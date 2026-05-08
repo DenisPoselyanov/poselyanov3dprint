@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Denis 3D Print</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --tg-blue: #2AABEE;
+    --accent: #FF6B35;
+    --bg: #F7F7F7;
+    --card-bg: #FFFFFF;
+    --text: #1A1A2E;
+    --muted: #8A8A9A;
+    --border: rgba(0,0,0,0.07);
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  .header {
+    background: var(--tg-blue);
+    padding: 16px 16px 20px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .header-top { display: flex; align-items: center; gap: 10px; }
+  .header-logo {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .header-title { color: #fff; font-size: 17px; font-weight: 800; }
+  .header-sub { color: rgba(255,255,255,0.75); font-size: 11px; margin-top: 1px; }
+
+  /* CATEGORY TABS */
+  .tabs {
+    display: flex; gap: 6px;
+    padding: 12px 14px 0;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: 700;
+    border: none; cursor: pointer; white-space: nowrap;
+    background: rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.85);
+    transition: all .2s;
+  }
+  .tab.active { background: #fff; color: var(--tg-blue); }
+
+  /* GRID */
+  .section-label {
+    font-size: 13px; font-weight: 800; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em;
+    padding: 16px 14px 8px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding: 0 12px 20px;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    border: 1px solid var(--border);
+  }
+  .card:active { transform: scale(0.97); }
+
+  .card-img {
+    height: 90px;
+    background: linear-gradient(135deg, #f0f4ff 0%, #e8f5ff 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 44px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card-img img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    position: absolute; inset: 0;
+  }
+  .card-badge {
+    position: absolute; top: 6px; right: 6px;
+    background: var(--accent); color: #fff;
+    font-size: 9px; font-weight: 800;
+    padding: 2px 6px; border-radius: 6px;
+    text-transform: uppercase;
+  }
+
+  .card-info { padding: 9px 10px 10px; }
+  .card-name { font-size: 12px; font-weight: 700; color: var(--text); line-height: 1.3; margin-bottom: 3px; }
+  .card-mat { font-size: 10px; color: var(--muted); margin-bottom: 7px; }
+  .card-footer { display: flex; align-items: center; justify-content: space-between; }
+  .card-price { font-size: 14px; font-weight: 800; color: var(--tg-blue); }
+  .card-btn {
+    font-size: 10px; font-weight: 700;
+    padding: 5px 11px; border-radius: 8px;
+    border: none; background: var(--tg-blue); color: #fff;
+    cursor: pointer; transition: opacity .15s;
+  }
+  .card-btn:active { opacity: .75; }
+
+  /* MODAL */
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 100; align-items: flex-end;
+  }
+  .modal-backdrop.open { display: flex; }
+
+  .modal {
+    background: var(--card-bg);
+    border-radius: 24px 24px 0 0;
+    width: 100%; max-height: 92vh;
+    overflow-y: auto;
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .modal-handle {
+    width: 36px; height: 4px;
+    background: #DDD; border-radius: 2px;
+    margin: 12px auto 0;
+  }
+
+  .modal-header {
+    padding: 14px 18px 0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title { font-size: 16px; font-weight: 800; }
+  .modal-close {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--bg); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: var(--muted);
+  }
+
+  .modal-photo {
+    width: 100%; height: 200px;
+    background: linear-gradient(135deg, #f0f4ff, #e8f5ff);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 72px;
+    overflow: hidden;
+    position: relative;
+  }
+  .modal-photo img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  .modal-photo-fallback {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+  }
+
+  .modal-product {
+    display: flex; align-items: center; gap: 12px;
+    margin: 14px 18px;
+    padding: 12px;
+    background: var(--bg); border-radius: var(--radius-sm);
+  }
+  .modal-pname { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+  .modal-pprice { font-size: 16px; font-weight: 800; color: var(--tg-blue); }
+
+  .modal-body { padding: 0 18px 24px; }
+
+  .field-label {
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .field { margin-bottom: 16px; }
+
+  textarea {
+    width: 100%; padding: 12px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px; color: var(--text);
+    background: var(--bg); resize: none;
+    transition: border-color .2s;
+    line-height: 1.5;
+  }
+  textarea:focus { outline: none; border-color: var(--tg-blue); }
+
+  .notice {
+    background: #EFF8FF; border-left: 3px solid var(--tg-blue);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 10px 12px;
+    font-size: 12px; color: #2255AA; line-height: 1.5;
+    margin-bottom: 16px;
+  }
+
+  .submit-btn {
+    width: 100%; padding: 15px;
+    background: var(--tg-blue); color: #fff;
+    border: none; border-radius: var(--radius-sm);
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px; font-weight: 800;
+    cursor: pointer; transition: opacity .15s;
+    letter-spacing: .02em;
+  }
+  .submit-btn:active { opacity: .85; }
+
+  /* SUCCESS */
+  .success-screen {
+    display: none; position: fixed; inset: 0;
+    background: var(--card-bg);
+    z-index: 200; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 32px;
+  }
+  .success-screen.open { display: flex; }
+  .success-emoji { font-size: 72px; margin-bottom: 16px; }
+  .success-title { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+  .success-sub { font-size: 14px; color: var(--muted); line-height: 1.6; max-width: 280px; }
+  .success-back {
+    margin-top: 24px; padding: 13px 32px;
+    background: var(--tg-blue); color: #fff;
+    border: none; border-radius: var(--radius-sm);
+    font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* empty state */
+  .empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px; }
+  .empty-ico { font-size: 40px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div class="header-logo">🖨️</div>
+    <div>
+      <div class="header-title">Denis 3D Print</div>
+      <div class="header-sub">Handmade 3D-принти • Глибока</div>
+    </div>
+  </div>
+  <div class="tabs" id="tabs">
+    <button class="tab active" onclick="filterCat(this,'all')">🏠 Всі</button>
+    <button class="tab" onclick="filterCat(this,'toy')">🧸 Іграшки</button>
+    <button class="tab" onclick="filterCat(this,'key')">🔑 Брелки</button>
+    <button class="tab" onclick="filterCat(this,'anti')">🧠 Антистрес</button>
+  </div>
+</div>
+
+<div id="catalog">
+  <div class="section-label" id="section-label">Всі товари</div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<!-- ORDER MODAL -->
+<div class="modal-backdrop" id="modal-backdrop" onclick="closeIfBackdrop(event)">
+  <div class="modal" id="modal">
+    <div class="modal-photo" id="m-photo">
+      <div class="modal-photo-fallback" id="m-fallback"></div>
+    </div>
+    <div class="modal-header">
+      <span class="modal-title">Замовлення</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-product">
+      <div>
+        <div class="modal-pname" id="m-name"></div>
+        <div class="modal-pprice" id="m-price"></div>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="field-label">Коментар / побажання</div>
+        <textarea id="m-comment" rows="3" placeholder="Наприклад: колір чорний, надпис 'Саша', або особливі побажання..."></textarea>
+      </div>
+      <div class="notice">
+        📲 Після замовлення я напишу тобі особисто для уточнення деталей та оплати.
+      </div>
+      <button class="submit-btn" onclick="submitOrder()">✓ Надіслати замовлення</button>
+    </div>
+  </div>
+</div>
+
+<!-- SUCCESS -->
+<div class="success-screen" id="success-screen">
+  <div class="success-emoji">🎉</div>
+  <div class="success-title">Замовлення прийнято!</div>
+  <div class="success-sub">Я отримав твоє замовлення і зв'яжусь найближчим часом для підтвердження та оплати.</div>
+  <button class="success-back" onclick="backToCatalog()">← Переглянути ще товари</button>
+</div>
+
+<script>
+// =============================================
+// ТОВАРИ — редагуй цей масив під свій каталог
+// =============================================
+// photo: '' — показує emoji; photo: 'https://...' — показує фото
+// Як додати фото:
+//   1. Зроби фото свого принту
+//   2. Завантаж на imgur.com (безкоштовно, без реєстрації)
+//   3. Натисни правою кнопкою на фото → "Копіювати адресу зображення"
+//   4. Встав сюди замість ''
+// =============================================
+const PRODUCTS = [
+  { id:1, cat:'toy',  emoji:'🐉', photo:'', name:'Flexi-дракон',        mat:'PLA flex · шарнірний',           price:120, hot:true  },
+  { id:2, cat:'toy',  emoji:'🦕', photo:'', name:'Флекс-динозавр',      mat:'PLA flex · кольоровий',           price:110, hot:false },
+  { id:3, cat:'toy',  emoji:'🐱', photo:'', name:'Кіт-нянька',          mat:'PLA · є різні кольори',           price:90,  hot:false },
+  { id:4, cat:'toy',  emoji:'🦖', photo:'', name:'T-Rex шарнірний',     mat:'PLA · великий 20 см',             price:150, hot:true  },
+  { id:5, cat:'key',  emoji:'❤️', photo:'', name:'Брелок-серце',        mat:'PLA · будь-який колір',           price:50,  hot:false },
+  { id:6, cat:'key',  emoji:'💀', photo:'', name:'Брелок-скелет',       mat:'PLA · чорний або білий',          price:60,  hot:false },
+  { id:7, cat:'key',  emoji:'⭐', photo:'', name:'Брелок-зірка',        mat:'PLA · гліттер доступний',        price:45,  hot:false },
+  { id:8, cat:'key',  emoji:'🔑', photo:'', name:'Брелок з ім\'ям',     mat:'PLA · персоналізований',         price:70,  hot:true  },
+  { id:9, cat:'anti', emoji:'🔵', photo:'', name:'Спінер-куб',          mat:'PLA+PETG · крутиться',            price:110, hot:false },
+  { id:10,cat:'anti', emoji:'🟦', photo:'', name:'Pop-it кнопки',       mat:'TPU · м\'який силіконовий',      price:80,  hot:true  },
+  { id:11,cat:'anti', emoji:'🌀', photo:'', name:'Fidget-кільця',       mat:'PLA · набір 3 шт',                price:90,  hot:false },
+  { id:12,cat:'anti', emoji:'🧊', photo:'', name:'Infinite cube',       mat:'PLA · складається нескінченно',  price:130, hot:false },
+];
+
+const CAT_LABELS = { all:'Всі товари', toy:'🧸 Іграшки', key:'🔑 Брелки', anti:'🧠 Антистрес' };
+
+let currentCat = 'all';
+let currentProduct = null;
+
+function renderGrid(cat) {
+  const items = cat === 'all' ? PRODUCTS : PRODUCTS.filter(p => p.cat === cat);
+  const grid = document.getElementById('grid');
+  document.getElementById('section-label').textContent = CAT_LABELS[cat];
+
+  if (!items.length) {
+    grid.innerHTML = '<div class="empty"><div class="empty-ico">🤷</div>Товарів поки немає</div>';
+    return;
+  }
+
+  grid.innerHTML = items.map(p => `
+    <div class="card" onclick="openModal(${p.id})">
+      <div class="card-img">
+        ${p.photo ? `<img src="${p.photo}" alt="${p.name}" loading="lazy">` : ''}
+        <span style="position:relative;z-index:1">${p.photo ? '' : p.emoji}</span>
+        ${p.hot ? '<div class="card-badge">🔥 Хіт</div>' : ''}
+      </div>
+      <div class="card-info">
+        <div class="card-name">${p.name}</div>
+        <div class="card-mat">${p.mat}</div>
+        <div class="card-footer">
+          <div class="card-price">${p.price} ₴</div>
+          <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id})">Замовити</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function filterCat(el, cat) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  currentCat = cat;
+  renderGrid(cat);
+}
+
+function openModal(id) {
+  currentProduct = PRODUCTS.find(p => p.id === id);
+
+  // Фото або emoji у банері
+  const photoEl = document.getElementById('m-photo');
+  const fallbackEl = document.getElementById('m-fallback');
+  // прибираємо старе фото якщо є
+  const oldImg = photoEl.querySelector('img');
+  if (oldImg) oldImg.remove();
+
+  if (currentProduct.photo) {
+    const img = document.createElement('img');
+    img.src = currentProduct.photo;
+    img.alt = currentProduct.name;
+    fallbackEl.style.display = 'none';
+    photoEl.appendChild(img);
+  } else {
+    fallbackEl.style.display = 'flex';
+    fallbackEl.textContent = currentProduct.emoji;
+  }
+
+  document.getElementById('m-name').textContent = currentProduct.name;
+  document.getElementById('m-price').textContent = currentProduct.price + ' ₴';
+  document.getElementById('m-comment').value = '';
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open');
+}
+
+function closeIfBackdrop(e) {
+  if (e.target === document.getElementById('modal-backdrop')) closeModal();
+}
+
+function submitOrder() {
+  if (!currentProduct) return;
+  const comment = document.getElementById('m-comment').value.trim();
+
+  // Формуємо повідомлення для бота
+  const tg = window.Telegram?.WebApp;
+  const user = tg?.initDataUnsafe?.user;
+  const username = user ? (user.username ? '@' + user.username : user.first_name) : 'невідомо';
+
+  const message = JSON.stringify({
+    action: 'order',
+    product_id: currentProduct.id,
+    product_name: currentProduct.name,
+    price: currentProduct.price,
+    comment: comment || '',
+    user: username
+  });
+
+  // Надсилаємо через Telegram WebApp API
+  if (tg) {
+    tg.sendData(message);
+  }
+
+  closeModal();
+  document.getElementById('success-screen').classList.add('open');
+}
+
+function backToCatalog() {
+  document.getElementById('success-screen').classList.remove('open');
+}
+
+// Ініціалізація Telegram WebApp
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.Telegram?.WebApp) {
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+  }
+  renderGrid('all');
+});
+</script>
+</body>
+</html>
