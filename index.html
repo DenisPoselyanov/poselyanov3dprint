@@ -10,6 +10,7 @@
   :root {
     --tg-blue: #2AABEE;
     --accent: #FF6B35;
+    --sale: #E53935;
     --bg: #F7F7F7;
     --card-bg: #FFFFFF;
     --text: #1A1A2E;
@@ -21,11 +22,11 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-  body {
+  html, body {
     font-family: 'Nunito', sans-serif;
     background: var(--bg);
     color: var(--text);
-    min-height: 100vh;
+    height: 100%;
     overflow-x: hidden;
   }
 
@@ -34,6 +35,7 @@
     background: var(--tg-blue);
     padding: 16px 16px 20px;
     position: sticky; top: 0; z-index: 10;
+    flex-shrink: 0;
   }
   .header-top { display: flex; align-items: center; gap: 10px; }
   .header-logo {
@@ -76,15 +78,21 @@
     padding: 0 12px 20px;
   }
 
+  /* CARD */
   .card {
     background: var(--card-bg);
     border-radius: var(--radius);
     overflow: hidden;
     cursor: pointer;
-    transition: transform .15s, box-shadow .15s;
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
     border: 1px solid var(--border);
+    animation: fadeInUp .35s ease both;
   }
-  .card:active { transform: scale(0.97); }
+  .card:active { transform: scale(0.96); }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 
   .card-img {
     height: 90px;
@@ -98,46 +106,80 @@
     width: 100%; height: 100%;
     object-fit: cover;
     position: absolute; inset: 0;
+    transition: transform .3s ease;
   }
+  .card:active .card-img img { transform: scale(1.04); }
+
   .card-badge {
     position: absolute; top: 6px; right: 6px;
     background: var(--accent); color: #fff;
     font-size: 9px; font-weight: 800;
     padding: 2px 6px; border-radius: 6px;
     text-transform: uppercase;
+    z-index: 2;
+  }
+  .card-sale-badge {
+    position: absolute; top: 6px; left: 6px;
+    background: var(--sale); color: #fff;
+    font-size: 9px; font-weight: 800;
+    padding: 2px 6px; border-radius: 6px;
+    z-index: 2;
   }
 
   .card-info { padding: 9px 10px 10px; }
   .card-name { font-size: 12px; font-weight: 700; color: var(--text); line-height: 1.3; margin-bottom: 3px; }
   .card-mat { font-size: 10px; color: var(--muted); margin-bottom: 7px; }
   .card-footer { display: flex; align-items: center; justify-content: space-between; }
-  .card-price { font-size: 14px; font-weight: 800; color: var(--tg-blue); }
+
+  .card-price-wrap { display: flex; flex-direction: column; }
+  .card-price { font-size: 14px; font-weight: 800; color: var(--tg-blue); line-height: 1; }
+  .card-price-old {
+    font-size: 10px; font-weight: 700; color: var(--muted);
+    text-decoration: line-through; line-height: 1; margin-bottom: 1px;
+  }
+
   .card-btn {
     font-size: 10px; font-weight: 700;
     padding: 5px 11px; border-radius: 8px;
     border: none; background: var(--tg-blue); color: #fff;
-    cursor: pointer; transition: opacity .15s;
+    cursor: pointer; transition: opacity .15s, transform .1s;
   }
-  .card-btn:active { opacity: .75; }
+  .card-btn:active { opacity: .75; transform: scale(0.95); }
 
-  /* MODAL */
+  /* ===== PRODUCT MODAL ===== */
   .modal-backdrop {
-    display: none; position: fixed; inset: 0;
+    display: none;
+    position: fixed; inset: 0;
     background: rgba(0,0,0,0.5);
-    z-index: 100; align-items: flex-end;
+    z-index: 100;
+    align-items: flex-end;
+    /* lock background scroll */
   }
   .modal-backdrop.open { display: flex; }
+
+  /* Lock body scroll when modal is open */
+  body.modal-open { overflow: hidden; position: fixed; width: 100%; }
 
   .modal {
     background: var(--card-bg);
     border-radius: 24px 24px 0 0;
-    width: 100%; max-height: 92vh;
+    width: 100%;
+    max-height: 92vh;
     overflow-y: auto;
-    animation: slideUp .25s ease;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    animation: slideUp .28s cubic-bezier(.34,1.2,.64,1);
   }
   @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
+    from { transform: translateY(100%); opacity: .6; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  .modal-close-anim {
+    animation: slideDown .22s ease forwards;
+  }
+  @keyframes slideDown {
+    to { transform: translateY(100%); opacity: 0; }
   }
 
   .modal-handle {
@@ -146,8 +188,142 @@
     margin: 12px auto 0;
   }
 
+  /* ===== CAROUSEL ===== */
+  .carousel-wrap {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #f0f4ff, #e8f5ff);
+    touch-action: pan-y;
+    user-select: none;
+  }
+  .carousel-track {
+    display: flex;
+    height: 100%;
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+    will-change: transform;
+  }
+  .carousel-slide {
+    min-width: 100%;
+    height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: zoom-in;
+    position: relative;
+    overflow: hidden;
+  }
+  .carousel-slide img,
+  .carousel-slide .slide-emoji {
+    max-width: 100%; max-height: 100%;
+    object-fit: cover;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .carousel-slide .slide-emoji {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 72px; cursor: default;
+  }
+  /* GIF badge */
+  .gif-badge {
+    position: absolute; bottom: 6px; right: 8px;
+    background: rgba(0,0,0,0.55); color: #fff;
+    font-size: 9px; font-weight: 800; letter-spacing: .05em;
+    padding: 2px 5px; border-radius: 4px;
+  }
+
+  .carousel-dots {
+    display: flex; gap: 5px;
+    justify-content: center;
+    padding: 8px 0 2px;
+  }
+  .carousel-dot {
+    width: 6px; height: 6px; border-radius: 3px;
+    background: var(--border);
+    transition: background .2s, width .2s;
+  }
+  .carousel-dot.active {
+    background: var(--tg-blue);
+    width: 14px;
+  }
+
+  /* Carousel arrows */
+  .carousel-arrow {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(255,255,255,0.85); border: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; cursor: pointer; z-index: 3;
+    box-shadow: 0 1px 6px rgba(0,0,0,.15);
+    transition: opacity .15s;
+  }
+  .carousel-arrow:active { opacity: .7; }
+  .carousel-arrow.left  { left: 8px; }
+  .carousel-arrow.right { right: 8px; }
+
+  /* ===== LIGHTBOX ===== */
+  .lightbox {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.95);
+    z-index: 300;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    touch-action: pan-y;
+  }
+  .lightbox.open { display: flex; animation: lbIn .2s ease; }
+  @keyframes lbIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .lightbox-close {
+    position: absolute; top: 14px; right: 14px;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,0.15); border: none; color: #fff;
+    font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lightbox-track {
+    display: flex;
+    width: 100%;
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+    will-change: transform;
+  }
+  .lightbox-slide {
+    min-width: 100%;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .lightbox-slide img {
+    max-width: 100%; max-height: 80vh;
+    object-fit: contain;
+    border-radius: 8px;
+    pointer-events: none;
+  }
+  .lightbox-slide .slide-emoji {
+    font-size: 100px;
+  }
+  .lightbox-hint {
+    position: absolute; bottom: 28px;
+    color: rgba(255,255,255,0.45); font-size: 11px; font-weight: 600;
+    text-align: center;
+  }
+  .lb-dots {
+    display: flex; gap: 5px; margin-top: 10px;
+  }
+  .lb-dot {
+    width: 6px; height: 6px; border-radius: 3px;
+    background: rgba(255,255,255,.3);
+    transition: background .2s, width .2s;
+  }
+  .lb-dot.active {
+    background: #fff;
+    width: 14px;
+  }
+
+  /* MODAL CONTENT */
   .modal-header {
-    padding: 14px 18px 0;
+    padding: 10px 18px 0;
     display: flex; align-items: center; justify-content: space-between;
   }
   .modal-title { font-size: 16px; font-weight: 800; }
@@ -156,35 +332,31 @@
     background: var(--bg); border: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     font-size: 16px; color: var(--muted);
+    transition: background .15s;
   }
-
-  .modal-photo {
-    width: 100%; height: 200px;
-    background: linear-gradient(135deg, #f0f4ff, #e8f5ff);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 72px;
-    overflow: hidden;
-    position: relative;
-  }
-  .modal-photo img {
-    width: 100%; height: 100%;
-    object-fit: cover;
-  }
-  .modal-photo-fallback {
-    display: flex; align-items: center; justify-content: center;
-    width: 100%; height: 100%;
-  }
+  .modal-close:active { background: #e0e0e0; }
 
   .modal-product {
     display: flex; align-items: center; gap: 12px;
     margin: 14px 18px;
     padding: 12px;
     background: var(--bg); border-radius: var(--radius-sm);
+    animation: fadeInUp .3s .1s ease both;
   }
-  .modal-pname { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+  .modal-pname { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .modal-price-row { display: flex; align-items: baseline; gap: 8px; }
   .modal-pprice { font-size: 16px; font-weight: 800; color: var(--tg-blue); }
+  .modal-pprice-old {
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    text-decoration: line-through;
+  }
+  .modal-sale-chip {
+    background: var(--sale); color: #fff;
+    font-size: 10px; font-weight: 800;
+    padding: 1px 6px; border-radius: 5px;
+  }
 
-  .modal-body { padding: 0 18px 24px; }
+  .modal-body { padding: 0 18px 24px; animation: fadeInUp .3s .15s ease both; }
 
   .field-label {
     font-size: 12px; font-weight: 700; color: var(--muted);
@@ -218,10 +390,11 @@
     border: none; border-radius: var(--radius-sm);
     font-family: 'Nunito', sans-serif;
     font-size: 15px; font-weight: 800;
-    cursor: pointer; transition: opacity .15s;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
     letter-spacing: .02em;
   }
-  .submit-btn:active { opacity: .85; }
+  .submit-btn:active { opacity: .85; transform: scale(0.98); }
 
   /* SUCCESS */
   .success-screen {
@@ -231,8 +404,12 @@
     align-items: center; justify-content: center;
     text-align: center; padding: 32px;
   }
-  .success-screen.open { display: flex; }
-  .success-emoji { font-size: 72px; margin-bottom: 16px; }
+  .success-screen.open { display: flex; animation: fadeInUp .35s ease; }
+  .success-emoji { font-size: 72px; margin-bottom: 16px; animation: pop .4s .1s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes pop {
+    from { transform: scale(0.5); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
   .success-title { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
   .success-sub { font-size: 14px; color: var(--muted); line-height: 1.6; max-width: 280px; }
   .success-back {
@@ -240,12 +417,16 @@
     background: var(--tg-blue); color: #fff;
     border: none; border-radius: var(--radius-sm);
     font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700;
-    cursor: pointer;
+    cursor: pointer; transition: opacity .15s;
   }
+  .success-back:active { opacity: .8; }
 
-  /* empty state */
+  /* EMPTY */
   .empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px; }
   .empty-ico { font-size: 40px; margin-bottom: 8px; }
+
+  /* Catalog */
+  #catalog { overflow-y: auto; }
 </style>
 </head>
 <body>
@@ -254,8 +435,8 @@
   <div class="header-top">
     <div class="header-logo">🖨️</div>
     <div>
-      <div class="header-title">Denis 3D Print</div>
-      <div class="header-sub">Handmade 3D-принти • с.Кам'янка, Чернівецька область</div>
+      <div class="header-title">Poselyanov 3D Print</div>
+      <div class="header-sub">Товари створені 3д принтером • с. Кам'янка, Чернівецька область</div>
     </div>
   </div>
   <div class="tabs" id="tabs">
@@ -271,26 +452,43 @@
   <div class="grid" id="grid"></div>
 </div>
 
-<!-- ORDER MODAL -->
+<!-- PRODUCT MODAL -->
 <div class="modal-backdrop" id="modal-backdrop" onclick="closeIfBackdrop(event)">
   <div class="modal" id="modal">
-    <div class="modal-photo" id="m-photo">
-      <div class="modal-photo-fallback" id="m-fallback"></div>
+    <div class="modal-handle"></div>
+
+    <!-- Карусель фото -->
+    <div class="carousel-wrap" id="carousel-wrap" style="display:none">
+      <div class="carousel-track" id="carousel-track"></div>
+      <button class="carousel-arrow left" id="carr-left" onclick="carouselNav(-1)">‹</button>
+      <button class="carousel-arrow right" id="carr-right" onclick="carouselNav(1)">›</button>
     </div>
+    <!-- Emoji fallback -->
+    <div id="m-emoji-fallback" style="display:none;height:220px;font-size:72px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f4ff,#e8f5ff)"></div>
+
+    <!-- Dots -->
+    <div class="carousel-dots" id="carousel-dots"></div>
+
     <div class="modal-header">
       <span class="modal-title">Замовлення</span>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
+
     <div class="modal-product">
-      <div>
+      <div style="flex:1">
         <div class="modal-pname" id="m-name"></div>
-        <div class="modal-pprice" id="m-price"></div>
+        <div class="modal-price-row">
+          <div class="modal-pprice" id="m-price"></div>
+          <div class="modal-pprice-old" id="m-price-old" style="display:none"></div>
+          <div class="modal-sale-chip" id="m-sale-chip" style="display:none"></div>
+        </div>
       </div>
     </div>
+
     <div class="modal-body">
       <div class="field">
         <div class="field-label">Коментар / побажання</div>
-        <textarea id="m-comment" rows="3" placeholder="Наприклад: колір чорний, надпис 'Саша', або особливі побажання..."></textarea>
+        <textarea id="m-comment" rows="3" placeholder="Наприклад: колір чорний, надпис '...', або особливі побажання..."></textarea>
       </div>
       <div class="notice">
         📲 Після замовлення я напишу тобі особисто для уточнення деталей та оплати.
@@ -298,6 +496,16 @@
       <button class="submit-btn" onclick="submitOrder()">✓ Надіслати замовлення</button>
     </div>
   </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <div style="overflow:hidden;width:100%;display:flex;flex-direction:column;align-items:center">
+    <div class="lightbox-track" id="lb-track"></div>
+    <div class="lb-dots" id="lb-dots"></div>
+  </div>
+  <div class="lightbox-hint">← свайп для навігації • натисни ✕ щоб повернутись →</div>
 </div>
 
 <!-- SUCCESS -->
@@ -309,36 +517,131 @@
 </div>
 
 <script>
-// =============================================
-// ТОВАРИ — редагуй цей масив під свій каталог
-// =============================================
-// photo: '' — показує emoji; photo: 'https://...' — показує фото
-// Як додати фото:
-//   1. Зроби фото свого принту
-//   2. Завантаж на imgur.com (безкоштовно, без реєстрації)
-//   3. Натисни правою кнопкою на фото → "Копіювати адресу зображення"
-//   4. Встав сюди замість ''
-// =============================================
+// ============================================================
+//  ТОВАРИ — редагуй цей масив
+//
+//  Поля:
+//    id       — унікальний номер
+//    cat      — категорія: 'toy' | 'key' | 'anti'
+//    emoji    — показується якщо нема фото
+//    photos   — масив URL фото з Google Drive (або порожній [])
+//               Як отримати посилання з Google Drive:
+//                 1. Завантаж фото на Google Drive
+//                 2. ПКМ → "Отримати посилання" → "Всі хто має посилання"
+//                 3. Скопіюй FILE_ID з посилання:
+//                    https://drive.google.com/file/d/FILE_ID/view
+//                 4. Встав як: drivePhoto('FILE_ID')
+//                    або просто url рядком
+//               Для GIF — те саме, карусель покаже badge "GIF"
+//    name     — назва товару
+//    mat      — матеріал / опис
+//    price    — поточна ціна
+//    oldPrice — (необов'язково) стара ціна для показу знижки
+//    hot      — true / false — значок "🔥 Хіт"
+// ============================================================
+
+// Хелпер для Google Drive фото
+function drivePhoto(fileId) {
+  return `https://lh3.googleusercontent.com/d/${fileId}`;
+}
+
 const PRODUCTS = [
-  { id:1, cat:'toy',  emoji:'🐉', photo:'', name:'Flexi-дракон',        mat:'PLA flex · шарнірний',           price:120, hot:true  },
-  { id:2, cat:'toy',  emoji:'🦕', photo:'', name:'Флекс-динозавр',      mat:'PLA flex · кольоровий',           price:110, hot:false },
-  { id:3, cat:'toy',  emoji:'🐱', photo:'', name:'Кіт-нянька',          mat:'PLA · є різні кольори',           price:90,  hot:false },
-  { id:4, cat:'toy',  emoji:'🦖', photo:'', name:'T-Rex шарнірний',     mat:'PLA · великий 20 см',             price:150, hot:true  },
-  { id:5, cat:'key',  emoji:'❤️', photo:'', name:'Брелок-серце',        mat:'PLA · будь-який колір',           price:50,  hot:false },
-  { id:6, cat:'key',  emoji:'💀', photo:'', name:'Брелок-скелет',       mat:'PLA · чорний або білий',          price:60,  hot:false },
-  { id:7, cat:'key',  emoji:'⭐', photo:'', name:'Брелок-зірка',        mat:'PLA · гліттер доступний',        price:45,  hot:false },
-  { id:8, cat:'key',  emoji:'🔑', photo:'', name:'Брелок з ім\'ям',     mat:'PLA · персоналізований',         price:70,  hot:true  },
-  { id:9, cat:'anti', emoji:'🔵', photo:'https://i.imgur.com/IWTdTqZ.jpeg', name:'Спінер-куб',          mat:'PLA+PETG · крутиться',            price:110, hot:false },
-  { id:10,cat:'anti', emoji:'🟦', photo:'', name:'Pop-it кнопки',       mat:'TPU · м\'який силіконовий',      price:80,  hot:true  },
-  { id:11,cat:'anti', emoji:'🌀', photo:'', name:'Fidget-кільця',       mat:'PLA · набір 3 шт',                price:90,  hot:false },
-  { id:12,cat:'anti', emoji:'🧊', photo:'', name:'Infinite cube',       mat:'PLA · складається нескінченно',  price:130, hot:false },
+  {
+    id: 1, cat: 'toy', emoji: '🐉',
+    photos: ['https://drive.google.com/file/d/1iX4kTCMRUZWT9QrCvtWCsFA0DGdO42Jt/view?usp=drive_link',
+    'https://drive.google.com/file/d/176pnnFC2RNPFrEFndqZ54Dp8X-xzoJPa/view?usp=drive_link'],  // drivePhoto('YOUR_FILE_ID')
+    name: 'Fidget-спіраль',
+    mat: 'PLA · один або два кольори',
+    price: 300, hot: true
+  },
+  {
+    id: 2, cat: 'toy', emoji: '🦕',
+    photos: [],
+    name: 'Флекс-динозавр',
+    mat: 'PLA flex · кольоровий',
+    price: 110, oldPrice: 150, hot: false  // <- знижка!
+  },
+  {
+    id: 3, cat: 'toy', emoji: '🐱',
+    photos: [],
+    name: 'Кіт-нянька',
+    mat: 'PLA · є різні кольори',
+    price: 90, hot: false
+  },
+  {
+    id: 4, cat: 'toy', emoji: '🦖',
+    photos: [],
+    name: 'T-Rex шарнірний',
+    mat: 'PLA · великий 20 см',
+    price: 150, hot: true
+  },
+  {
+    id: 5, cat: 'key', emoji: '❤️',
+    photos: [],
+    name: 'Брелок-серце',
+    mat: 'PLA · будь-який колір',
+    price: 50, hot: false
+  },
+  {
+    id: 6, cat: 'key', emoji: '💀',
+    photos: [],
+    name: 'Брелок-скелет',
+    mat: 'PLA · чорний або білий',
+    price: 60, hot: false
+  },
+  {
+    id: 7, cat: 'key', emoji: '⭐',
+    photos: [],
+    name: 'Брелок-зірка',
+    mat: 'PLA · гліттер доступний',
+    price: 45, hot: false
+  },
+  {
+    id: 8, cat: 'key', emoji: '🔑',
+    photos: [],
+    name: "Брелок з ім'ям",
+    mat: 'PLA · персоналізований',
+    price: 70, hot: true
+  },
+  {
+    id: 9, cat: 'anti', emoji: '🔵',
+    photos: [],
+    name: 'Спінер-куб',
+    mat: 'PLA+PETG · крутиться',
+    price: 110, hot: false
+  },
+  {
+    id: 10, cat: 'anti', emoji: '🟦',
+    photos: [],
+    name: 'Pop-it кнопки',
+    mat: "TPU · м'який силіконовий",
+    price: 80, hot: true
+  },
+  {
+    id: 11, cat: 'anti', emoji: '🌀',
+    photos: [],
+    name: 'Fidget-кільця',
+    mat: 'PLA · набір 3 шт',
+    price: 90, hot: false
+  },
+  {
+    id: 12, cat: 'anti', emoji: '🧊',
+    photos: [],
+    name: 'Infinite cube',
+    mat: 'PLA · складається нескінченно',
+    price: 130, hot: false
+  },
 ];
 
-const CAT_LABELS = { all:'Всі товари', toy:'🧸 Іграшки', key:'🔑 Брелки', anti:'🧠 Антистрес' };
+// ============================================================
+const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', key: '🔑 Брелки', anti: '🧠 Антистрес' };
 
 let currentCat = 'all';
 let currentProduct = null;
+let carouselIndex = 0;
+let lbIndex = 0;
 
+// ─── GRID ───────────────────────────────────────────────────
 function renderGrid(cat) {
   const items = cat === 'all' ? PRODUCTS : PRODUCTS.filter(p => p.cat === cat);
   const grid = document.getElementById('grid');
@@ -349,23 +652,30 @@ function renderGrid(cat) {
     return;
   }
 
-  grid.innerHTML = items.map(p => `
-    <div class="card" onclick="openModal(${p.id})">
-      <div class="card-img">
-        ${p.photo ? `<img src="${p.photo}" alt="${p.name}" loading="lazy">` : ''}
-        <span style="position:relative;z-index:1">${p.photo ? '' : p.emoji}</span>
-        ${p.hot ? '<div class="card-badge">🔥 Хіт</div>' : ''}
-      </div>
-      <div class="card-info">
-        <div class="card-name">${p.name}</div>
-        <div class="card-mat">${p.mat}</div>
-        <div class="card-footer">
-          <div class="card-price">${p.price} ₴</div>
-          <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id})">Замовити</button>
+  grid.innerHTML = items.map((p, i) => {
+    const hasPhotos = p.photos && p.photos.length > 0;
+    const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
+    return `
+      <div class="card" style="animation-delay:${i * 0.05}s" onclick="openModal(${p.id})">
+        <div class="card-img">
+          ${hasPhotos ? `<img src="${p.photos[0]}" alt="${p.name}" loading="lazy">` : ''}
+          <span style="position:relative;z-index:1">${hasPhotos ? '' : p.emoji}</span>
+          ${p.hot ? '<div class="card-badge">🔥 Хіт</div>' : ''}
+          ${discount ? `<div class="card-sale-badge">−${discount}%</div>` : ''}
         </div>
-      </div>
-    </div>
-  `).join('');
+        <div class="card-info">
+          <div class="card-name">${p.name}</div>
+          <div class="card-mat">${p.mat}</div>
+          <div class="card-footer">
+            <div class="card-price-wrap">
+              ${p.oldPrice ? `<div class="card-price-old">${p.oldPrice} ₴</div>` : ''}
+              <div class="card-price">${p.price} ₴</div>
+            </div>
+            <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id})">Замовити</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function filterCat(el, cat) {
@@ -375,47 +685,210 @@ function filterCat(el, cat) {
   renderGrid(cat);
 }
 
+// ─── CAROUSEL ───────────────────────────────────────────────
+function isGif(url) { return url && url.toLowerCase().includes('.gif'); }
+
+function buildCarousel(photos) {
+  const wrap = document.getElementById('carousel-wrap');
+  const track = document.getElementById('carousel-track');
+  const dots  = document.getElementById('carousel-dots');
+  const emoji = document.getElementById('m-emoji-fallback');
+  const leftBtn  = document.getElementById('carr-left');
+  const rightBtn = document.getElementById('carr-right');
+
+  if (!photos || photos.length === 0) {
+    wrap.style.display = 'none';
+    emoji.style.display = 'flex';
+    emoji.textContent = currentProduct.emoji;
+    dots.innerHTML = '';
+    return;
+  }
+
+  emoji.style.display = 'none';
+  wrap.style.display = 'block';
+
+  track.innerHTML = photos.map((url, i) => `
+    <div class="carousel-slide" onclick="openLightbox(${i})">
+      <img src="${url}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}">
+      ${isGif(url) ? '<div class="gif-badge">GIF</div>' : ''}
+    </div>
+  `).join('');
+
+  dots.innerHTML = photos.map((_, i) =>
+    `<div class="carousel-dot ${i === 0 ? 'active' : ''}" id="cdot-${i}"></div>`
+  ).join('');
+
+  leftBtn.style.display  = photos.length > 1 ? 'flex' : 'none';
+  rightBtn.style.display = photos.length > 1 ? 'flex' : 'none';
+
+  carouselIndex = 0;
+  updateCarousel();
+  initCarouselSwipe();
+}
+
+function updateCarousel() {
+  const photos = currentProduct?.photos || [];
+  document.getElementById('carousel-track').style.transform = `translateX(-${carouselIndex * 100}%)`;
+  document.querySelectorAll('.carousel-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === carouselIndex);
+  });
+}
+
+function carouselNav(dir) {
+  const photos = currentProduct?.photos || [];
+  carouselIndex = (carouselIndex + dir + photos.length) % photos.length;
+  updateCarousel();
+}
+
+let carSwipeX = null;
+function initCarouselSwipe() {
+  const wrap = document.getElementById('carousel-wrap');
+  // remove old listeners via clone
+  const newWrap = wrap.cloneNode(false);
+  while (wrap.firstChild) newWrap.appendChild(wrap.firstChild);
+  wrap.parentNode.replaceChild(newWrap, wrap);
+
+  // re-grab
+  const w = document.getElementById('carousel-wrap');
+  w.addEventListener('touchstart', e => { carSwipeX = e.touches[0].clientX; }, { passive: true });
+  w.addEventListener('touchend', e => {
+    if (carSwipeX === null) return;
+    const dx = e.changedTouches[0].clientX - carSwipeX;
+    if (Math.abs(dx) > 40) carouselNav(dx < 0 ? 1 : -1);
+    carSwipeX = null;
+  }, { passive: true });
+
+  // re-attach click on slides
+  w.querySelectorAll('.carousel-slide').forEach((s, i) => {
+    s.addEventListener('click', () => openLightbox(i));
+  });
+}
+
+// ─── LIGHTBOX ───────────────────────────────────────────────
+function openLightbox(startIndex) {
+  const photos = currentProduct?.photos || [];
+  if (!photos.length) return;
+  lbIndex = startIndex;
+
+  const track = document.getElementById('lb-track');
+  const dots  = document.getElementById('lb-dots');
+
+  track.innerHTML = photos.map((url, i) => {
+    if (url && !isGif(url) && !url.match(/\.(gif|png|jpg|jpeg|webp|bmp|svg)/i)) {
+      // Google Drive image
+      return `<div class="lightbox-slide"><img src="${url}" alt="фото ${i+1}" loading="lazy"></div>`;
+    }
+    return `<div class="lightbox-slide"><img src="${url}" alt="фото ${i+1}" loading="lazy"></div>`;
+  }).join('');
+
+  dots.innerHTML = photos.map((_, i) =>
+    `<div class="lb-dot ${i === startIndex ? 'active' : ''}" id="lbdot-${i}"></div>`
+  ).join('');
+
+  updateLightbox(false);
+  document.getElementById('lightbox').classList.add('open');
+  initLightboxSwipe();
+}
+
+function updateLightbox(animate = true) {
+  const track = document.getElementById('lb-track');
+  track.style.transition = animate ? 'transform .3s cubic-bezier(.4,0,.2,1)' : 'none';
+  track.style.transform = `translateX(-${lbIndex * 100}%)`;
+  document.querySelectorAll('.lb-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === lbIndex);
+  });
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+let lbSwipeX = null;
+function initLightboxSwipe() {
+  const lb = document.getElementById('lightbox');
+  const newLb = lb.cloneNode(false);
+  while (lb.firstChild) newLb.appendChild(lb.firstChild);
+  lb.parentNode.replaceChild(newLb, lb);
+
+  const l = document.getElementById('lightbox');
+  l.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
+  l.addEventListener('touchstart', e => { lbSwipeX = e.touches[0].clientX; }, { passive: true });
+  l.addEventListener('touchend', e => {
+    if (lbSwipeX === null) return;
+    const dx = e.changedTouches[0].clientX - lbSwipeX;
+    const photos = currentProduct?.photos || [];
+    if (Math.abs(dx) > 40) {
+      lbIndex = (lbIndex + (dx < 0 ? 1 : -1) + photos.length) % photos.length;
+      updateLightbox();
+    }
+    lbSwipeX = null;
+  }, { passive: true });
+}
+
+// ─── MODAL ──────────────────────────────────────────────────
 function openModal(id) {
   currentProduct = PRODUCTS.find(p => p.id === id);
+  if (!currentProduct) return;
 
-  // Фото або emoji у банері
-  const photoEl = document.getElementById('m-photo');
-  const fallbackEl = document.getElementById('m-fallback');
-  // прибираємо старе фото якщо є
-  const oldImg = photoEl.querySelector('img');
-  if (oldImg) oldImg.remove();
-
-  if (currentProduct.photo) {
-    const img = document.createElement('img');
-    img.src = currentProduct.photo;
-    img.alt = currentProduct.name;
-    fallbackEl.style.display = 'none';
-    photoEl.appendChild(img);
-  } else {
-    fallbackEl.style.display = 'flex';
-    fallbackEl.textContent = currentProduct.emoji;
-  }
+  // Ціна / знижка
+  const discount = currentProduct.oldPrice
+    ? Math.round((1 - currentProduct.price / currentProduct.oldPrice) * 100) : 0;
 
   document.getElementById('m-name').textContent = currentProduct.name;
   document.getElementById('m-price').textContent = currentProduct.price + ' ₴';
+
+  const oldEl   = document.getElementById('m-price-old');
+  const chipEl  = document.getElementById('m-sale-chip');
+  if (currentProduct.oldPrice) {
+    oldEl.textContent  = currentProduct.oldPrice + ' ₴';
+    chipEl.textContent = `−${discount}%`;
+    oldEl.style.display  = '';
+    chipEl.style.display = '';
+  } else {
+    oldEl.style.display  = 'none';
+    chipEl.style.display = 'none';
+  }
+
   document.getElementById('m-comment').value = '';
-  document.getElementById('modal-backdrop').classList.add('open');
+
+  buildCarousel(currentProduct.photos);
+
+  // Lock background scroll
+  const scrollY = window.scrollY;
+  document.body.classList.add('modal-open');
+  document.body.style.top = `-${scrollY}px`;
+
+  const backdrop = document.getElementById('modal-backdrop');
+  backdrop.classList.add('open');
+  document.getElementById('modal').classList.remove('modal-close-anim');
 }
 
 function closeModal() {
-  document.getElementById('modal-backdrop').classList.remove('open');
+  const modal    = document.getElementById('modal');
+  const backdrop = document.getElementById('modal-backdrop');
+
+  modal.classList.add('modal-close-anim');
+  setTimeout(() => {
+    backdrop.classList.remove('open');
+    modal.classList.remove('modal-close-anim');
+  }, 220);
+
+  // Restore background scroll
+  const scrollY = parseInt(document.body.style.top || '0') * -1;
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  window.scrollTo(0, scrollY);
 }
 
 function closeIfBackdrop(e) {
   if (e.target === document.getElementById('modal-backdrop')) closeModal();
 }
 
+// ─── ORDER ──────────────────────────────────────────────────
 function submitOrder() {
   if (!currentProduct) return;
   const comment = document.getElementById('m-comment').value.trim();
-
-  // Формуємо повідомлення для бота
-  const tg = window.Telegram?.WebApp;
+  const tg   = window.Telegram?.WebApp;
   const user = tg?.initDataUnsafe?.user;
   const username = user ? (user.username ? '@' + user.username : user.first_name) : 'невідомо';
 
@@ -428,20 +901,19 @@ function submitOrder() {
     user: username
   });
 
-  // Надсилаємо через Telegram WebApp API
-  if (tg) {
-    tg.sendData(message);
-  }
+  if (tg) tg.sendData(message);
 
   closeModal();
-  document.getElementById('success-screen').classList.add('open');
+  setTimeout(() => {
+    document.getElementById('success-screen').classList.add('open');
+  }, 250);
 }
 
 function backToCatalog() {
   document.getElementById('success-screen').classList.remove('open');
 }
 
-// Ініціалізація Telegram WebApp
+// ─── INIT ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
