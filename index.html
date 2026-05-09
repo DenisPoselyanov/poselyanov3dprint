@@ -851,7 +851,16 @@ function initLightboxSwipe() {
   lb.parentNode.replaceChild(newLb, lb);
 
   const l = document.getElementById('lightbox');
-  l.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
+  l.querySelector('.lightbox-close').addEventListener('click', () => {
+    const lb = document.getElementById('lightbox');
+    lb.style.transition = 'opacity .22s ease, transform .22s ease';
+    lb.style.opacity = '0';
+    setTimeout(() => {
+      lb.classList.remove('open');
+      lb.style.opacity = '';
+      lb.style.transition = '';
+    }, 220);
+  });
   l.addEventListener('touchstart', e => {
     lbSwipeX = e.touches[0].clientX;
     lbSwipeY = e.touches[0].clientY;
