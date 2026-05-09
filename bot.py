@@ -22,7 +22,7 @@ from telegram.ext import (
 # НАЛАШТУВАННЯ — заміни на свої значення!
 # =============================================
 
-BOT_TOKEN = "8226488857:AAHn1PUrUr7MaGGR01j2sUfEMEhXzCE5YYo"   # напр. 7123456789:AAF_abc...
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")   # напр. 7123456789:AAF_abc...
 OWNER_ID  = 718746623                    # твій Telegram ID (як дізнатись — нижче)
 WEBAPP_URL = "https://github.com/DenisPoselyanov/poselyanov3dprint"  # URL твого Mini App
 
