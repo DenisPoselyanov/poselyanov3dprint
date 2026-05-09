@@ -25,7 +25,7 @@ from telegram.ext import (
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")   # напр. 7123456789:AAF_abc...
 OWNER_ID  = 718746623                    # твій Telegram ID (як дізнатись — нижче)
-WEBAPP_URL = "https://github.com/DenisPoselyanov/poselyanov3dprint"  # URL твого Mini App
+WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"  # URL твого Mini App
 
 # =============================================
 
@@ -50,7 +50,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Привіт! Я — Poselyanov 3D Print\n\n"
         "Роблю 3D-принти на замовлення:\n"
-        "🧸 Іграшки · 🔑 Брелки · 🧠 Антистрес\n\n"
         "Натисни кнопку нижче щоб переглянути каталог 👇",
         reply_markup=markup
     )
