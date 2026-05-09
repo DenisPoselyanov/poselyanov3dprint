@@ -102,7 +102,7 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )]])
     else:
         # Додай ID щоб хоч якось зв'язатись
-        owner_msg += f"⚠️ Немає username, ID: `{user.id}`\n"
+        owner_text += f"⚠️ Немає username, ID: `{user.id}`\n"
         markup = None
 
     await context.bot.send_message(
@@ -130,7 +130,10 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
 
     logger.info("Бот запущений!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
 
 
 if __name__ == '__main__':
