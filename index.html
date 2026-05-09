@@ -285,6 +285,7 @@
     align-items: center;
     justify-content: center;
     touch-action: pan-y;
+    transition: opacity .22s ease, transform .22s ease;
   }
   .lightbox.open { display: flex; animation: lbIn .2s ease; }
   @keyframes lbIn {
@@ -297,6 +298,8 @@
     background: rgba(255,255,255,0.15); border: none; color: #fff;
     font-size: 18px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    transform: translateY(60px);
   }
   .lightbox-track {
     display: flex;
@@ -830,7 +833,13 @@ function updateLightbox(animate = true) {
 }
 
 function closeLightbox() {
-  document.getElementById('lightbox').classList.remove('open');
+  const l = document.getElementById('lightbox');
+  l.classList.add('closing');
+  setTimeout(() => {
+    l.classList.remove('open');
+    l.classList.remove('closing');
+    l.style.transform = '';
+  }, 220);
 }
 
 let lbSwipeX = null;
@@ -847,13 +856,23 @@ function initLightboxSwipe() {
     lbSwipeX = e.touches[0].clientX;
     lbSwipeY = e.touches[0].clientY;
   }, { passive: true });
-  l.addEventListener('touchend', e => {
+  addEventListener('touchend', e => {
     if (lbSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - lbSwipeX;
     const dy = e.changedTouches[0].clientY - lbSwipeY;
 
+    // ↓ ось сюди вставляєш цей блок
     if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
-      closeLightbox();
+      const l = document.getElementById('lightbox');
+      l.style.transition = 'opacity .22s ease, transform .22s ease';
+      l.style.opacity = '0';
+      l.style.transform = `translateY(${dy > 0 ? '80px' : '-80px'})`;
+      setTimeout(() => {
+        l.classList.remove('open');
+        l.style.opacity = '';
+        l.style.transform = '';
+        l.style.transition = '';
+      }, 220);
       lbSwipeX = null;
       lbSwipeY = null;
       return;
