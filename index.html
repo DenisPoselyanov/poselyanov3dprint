@@ -298,8 +298,6 @@
     background: rgba(255,255,255,0.15); border: none; color: #fff;
     font-size: 18px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    opacity: 0;
-    transform: translateY(60px);
   }
   .lightbox-track {
     display: flex;
@@ -865,7 +863,7 @@ function initLightboxSwipe() {
     lbSwipeX = e.touches[0].clientX;
     lbSwipeY = e.touches[0].clientY;
   }, { passive: true });
-  addEventListener('touchend', e => {
+  l.addEventListener('touchend', e => {
     if (lbSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - lbSwipeX;
     const dy = e.changedTouches[0].clientY - lbSwipeY;
