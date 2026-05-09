@@ -797,37 +797,27 @@ function initCarouselSwipe() {
 // ─── Свайп модального вікна ───────────────────────────────────────────────
 function initModalSwipe() {
   const modal = document.getElementById('modal');
-  let swipeStartY = null;
+  let modalSwipeStartY = null;
+  let modalSwipeStartX = null;
+  let modalStartedOnCarousel = false;
 
   modal.addEventListener('touchstart', e => {
-    swipeStartY = e.touches[0].clientY;
+    modalSwipeStartY = e.touches[0].clientY;
+    modalSwipeStartX = e.touches[0].clientX;
+    modalStartedOnCarousel = !!e.target.closest('#carousel-wrap');
   }, { passive: true });
 
   modal.addEventListener('touchend', e => {
-    if (swipeStartY === null) return;
-    const dy = e.changedTouches[0].clientY - swipeStartY;
+    if (modalSwipeStartY === null) return;
+    const dy = e.changedTouches[0].clientY - modalSwipeStartY;
+    const dx = e.changedTouches[0].clientX - modalSwipeStartX;
 
-    if (dy > 80) 
-     closeModal();
-    { // свайп вниз
-      const backdrop = document.getElementById('modal-backdrop');
-      modal.style.transition = 'transform .25s ease, opacity .25s ease';
-      modal.style.transform = 'translateY(100%)';
-      modal.style.opacity = '0';
-      setTimeout(() => {
-        backdrop.classList.remove('open');
-        modal.style.transition = '';
-        modal.style.transform = '';
-        modal.style.opacity = '';
-        // Restore background scroll
-        const scrollY = parseInt(document.body.style.top || '0') * -1;
-        document.body.classList.remove('modal-open');
-        document.body.style.top = '';
-        window.scrollTo(0, scrollY);
-      }, 250);
+    if (!modalStartedOnCarousel && dy > 80 && Math.abs(dy) > Math.abs(dx)) {
+      closeModal();
     }
 
-    swipeStartY = null;
+    modalSwipeStartY = null;
+    modalSwipeStartX = null;
   }, { passive: true });
 }
 
