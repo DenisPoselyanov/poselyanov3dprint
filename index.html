@@ -794,7 +794,7 @@ function initCarouselSwipe() {
     s.addEventListener('click', () => openLightbox(i));
   });
 }
-// ─── Свайп модального вікна───────────────────────────────────────────────
+// ─── Свайп модального вікна ───────────────────────────────────────────────
 function initModalSwipe() {
   const modal = document.getElementById('modal');
   let swipeStartY = null;
@@ -807,7 +807,9 @@ function initModalSwipe() {
     if (swipeStartY === null) return;
     const dy = e.changedTouches[0].clientY - swipeStartY;
 
-    if (dy > 80) { // свайп вниз
+    if (dy > 80) 
+     closeModal();
+    { // свайп вниз
       const backdrop = document.getElementById('modal-backdrop');
       modal.style.transition = 'transform .25s ease, opacity .25s ease';
       modal.style.transform = 'translateY(100%)';
