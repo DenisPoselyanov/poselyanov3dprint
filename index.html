@@ -540,9 +540,10 @@
 //    hot      — true / false — значок "🔥 Хіт"
 // ============================================================
 
-// Хелпер для Google Drive фото
-function drivePhoto(fileId) {
-  return `https://lh3.googleusercontent.com/d/${fileId}`;
+// Хелпер для ImgBB
+function photo(url) {
+  if (!url) return '';
+  return url.trim();
 }
 
 const PRODUCTS = [
@@ -551,8 +552,8 @@ const PRODUCTS = [
     cat: 'toy', 
     emoji: '🐉',
     photos: [
-      drivePhoto('1iX4kTCMRUZWT9QrCvtWCsFA0DGdO42Jt'),
-      drivePhoto('176pnnFC2RNPFrEFndqZ54Dp8X-xzoJPa')   // повний ID!
+      photo('https://ibb.co/VcYprZLN'), // Посилання на фото
+      photo('https://ibb.co/LdVhjNPS')
     ],
     name: 'Fidget-спіраль',
     mat: 'PLA · один або два кольори',
