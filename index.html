@@ -380,6 +380,13 @@
     font-size: 10px; font-weight: 800;
     padding: 1px 6px; border-radius: 5px;
   }
+  .modal-sale-badge {
+    position: absolute; top: 10px; left: 10px;
+    background: var(--sale); color: #fff;
+    font-size: 11px; font-weight: 800;
+    padding: 3px 8px; border-radius: 7px;
+    z-index: 4;
+  }
 
   .modal-body { padding: 0 18px 24px; animation: fadeInUp .3s .15s ease both; }
 
@@ -582,8 +589,7 @@ const PRODUCTS = [
     ],
     name: 'Fidget-спіраль',
     mat: 'PLA · один або два кольори',
-    price: 300, 
-    hot: true
+    price: 200, oldPrice: 250, hot: false  // <- знижка!
   },
   {
     id: 2, cat: 'toy', emoji: '🦕',
@@ -726,6 +732,8 @@ function buildCarousel(photos) {
   const emoji = document.getElementById('m-emoji-fallback');
   const leftBtn  = document.getElementById('carr-left');
   const rightBtn = document.getElementById('carr-right');
+  const discount = currentProduct?.oldPrice
+    ? Math.round((1 - currentProduct.price / currentProduct.oldPrice) * 100) : 0;
 
   if (!photos || photos.length === 0) {
     wrap.style.display = 'none';
@@ -737,6 +745,16 @@ function buildCarousel(photos) {
 
   emoji.style.display = 'none';
   wrap.style.display = 'block';
+
+  // Badge знижки поверх каруселі
+  const existingBadge = wrap.querySelector('.modal-sale-badge');
+  if (existingBadge) existingBadge.remove();
+  if (currentProduct.oldPrice) {
+    const badge = document.createElement('div');
+    badge.className = 'modal-sale-badge';
+    badge.textContent = `−${discount}%`;
+    wrap.appendChild(badge);
+  }
 
   track.innerHTML = photos.map((url, i) => `
     <div class="carousel-slide" onclick="openLightbox(${i})">
@@ -942,13 +960,11 @@ function openModal(id) {
   const chipEl  = document.getElementById('m-sale-chip');
   if (currentProduct.oldPrice) {
     oldEl.textContent  = currentProduct.oldPrice + ' ₴';
-    chipEl.textContent = `−${discount}%`;
     oldEl.style.display  = '';
-    chipEl.style.display = '';
   } else {
     oldEl.style.display  = 'none';
-    chipEl.style.display = 'none';
   }
+  chipEl.style.display = 'none'; // завжди ховаємо тут
 
   document.getElementById('m-comment').value = '';
 
@@ -1022,6 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Telegram.WebApp.expand();
   }
   renderGrid('all');
+  initModalSwipe(); // 
 });
 </script>
 </body>
