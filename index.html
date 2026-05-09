@@ -794,6 +794,40 @@ function initCarouselSwipe() {
     s.addEventListener('click', () => openLightbox(i));
   });
 }
+// ─── Свайп модального вікна───────────────────────────────────────────────
+function initModalSwipe() {
+  const modal = document.getElementById('modal');
+  let swipeStartY = null;
+
+  modal.addEventListener('touchstart', e => {
+    swipeStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  modal.addEventListener('touchend', e => {
+    if (swipeStartY === null) return;
+    const dy = e.changedTouches[0].clientY - swipeStartY;
+
+    if (dy > 80) { // свайп вниз
+      const backdrop = document.getElementById('modal-backdrop');
+      modal.style.transition = 'transform .25s ease, opacity .25s ease';
+      modal.style.transform = 'translateY(100%)';
+      modal.style.opacity = '0';
+      setTimeout(() => {
+        backdrop.classList.remove('open');
+        modal.style.transition = '';
+        modal.style.transform = '';
+        modal.style.opacity = '';
+        // Restore background scroll
+        const scrollY = parseInt(document.body.style.top || '0') * -1;
+        document.body.classList.remove('modal-open');
+        document.body.style.top = '';
+        window.scrollTo(0, scrollY);
+      }, 250);
+    }
+
+    swipeStartY = null;
+  }, { passive: true });
+}
 
 // ─── LIGHTBOX ───────────────────────────────────────────────
 function openLightbox(startIndex) {
@@ -927,6 +961,7 @@ function openModal(id) {
   document.getElementById('m-comment').value = '';
 
   buildCarousel(currentProduct.photos);
+  initModalSwipe(); // Свайп модального вікна
 
   // Lock background scroll
   const scrollY = window.scrollY;
