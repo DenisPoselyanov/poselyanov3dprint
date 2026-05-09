@@ -132,10 +132,21 @@
   .card-footer { display: flex; align-items: center; justify-content: space-between; }
 
   .card-price-wrap { display: flex; flex-direction: column; }
-  .card-price { font-size: 14px; font-weight: 800; color: var(--tg-blue); line-height: 1; }
+
+  /* Ціни на картках товарів */
+  .card-price { 
+    font-size: 15px; 
+    font-weight: 800; 
+    color: #E53935;           /* Червоний для нової ціни */
+    line-height: 1; 
+  }
   .card-price-old {
-    font-size: 10px; font-weight: 700; color: var(--muted);
-    text-decoration: line-through; line-height: 1; margin-bottom: 1px;
+    font-size: 11px; 
+    font-weight: 600; 
+    color: var(--tg-blue);    /* Синя для старої ціни */
+    text-decoration: line-through; 
+    line-height: 1; 
+    margin-bottom: 1px;
   }
 
   .card-btn {
@@ -345,9 +356,15 @@
   }
   .modal-pname { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
   .modal-price-row { display: flex; align-items: baseline; gap: 8px; }
-  .modal-pprice { font-size: 16px; font-weight: 800; color: var(--tg-blue); }
+  .modal-pprice {
+    font-size: 22px;
+    font-weight: 800;
+    color: #E53935;           /* Червоний для нової ціни */
+  }
   .modal-pprice-old {
-    font-size: 12px; font-weight: 700; color: var(--muted);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--tg-blue);    /* Синя для старої ціни */
     text-decoration: line-through;
   }
   .modal-sale-chip {
