@@ -137,15 +137,19 @@
   .card-price { 
     font-size: 15px; 
     font-weight: 800; 
-    color: #E53935;           /* Червоний для нової ціни */
     line-height: 1; 
+    color: var(--tg-blue); /* синій за замовчуванням */
   }
+  /* Червона ціна тільки при знижці */
+  .card-price.has-discount {
+    color: #ff2f2f;        /* червоний */
+  }
+  /* Стара ціна (закреслена) */
   .card-price-old {
     font-size: 11px; 
     font-weight: 600; 
-    color: var(--tg-blue);    /* Синя для старої ціни */
+    color: var(--tg-blue); 
     text-decoration: line-through; 
-    line-height: 1; 
     margin-bottom: 1px;
   }
 
@@ -359,12 +363,15 @@
   .modal-pprice {
     font-size: 22px;
     font-weight: 800;
-    color: #E53935;           /* Червоний для нової ціни */
+    color: var(--tg-blue); /* синій за замовчуванням */
+  }
+  .modal-pprice.has-discount {
+    color: #E53935;        /* Червоний тільки при знижці */
   }
   .modal-pprice-old {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--tg-blue);    /* Синя для старої ціни */
+    font-size: 12px; 
+    font-weight: 700; 
+    color: var(--tg-blue); 
     text-decoration: line-through;
   }
   .modal-sale-chip {
@@ -692,7 +699,7 @@ function renderGrid(cat) {
           <div class="card-footer">
             <div class="card-price-wrap">
               ${p.oldPrice ? `<div class="card-price-old">${p.oldPrice} ₴</div>` : ''}
-              <div class="card-price">${p.price} ₴</div>
+              <div class="card-price${p.oldPrice ? ' has-discount' : ''}">${p.price} ₴</div>
             </div>
             <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id})">Замовити</button>
           </div>
@@ -827,6 +834,7 @@ function closeLightbox() {
 }
 
 let lbSwipeX = null;
+let lbSwipeY = null;
 function initLightboxSwipe() {
   const lb = document.getElementById('lightbox');
   const newLb = lb.cloneNode(false);
@@ -835,16 +843,29 @@ function initLightboxSwipe() {
 
   const l = document.getElementById('lightbox');
   l.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
-  l.addEventListener('touchstart', e => { lbSwipeX = e.touches[0].clientX; }, { passive: true });
+  l.addEventListener('touchstart', e => {
+    lbSwipeX = e.touches[0].clientX;
+    lbSwipeY = e.touches[0].clientY;
+  }, { passive: true });
   l.addEventListener('touchend', e => {
     if (lbSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - lbSwipeX;
+    const dy = e.changedTouches[0].clientY - lbSwipeY;
+
+    if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
+      closeLightbox();
+      lbSwipeX = null;
+      lbSwipeY = null;
+      return;
+    }
+
     const photos = currentProduct?.photos || [];
     if (Math.abs(dx) > 40) {
       lbIndex = (lbIndex + (dx < 0 ? 1 : -1) + photos.length) % photos.length;
       updateLightbox();
     }
     lbSwipeX = null;
+    lbSwipeY = null;
   }, { passive: true });
 }
 
@@ -859,7 +880,12 @@ function openModal(id) {
 
   document.getElementById('m-name').textContent = currentProduct.name;
   document.getElementById('m-price').textContent = currentProduct.price + ' ₴';
-
+  const priceEl = document.getElementById('m-price');
+  if (currentProduct.oldPrice) {
+    priceEl.classList.add('has-discount');
+  } else {
+    priceEl.classList.remove('has-discount');
+  }
   const oldEl   = document.getElementById('m-price-old');
   const chipEl  = document.getElementById('m-sale-chip');
   if (currentProduct.oldPrice) {
