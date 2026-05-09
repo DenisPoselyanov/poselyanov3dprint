@@ -1017,7 +1017,13 @@ function submitOrder() {
     user: username
   });
 
-  if (tg) tg.sendData(message);
+  if (tg && tg.sendData) {
+    try {
+      tg.sendData(message);
+    } catch(e) {
+      console.error('sendData failed:', e);
+    }
+  }
 
   closeModal();
   setTimeout(() => {
@@ -1034,6 +1040,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
+    // Виведи в консоль для діагностики:
+    console.log('TG initData:', Telegram.WebApp.initData);
+    console.log('TG platform:', Telegram.WebApp.platform);
   }
   renderGrid('all');
   initModalSwipe(); // 
