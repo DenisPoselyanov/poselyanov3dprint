@@ -476,6 +476,9 @@
     <button class="tab" onclick="filterCat(this,'toy')">🧸 Іграшки</button>
     <button class="tab" onclick="filterCat(this,'key')">🔑 Брелки</button>
     <button class="tab" onclick="filterCat(this,'anti')">🧠 Антистрес</button>
+    <button class="tab" onclick="filterCat(this,'gifts')">🎁 Подарунки та декор</button>
+    <button class="tab" onclick="filterCat(this,'home')">🏠 Дім та побут</button>
+    <button class="tab" onclick="filterCat(this,'individual')">✏️ Індивідуальне</button>
   </div>
 </div>
 
@@ -556,15 +559,7 @@
 //    id       — унікальний номер
 //    cat      — категорія: 'toy' | 'key' | 'anti'
 //    emoji    — показується якщо нема фото
-//    photos   — масив URL фото з Google Drive (або порожній [])
-//               Як отримати посилання з Google Drive:
-//                 1. Завантаж фото на Google Drive
-//                 2. ПКМ → "Отримати посилання" → "Всі хто має посилання"
-//                 3. Скопіюй FILE_ID з посилання:
-//                    https://drive.google.com/file/d/FILE_ID/view
-//                 4. Встав як: drivePhoto('FILE_ID')
-//                    або просто url рядком
-//               Для GIF — те саме, карусель покаже badge "GIF"
+//    photos   — масив URL фото 
 //    name     — назва товару
 //    mat      — матеріал / опис
 //    price    — поточна ціна
@@ -585,18 +580,21 @@ const PRODUCTS = [
     emoji: '🐉',
     photos: [
       photo('https://i.ibb.co/Q3vjzRJc/IMG-0246.gif'), // Посилання на фото
-      photo('https://i.ibb.co/m5fFZNBJ/IMG-0244.png')
+      photo('https://i.ibb.co/m5fFZNBJ/IMG-0244.png'),
+      photo('https://i.ibb.co/3mF9zKCp/image.png'),
+      photo('https://i.ibb.co/PzrvMq60/image.png'),
+      photo('https://i.ibb.co/h1L65Yks/image.png')
     ],
     name: 'Fidget-спіраль',
     mat: 'PLA · один або два кольори',
-    price: 200, oldPrice: 250, hot: false  // <- знижка!
+    price: 100, oldPrice: 150, hot: true  // <- знижка!
   },
   {
     id: 2, cat: 'toy', emoji: '🦕',
     photos: [],
     name: 'Флекс-динозавр',
     mat: 'PLA flex · кольоровий',
-    price: 110, oldPrice: 150, hot: false  // <- знижка!
+    price: 110, hot: false  // <- знижка!
   },
   {
     id: 3, cat: 'toy', emoji: '🐱',
