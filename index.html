@@ -1004,9 +1004,11 @@ function closeIfBackdrop(e) {
 function submitOrder() {
   if (!currentProduct) return;
   const comment = document.getElementById('m-comment').value.trim();
-  const tg   = window.Telegram?.WebApp;
+  const tg = window.Telegram?.WebApp;
   const user = tg?.initDataUnsafe?.user;
-  const username = user ? (user.username ? '@' + user.username : user.first_name) : 'невідомо';
+  const username = user?.username 
+    ? '@' + user.username 
+    : (user?.first_name || 'невідомо');
 
   const message = JSON.stringify({
     action: 'order',
