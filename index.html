@@ -1017,13 +1017,8 @@ function submitOrder() {
     user: username
   });
 
-  // Перевіряємо що справді відкрито через Telegram
-  if (tg && tg.initData && tg.initData.length > 0) {
+  if (tg) {
     tg.sendData(message);
-  } else {
-    console.warn('sendData недоступний — Mini App відкрито не через бота');
-    alert('Будь ласка, відкрий магазин через Telegram бота!');
-    return;
   }
 
   closeModal();
@@ -1031,13 +1026,6 @@ function submitOrder() {
     document.getElementById('success-screen').classList.add('open');
   }, 250);
 }
-
-  closeModal();
-  setTimeout(() => {
-    document.getElementById('success-screen').classList.add('open');
-  }, 250);
-
-
 function backToCatalog() {
   document.getElementById('success-screen').classList.remove('open');
 }
