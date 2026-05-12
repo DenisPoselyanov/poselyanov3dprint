@@ -2,12 +2,17 @@
 Denis 3D Print — Telegram Bot
 """
 
+from aiohttp import web
+import asyncio
 import json
 import logging
 import os
 import sqlite3
 from pathlib import Path
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+)
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     filters, ContextTypes
@@ -15,7 +20,7 @@ from telegram.ext import (
 
 # =============================================
 BOT_TOKEN  = os.environ.get("BOT_TOKEN")
-OWNER_ID   = -1003739884073 # ID канала, куди приходять замовлення та статистика
+OWNER_ID   = -1003739884073
 WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"
 DB_FILE    = "users.db"
 PRODUCTS_FILE = "products.json"
@@ -25,6 +30,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -116,13 +122,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.message.from_user)
 
     keyboard = [[
-        InlineKeyboardButton("🛍️ Відкрити каталог", web_app={"url": WEBAPP_URL})
+        KeyboardButton(
+            "🛍️ Відкрити каталог",
+            web_app=WebAppInfo(url=WEBAPP_URL)
+        )
     ]]
     await update.message.reply_text(
         "👋 Привіт! Я — Poselyanov 3D Print\n\n"
         "Роблю 3D-принти на замовлення:\n"
         "Натисни кнопку нижче щоб переглянути каталог 👇",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     )
 
 
@@ -139,8 +148,8 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product_name = data.get('product_name', '—')
     price        = data.get('price', '—')
     comment      = data.get('comment', '').strip()
-    client       = data.get('user', '—')
     user         = update.message.from_user
+    client       = f"@{user.username}" if user.username else user.first_name
 
     save_order(
         user.id,
@@ -190,7 +199,7 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != OWNER_ID:
+    if update.message.from_user.id != 718746623:
         return
     user_count, order_count, recent = get_stats()
     lines = [
@@ -205,35 +214,31 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != OWNER_ID:
+    if update.message.from_user.id != 718746623:
         return
 
-    # Формат: /broadcast <id товару> <текст>
-    # Приклад: /broadcast 1 Новий хіт в каталозі! 🔥
     args = context.args
     if not args or len(args) < 2:
         await update.message.reply_text(
             "Використання: `/broadcast <id товару> <текст>`\n\n"
-            "Приклад: `/broadcast 1 Новий хіт в каталозі\\! 🔥`",
+            "Приклад: `/broadcast 1 Новий хіт в каталозі! 🔥`",
             parse_mode='Markdown'
         )
         return
 
-    # Перший аргумент — ID товару, решта — текст
     try:
         product_id = int(args[0])
     except ValueError:
-        await update.message.reply_text("❌ ID товару має бути числом. Наприклад: `/broadcast 1 Текст`", parse_mode='Markdown')
+        await update.message.reply_text("❌ ID товару має бути числом.", parse_mode='Markdown')
         return
 
     text = ' '.join(args[1:])
     product = get_product_by_id(product_id)
 
     if not product:
-        await update.message.reply_text(f"❌ Товар з ID `{product_id}` не знайдено в products.json", parse_mode='Markdown')
+        await update.message.reply_text(f"❌ Товар з ID `{product_id}` не знайдено.", parse_mode='Markdown')
         return
 
-    # Кнопка що відкриває конкретний товар в Mini App
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "🛍️ Переглянути товар",
@@ -241,7 +246,6 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     ]])
 
-    # Фото — береться перше з масиву photos
     photo_url = product.get('photos', [])
     photo_url = photo_url[0] if photo_url else None
 
@@ -280,26 +284,88 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+#Новий HTTP хендлер для прийому замовлень з веб-додатку
+async def handle_order(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.Response(status=400, text="Bad JSON")
+
+    product_name = data.get('product_name', '—')
+    price        = data.get('price', '—')
+    comment      = data.get('comment', '').strip()
+    username     = data.get('user', 'невідомо')
+    user_id      = data.get('user_id')
+    first_name   = data.get('first_name', '')
+
+    save_order(user_id or 0, username, product_name, price, comment)
+
+    owner_text = (
+        f"🔔 *НОВЕ ЗАМОВЛЕННЯ*\n\n"
+        f"📦 Товар: *{product_name}*\n"
+        f"💰 Ціна: *{price} ₴*\n"
+        f"👤 Від: {username}\n"
+    )
+    if comment:
+        owner_text += f"📝 Коментар: _{comment}_\n"
+
+    tg_username = data.get('tg_username')
+    if tg_username:
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+            f"💬 Написати {first_name}",
+            url=f"https://t.me/{tg_username}"
+        )]])
+    else:
+        markup = None
+
+    await bot_app.bot.send_message(
+        chat_id=OWNER_ID,
+        text=owner_text,
+        parse_mode='Markdown',
+        reply_markup=markup
+    )
+
+    return web.Response(text="ok")
+
 
 # ─── ЗАПУСК ─────────────────────────────────────────────────
 
+bot_app = None
+
 def main():
+    global bot_app
     init_db()
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    bot_app = Application.builder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start",     start))
-    app.add_handler(CommandHandler("myid",      myid))
-    app.add_handler(CommandHandler("stats",     stats))
-    app.add_handler(CommandHandler("broadcast", broadcast))
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
+    bot_app.add_handler(CommandHandler("start",     start))
+    bot_app.add_handler(CommandHandler("myid",      myid))
+    bot_app.add_handler(CommandHandler("stats",     stats))
+    bot_app.add_handler(CommandHandler("broadcast", broadcast))
+    bot_app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
 
-    logger.info("Бот запущений!")
-    app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-    )
+    async def run():
+        # HTTP сервер
+        http_app = web.Application()
+        http_app.router.add_post('/order', handle_order)
+        runner = web.AppRunner(http_app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
+        await site.start()
+        logger.info("HTTP сервер запущений на порту 8080")
 
+        # Telegram polling
+        async with bot_app:
+            await bot_app.initialize()
+            await bot_app.start()
+            await bot_app.updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+            )
+            logger.info("Бот запущений!")
+            await asyncio.Event().wait()
+
+    asyncio.run(run())
 
 if __name__ == '__main__':
     main()
