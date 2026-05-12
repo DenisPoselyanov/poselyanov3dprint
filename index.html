@@ -876,41 +876,20 @@ async function submitOrder() {
   }, 250);
 }
 
-  if (!currentProduct) return;
-  const comment = document.getElementById('m-comment').value.trim();
-  const tg   = window.Telegram?.WebApp;
-  const user = tg?.initDataUnsafe?.user;
-  const username = user?.username ? '@' + user.username : (user?.first_name || 'невідомо');
-
-  const payload = {
-    action: 'order',
-    product_id: currentProduct.id,
-    product_name: currentProduct.name,
-    price: currentProduct.price,
-    comment: comment || '',
-    user: username,
-    user_id: user?.id || null,
-    first_name: user?.first_name || '',
-    tg_username: user?.username || null
-  };
-
-  // Спробуємо sendData (працює через KeyboardButton)
-  if (tg && tg.initData && tg.initData.length > 0) {
-    try {
-      tg.sendData(JSON.stringify(payload));
-    } catch(e) {
-      // Якщо не спрацювало — відправляємо через HTTP
-      await sendViaHttp(payload);
-    }
-  } else {
-    // Main App або інший спосіб — відправляємо через HTTP
-    await sendViaHttp(payload);
+async function sendViaHttp(payload) {
+  try {
+    await fetch('https://denis-3d-bot-production.up.railway.app/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch(e) {
+    console.error('Помилка відправки:', e);
   }
+}
 
-  closeModal();
-  setTimeout(() => {
-    document.getElementById('success-screen').classList.add('open');
-  }, 250);
+function backToCatalog() {
+  document.getElementById('success-screen').classList.remove('open');
 }
 
 async function sendViaHttp(payload) {
