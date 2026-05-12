@@ -868,6 +868,32 @@ async function submitOrder() {
     tg_username: user?.username || null
   };
 
+  await sendViaHttp(payload);
+
+  closeModal();
+  setTimeout(() => {
+    document.getElementById('success-screen').classList.add('open');
+  }, 250);
+}
+
+  if (!currentProduct) return;
+  const comment = document.getElementById('m-comment').value.trim();
+  const tg   = window.Telegram?.WebApp;
+  const user = tg?.initDataUnsafe?.user;
+  const username = user?.username ? '@' + user.username : (user?.first_name || 'невідомо');
+
+  const payload = {
+    action: 'order',
+    product_id: currentProduct.id,
+    product_name: currentProduct.name,
+    price: currentProduct.price,
+    comment: comment || '',
+    user: username,
+    user_id: user?.id || null,
+    first_name: user?.first_name || '',
+    tg_username: user?.username || null
+  };
+
   // Спробуємо sendData (працює через KeyboardButton)
   if (tg && tg.initData && tg.initData.length > 0) {
     try {

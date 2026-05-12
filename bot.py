@@ -302,6 +302,26 @@ async def handle_order(request):
 
     save_order(user_id or 0, username, product_name, price, comment)
 
+    # Підтвердження клієнту
+    if user_id:
+        confirm_text = (
+            f"✅ Замовлення прийнято!\n\n"
+            f"📦 *{product_name}*\n"
+            f"💰 {price} ₴\n"
+        )
+        if comment:
+            confirm_text += f"📝 Коментар: {comment}\n"
+        confirm_text += "\n[Денис](https://t.me/denisposelyanov) зв'яжеться з тобою найближчим часом 🙌"
+
+    try:
+        await bot_app.bot.send_message(
+            chat_id=user_id,
+            text=confirm_text,
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Помилка підтвердження клієнту: {e}")
+
     owner_text = (
         f"🔔 *НОВЕ ЗАМОВЛЕННЯ*\n\n"
         f"📦 Товар: *{product_name}*\n"
