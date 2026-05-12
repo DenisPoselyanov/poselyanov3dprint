@@ -325,8 +325,23 @@ async def handle_order(request):
         reply_markup=markup
     )
 
-    return web.Response(text="ok")
+    return web.Response(
+    text="ok",
+    headers={
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+    }
+)
 
+async def handle_options(request):
+    return web.Response(
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
+        }
+    )
 
 # ─── ЗАПУСК ─────────────────────────────────────────────────
 
@@ -348,6 +363,7 @@ def main():
         # HTTP сервер
         http_app = web.Application()
         http_app.router.add_post('/order', handle_order)
+        http_app.router.add_route('OPTIONS', '/order', handle_options)
         runner = web.AppRunner(http_app)
         await runner.setup()
         site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
