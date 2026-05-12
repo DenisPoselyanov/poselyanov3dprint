@@ -1,66 +1,131 @@
 """
 Denis 3D Print — Telegram Bot
-==============================
-Отримує замовлення з Mini App та надсилає повідомлення власнику.
-
-Встановлення:
-  pip install python-telegram-bot==20.7
-
-Запуск:
-  python bot.py
 """
 
 import json
 import logging
 import os
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
-)
+import sqlite3
+from pathlib import Path
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, filters, ContextTypes
+    filters, ContextTypes
 )
 
 # =============================================
-# НАЛАШТУВАННЯ — заміни на свої значення!
+BOT_TOKEN  = os.environ.get("BOT_TOKEN")
+OWNER_ID   = -1003739884073 # ID канала, куди приходять замовлення та статистика
+WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"
+DB_FILE    = "users.db"
+PRODUCTS_FILE = "products.json"
 # =============================================
-
-BOT_TOKEN = os.environ.get("BOT_TOKEN")   # напр. 7123456789:AAF_abc...from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
-
-OWNER_ID  = -1003739884073                  # ID групи (завжди від'ємний і починається з -100)
-WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"  # URL твого Mini App
-
-# =============================================
-
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-# --- /start ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[
-        KeyboardButton(
-            "🛍️ Відкрити каталог",
-            web_app=WebAppInfo(url=WEBAPP_URL)
-        )
-    ]]
-    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+# ─── ТОВАРИ ─────────────────────────────────────────────────
 
+def load_products():
+    if Path(PRODUCTS_FILE).exists():
+        return json.loads(Path(PRODUCTS_FILE).read_text(encoding='utf-8'))
+    return []
+
+def get_product_by_id(product_id: int):
+    for p in load_products():
+        if p['id'] == product_id:
+            return p
+    return None
+
+
+# ─── БАЗА ДАНИХ ─────────────────────────────────────────────
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id        INTEGER PRIMARY KEY,
+            name      TEXT,
+            username  TEXT,
+            blocked   INTEGER DEFAULT 0,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER,
+            username     TEXT,
+            product_name TEXT,
+            price        INTEGER,
+            comment      TEXT,
+            ordered_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def save_user(user):
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("""
+        INSERT OR IGNORE INTO users (id, name, username)
+        VALUES (?, ?, ?)
+    """, (user.id, user.first_name, f"@{user.username}" if user.username else "—"))
+    conn.commit()
+    conn.close()
+
+def save_order(user_id, username, product_name, price, comment):
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("""
+        INSERT INTO orders (user_id, username, product_name, price, comment)
+        VALUES (?, ?, ?, ?, ?)
+    """, (user_id, username, product_name, price, comment))
+    conn.commit()
+    conn.close()
+
+def get_stats():
+    conn = sqlite3.connect(DB_FILE)
+    user_count  = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    order_count = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+    recent      = conn.execute(
+        "SELECT name, username FROM users ORDER BY joined_at DESC LIMIT 10"
+    ).fetchall()
+    conn.close()
+    return user_count, order_count, recent
+
+def set_blocked(user_id, blocked: bool):
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("UPDATE users SET blocked = ? WHERE id = ?", (int(blocked), user_id))
+    conn.commit()
+    conn.close()
+
+def get_all_users():
+    conn = sqlite3.connect(DB_FILE)
+    users = conn.execute("SELECT id FROM users WHERE blocked = 0").fetchall()
+    conn.close()
+    return users
+
+
+# ─── ХЕНДЛЕРИ ───────────────────────────────────────────────
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    save_user(update.message.from_user)
+
+    keyboard = [[
+        InlineKeyboardButton("🛍️ Відкрити каталог", web_app={"url": WEBAPP_URL})
+    ]]
     await update.message.reply_text(
         "👋 Привіт! Я — Poselyanov 3D Print\n\n"
         "Роблю 3D-принти на замовлення:\n"
         "Натисни кнопку нижче щоб переглянути каталог 👇",
-        reply_markup=markup
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
-# --- Отримання замовлення з Mini App ---
 async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         data = json.loads(update.message.web_app_data.data)
@@ -74,10 +139,18 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product_name = data.get('product_name', '—')
     price        = data.get('price', '—')
     comment      = data.get('comment', '').strip()
-    user = update.message.from_user
-    client = f"@{user.username}" if user.username else user.first_name
-    
-    # Повідомлення клієнту — підтвердження
+    client       = data.get('user', '—')
+    user         = update.message.from_user
+
+    save_order(
+        user.id,
+        f"@{user.username}" if user.username else "—",
+        product_name,
+        price,
+        comment
+    )
+
+    # Підтвердження клієнту
     confirm_text = (
         f"✅ Замовлення прийнято!\n\n"
         f"📦 *{product_name}*\n"
@@ -85,7 +158,7 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     if comment:
         confirm_text += f"📝 Коментар: {comment}\n"
-    confirm_text += "\nДенис зв'яжеться з тобою найближчим часом 🙌"
+    confirm_text += "\n[Денис](https://t.me/denisposelyanov) зв'яжеться з тобою найближчим часом 🙌"
 
     await update.message.reply_text(confirm_text, parse_mode='Markdown')
 
@@ -99,15 +172,12 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if comment:
         owner_text += f"📝 Коментар: _{comment}_\n"
 
-    # Кнопка "Написати клієнту"
-    user = update.message.from_user
     if user.username:
         markup = InlineKeyboardMarkup([[InlineKeyboardButton(
             f"💬 Написати {user.first_name}",
             url=f"https://t.me/{user.username}"
         )]])
     else:
-        # Додай ID щоб хоч якось зв'язатись
         owner_text += f"⚠️ Немає username, ID: `{user.id}`\n"
         markup = None
 
@@ -119,38 +189,109 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# --- /myid — щоб дізнатись свій Telegram ID ---
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.from_user.id != OWNER_ID:
+        return
+    user_count, order_count, recent = get_stats()
+    lines = [
+        f"📊 *Статистика*\n",
+        f"👥 Користувачів: *{user_count}*",
+        f"📦 Замовлень: *{order_count}*\n",
+        f"🕐 Останні користувачі:",
+    ]
+    for name, username in recent:
+        lines.append(f"• {name} {username}")
+    await update.message.reply_text("\n".join(lines), parse_mode='Markdown')
+
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.from_user.id != OWNER_ID:
+        return
+
+    # Формат: /broadcast <id товару> <текст>
+    # Приклад: /broadcast 1 Новий хіт в каталозі! 🔥
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            "Використання: `/broadcast <id товару> <текст>`\n\n"
+            "Приклад: `/broadcast 1 Новий хіт в каталозі\\! 🔥`",
+            parse_mode='Markdown'
+        )
+        return
+
+    # Перший аргумент — ID товару, решта — текст
+    try:
+        product_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ ID товару має бути числом. Наприклад: `/broadcast 1 Текст`", parse_mode='Markdown')
+        return
+
+    text = ' '.join(args[1:])
+    product = get_product_by_id(product_id)
+
+    if not product:
+        await update.message.reply_text(f"❌ Товар з ID `{product_id}` не знайдено в products.json", parse_mode='Markdown')
+        return
+
+    # Кнопка що відкриває конкретний товар в Mini App
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "🛍️ Переглянути товар",
+            url=f"https://t.me/poselyanov3dprint_bot?startapp=product_{product_id}"
+        )
+    ]])
+
+    # Фото — береться перше з масиву photos
+    photo_url = product.get('photos', [])
+    photo_url = photo_url[0] if photo_url else None
+
+    users = get_all_users()
+    sent, failed = 0, 0
+
+    for (user_id,) in users:
+        try:
+            if photo_url:
+                await context.bot.send_photo(
+                    chat_id=user_id,
+                    photo=photo_url,
+                    caption=text,
+                    reply_markup=markup
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    reply_markup=markup
+                )
+            sent += 1
+        except Exception:
+            set_blocked(user_id, True)
+            failed += 1
+
+    await update.message.reply_text(
+        f"📨 Розсилка завершена\n✅ Надіслано: *{sent}*\n❌ Заблоковано: *{failed}*",
+        parse_mode='Markdown'
+    )
+
+
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Твій Telegram ID: `{update.message.from_user.id}`",
         parse_mode='Markdown'
     )
 
-# --- Гарний лог ---
-async def debug_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message and update.message.web_app_data:
-        data = json.loads(update.message.web_app_data.data)
-        logger.info(
-            f"\n{'='*40}\n"
-            f"📦 НОВЕ ЗАМОВЛЕННЯ\n"
-            f"👤 Від: @{update.message.from_user.username}\n"
-            f"🛍️ Товар: {data.get('product_name')}\n"
-            f"💰 Ціна: {data.get('price')} ₴\n"
-            f"📝 Коментар: {data.get('comment') or '—'}\n"
-            f"{'='*40}"
-        )
-    elif update.message:
-        user = update.message.from_user
-        name = f"@{user.username}" if user and user.username else (user.first_name if user else "невідомо")
-        logger.info(f"📨 Повідомлення від {name}: {update.message.text}")
-        
-# --- Запуск ---
+
+# ─── ЗАПУСК ─────────────────────────────────────────────────
+
 def main():
+    init_db()
+
     app = Application.builder().token(BOT_TOKEN).build()
 
-    app.add_handler(MessageHandler(filters.ALL, debug_all), group=-1)
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("start",     start))
+    app.add_handler(CommandHandler("myid",      myid))
+    app.add_handler(CommandHandler("stats",     stats))
+    app.add_handler(CommandHandler("broadcast", broadcast))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
 
     logger.info("Бот запущений!")

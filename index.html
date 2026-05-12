@@ -552,20 +552,6 @@
 </div>
 
 <script>
-// ============================================================
-//  ТОВАРИ — редагуй цей масив
-//
-//  Поля:
-//    id       — унікальний номер
-//    cat      — категорія: 'toy' | 'key' | 'anti'
-//    emoji    — показується якщо нема фото
-//    photos   — масив URL фото 
-//    name     — назва товару
-//    mat      — матеріал / опис
-//    price    — поточна ціна
-//    oldPrice — (необов'язково) стара ціна для показу знижки
-//    hot      — true / false — значок "🔥 Хіт"
-// ============================================================
 
 // Хелпер для ImgBB (і будь-яких прямих посилань)
 function photo(url) {
@@ -573,108 +559,19 @@ function photo(url) {
   return url.trim();
 }
 
-const PRODUCTS = [
-  {
-    id: 1, 
-    cat: 'toy', 
-    emoji: '🐉',
-    photos: [
-      photo('https://i.ibb.co/Q3vjzRJc/IMG-0246.gif'), // Посилання на фото
-      photo('https://i.ibb.co/m5fFZNBJ/IMG-0244.png'),
-      photo('https://i.ibb.co/3mF9zKCp/image.png'),
-      photo('https://i.ibb.co/PzrvMq60/image.png'),
-      photo('https://i.ibb.co/h1L65Yks/image.png')
-    ],
-    name: 'Fidget-спіраль',
-    mat: 'PLA · один або два кольори',
-    price: 100, oldPrice: 150, hot: true  // <- знижка!
-  },
-  {
-    id: 2, cat: 'toy', emoji: '🦕',
-    photos: [],
-    name: 'Флекс-динозавр',
-    mat: 'PLA flex · кольоровий',
-    price: 110, hot: false  // <- знижка!
-  },
-  {
-    id: 3, cat: 'toy', emoji: '🐱',
-    photos: [],
-    name: 'Кіт-нянька',
-    mat: 'PLA · є різні кольори',
-    price: 90, hot: false
-  },
-  {
-    id: 4, cat: 'toy', emoji: '🦖',
-    photos: [],
-    name: 'T-Rex шарнірний',
-    mat: 'PLA · великий 20 см',
-    price: 150, hot: true
-  },
-  {
-    id: 5, cat: 'key', emoji: '❤️',
-    photos: [],
-    name: 'Брелок-серце',
-    mat: 'PLA · будь-який колір',
-    price: 50, hot: false
-  },
-  {
-    id: 6, cat: 'key', emoji: '💀',
-    photos: [],
-    name: 'Брелок-скелет',
-    mat: 'PLA · чорний або білий',
-    price: 60, hot: false
-  },
-  {
-    id: 7, cat: 'key', emoji: '⭐',
-    photos: [],
-    name: 'Брелок-зірка',
-    mat: 'PLA · гліттер доступний',
-    price: 45, hot: false
-  },
-  {
-    id: 8, cat: 'key', emoji: '🔑',
-    photos: [],
-    name: "Брелок з ім'ям",
-    mat: 'PLA · персоналізований',
-    price: 70, hot: true
-  },
-  {
-    id: 9, cat: 'anti', emoji: '🔵',
-    photos: [],
-    name: 'Спінер-куб',
-    mat: 'PLA+PETG · крутиться',
-    price: 110, hot: false
-  },
-  {
-    id: 10, cat: 'anti', emoji: '🟦',
-    photos: [],
-    name: 'Pop-it кнопки',
-    mat: "TPU · м'який силіконовий",
-    price: 80, hot: true
-  },
-  {
-    id: 11, cat: 'anti', emoji: '🌀',
-    photos: [],
-    name: 'Fidget-кільця',
-    mat: 'PLA · набір 3 шт',
-    price: 90, hot: false
-  },
-  {
-    id: 12, cat: 'anti', emoji: '🧊',
-    photos: [],
-    name: 'Infinite cube',
-    mat: 'PLA · складається нескінченно',
-    price: 130, hot: false
-  },
-];
+const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', key: '🔑 Брелки', anti: '🧠 Антистрес', gifts: '🎁 Подарунки та декор', home: '🏠 Дім та побут', individual: '✏️ Індивідуальне' };
 
-// ============================================================
-const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', key: '🔑 Брелки', anti: '🧠 Антистрес' };
-
+let PRODUCTS = [];
 let currentCat = 'all';
 let currentProduct = null;
 let carouselIndex = 0;
 let lbIndex = 0;
+
+// ─── ЗАВАНТАЖЕННЯ ТОВАРІВ ────────────────────────────────────
+async function loadProducts() {
+  const response = await fetch('products.json');
+  PRODUCTS = await response.json();
+}
 
 // ─── GRID ───────────────────────────────────────────────────
 function renderGrid(cat) {
@@ -730,8 +627,6 @@ function buildCarousel(photos) {
   const emoji = document.getElementById('m-emoji-fallback');
   const leftBtn  = document.getElementById('carr-left');
   const rightBtn = document.getElementById('carr-right');
-  const discount = currentProduct?.oldPrice
-    ? Math.round((1 - currentProduct.price / currentProduct.oldPrice) * 100) : 0;
 
   if (!photos || photos.length === 0) {
     wrap.style.display = 'none';
@@ -743,16 +638,6 @@ function buildCarousel(photos) {
 
   emoji.style.display = 'none';
   wrap.style.display = 'block';
-
-  // Badge знижки поверх каруселі
-  const existingBadge = wrap.querySelector('.modal-sale-badge');
-  if (existingBadge) existingBadge.remove();
-  if (currentProduct.oldPrice) {
-    const badge = document.createElement('div');
-    badge.className = 'modal-sale-badge';
-    badge.textContent = `−${discount}%`;
-    wrap.appendChild(badge);
-  }
 
   track.innerHTML = photos.map((url, i) => `
     <div class="carousel-slide" onclick="openLightbox(${i})">
@@ -790,12 +675,10 @@ function carouselNav(dir) {
 let carSwipeX = null;
 function initCarouselSwipe() {
   const wrap = document.getElementById('carousel-wrap');
-  // remove old listeners via clone
   const newWrap = wrap.cloneNode(false);
   while (wrap.firstChild) newWrap.appendChild(wrap.firstChild);
   wrap.parentNode.replaceChild(newWrap, wrap);
 
-  // re-grab
   const w = document.getElementById('carousel-wrap');
   w.addEventListener('touchstart', e => { carSwipeX = e.touches[0].clientX; }, { passive: true });
   w.addEventListener('touchend', e => {
@@ -805,36 +688,9 @@ function initCarouselSwipe() {
     carSwipeX = null;
   }, { passive: true });
 
-  // re-attach click on slides
   w.querySelectorAll('.carousel-slide').forEach((s, i) => {
     s.addEventListener('click', () => openLightbox(i));
   });
-}
-// ─── Свайп модального вікна ───────────────────────────────────────────────
-function initModalSwipe() {
-  const modal = document.getElementById('modal');
-  let modalSwipeStartY = null;
-  let modalSwipeStartX = null;
-  let modalStartedOnCarousel = false;
-
-  modal.addEventListener('touchstart', e => {
-    modalSwipeStartY = e.touches[0].clientY;
-    modalSwipeStartX = e.touches[0].clientX;
-    modalStartedOnCarousel = !!e.target.closest('#carousel-wrap');
-  }, { passive: true });
-
-  modal.addEventListener('touchend', e => {
-    if (modalSwipeStartY === null) return;
-    const dy = e.changedTouches[0].clientY - modalSwipeStartY;
-    const dx = e.changedTouches[0].clientX - modalSwipeStartX;
-
-    if (!modalStartedOnCarousel && dy > 80 && Math.abs(dy) > Math.abs(dx)) {
-      closeModal();
-    }
-
-    modalSwipeStartY = null;
-    modalSwipeStartX = null;
-  }, { passive: true });
 }
 
 // ─── LIGHTBOX ───────────────────────────────────────────────
@@ -846,13 +702,9 @@ function openLightbox(startIndex) {
   const track = document.getElementById('lb-track');
   const dots  = document.getElementById('lb-dots');
 
-  track.innerHTML = photos.map((url, i) => {
-    if (url && !isGif(url) && !url.match(/\.(gif|png|jpg|jpeg|webp|bmp|svg)/i)) {
-      // Google Drive image
-      return `<div class="lightbox-slide"><img src="${url}" alt="фото ${i+1}" loading="lazy"></div>`;
-    }
-    return `<div class="lightbox-slide"><img src="${url}" alt="фото ${i+1}" loading="lazy"></div>`;
-  }).join('');
+  track.innerHTML = photos.map((url, i) =>
+    `<div class="lightbox-slide"><img src="${url}" alt="фото ${i+1}" loading="lazy"></div>`
+  ).join('');
 
   dots.innerHTML = photos.map((_, i) =>
     `<div class="lb-dot ${i === startIndex ? 'active' : ''}" id="lbdot-${i}"></div>`
@@ -905,12 +757,11 @@ function initLightboxSwipe() {
     lbSwipeX = e.touches[0].clientX;
     lbSwipeY = e.touches[0].clientY;
   }, { passive: true });
-  l.addEventListener('touchend', e => {
+  addEventListener('touchend', e => {
     if (lbSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - lbSwipeX;
     const dy = e.changedTouches[0].clientY - lbSwipeY;
 
-    // ↓ ось сюди вставляєш цей блок
     if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
       const l = document.getElementById('lightbox');
       l.style.transition = 'opacity .22s ease, transform .22s ease';
@@ -942,40 +793,38 @@ function openModal(id) {
   currentProduct = PRODUCTS.find(p => p.id === id);
   if (!currentProduct) return;
 
-  // Ціна / знижка
   const discount = currentProduct.oldPrice
     ? Math.round((1 - currentProduct.price / currentProduct.oldPrice) * 100) : 0;
 
   document.getElementById('m-name').textContent = currentProduct.name;
-  document.getElementById('m-price').textContent = currentProduct.price + ' ₴';
   const priceEl = document.getElementById('m-price');
+  priceEl.textContent = currentProduct.price + ' ₴';
   if (currentProduct.oldPrice) {
     priceEl.classList.add('has-discount');
   } else {
     priceEl.classList.remove('has-discount');
   }
-  const oldEl   = document.getElementById('m-price-old');
-  const chipEl  = document.getElementById('m-sale-chip');
+
+  const oldEl  = document.getElementById('m-price-old');
+  const chipEl = document.getElementById('m-sale-chip');
   if (currentProduct.oldPrice) {
     oldEl.textContent  = currentProduct.oldPrice + ' ₴';
+    chipEl.textContent = `−${discount}%`;
     oldEl.style.display  = '';
+    chipEl.style.display = '';
   } else {
     oldEl.style.display  = 'none';
+    chipEl.style.display = 'none';
   }
-  chipEl.style.display = 'none'; // завжди ховаємо тут
 
   document.getElementById('m-comment').value = '';
-
   buildCarousel(currentProduct.photos);
-  initModalSwipe(); // Свайп модального вікна
 
-  // Lock background scroll
   const scrollY = window.scrollY;
   document.body.classList.add('modal-open');
   document.body.style.top = `-${scrollY}px`;
 
-  const backdrop = document.getElementById('modal-backdrop');
-  backdrop.classList.add('open');
+  document.getElementById('modal-backdrop').classList.add('open');
   document.getElementById('modal').classList.remove('modal-close-anim');
 }
 
@@ -989,7 +838,6 @@ function closeModal() {
     modal.classList.remove('modal-close-anim');
   }, 220);
 
-  // Restore background scroll
   const scrollY = parseInt(document.body.style.top || '0') * -1;
   document.body.classList.remove('modal-open');
   document.body.style.top = '';
@@ -1004,11 +852,9 @@ function closeIfBackdrop(e) {
 function submitOrder() {
   if (!currentProduct) return;
   const comment = document.getElementById('m-comment').value.trim();
-  const tg = window.Telegram?.WebApp;
+  const tg   = window.Telegram?.WebApp;
   const user = tg?.initDataUnsafe?.user;
-  const username = user?.username 
-    ? '@' + user.username 
-    : (user?.first_name || 'невідомо');
+  const username = user ? (user.username ? '@' + user.username : user.first_name) : 'невідомо';
 
   const message = JSON.stringify({
     action: 'order',
@@ -1019,30 +865,34 @@ function submitOrder() {
     user: username
   });
 
-  if (tg) {
-    tg.sendData(message);
-  }
+  if (tg) tg.sendData(message);
 
   closeModal();
   setTimeout(() => {
     document.getElementById('success-screen').classList.add('open');
   }, 250);
 }
+
 function backToCatalog() {
   document.getElementById('success-screen').classList.remove('open');
 }
 
 // ─── INIT ────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
-    // Виведи в консоль для діагностики:
-    console.log('TG initData:', Telegram.WebApp.initData);
-    console.log('TG platform:', Telegram.WebApp.platform);
   }
+
+  await loadProducts();
   renderGrid('all');
-  initModalSwipe(); // 
+
+  // Відкрити конкретний товар якщо прийшли через startapp=product_1
+  const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+  if (startParam && startParam.startsWith('product_')) {
+    const id = parseInt(startParam.replace('product_', ''));
+    if (id) openModal(id);
+  }
 });
 </script>
 </body>

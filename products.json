@@ -1,1 +1,26 @@
-
+[
+  {
+    "id": 1,
+    "cat": "toy",
+    "emoji": "🐉",
+    "photos": [
+      "https://i.ibb.co/Q3vjzRJc/IMG-0246.gif",
+      "https://i.ibb.co/m5fFZNBJ/IMG-0244.png"
+    ],
+    "name": "Fidget-спіраль",
+    "mat": "PLA · один або два кольори",
+    "price": 300,
+    "hot": true
+  },
+  {
+    "id": 2,
+    "cat": "toy",
+    "emoji": "🦕",
+    "photos": [],
+    "name": "Флекс-динозавр",
+    "mat": "PLA flex · кольоровий",
+    "price": 110,
+    "oldPrice": 150,
+    "hot": false
+  }
+]
