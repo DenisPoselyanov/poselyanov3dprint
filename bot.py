@@ -291,6 +291,8 @@ async def handle_order(request):
     except Exception:
         return web.Response(status=400, text="Bad JSON")
 
+    logger.info(f"=== HTTP ЗАМОВЛЕННЯ: {data} ===")
+
     product_name = data.get('product_name', '—')
     price        = data.get('price', '—')
     comment      = data.get('comment', '').strip()
@@ -318,22 +320,25 @@ async def handle_order(request):
     else:
         markup = None
 
-    await bot_app.bot.send_message(
-        chat_id=OWNER_ID,
-        text=owner_text,
-        parse_mode='Markdown',
-        reply_markup=markup
-    )
+    try:
+        await bot_app.bot.send_message(
+            chat_id=OWNER_ID,
+            text=owner_text,
+            parse_mode='Markdown',
+            reply_markup=markup
+        )
+        logger.info("=== ПОВІДОМЛЕННЯ НАДІСЛАНО В КАНАЛ ===")
+    except Exception as e:
+        logger.error(f"=== ПОМИЛКА НАДСИЛАННЯ: {e} ===")
 
     return web.Response(
-    text="ok",
-    headers={
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
-    }
-)
-
+        text="ok",
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
+        }
+    )
 async def handle_options(request):
     return web.Response(
         headers={
