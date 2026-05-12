@@ -13,7 +13,10 @@ Denis 3D Print — Telegram Bot
 import json
 import logging
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+)
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, filters, ContextTypes
@@ -23,8 +26,9 @@ from telegram.ext import (
 # НАЛАШТУВАННЯ — заміни на свої значення!
 # =============================================
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")   # напр. 7123456789:AAF_abc...
-OWNER_ID  = 718746623                    # твій Telegram ID (як дізнатись — нижче)
+BOT_TOKEN = os.environ.get("BOT_TOKEN")   # напр. 7123456789:AAF_abc...from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+
+OWNER_ID  = -1003739884073                  # ID групи (завжди від'ємний і починається з -100)
 WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"  # URL твого Mini App
 
 # =============================================
@@ -34,18 +38,19 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
 # --- /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[
-        InlineKeyboardButton(
+        KeyboardButton(
             "🛍️ Відкрити каталог",
-            web_app={"url": WEBAPP_URL}
+            web_app=WebAppInfo(url=WEBAPP_URL)
         )
     ]]
-    markup = InlineKeyboardMarkup(keyboard)
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     await update.message.reply_text(
         "👋 Привіт! Я — Poselyanov 3D Print\n\n"
@@ -69,8 +74,9 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product_name = data.get('product_name', '—')
     price        = data.get('price', '—')
     comment      = data.get('comment', '').strip()
-    client       = data.get('user', '—')
-
+    user = update.message.from_user
+    client = f"@{user.username}" if user.username else user.first_name
+    
     # Повідомлення клієнту — підтвердження
     confirm_text = (
         f"✅ Замовлення прийнято!\n\n"
@@ -120,11 +126,29 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-
+# --- Гарний лог ---
+async def debug_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message and update.message.web_app_data:
+        data = json.loads(update.message.web_app_data.data)
+        logger.info(
+            f"\n{'='*40}\n"
+            f"📦 НОВЕ ЗАМОВЛЕННЯ\n"
+            f"👤 Від: @{update.message.from_user.username}\n"
+            f"🛍️ Товар: {data.get('product_name')}\n"
+            f"💰 Ціна: {data.get('price')} ₴\n"
+            f"📝 Коментар: {data.get('comment') or '—'}\n"
+            f"{'='*40}"
+        )
+    elif update.message:
+        user = update.message.from_user
+        name = f"@{user.username}" if user and user.username else (user.first_name if user else "невідомо")
+        logger.info(f"📨 Повідомлення від {name}: {update.message.text}")
+        
 # --- Запуск ---
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
+    app.add_handler(MessageHandler(filters.ALL, debug_all), group=-1)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
