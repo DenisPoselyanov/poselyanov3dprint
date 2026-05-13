@@ -1,7 +1,7 @@
 """
 Denis 3D Print — Telegram Bot
 """
-
+from aiohttp import web
 import asyncio
 import json
 import logging
@@ -150,6 +150,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"=== WEB APP DATA ОТРИМАНО ===")  #Лог чи отримано дані з веб-додатку
     try:
         data = json.loads(update.message.web_app_data.data)
     except Exception:
@@ -444,10 +445,27 @@ def main():
     bot_app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
     bot_app.add_handler(CallbackQueryHandler(order_action, pattern=r"^(confirm|draft|cancel)_"))
 
-    bot_app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True
-    )
+    async def run():
+        http_app = web.Application()
+        http_app.router.add_post('/order', handle_order)
+        http_app.router.add_route('OPTIONS', '/order', handle_options)
+        runner = web.AppRunner(http_app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
+        await site.start()
+        logger.info("HTTP сервер запущений на порту 8080")
+
+        async with bot_app:
+            await bot_app.initialize()
+            await bot_app.start()
+            await bot_app.updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+            )
+            logger.info("Бот запущений!")
+            await asyncio.Event().wait()
+
+    asyncio.run(run())
 
 if __name__ == '__main__':
     main()

@@ -859,29 +859,35 @@ function closeIfBackdrop(e) {
 async function submitOrder() {
   if (!currentProduct) return;
   const comment = document.getElementById('m-comment').value.trim();
+  const tg   = window.Telegram?.WebApp;
+  const user = tg?.initDataUnsafe?.user;
 
   const payload = {
-    action: 'order',
-    product_id: currentProduct.id,
+    action:       'order',
+    product_id:   currentProduct.id,
     product_name: currentProduct.name,
-    price: currentProduct.price,
-    comment: comment || ''
+    price:        currentProduct.price,
+    comment:      comment || '',
+    user:         user?.username ? '@' + user.username : (user?.first_name || 'невідомо'),
+    user_id:      user?.id || null,
+    first_name:   user?.first_name || '',
+    tg_username:  user?.username || null
   };
 
-  window.Telegram.WebApp.sendData(JSON.stringify(payload));
-  closeModal();
-  setTimeout(() => {
-    document.getElementById('success-screen').classList.add('open');
-  }, 250);
+  try {
+    await fetch('http://localhost:8080/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch(e) {
+    console.error('Помилка відправки:', e);
+  }
 
   closeModal();
   setTimeout(() => {
     document.getElementById('success-screen').classList.add('open');
   }, 250);
-}
-
-function backToCatalog() {
-  document.getElementById('success-screen').classList.remove('open');
 }
 
 // ─── INIT ────────────────────────────────────────────────────
