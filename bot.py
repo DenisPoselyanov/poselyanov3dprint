@@ -15,7 +15,7 @@ from telegram import (
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, filters, ContextTypes
+    filters, ContextTypes
 )
 
 # =============================================
@@ -69,7 +69,6 @@ def init_db():
             product_name TEXT,
             price        INTEGER,
             comment      TEXT,
-            status       TEXT DEFAULT 'pending',
             ordered_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -87,34 +86,22 @@ def save_user(user):
 
 def save_order(user_id, username, product_name, price, comment):
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.execute("""
-        INSERT INTO orders (user_id, username, product_name, price, comment, status)
-        VALUES (?, ?, ?, ?, ?, 'pending')
+    conn.execute("""
+        INSERT INTO orders (user_id, username, product_name, price, comment)
+        VALUES (?, ?, ?, ?, ?)
     """, (user_id, username, product_name, price, comment))
-    order_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    return order_id
 
 def get_stats():
     conn = sqlite3.connect(DB_FILE)
-    user_count       = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    order_count      = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
-    order_confirmed  = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'confirmed'").fetchone()[0]
-    order_draft      = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'draft'").fetchone()[0]
-    order_cancelled  = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'cancelled'").fetchone()[0]
-    earned           = conn.execute("SELECT SUM(price) FROM orders WHERE status = 'confirmed'").fetchone()[0] or 0
-    recent           = conn.execute(
+    user_count  = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    order_count = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+    recent      = conn.execute(
         "SELECT name, username FROM users ORDER BY joined_at DESC LIMIT 10"
     ).fetchall()
     conn.close()
-    return user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent
-
-def update_order_status(order_id: int, status: str):
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
-    conn.commit()
-    conn.close()
+    return user_count, order_count, recent
 
 def set_blocked(user_id, blocked: bool):
     conn = sqlite3.connect(DB_FILE)
@@ -164,7 +151,7 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user         = update.message.from_user
     client       = f"@{user.username}" if user.username else user.first_name
 
-    order_id = save_order(
+    save_order(
         user.id,
         f"@{user.username}" if user.username else "—",
         product_name,
@@ -186,7 +173,7 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Повідомлення власнику
     owner_text = (
-        f"🔔 *НОВЕ ЗАМОВЛЕННЯ #{order_id}*\n\n"
+        f"🔔 *НОВЕ ЗАМОВЛЕННЯ*\n\n"
         f"📦 Товар: *{product_name}*\n"
         f"💰 Ціна: *{price} ₴*\n"
         f"👤 Від: {client}\n"
@@ -194,19 +181,14 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if comment:
         owner_text += f"📝 Коментар: _{comment}_\n"
 
-    status_buttons = [
-        InlineKeyboardButton("✅ Справжнє",     callback_data=f"confirm_{order_id}"),
-        InlineKeyboardButton("❓ Під питанням", callback_data=f"draft_{order_id}"),
-        InlineKeyboardButton("❌ Відміна",      callback_data=f"cancel_{order_id}"),
-    ]
     if user.username:
-        markup = InlineKeyboardMarkup([
-            status_buttons,
-            [InlineKeyboardButton(f"💬 Написати {user.first_name}", url=f"https://t.me/{user.username}")]
-        ])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+            f"💬 Написати {user.first_name}",
+            url=f"https://t.me/{user.username}"
+        )]])
     else:
         owner_text += f"⚠️ Немає username, ID: `{user.id}`\n"
-        markup = InlineKeyboardMarkup([status_buttons])
+        markup = None
 
     await context.bot.send_message(
         chat_id=OWNER_ID,
@@ -219,15 +201,11 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != 718746623:
         return
-    user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent = get_stats()
+    user_count, order_count, recent = get_stats()
     lines = [
         f"📊 *Статистика*\n",
         f"👥 Користувачів: *{user_count}*",
-        f"📦 Замовлень всього: *{order_count}*",
-        f"  ✅ Підтверджених: *{order_confirmed}*",
-        f"  ❓ Під питанням: *{order_draft}*",
-        f"  ❌ Відмінених: *{order_cancelled}*\n",
-        f"💰 Зароблено: *{earned} ₴*\n",
+        f"📦 Замовлень: *{order_count}*\n",
         f"🕐 Останні користувачі:",
     ]
     for name, username in recent:
@@ -322,7 +300,7 @@ async def handle_order(request):
     user_id      = data.get('user_id')
     first_name   = data.get('first_name', '')
 
-    order_id = save_order(user_id or 0, username, product_name, price, comment)
+    save_order(user_id or 0, username, product_name, price, comment)
 
     # Підтвердження клієнту
     if user_id:
@@ -345,7 +323,7 @@ async def handle_order(request):
         logger.error(f"Помилка підтвердження клієнту: {e}")
 
     owner_text = (
-        f"🔔 *НОВЕ ЗАМОВЛЕННЯ #{order_id}*\n\n"
+        f"🔔 *НОВЕ ЗАМОВЛЕННЯ*\n\n"
         f"📦 Товар: *{product_name}*\n"
         f"💰 Ціна: *{price} ₴*\n"
         f"👤 Від: {username}\n"
@@ -353,19 +331,14 @@ async def handle_order(request):
     if comment:
         owner_text += f"📝 Коментар: _{comment}_\n"
 
-    status_buttons = [
-        InlineKeyboardButton("✅ Справжнє",     callback_data=f"confirm_{order_id}"),
-        InlineKeyboardButton("❓ Під питанням", callback_data=f"draft_{order_id}"),
-        InlineKeyboardButton("❌ Відміна",      callback_data=f"cancel_{order_id}"),
-    ]
     tg_username = data.get('tg_username')
     if tg_username:
-        markup = InlineKeyboardMarkup([
-            status_buttons,
-            [InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")]
-        ])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+            f"💬 Написати {first_name}",
+            url=f"https://t.me/{tg_username}"
+        )]])
     else:
-        markup = InlineKeyboardMarkup([status_buttons])
+        markup = None
 
     try:
         await bot_app.bot.send_message(
@@ -395,37 +368,6 @@ async def handle_options(request):
         }
     )
 
-async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "done":
-        return
-
-    action, order_id = query.data.split("_", 1)
-    order_id = int(order_id)
-
-    if action == "confirm":
-        update_order_status(order_id, "confirmed")
-        label = "✅ Справжнє"
-    elif action == "draft":
-        update_order_status(order_id, "draft")
-        label = "❓ Під питанням"
-    elif action == "cancel":
-        update_order_status(order_id, "cancelled")
-        label = "❌ Відмінено"
-    else:
-        return
-
-    await query.edit_message_text(
-        text=query.message.text + f"\n\n*Статус: {label}*",
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton(label, callback_data="done")
-        ]])
-    )
-
-
 # ─── ЗАПУСК ─────────────────────────────────────────────────
 
 bot_app = None
@@ -441,7 +383,6 @@ def main():
     bot_app.add_handler(CommandHandler("stats",     stats))
     bot_app.add_handler(CommandHandler("broadcast", broadcast))
     bot_app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
-    bot_app.add_handler(CallbackQueryHandler(order_action, pattern=r"^(confirm|draft|cancel)_"))
 
     async def run():
         # HTTP сервер
