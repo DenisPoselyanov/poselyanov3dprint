@@ -880,14 +880,14 @@ async function submitOrder() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    closeModal();
+    setTimeout(() => {
+      document.getElementById('success-screen').classList.add('open');
+    }, 250);
   } catch(e) {
     console.error('Помилка відправки:', e);
+    alert('❌ Не вдалось надіслати замовлення. Перевір з\'єднання і спробуй ще раз.');
   }
-
-  closeModal();
-  setTimeout(() => {
-    document.getElementById('success-screen').classList.add('open');
-  }, 250);
 }
 
 function backToCatalog() {
