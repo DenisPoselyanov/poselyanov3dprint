@@ -2,7 +2,6 @@
 Denis 3D Print — Telegram Bot
 """
 
-from aiohttp import web
 import asyncio
 import json
 import logging
@@ -41,8 +40,10 @@ def load_products():
         return json.loads(Path(PRODUCTS_FILE).read_text(encoding='utf-8'))
     return []
 
+PRODUCTS_CACHE = load_products()  # ← завантажується один раз при старті
+
 def get_product_by_id(product_id: int):
-    for p in load_products():
+    for p in PRODUCTS_CACHE:
         if p['id'] == product_id:
             return p
     return None
@@ -324,25 +325,25 @@ async def handle_order(request):
 
     order_id = save_order(user_id or 0, username, product_name, price, comment)
 
-    # Підтвердження клієнту
-    if user_id:
-        confirm_text = (
-            f"✅ Замовлення прийнято!\n\n"
-            f"📦 *{product_name}*\n"
-            f"💰 {price} ₴\n"
-        )
-        if comment:
-            confirm_text += f"📝 Коментар: {comment}\n"
-        confirm_text += "\n[Денис](https://t.me/denisposelyanov) зв'яжеться з тобою найближчим часом 🙌"
+    # Підтвердження клієнту, Виправлення: завжди оголошуй confirm_text
+    confirm_text = (
+        f"✅ Замовлення прийнято!\n\n"
+        f"📦 *{product_name}*\n"
+        f"💰 {price} ₴\n"
+    )
+    if comment:
+        confirm_text += f"📝 Коментар: {comment}\n"
+    confirm_text += "\n[Денис](https://t.me/denisposelyanov) зв'яжеться з тобою найближчим часом 🙌"
 
-    try:
-        await bot_app.bot.send_message(
-            chat_id=user_id,
-            text=confirm_text,
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        logger.error(f"Помилка підтвердження клієнту: {e}")
+    if user_id:
+        try:
+            await bot_app.bot.send_message(
+                chat_id=user_id,
+                text=confirm_text,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Помилка підтвердження клієнту: {e}")
 
     owner_text = (
         f"🔔 *НОВЕ ЗАМОВЛЕННЯ #{order_id}*\n\n"
@@ -443,29 +444,10 @@ def main():
     bot_app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
     bot_app.add_handler(CallbackQueryHandler(order_action, pattern=r"^(confirm|draft|cancel)_"))
 
-    async def run():
-        # HTTP сервер
-        http_app = web.Application()
-        http_app.router.add_post('/order', handle_order)
-        http_app.router.add_route('OPTIONS', '/order', handle_options)
-        runner = web.AppRunner(http_app)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
-        await site.start()
-        logger.info("HTTP сервер запущений на порту 8080")
-
-        # Telegram polling
-        async with bot_app:
-            await bot_app.initialize()
-            await bot_app.start()
-            await bot_app.updater.start_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,
-            )
-            logger.info("Бот запущений!")
-            await asyncio.Event().wait()
-
-    asyncio.run(run())
+    bot_app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True
+    )
 
 if __name__ == '__main__':
     main()

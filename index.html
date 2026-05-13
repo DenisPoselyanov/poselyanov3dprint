@@ -499,7 +499,7 @@
       <button class="carousel-arrow right" id="carr-right" onclick="carouselNav(1)">›</button>
     </div>
     <!-- Emoji fallback -->
-    <div id="m-emoji-fallback" style="display:none;height:220px;font-size:72px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f4ff,#e8f5ff)"></div>
+    <div id="m-emoji-fallback" style="display:none;height:220px;font-size:72px;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f4ff,#e8f5ff)"></div>
 
     <!-- Dots -->
     <div class="carousel-dots" id="carousel-dots"></div>
@@ -569,8 +569,15 @@ let lbIndex = 0;
 
 // ─── ЗАВАНТАЖЕННЯ ТОВАРІВ ────────────────────────────────────
 async function loadProducts() {
-  const response = await fetch('products.json');
-  PRODUCTS = await response.json();
+  try {
+    const response = await fetch('products.json');
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    PRODUCTS = await response.json();
+  } catch (e) {
+    console.error('Помилка завантаження товарів:', e);
+    document.getElementById('grid').innerHTML =
+      '<div class="empty"><div class="empty-ico">😕</div>Не вдалось завантажити товари. Спробуй пізніше.</div>';
+  }
 }
 
 // ─── GRID ───────────────────────────────────────────────────
@@ -757,7 +764,7 @@ function initLightboxSwipe() {
     lbSwipeX = e.touches[0].clientX;
     lbSwipeY = e.touches[0].clientY;
   }, { passive: true });
-  addEventListener('touchend', e => {
+  l.addEventListener('touchend', e => {
     if (lbSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - lbSwipeX;
     const dy = e.changedTouches[0].clientY - lbSwipeY;
@@ -852,56 +859,25 @@ function closeIfBackdrop(e) {
 async function submitOrder() {
   if (!currentProduct) return;
   const comment = document.getElementById('m-comment').value.trim();
-  const tg   = window.Telegram?.WebApp;
-  const user = tg?.initDataUnsafe?.user;
-  const username = user?.username ? '@' + user.username : (user?.first_name || 'невідомо');
 
   const payload = {
     action: 'order',
     product_id: currentProduct.id,
     product_name: currentProduct.name,
     price: currentProduct.price,
-    comment: comment || '',
-    user: username,
-    user_id: user?.id || null,
-    first_name: user?.first_name || '',
-    tg_username: user?.username || null
+    comment: comment || ''
   };
 
-  await sendViaHttp(payload);
+  window.Telegram.WebApp.sendData(JSON.stringify(payload));
+  closeModal();
+  setTimeout(() => {
+    document.getElementById('success-screen').classList.add('open');
+  }, 250);
 
   closeModal();
   setTimeout(() => {
     document.getElementById('success-screen').classList.add('open');
   }, 250);
-}
-
-async function sendViaHttp(payload) {
-  try {
-    await fetch('https://denis-3d-bot-production.up.railway.app/order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-  } catch(e) {
-    console.error('Помилка відправки:', e);
-  }
-}
-
-function backToCatalog() {
-  document.getElementById('success-screen').classList.remove('open');
-}
-
-async function sendViaHttp(payload) {
-  try {
-    await fetch('https://denis-3d-bot-production.up.railway.app/order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-  } catch(e) {
-    console.error('Помилка відправки:', e);
-  }
 }
 
 function backToCatalog() {
