@@ -874,13 +874,6 @@ async function submitOrder() {
     tg_username:  user?.username || null
   };
 
-  // Якщо відкрито через KeyboardButton (/start) — sendData
-  // Якщо через Main App — HTTP
-  if (tg?.initDataUnsafe?.query_id === undefined && tg?.isActive) {
-    tg.sendData(JSON.stringify(payload));
-    return; // Mini App закриється автоматично
-  }
-
   try {
     await fetch('http://localhost:8080/order', {
       method: 'POST',
