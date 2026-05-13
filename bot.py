@@ -269,7 +269,7 @@ async def handle_order(request):
         try:
             now = datetime.now()
             existing = confirmation_messages.get(user_id)
-            footer = "\n[Денис](https://t.me/denisposelyanov) зв'язується з тобою найближчим часом 🙌"
+            footer = "\n[Денис](https://t.me/denisposelyanov) зв'яжеться з тобою найближчим часом 🙌"
 
             # Формуємо рядок товару
             line = f"📦 *{product_name}* — {price} ₴"
