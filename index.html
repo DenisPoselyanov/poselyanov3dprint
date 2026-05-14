@@ -32,7 +32,7 @@
   body.dark .bottom-nav {
     border-top-color: rgba(255,255,255,0.06);
   }
-  
+
   body.dark .tab {
     background: rgba(255,255,255,0.08);
     color: var(--muted);
@@ -563,6 +563,38 @@
     line-height: 1;
   }
 
+  /* ===== СТОРІНКИ: АКЦІЇ / ІНДИВІДУАЛЬНЕ ===== */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Сторінка акцій — звичайний грид, без табів */
+  #page-sales .section-label { padding: 16px 14px 8px; }
+
+  /* Поле кастомізації в модалці */
+  .custom-field-wrap { display: none; margin-bottom: 16px; }
+  .custom-field-wrap.visible { display: block; }
+
+  /* Плашка "Індивідуальне замовлення" в модалці */
+  .custom-notice {
+    background: #FFF3E0;
+    border-left: 3px solid #FF9800;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 10px 12px;
+    font-size: 12px; color: #7A4A00; line-height: 1.5;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .custom-notice.visible { display: block; }
+
+  /* Бейдж "Індивідуальне" на картці */
+  .card-custom-badge {
+    position: absolute; bottom: 6px; left: 6px;
+    background: #FF9800; color: #fff;
+    font-size: 9px; font-weight: 800;
+    padding: 2px 6px; border-radius: 6px;
+    z-index: 2;
+  }
+
   /* PAGES */
   .page { display: none; }
   .page.active { display: block; padding-bottom: calc(60px + 44px + env(safe-area-inset-bottom) + 8px); }
@@ -622,36 +654,32 @@
   <div class="tabs" id="tabs">
     <button class="tab active" onclick="filterCat(this,'all')">🏠 Всі</button>
     <button class="tab" onclick="filterCat(this,'toy')">🧸 Іграшки</button>
-    <button class="tab" onclick="filterCat(this,'key')">🔑 Брелки</button>
     <button class="tab" onclick="filterCat(this,'anti')">🧠 Антистрес</button>
+    <button class="tab" onclick="filterCat(this,'key')">🔑 Брелки</button>
+    <button class="tab" onclick="filterCat(this,'gifts')">🎁 Подарунки та декор</button>
+    <button class="tab" onclick="filterCat(this,'home')">🏠 Для дому</button>
+    <button class="tab" onclick="filterCat(this,'gadget')">📲 Для гаджетів</button>
+    <button class="tab" onclick="filterCat(this,'tool')">⚒️ Інструменти</button>
   </div>
 </div>
 
 <!-- PAGE: Товари -->
 <div class="page active" id="page-products">
-  <div id="catalog">
-    <div class="section-label" id="section-label">Всі товари</div>
-    <div class="grid" id="grid"></div>
-  </div>
+  <div class="section-label" id="section-label">Всі товари</div>
+  <div class="grid" id="grid"></div>
   <div class="blur-fade" id="blur-fade"></div>
 </div>
 
 <!-- PAGE: Акції -->
 <div class="page" id="page-sales">
-  <div class="page-placeholder">
-    <div class="ph-icon">🔥</div>
-    <div class="ph-title">Акції</div>
-    <div class="ph-sub">Буде реалізовано в Етапі 3</div>
-  </div>
+  <div class="section-label">🏷️ Акції</div>
+  <div class="grid" id="grid-sales"></div>
 </div>
 
 <!-- PAGE: Індивідуальне -->
 <div class="page" id="page-custom">
-  <div class="page-placeholder">
-    <div class="ph-icon">✏️</div>
-    <div class="ph-title">Індивідуальне замовлення</div>
-    <div class="ph-sub">Буде реалізовано в Етапі 3</div>
-  </div>
+  <div class="section-label">🎨 Індивідуальне</div>
+  <div class="grid" id="grid-custom"></div>
 </div>
 
 <!-- PAGE: Кошик -->
@@ -687,16 +715,28 @@
 
     <div class="modal-product">
       <div style="flex:1">
-        <div class="modal-pname" id="m-name"></div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+          <div class="modal-pname" id="m-name"></div>
+          <div class="modal-sale-chip" id="m-sale-chip" style="display:none"></div>
+        </div>
         <div class="modal-price-row">
           <div class="modal-pprice" id="m-price"></div>
           <div class="modal-pprice-old" id="m-price-old" style="display:none"></div>
-          <div class="modal-sale-chip" id="m-sale-chip" style="display:none"></div>
         </div>
       </div>
     </div>
 
     <div class="modal-body">
+      <!-- Поле для індивідуальних товарів -->
+      <div class="custom-notice" id="m-custom-notice">
+        ✏️ Це індивідуальне замовлення. Заповни поле нижче — я виготовлю спеціально для тебе.
+      </div>
+      <div class="custom-field-wrap" id="m-custom-field-wrap">
+        <div class="field-label" id="m-custom-label">Деталі замовлення</div>
+        <textarea id="m-custom-value" rows="2" placeholder="Вкажи деталі..."></textarea>
+      </div>
+
+      <!-- Загальне поле для коментарів та побажань -->
       <div class="field">
         <div class="field-label">Коментар / побажання</div>
         <textarea id="m-comment" rows="3" placeholder="Наприклад: колір чорний, надпис '...', або особливі побажання..."></textarea>
@@ -759,9 +799,72 @@ function applyTheme(scheme) {
   document.body.classList.toggle('dark', scheme === 'dark');
 }
 
-const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', key: '🔑 Брелки', anti: '🧠 Антистрес', gifts: '🎁 Подарунки та декор', home: '🏠 Дім та побут', individual: '✏️ Індивідуальне' };
+// Категорійні ярлики (для табів та заголовку)
+const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', anti: '🧠 Антистрес', key: '🔑 Брелки', gifts: '🎁 Подарунки та декор', home: '🏠 Дім та побут', gadget: '📲 Для гаджетів', tool: '⚒️ Інструменти та приладдя', individual: '✏️ Індивідуальне' };
 
+// Глобальний масив товарів (заповнюється при завантаженні)
 let PRODUCTS = [];
+// Глобальний масив індивідуальних товарів (заповнюється при завантаженні)
+let CUSTOM_PRODUCTS = [];
+
+// ─── СТОРІНКИ ───────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  // таби категорій — тільки на сторінці "товари"
+  const tabsEl = document.getElementById('category-tabs'); // id твоїх табів з Етапу 2
+  if (tabsEl) tabsEl.style.display = name === 'products' ? '' : 'none';
+}
+
+// ─── СТОРІНКА АКЦІЙ ─────────────────────────────────────────
+function renderSales() {
+  const items = PRODUCTS.filter(p => p.oldPrice);
+  const grid = document.getElementById('grid-sales');
+  if (!items.length) {
+    grid.innerHTML = '<div class="empty"><div class="empty-ico">🏷️</div>Акцій поки немає</div>';
+    return;
+  }
+  grid.innerHTML = items.map((p, i) => buildCard(p, i, false)).join('');
+}
+
+// ─── СТОРІНКА ІНДИВІДУАЛЬНЕ ─────────────────────────────────
+function renderCustom() {
+  const grid = document.getElementById('grid-custom');
+  if (!CUSTOM_PRODUCTS.length) {
+    grid.innerHTML = '<div class="empty"><div class="empty-ico">🎨</div>Завантаження...</div>';
+    return;
+  }
+  grid.innerHTML = CUSTOM_PRODUCTS.map((p, i) => buildCard(p, i, true)).join('');
+}
+
+// ─── СПІЛЬНИЙ РЕНДЕР КАРТКИ ──────────────────────────────────
+function buildCard(p, i, isCustom) {
+  const hasPhotos = p.photos && p.photos.length > 0;
+  const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
+  const source = isCustom ? 'custom' : 'main';
+  return `
+    <div class="card" style="animation-delay:${i * 0.05}s" onclick="openModal(${p.id}, '${source}')">
+      <div class="card-img">
+        ${hasPhotos ? `<img src="${p.photos[0]}" alt="${p.name}" loading="lazy">` : ''}
+        <span style="position:relative;z-index:1">${hasPhotos ? '' : p.emoji}</span>
+        ${p.hot ? '<div class="card-badge">🔥 Хіт</div>' : ''}
+        ${discount ? `<div class="card-sale-badge">−${discount}%</div>` : ''}
+        ${isCustom ? '<div class="card-custom-badge">✏️ Індив.</div>' : ''}
+      </div>
+      <div class="card-info">
+        <div class="card-name">${p.name}</div>
+        <div class="card-mat">${p.mat}</div>
+        <div class="card-footer">
+          <div class="card-price-wrap">
+            ${p.oldPrice ? `<div class="card-price-old">${p.oldPrice} ₴</div>` : ''}
+            <div class="card-price${p.oldPrice ? ' has-discount' : ''}">${p.price} ₴</div>
+          </div>
+          <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id}, '${source}')">Замовити</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 let currentCat = 'all';
 let currentProduct = null;
 let carouselIndex = 0;
@@ -792,16 +895,18 @@ async function loadProducts() {
   }
 }
 
-// ─── GRID ───────────────────────────────────────────────────
+// ─── РЕНДЕР ГРИДУ ТОВАРІВ ЗА КАТЕГОРІЄЮ ───────────────────────────────
 function renderGrid(cat) {
   const items = cat === 'all' ? PRODUCTS : PRODUCTS.filter(p => p.cat === cat);
   const grid = document.getElementById('grid');
-  document.getElementById('section-label').textContent = CAT_LABELS[cat];
+  document.getElementById('section-label').textContent = CAT_LABELS[cat] || cat;
 
+  // Якщо немає товарів для цієї категорії, показуємо заглушку
   if (!items.length) {
     grid.innerHTML = '<div class="empty"><div class="empty-ico">🤷</div>Товарів поки немає</div>';
     return;
   }
+  grid.innerHTML = items.map((p, i) => buildCard(p, i, false)).join('');
 
   grid.innerHTML = items.map((p, i) => {
     const hasPhotos = p.photos && p.photos.length > 0;
@@ -1007,10 +1112,13 @@ function initLightboxSwipe() {
   }, { passive: true });
 }
 
-// ─── MODAL ──────────────────────────────────────────────────
-function openModal(id) {
-  currentProduct = PRODUCTS.find(p => p.id === id);
+// ─── МОДАЛЬНЕ ВІКНО ТОВАРУ ───────────────────────────────────────────────
+function openModal(id, source = 'main') {
+  // В залежності від джерела (основні товари чи індивідуальні), ми шукаємо товар у відповідному масиві. Це дозволяє нам підтримувати окремі набори товарів для різних категорій, якщо це необхідно.
+  const pool = source === 'custom' ? CUSTOM_PRODUCTS : PRODUCTS;
+  currentProduct = pool.find(p => p.id === id);
   if (!currentProduct) return;
+  currentProduct._isCustom = source === 'custom';
 
   const discount = currentProduct.oldPrice
     ? Math.round((1 - currentProduct.price / currentProduct.oldPrice) * 100) : 0;
@@ -1037,6 +1145,21 @@ function openModal(id) {
   }
 
   document.getElementById('m-comment').value = '';
+  // Якщо товар є індивідуальним, показуємо спеціальне поле для деталей замовлення та відповідну плашку. Це дозволяє користувачам надавати додаткову інформацію для індивідуальних замовлень, що є важливим для правильного виготовлення товару.
+  const noticeEl = document.getElementById('m-custom-notice');
+  const wrapEl   = document.getElementById('m-custom-field-wrap');
+  const labelEl  = document.getElementById('m-custom-label');
+  const valueEl  = document.getElementById('m-custom-value');
+  if (currentProduct._isCustom && currentProduct.custom_fields) {
+    noticeEl.classList.add('visible');
+    wrapEl.classList.add('visible');
+    labelEl.textContent = currentProduct.custom_fields;
+    valueEl.value = '';
+    valueEl.placeholder = 'Вкажи ' + currentProduct.custom_fields.toLowerCase() + '...';
+  } else {
+    noticeEl.classList.remove('visible');
+    wrapEl.classList.remove('visible');
+  }
   buildCarousel(currentProduct.photos);
 
   const scrollY = window.scrollY;
@@ -1228,9 +1351,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="skeleton-line price"></div>
     </div>
   `).join('');
-
+  
+  // Завантажуємо товари та рендеримо першу категорію
   await loadProducts();
   renderGrid('all');
+  renderSales();
+
+  // Завантажуємо індивідуальні товари
+  fetch('custom_products.json')
+    .then(r => r.json())
+    .then(data => {
+      CUSTOM_PRODUCTS = data;
+      renderCustom();
+    })
+    // Якщо не вдалось завантажити індивідуальні товари, показуємо повідомлення про помилку
+    .catch(() => {
+      document.getElementById('grid-custom').innerHTML =
+        '<div class="empty"><div class="empty-ico">😕</div>Не вдалось завантажити</div>';
+    });
 
   // Відкрити конкретний товар якщо прийшли через startapp=product_1
   const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;

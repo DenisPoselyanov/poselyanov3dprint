@@ -1,0 +1,59 @@
+[
+  {
+    "id": 101,
+    "cat": "custom",
+    "emoji": "🔑",
+    "photos": [],
+    "name": "Брелок з номером авто",
+    "mat": "PLA · персоналізований",
+    "price": 70,
+    "oldPrice": 90,
+    "hot": false,
+    "custom_fields": "Номер автомобіля"
+  },
+  {
+    "id": 102,
+    "cat": "custom",
+    "emoji": "🏷️",
+    "photos": [],
+    "name": "Брелок з іменем",
+    "mat": "PLA · будь-який колір",
+    "price": 60,
+    "hot": false,
+    "custom_fields": "Ім'я або напис"
+  },
+  {
+    "id": 103,
+    "cat": "custom",
+    "emoji": "🏠",
+    "photos": [],
+    "name": "Підставка з підписом",
+    "mat": "PLA · колір на вибір",
+    "price": 120,
+    "hot": true,
+    "custom_fields": "Текст для підпису (до 20 символів)"
+  },
+  {
+    "id": 104,
+    "cat": "custom",
+    "emoji": "💍",
+    "photos": [],
+    "name": "Каблучка з ініціалами",
+    "mat": "PLA · розмір на вибір",
+    "price": 80,
+    "oldPrice": 100,
+    "hot": false,
+    "custom_fields": "Ініціали (до 3 літер) та розмір каблучки"
+  },
+  {
+    "id": 105,
+    "cat": "custom",
+    "emoji": "🖼️",
+    "photos": [],
+    "name": "Рамка для фото",
+    "mat": "PLA · різні кольори",
+    "price": 150,
+    "hot": true,
+    "custom_fields": "Розмір фото (наприклад 10×15) та колір рамки"
+  }
+]
