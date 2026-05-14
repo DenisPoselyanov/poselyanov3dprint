@@ -960,6 +960,48 @@ function initModalSwipe() {
     }
     modalSwipeStartY = null;
   }, { passive: true });
+    let mouseDown = false;
+
+  m.addEventListener('mousedown', e => {
+    mouseDown = true;
+    modalSwipeStartY = e.clientY;
+  });
+
+  m.addEventListener('mousemove', e => {
+    if (!mouseDown || modalSwipeStartY === null) return;
+    const dy = e.clientY - modalSwipeStartY;
+    if (dy > 0) {
+      m.style.transform = `translateY(${dy}px)`;
+      m.style.transition = 'none';
+    }
+  });
+
+  // Обробник для руху миші. Якщо користувач тягне модальне вікно вниз, ми переміщаємо його відповідно до руху миші, створюючи ефект "витягування" модального вікна.
+  m.addEventListener('mouseup', e => {
+    if (!mouseDown) return;
+    mouseDown = false;
+    const dy = e.clientY - modalSwipeStartY;
+
+    if (dy > 80) {
+      m.style.transition = 'transform .25s ease';
+      m.style.transform = `translateY(100%)`;
+      setTimeout(() => {
+        m.style.transition = '';
+        m.style.transform = '';
+        document.getElementById('modal-backdrop').classList.remove('open');
+        m.classList.remove('modal-close-anim');
+        const scrollY = parseInt(document.body.style.top || '0') * -1;
+        document.body.classList.remove('modal-open');
+        document.body.style.top = '';
+        window.scrollTo(0, scrollY);
+      }, 250);
+    } else {
+      m.style.transition = 'transform .3s cubic-bezier(.34,1.2,.64,1)';
+      m.style.transform = '';
+      setTimeout(() => { m.style.transition = ''; }, 300);
+    }
+    modalSwipeStartY = null;
+  });
 }
 
 function closeIfBackdrop(e) {
@@ -1040,6 +1082,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     const id = parseInt(startParam.replace('product_', ''));
     if (id) openModal(id);
   }
+
+// Логіка для навігації в лайтбоксі за допомогою клавіатури
+document.addEventListener('keydown', e => {
+  const lb = document.getElementById('lightbox');
+  if (!lb.classList.contains('open')) return;
+
+  const photos = currentProduct?.photos || [];
+  if (e.key === 'ArrowRight') {
+    lbIndex = (lbIndex + 1) % photos.length;
+    updateLightbox();
+  } else if (e.key === 'ArrowLeft') {
+    lbIndex = (lbIndex - 1 + photos.length) % photos.length;
+    updateLightbox();
+  } else if (e.key === 'Escape') {
+    closeLightbox();
+  }
+});
 });
 </script>
 </body>
