@@ -287,7 +287,7 @@ async def handle_order(request):
                 line += f"\n📝 _{comment}_"
             
             # Формуємо текст для нового повідомлення
-            confirm_text = f"✅ *Замовлення прийнято!*\n\n{line}\n\n"
+            confirm_text = f"✅ *Замовлення прийнято!*\n\n{line}\n"
             confirm_text += footer
 
             if existing and now - existing["time"] < timedelta(hours=4):
