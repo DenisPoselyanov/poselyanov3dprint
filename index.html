@@ -99,6 +99,7 @@
     display: flex; gap: 6px;
     padding: 8px 14px 8px;
     overflow-x: auto; scrollbar-width: none;
+    cursor: grab;
   }
   .tabs::-webkit-scrollbar { display: none; }
 
@@ -1283,6 +1284,26 @@ function initModalSwipe() {
   });
 }
 
+// ─── СКРОЛ ГРІДУ МИШКОЮ ─────────────────────────────────────
+(function() {
+  const el = document.documentElement;
+  let isDown = false, startY, scrollTop;
+  document.addEventListener('mousedown', e => {
+    if (e.target.closest('.modal-backdrop, .bottom-nav, .tabs, .header')) return;
+    isDown = true;
+    startY = e.pageY;
+    scrollTop = el.scrollTop;
+    document.body.style.cursor = 'grabbing';
+  });
+  document.addEventListener('mouseleave', () => { isDown = false; document.body.style.cursor = ''; });
+  document.addEventListener('mouseup', () => { isDown = false; document.body.style.cursor = ''; });
+  document.addEventListener('mousemove', e => {
+    if (!isDown) return;
+    e.preventDefault();
+    el.scrollTop = scrollTop - (e.pageY - startY);
+  });
+})();
+
 function closeIfBackdrop(e) {
   if (e.target === document.getElementById('modal-backdrop')) closeModal();
 }
@@ -1325,6 +1346,26 @@ async function submitOrder() {
 function backToCatalog() {
   document.getElementById('success-screen').classList.remove('open');
 }
+
+// ─── СКРОЛ ТАБІВ МИШКОЮ ─────────────────────────────────────
+(function() {
+  const tabs = document.getElementById('tabs');
+  let isDown = false, startX, scrollLeft;
+  tabs.addEventListener('mousedown', e => {
+    isDown = true;
+    startX = e.pageX - tabs.offsetLeft;
+    scrollLeft = tabs.scrollLeft;
+    tabs.style.cursor = 'grabbing';
+  });
+  tabs.addEventListener('mouseleave', () => { isDown = false; tabs.style.cursor = ''; });
+  tabs.addEventListener('mouseup', () => { isDown = false; tabs.style.cursor = ''; });
+  tabs.addEventListener('mousemove', e => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - tabs.offsetLeft;
+    tabs.scrollLeft = scrollLeft - (x - startX);
+  });
+})();
 
 // ─── INIT ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
