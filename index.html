@@ -1284,30 +1284,6 @@ function initModalSwipe() {
   });
 }
 
-// ─── СКРОЛ ГРІДУ МИШКОЮ ─────────────────────────────────────
-(function() {
-  const el = document.documentElement;
-  let isDown = false, startY, scrollTop;
-  document.addEventListener('mousedown', e => {
-    if (e.target.closest('.modal-backdrop, .bottom-nav, .tabs, .header')) return;
-    isDown = true;
-    startY = e.pageY;
-    scrollTop = el.scrollTop;
-    document.body.style.cursor = 'grabbing';
-  });
-  document.addEventListener('mouseleave', () => { isDown = false; document.body.style.cursor = ''; });
-  document.addEventListener('mouseup', () => { isDown = false; document.body.style.cursor = ''; });
-  document.addEventListener('mousemove', e => {
-    if (!isDown) return;
-    e.preventDefault();
-    el.scrollTop = scrollTop - (e.pageY - startY);
-  });
-})();
-
-function closeIfBackdrop(e) {
-  if (e.target === document.getElementById('modal-backdrop')) closeModal();
-}
-
 // ─── ORDER ──────────────────────────────────────────────────
 async function submitOrder() {
   if (!currentProduct) return;
@@ -1365,6 +1341,46 @@ function backToCatalog() {
     const x = e.pageX - tabs.offsetLeft;
     tabs.scrollLeft = scrollLeft - (x - startX);
   });
+})();
+
+// ─── СКРОЛ ГРІДУ МИШКОЮ ─────────────────────────────────────
+(function() {
+  let isDown = false, startY, scrollTop, scrollEl, didDrag = false;
+  document.addEventListener('mousedown', e => {
+    if (e.target.closest('.modal-backdrop, .bottom-nav, .tabs, .header')) return;
+    scrollEl = document.scrollingElement || document.documentElement;
+    if (scrollEl.scrollHeight <= scrollEl.clientHeight) scrollEl = document.body;
+    isDown = true;
+    didDrag = false;
+    startY = e.pageY;
+    scrollTop = scrollEl.scrollTop;
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mouseup', () => {
+    isDown = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+  document.addEventListener('mouseleave', () => {
+    isDown = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!isDown || !scrollEl) return;
+    const dy = e.pageY - startY;
+    if (Math.abs(dy) > 5) {
+      didDrag = true;
+      document.body.style.cursor = 'grabbing';
+      scrollEl.scrollTop = scrollTop - dy;
+    }
+  });
+  document.addEventListener('click', e => {
+    if (didDrag) {
+      e.stopPropagation();
+      didDrag = false;
+    }
+  }, true); // capture — перехоплює до будь-якого onclick
 })();
 
 // ─── INIT ────────────────────────────────────────────────────
