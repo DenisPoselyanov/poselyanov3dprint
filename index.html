@@ -144,7 +144,7 @@
   }
 
   .card-img {
-    height: 90px;
+    height: 140px;
     background: linear-gradient(135deg, #f0f4ff 0%, #e8f5ff 100%);
     display: flex; align-items: center; justify-content: center;
     font-size: 44px;
@@ -589,6 +589,18 @@
   }
   .custom-notice.visible { display: block; }
 
+  /* Бейдж "В кошику" на картці */
+  .card-in-cart-badge {
+    position: absolute; top: 6px; right: 6px;
+    background: #4CAF50; color: #fff;
+    font-size: 9px; font-weight: 800;
+    padding: 2px 6px; border-radius: 6px;
+    z-index: 3;
+  }
+  .card-btn.in-cart {
+    background: #4CAF50;
+  }
+
   /* Бейдж "Індивідуальне" на картці */
   .card-custom-badge {
     position: absolute; bottom: 6px; left: 6px;
@@ -658,7 +670,7 @@
 
   /* Активний стан кнопок "+" та "-" при натисканні */
   .qty-btn:active { background: var(--tg-blue); color: #fff; transform: scale(0.92); }
-  
+
   /* Потенційний стан "заблоковано" для кнопки "-" при кількості 1 */
   .qty-display {
     font-size: 18px; font-weight: 800; color: var(--text);
@@ -677,17 +689,21 @@
     background: #4CAF50;
   }
 
-  /* ===== СТОРІНКА КОШИКА ===== */
+  /* ===== CART PAGE ===== */
   .cart-page {
     display: flex; flex-direction: column;
-    height: 100%;
-    overflow: hidden;
+    min-height: calc(100vh - 60px);
   }
+
+  /* Список товарів у кошику з прокруткою */
   .cart-scroll {
     flex: 1; overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     padding: 12px 12px 0;
+    overscroll-behavior: contain;
   }
+
+  /* Картка товару в кошику */
   .cart-item {
     background: var(--card-bg);
     border-radius: var(--radius);
@@ -724,15 +740,21 @@
   /* Підвал кошика */
   .cart-footer {
     flex-shrink: 0;
-    padding: 12px 12px;
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     background: var(--card-bg);
+    position: sticky;
+    bottom: 60px; /* висота bottom-nav */
   }
+
+  /* Поле для коментаря до замовлення в кошику */
   .cart-comment-label {
     font-size: 11px; font-weight: 700; color: var(--muted);
     text-transform: uppercase; letter-spacing: .04em;
     margin-bottom: 6px;
   }
+
+  /* Текстова область для коментаря до замовлення в кошику */
   .cart-comment {
     width: 100%; padding: 10px 12px;
     border: 1.5px solid var(--border);
@@ -760,15 +782,59 @@
     cursor: pointer; transition: opacity .15s, transform .1s;
   }
   .cart-submit-btn:active { opacity: .85; transform: scale(0.98); }
+
+  /* Заглушка для порожнього кошика */
   .cart-empty {
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    height: 100%; padding: 40px 20px; text-align: center;
+    min-height: calc(100vh - 180px);
+    padding: 40px 20px; text-align: center;
     color: var(--muted);
   }
+
+  /* Іконка, заголовок та підзаголовок для порожнього кошика */
   .cart-empty-ico { font-size: 52px; margin-bottom: 12px; }
+  /* Заголовок для порожнього кошика */
   .cart-empty-title { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+  /* Підзаголовок для порожнього кошика */
   .cart-empty-sub { font-size: 13px; line-height: 1.5; }
+
+  /* ===== АНІМАЦІЯ ВИДАЛЕННЯ ===== */
+  .cart-item {
+    transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+    overflow: hidden;
+  }
+  .cart-item.removing {
+    transform: translateX(-110%);
+    opacity: 0;
+  }
+
+  .cart-undo-bar {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+    min-height: 60px;
+    transition: opacity .2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .cart-undo-bar:active { opacity: .75; }
+  .cart-undo-text {
+    flex: 1; font-size: 13px; font-weight: 700; color: var(--text);
+  }
+  .cart-undo-hint {
+    font-size: 11px; color: var(--muted); font-weight: 600;
+  }
+  .cart-undo-progress {
+    position: absolute; bottom: 0; left: 0;
+    height: 3px; background: var(--tg-blue);
+    border-radius: 0 0 0 var(--radius);
+    transition: width linear;
+  }
 </style>
 </head>
 <body>
@@ -985,8 +1051,11 @@ function updateCartBadge() {
 // Поточна кількість в модалці (не в кошику — просто UI лічильник)
 let modalQty = 1;
 
+// Зміна кількості в модальному вікні (натискання на "+" або "-")
 function modalQtyChange(delta) {
-  modalQty = Math.max(1, modalQty + delta);
+  const existing = getCartItem(currentProduct?.id);
+  const minQty = existing ? 0 : 1;
+  modalQty = Math.max(minQty, modalQty + delta);
   document.getElementById('m-qty').textContent = modalQty;
 }
 
@@ -1003,31 +1072,43 @@ function updateModalAddBtn() {
   }
 }
 
+// Додавання товару в кошик з модального вікна
 function addToCartFromModal() {
   if (!currentProduct) return;
   const customVal = currentProduct._isCustom
     ? (document.getElementById('m-custom-value')?.value.trim() || '')
     : '';
 
+  // Якщо товар вже в кошику — оновлюємо кількість та кастомізацію (якщо індивідуальний)
   const existing = getCartItem(currentProduct.id);
+
+  // Якщо кількість стала 0 або менше — видаляємо товар з кошика
   if (existing) {
-    existing.quantity += modalQty;
-    if (currentProduct._isCustom && customVal) existing.customValue = customVal;
+    existing.quantity = modalQty;
+    
+    // Якщо товар індивідуальний і є кастомізація — оновлюємо її
+    if (existing.quantity <= 0) {
+      // Просто видаляємо без анімації/таймеру
+      cart = cart.filter(i => i.id !== currentProduct.id);
+    } else {
+      if (currentProduct._isCustom && customVal) existing.customValue = customVal;
+    }
   } else {
-    cart.push({
-      id: currentProduct.id,
-      name: currentProduct.name,
-      price: currentProduct.price,
-      quantity: modalQty,
-      fromCustom: currentProduct._isCustom || false,
-      emoji: currentProduct.emoji,
-      customValue: customVal
-    });
+    if (modalQty > 0) {
+      cart.push({
+        id: currentProduct.id,
+        name: currentProduct.name,
+        price: currentProduct.price,
+        quantity: modalQty,
+        fromCustom: currentProduct._isCustom || false,
+        emoji: currentProduct.emoji,
+        customValue: customVal
+      });
+    }
   }
   saveCart();
   updateCartBadge();
   updateModalAddBtn();
-  // Закрити модалку через мить
   setTimeout(closeModal, 300);
 }
 
@@ -1066,14 +1147,17 @@ function buildCard(p, i, isCustom) {
   const hasPhotos = p.photos && p.photos.length > 0;
   const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
   const source = isCustom ? 'custom' : 'main';
+  const cartItem = getCartItem(p.id);
+  const inCart = !!cartItem;
   return `
-    <div class="card" style="animation-delay:${i * 0.05}s" onclick="openModal(${p.id}, '${source}')">
+    <div class="card" data-id="${p.id}" style="animation-delay:${i * 0.05}s" onclick="openModal(${p.id}, '${source}')">
       <div class="card-img">
         ${hasPhotos ? `<img src="${p.photos[0]}" alt="${p.name}" loading="lazy">` : ''}
         <span style="position:relative;z-index:1">${hasPhotos ? '' : p.emoji}</span>
         ${p.hot ? '<div class="card-badge">🔥 Хіт</div>' : ''}
         ${discount ? `<div class="card-sale-badge">−${discount}%</div>` : ''}
         ${isCustom ? '<div class="card-custom-badge">✏️ Індив.</div>' : ''}
+        ${inCart ? `<div class="card-in-cart-badge">✓ ${cartItem.quantity} шт</div>` : ''}
       </div>
       <div class="card-info">
         <div class="card-name">${p.name}</div>
@@ -1083,10 +1167,44 @@ function buildCard(p, i, isCustom) {
             ${p.oldPrice ? `<div class="card-price-old">${p.oldPrice} ₴</div>` : ''}
             <div class="card-price${p.oldPrice ? ' has-discount' : ''}">${p.price} ₴</div>
           </div>
-          <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id}, '${source}')">Замовити</button>
+          <button class="card-btn${inCart ? ' in-cart' : ''}" onclick="event.stopPropagation(); openModal(${p.id}, '${source}')">${inCart ? `✓ В кошику` : 'Замовити'}</button>
         </div>
       </div>
     </div>`;
+}
+
+// Оновлює бейдж "В кошику" на всіх картках з цим товаром (якщо товар є в кошику — показує кількість, якщо немає — ховає бейдж)
+function updateCardBadge(id) {
+  const cartItem = getCartItem(id);
+  const inCart = !!cartItem;
+
+  // Шукаємо всі картки з цим товаром (може бути в кількох гридах одночасно)
+  document.querySelectorAll(`.card[data-id="${id}"]`).forEach(card => {
+    // Бейдж
+    let badge = card.querySelector('.card-in-cart-badge');
+    if (inCart) {
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'card-in-cart-badge';
+        card.querySelector('.card-img').appendChild(badge);
+      }
+      badge.textContent = `✓ ${cartItem.quantity} шт`;
+    } else {
+      if (badge) badge.remove();
+    }
+
+    // Кнопка
+    const btn = card.querySelector('.card-btn');
+    if (btn) {
+      if (inCart) {
+        btn.textContent = '✓ В кошику';
+        btn.classList.add('in-cart');
+      } else {
+        btn.textContent = 'Замовити';
+        btn.classList.remove('in-cart');
+      }
+    }
+  });
 }
 
 let currentCat = 'all';
@@ -1095,12 +1213,16 @@ let carouselIndex = 0;
 let lbIndex = 0;
 
 // ─── РЕНДЕР КОШИКА ──────────────────────────────────────────
+// Зберігаємо таймери видалення: { id -> { timeoutId, item } }
+const pendingRemovals = {};
+
 function renderCart() {
   const list   = document.getElementById('cart-list');
   const footer = document.getElementById('cart-footer');
   const totalEl = document.getElementById('cart-total');
 
-  if (!cart.length) {
+  // Якщо в кошику немає товарів і немає товарів що очікують видалення — показуємо заглушку "кошик порожній"
+  if (!cart.length && !Object.keys(pendingRemovals).length) {
     list.innerHTML = `
       <div class="cart-empty">
         <div class="cart-empty-ico">🛒</div>
@@ -1111,10 +1233,12 @@ function renderCart() {
     return;
   }
 
+  // Інакше — показуємо товари та підвал з сумою
   footer.style.display = '';
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   totalEl.textContent = total + ' ₴';
 
+  // Рендеримо товари в кошику
   list.innerHTML = cart.map(item => `
     <div class="cart-item" id="cart-item-${item.id}">
       <div class="cart-item-emoji">${item.emoji}</div>
@@ -1130,18 +1254,122 @@ function renderCart() {
       </div>
     </div>
   `).join('');
+
+  // Відновлюємо плашки "Повернути" для товарів що ще не видалились
+  Object.values(pendingRemovals).forEach(({ item, endsAt }) => {
+    const bar = buildUndoBar(item, endsAt);
+    list.appendChild(bar);
+  });
+}
+
+// Створює плашку "Повернути" для видаленого товару з прогрес-баром, що показує час до остаточного видалення
+function buildUndoBar(item, endsAt) {
+  const DURATION = 3000;
+  const div = document.createElement('div');
+  div.className = 'cart-undo-bar';
+  div.id = `undo-${item.id}`;
+  div.innerHTML = `
+    <span style="font-size:28px">${item.emoji}</span>
+    <div style="flex:1">
+      <div class="cart-undo-text">Повернути «${item.name}»</div>
+      <div class="cart-undo-hint">Натисни щоб скасувати</div>
+    </div>
+    <div class="cart-undo-progress" id="undo-prog-${item.id}"></div>
+  `;
+  div.addEventListener('click', () => undoRemove(item.id));
+
+  // Запускаємо прогрес-бар
+  const prog = div.querySelector('.cart-undo-progress');
+  const remaining = endsAt - Date.now();
+  const startPct = (remaining / DURATION) * 100;
+  prog.style.width = startPct + '%';
+  prog.style.transition = `width ${remaining}ms linear`;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      prog.style.width = '0%';
+    });
+  });
+
+  return div;
+}
+
+function undoRemove(id) {
+  const pending = pendingRemovals[id];
+  if (!pending) return;
+  clearTimeout(pending.timeoutId);
+  delete pendingRemovals[id];
+
+  // Повертаємо товар в кошик
+  cart.push(pending.item);
+  saveCart();
+  updateCartBadge();
+  renderCart();
 }
 
 function cartQtyChange(id, delta) {
   const item = getCartItem(id);
   if (!item) return;
-  item.quantity += delta;
-  if (item.quantity <= 0) {
+
+  if (delta < 0 && item.quantity === 1) {
+    // Видаляємо з кошика — запускаємо анімацію
+    const savedItem = { ...item };
     cart = cart.filter(i => i.id !== id);
+    saveCart();
+    updateCartBadge();
+
+    // Анімуємо слайд вліво
+    const el = document.getElementById(`cart-item-${id}`);
+    if (el) {
+      el.classList.add('removing');
+      el.addEventListener('transitionend', () => {
+        el.remove();
+        // Вставляємо плашку "Повернути"
+        const list = document.getElementById('cart-list');
+        if (list) {
+          const endsAt = Date.now() + 3000;
+          const bar = buildUndoBar(savedItem, endsAt);
+          list.appendChild(bar);
+
+          const timeoutId = setTimeout(() => {
+            delete pendingRemovals[id];
+            const b = document.getElementById(`undo-${id}`);
+            if (b) b.remove();
+            // Якщо кошик тепер порожній — оновити вигляд
+            if (!cart.length && !Object.keys(pendingRemovals).length) renderCart();
+          }, 3000);
+
+          pendingRemovals[id] = { item: savedItem, timeoutId, endsAt };
+        }
+      }, { once: true });
+    } else {
+      renderCart();
+    }
+
+    // Оновлюємо суму точково
+    updateCartTotal();
+    return;
   }
+
+  // Звичайна зміна кількості (+ або - без видалення)
+  item.quantity += delta;
   saveCart();
   updateCartBadge();
-  renderCart(); // повний перерендер (анімація — в Етапі 5)
+
+  // Точкове оновлення — без повного перерендеру
+  const qtyEl = document.getElementById(`cart-qty-${id}`);
+  const priceEl = document.querySelector(`#cart-item-${id} .cart-item-price`);
+  if (qtyEl) qtyEl.textContent = item.quantity;
+  if (priceEl) priceEl.textContent = `${item.price} ₴ × ${item.quantity} = ${item.price * item.quantity} ₴`;
+  updateCartTotal();
+}
+
+function updateCartTotal() {
+  const totalEl = document.getElementById('cart-total');
+  const footer  = document.getElementById('cart-footer');
+  if (!totalEl) return;
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  totalEl.textContent = total + ' ₴';
+  if (footer) footer.style.display = cart.length || Object.keys(pendingRemovals).length ? '' : 'none';
 }
 
 // ─── НАВІГАЦІЯ МІЖ СТОРІНКАМИ ───────────────────────────────
@@ -1183,31 +1411,6 @@ function renderGrid(cat) {
     return;
   }
   grid.innerHTML = items.map((p, i) => buildCard(p, i, false)).join('');
-
-  grid.innerHTML = items.map((p, i) => {
-    const hasPhotos = p.photos && p.photos.length > 0;
-    const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
-    return `
-      <div class="card" style="animation-delay:${i * 0.05}s" onclick="openModal(${p.id})">
-        <div class="card-img">
-          ${hasPhotos ? `<img src="${p.photos[0]}" alt="${p.name}" loading="lazy">` : ''}
-          <span style="position:relative;z-index:1">${hasPhotos ? '' : p.emoji}</span>
-          ${p.hot ? '<div class="card-badge">🔥 Хіт</div>' : ''}
-          ${discount ? `<div class="card-sale-badge">−${discount}%</div>` : ''}
-        </div>
-        <div class="card-info">
-          <div class="card-name">${p.name}</div>
-          <div class="card-mat">${p.mat}</div>
-          <div class="card-footer">
-            <div class="card-price-wrap">
-              ${p.oldPrice ? `<div class="card-price-old">${p.oldPrice} ₴</div>` : ''}
-              <div class="card-price${p.oldPrice ? ' has-discount' : ''}">${p.price} ₴</div>
-            </div>
-            <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id})">Замовити</button>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
 }
 
 function filterCat(el, cat) {
@@ -1437,20 +1640,24 @@ function openModal(id, source = 'main') {
   }
   buildCarousel(currentProduct.photos);
 
-  // Скидаємо лічильник модалки
-  modalQty = 1;
-  document.getElementById('m-qty').textContent = '1';
+  // Встановлюємо лічильник = кількість в кошику (або 1 якщо немає)
+  const existingInCart = getCartItem(currentProduct.id);
+  modalQty = existingInCart ? existingInCart.quantity : 1;
+  document.getElementById('m-qty').textContent = modalQty;
   updateModalAddBtn();
 
+  // Блокування скролу сторінки при відкритті модального вікна. Це забезпечує фокус користувача на модальному вікні та запобігає випадковому скролінгу фону, що може бути дезорієнтуючим.
   const scrollY = window.scrollY;
   document.body.classList.add('modal-open');
   document.body.style.top = `-${scrollY}px`;
 
+  // Відкриваємо модальне вікно з анімацією. Додаємо клас для бекдропа, який робить його видимим, та ініціалізуємо обробники свайпів для модального вікна, що дозволяє користувачам закривати його жестами.
   document.getElementById('modal-backdrop').classList.add('open');
   initModalSwipe();
   document.getElementById('modal').classList.remove('modal-close-anim');
 }
 
+// Закриття модального вікна з анімацією. Додаємо клас для анімації закриття, який плавно приховує модальне вікно, та після завершення анімації видаляємо клас для бекдропа, що робить його невидимим. Також відновлюємо скрол сторінки до попередньої позиції, забезпечуючи плавний перехід назад до основного контенту.
 function closeModal() {
   const modal    = document.getElementById('modal');
   const backdrop = document.getElementById('modal-backdrop');
@@ -1459,6 +1666,8 @@ function closeModal() {
   setTimeout(() => {
     backdrop.classList.remove('open');
     modal.classList.remove('modal-close-anim');
+    // Точкове оновлення бейджів — без перерендеру гриду
+    if (currentProduct) updateCardBadge(currentProduct.id);
   }, 220);
 
   const scrollY = parseInt(document.body.style.top || '0') * -1;
