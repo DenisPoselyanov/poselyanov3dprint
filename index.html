@@ -20,6 +20,40 @@
     --radius-sm: 10px;
   }
 
+  /* Темна тема (можна перемикати додаванням класу "dark" до body) */ 
+  body.dark {
+    --bg: #1c1c1e;
+    --card-bg: #2c2c2e;
+    --text: #f0f0f0;
+    --muted: #aaaaaa;
+    --border: rgba(255,255,255,0.08);
+  }
+
+  body.dark .header {
+    background: #1a3a52;
+  }
+
+  body.dark textarea {
+    background: #333;
+    color: #f0f0f0;
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  body.dark .notice {
+    background: #1e2d3d;
+    color: #90bce8;
+    border-color: #2AABEE;
+  }
+
+  body.dark .modal-close {
+    background: #333;
+    color: #aaa;
+  }
+
+  body.dark .success-screen {
+    background: #1a1a1a;
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
   html, body {
@@ -559,6 +593,11 @@ function photo(url) {
   return url.trim();
 }
 
+// Застосування теми (можна викликати з Telegram Web App або додаткової кнопки)
+function applyTheme(scheme) {
+  document.body.classList.toggle('dark', scheme === 'dark');
+}
+
 const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', key: '🔑 Брелки', anti: '🧠 Антистрес', gifts: '🎁 Подарунки та декор', home: '🏠 Дім та побут', individual: '✏️ Індивідуальне' };
 
 let PRODUCTS = [];
@@ -899,6 +938,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
+    applyTheme(Telegram.WebApp.colorScheme);
+    Telegram.WebApp.onEvent('themeChanged', () => {
+      applyTheme(Telegram.WebApp.colorScheme);
+    });
   }
 
   await loadProducts();
