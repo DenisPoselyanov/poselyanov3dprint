@@ -67,7 +67,7 @@
   /* HEADER */
   .header {
     background: var(--tg-blue);
-    padding: 16px 16px 20px;
+    padding: 16px;
     position: sticky; top: 0; z-index: 10;
     flex-shrink: 0;
   }
@@ -493,6 +493,32 @@
 
   /* Catalog */
   #catalog { overflow-y: auto; }
+
+  /* SKELETON */
+  .skeleton-card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .skeleton-img {
+    height: 90px;
+    background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s infinite;
+  }
+  .skeleton-line {
+    height: 11px; border-radius: 6px; margin: 9px 10px 5px;
+    background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s infinite;
+  }
+  .skeleton-line.short { width: 60%; height: 9px; margin-top: 3px; }
+  .skeleton-line.price { width: 40%; height: 13px; margin-top: 8px; }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
 </style>
 </head>
 <body>
@@ -504,15 +530,6 @@
       <div class="header-title">Poselyanov 3D Print</div>
       <div class="header-sub">Товари створені 3д принтером • с. Кам'янка, Чернівецька область</div>
     </div>
-  </div>
-  <div class="tabs" id="tabs">
-    <button class="tab active" onclick="filterCat(this,'all')">🏠 Всі</button>
-    <button class="tab" onclick="filterCat(this,'toy')">🧸 Іграшки</button>
-    <button class="tab" onclick="filterCat(this,'key')">🔑 Брелки</button>
-    <button class="tab" onclick="filterCat(this,'anti')">🧠 Антистрес</button>
-    <button class="tab" onclick="filterCat(this,'gifts')">🎁 Подарунки та декор</button>
-    <button class="tab" onclick="filterCat(this,'home')">🏠 Дім та побут</button>
-    <button class="tab" onclick="filterCat(this,'individual')">✏️ Індивідуальне</button>
   </div>
 </div>
 
@@ -871,6 +888,7 @@ function openModal(id) {
   document.body.style.top = `-${scrollY}px`;
 
   document.getElementById('modal-backdrop').classList.add('open');
+  initModalSwipe();
   document.getElementById('modal').classList.remove('modal-close-anim');
 }
 
@@ -888,6 +906,60 @@ function closeModal() {
   document.body.classList.remove('modal-open');
   document.body.style.top = '';
   window.scrollTo(0, scrollY);
+}
+
+// ─── SWIPE TO CLOSE MODAL ───────────────────────────────────
+let modalSwipeY = null;
+let modalSwipeStartY = null;
+
+// Ініціалізація свайпів для модального вікна. Це дозволяє користувачам закривати модальне вікно, свайпаючи його вниз, що є інтуїтивним жестом на мобільних пристроях.
+function initModalSwipe() {
+  // Щоб уникнути конфліктів з внутрішніми свайпами каруселі, ми клонуємо модальне вікно та замінюємо його, що дозволяє нам мати чисті обробники подій для свайпів.
+  const modal = document.getElementById('modal');
+  // Клонування модального вікна без дочірніх елементів
+  const newModal = modal.cloneNode(false);
+  while (modal.firstChild) newModal.appendChild(modal.firstChild);
+  modal.parentNode.replaceChild(newModal, modal);
+
+  const m = document.getElementById('modal');
+  m.addEventListener('touchstart', e => {
+    modalSwipeStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  // Обробник для руху пальця по екрану. Якщо користувач рухає пальцем вниз, ми переміщаємо модальне вікно відповідно до руху пальця, створюючи ефект "витягування" модального вікна.
+  m.addEventListener('touchmove', e => {
+    if (modalSwipeStartY === null) return;
+    const dy = e.touches[0].clientY - modalSwipeStartY;
+    if (dy > 0) {
+      m.style.transform = `translateY(${dy}px)`;
+      m.style.transition = 'none';
+    }
+  }, { passive: true });
+
+  m.addEventListener('touchend', e => {
+    if (modalSwipeStartY === null) return;
+    const dy = e.changedTouches[0].clientY - modalSwipeStartY;
+
+    if (dy > 80) {
+      m.style.transition = 'transform .25s ease';
+      m.style.transform = `translateY(100%)`;
+      setTimeout(() => {
+        m.style.transition = '';
+        m.style.transform = '';
+        document.getElementById('modal-backdrop').classList.remove('open');
+        m.classList.remove('modal-close-anim');
+        const scrollY = parseInt(document.body.style.top || '0') * -1;
+        document.body.classList.remove('modal-open');
+        document.body.style.top = '';
+        window.scrollTo(0, scrollY);
+      }, 250);
+    } else {
+      m.style.transition = 'transform .3s cubic-bezier(.34,1.2,.64,1)';
+      m.style.transform = '';
+      setTimeout(() => { m.style.transition = ''; }, 300);
+    }
+    modalSwipeStartY = null;
+  }, { passive: true });
 }
 
 function closeIfBackdrop(e) {
@@ -938,11 +1010,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
+
+    // Де потрібно, можна заборонити вертикальні свайпи, щоб не було конфліктів з модаллю та лайтбоксом
+    if (Telegram.WebApp.disableVerticalSwipes) {
+      Telegram.WebApp.disableVerticalSwipes();
+    }
     applyTheme(Telegram.WebApp.colorScheme);
     Telegram.WebApp.onEvent('themeChanged', () => {
       applyTheme(Telegram.WebApp.colorScheme);
     });
   }
+
+  // Скелетон
+  document.getElementById('grid').innerHTML = Array(6).fill(`
+    <div class="skeleton-card">
+      <div class="skeleton-img"></div>
+      <div class="skeleton-line"></div>
+      <div class="skeleton-line short"></div>
+      <div class="skeleton-line price"></div>
+    </div>
+  `).join('');
 
   await loadProducts();
   renderGrid('all');
