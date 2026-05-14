@@ -252,16 +252,22 @@ async def handle_order(request):
     except Exception:
         return web.Response(status=400, text="Bad JSON")
 
-    product_name = data.get('product_name', '—')
-    price        = data.get('price', '—')
-    comment      = data.get('comment', '').strip()
-    username     = data.get('user', 'невідомо')
-    user_id      = data.get('user_id')
-    first_name   = data.get('first_name', '')
+    # Витягуємо дані замовлення
+    items       = data.get('items', [])
+    total_price = data.get('total_price', 0)
+    comment     = data.get('comment', '').strip()
+    username    = data.get('user', 'невідомо')
+    user_id     = data.get('user_id')
+    first_name  = data.get('first_name', '')
 
-    order_id = save_order(user_id or 0, username, product_name, price, comment)
+    # Формуємо назву для збереження в БД (всі товари через кому)
+    product_name = ', '.join(i.get('product_name', '—') for i in items)
 
-    logger.info(f"📦 ЗАМОВЛЕННЯ  #{order_id}  {product_name}  {price}₴  від {username}")
+    # Зберігаємо замовлення в базі даних
+    order_id = save_order(user_id or 0, username, product_name, total_price, comment)
+
+    # Логування замовлення
+    logger.info(f"📦 ЗАМОВЛЕННЯ #{order_id}  {product_name}  {total_price}₴  від {username}")
 
     # Підтвердження клієнту
     
@@ -271,11 +277,15 @@ async def handle_order(request):
             existing = confirmation_messages.get(user_id)
             footer = "\n[Денис](https://t.me/denisposelyanov) зв'яжеться з тобою найближчим часом 🙌"
 
-            # Формуємо рядок товару
-            line = f"📦 *{product_name}* — {price} ₴"
+            # Формуємо текст для підтвердження клієнту
+            items_lines = '\n'.join(
+                f"  • {i.get('product_name','—')} × {i.get('quantity',1)}"
+                for i in items
+            )
+            line = f"📦 *Товари:*\n{items_lines}\n💰 *Разом: {total_price} ₴*"
             if comment:
-                line += f" · _{comment}_"
-
+                line += f"\n📝 _{comment}_"
+            
             # Формуємо текст для нового повідомлення
             confirm_text = f"✅ *Замовлення прийнято!*\n\n{line}\n\n"
             confirm_text += footer
@@ -322,11 +332,18 @@ async def handle_order(request):
         except Exception as e:
             logger.error(f"Помилка підтвердження клієнту: {e}")
 
+    items_text = ''
+    for i in items:
+        line = f"  • {i.get('product_name','—')} × {i.get('quantity',1)} — {i.get('price',0) * i.get('quantity',1)} ₴"
+        if i.get('customValue'):
+            line += f" _{i['customValue']}_"
+        items_text += line + '\n'
+
     owner_text = (
         f"🔔 *НОВЕ ЗАМОВЛЕННЯ #{order_id}*\n\n"
-        f"📦 Товар: *{product_name}*\n"
-        f"💰 Ціна: *{price} ₴*\n"
-        f"👤 Від: {username}\n"
+        f"👤 Від: {username}\n\n"
+        f"📦 *Товари:*\n{items_text}\n"
+        f"💰 *Разом: {total_price} ₴*\n"
     )
     if comment:
         owner_text += f"📝 Коментар: _{comment}_\n"

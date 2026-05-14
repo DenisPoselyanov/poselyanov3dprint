@@ -256,7 +256,7 @@
   .carousel-wrap {
     position: relative;
     width: 100%;
-    height: 220px;
+    height: 260px;
     overflow: hidden;
     background: linear-gradient(135deg, #f0f4ff, #e8f5ff);
     touch-action: pan-y;
@@ -401,17 +401,19 @@
   }
   .modal-close:active { background: #e0e0e0; }
 
+  /* Інформаційний блок з назвою, матеріалом та ціною в модальному вікні */
   .modal-product {
     display: flex; align-items: center; gap: 12px;
-    margin: 14px 18px;
-    padding: 12px;
+    margin: 16px 18px 12px;
+    padding: 14px 16px;
     background: var(--bg); border-radius: var(--radius-sm);
     animation: fadeInUp .3s .1s ease both;
   }
-  .modal-pname { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+
+  .modal-pname { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
   .modal-price-row { display: flex; align-items: baseline; gap: 8px; }
   .modal-pprice {
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 800;
     color: var(--tg-blue); /* синій за замовчуванням */
   }
@@ -437,7 +439,7 @@
     z-index: 4;
   }
 
-  .modal-body { padding: 0 18px 24px; animation: fadeInUp .3s .15s ease both; }
+  .modal-body { padding: 0 18px 40px; animation: fadeInUp .3s .15s ease both; }
 
   .field-label {
     font-size: 12px; font-weight: 700; color: var(--muted);
@@ -636,6 +638,137 @@
     0%   { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
+
+  /* ===== МОДАЛКА: КНОПКИ КІЛЬКОСТІ ===== */
+  .modal-qty-row {
+    display: flex; align-items: center; gap: 12px;
+    margin: 14px 18px 16px;
+  }
+
+  /* Кнопки "+" та "-" для вибору кількості товару в модальному вікні */
+  .qty-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 2px solid var(--tg-blue);
+    background: transparent; color: var(--tg-blue);
+    font-size: 20px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background .15s, color .15s, transform .1s;
+    flex-shrink: 0;
+  }
+
+  /* Активний стан кнопок "+" та "-" при натисканні */
+  .qty-btn:active { background: var(--tg-blue); color: #fff; transform: scale(0.92); }
+  
+  /* Потенційний стан "заблоковано" для кнопки "-" при кількості 1 */
+  .qty-display {
+    font-size: 18px; font-weight: 800; color: var(--text);
+    min-width: 28px; text-align: center;
+  }
+  .modal-add-btn {
+    flex: 1; padding: 11px 0;
+    background: var(--tg-blue); color: #fff;
+    border: none; border-radius: var(--radius-sm);
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px; font-weight: 800;
+    cursor: pointer; transition: opacity .15s, transform .1s;
+  }
+  .modal-add-btn:active { opacity: .85; transform: scale(0.98); }
+  .modal-add-btn.in-cart {
+    background: #4CAF50;
+  }
+
+  /* ===== СТОРІНКА КОШИКА ===== */
+  .cart-page {
+    display: flex; flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+  .cart-scroll {
+    flex: 1; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 12px 0;
+  }
+  .cart-item {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .cart-item-emoji { font-size: 32px; flex-shrink: 0; }
+  .cart-item-info { flex: 1; min-width: 0; }
+  .cart-item-name {
+    font-size: 13px; font-weight: 700; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 3px;
+  }
+  .cart-item-price { font-size: 12px; color: var(--muted); }
+  .cart-item-controls {
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  .cart-qty-btn {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--bg); color: var(--text);
+    font-size: 17px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: border-color .15s, transform .1s;
+  }
+  .cart-qty-btn:active { border-color: var(--tg-blue); transform: scale(0.9); }
+  .cart-qty-val {
+    font-size: 15px; font-weight: 800; color: var(--text);
+    min-width: 22px; text-align: center;
+  }
+
+  /* Підвал кошика */
+  .cart-footer {
+    flex-shrink: 0;
+    padding: 12px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--card-bg);
+  }
+  .cart-comment-label {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em;
+    margin-bottom: 6px;
+  }
+  .cart-comment {
+    width: 100%; padding: 10px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px; color: var(--text);
+    background: var(--bg); resize: none;
+    transition: border-color .2s;
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+  .cart-comment:focus { outline: none; border-color: var(--tg-blue); }
+  .cart-total-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .cart-total-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .cart-total-sum { font-size: 20px; font-weight: 800; color: var(--text); }
+  .cart-submit-btn {
+    width: 100%; padding: 14px;
+    background: var(--tg-blue); color: #fff;
+    border: none; border-radius: var(--radius-sm);
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px; font-weight: 800;
+    cursor: pointer; transition: opacity .15s, transform .1s;
+  }
+  .cart-submit-btn:active { opacity: .85; transform: scale(0.98); }
+  .cart-empty {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    height: 100%; padding: 40px 20px; text-align: center;
+    color: var(--muted);
+  }
+  .cart-empty-ico { font-size: 52px; margin-bottom: 12px; }
+  .cart-empty-title { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+  .cart-empty-sub { font-size: 13px; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -685,10 +818,17 @@
 
 <!-- PAGE: Кошик -->
 <div class="page" id="page-cart">
-  <div class="page-placeholder">
-    <div class="ph-icon">🛒</div>
-    <div class="ph-title">Кошик порожній</div>
-    <div class="ph-sub">Буде реалізовано в Етапі 4</div>
+  <div class="cart-page">
+    <div class="cart-scroll" id="cart-list"></div>
+    <div class="cart-footer" id="cart-footer" style="display:none">
+      <div class="cart-comment-label">Коментар / побажання</div>
+      <textarea class="cart-comment" id="cart-comment" rows="2" placeholder="Колір, написи, особливі побажання..."></textarea>
+      <div class="cart-total-row">
+        <span class="cart-total-label">Разом:</span>
+        <span class="cart-total-sum" id="cart-total">0 ₴</span>
+      </div>
+      <button class="cart-submit-btn" onclick="submitOrder()">✓ Оформити замовлення</button>
+    </div>
   </div>
 </div>
 
@@ -704,7 +844,7 @@
       <button class="carousel-arrow right" id="carr-right" onclick="carouselNav(1)">›</button>
     </div>
     <!-- Emoji fallback -->
-    <div id="m-emoji-fallback" style="display:none;height:220px;font-size:72px;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f4ff,#e8f5ff)"></div>
+    <div id="m-emoji-fallback" style="display:none;height:260px;font-size:72px;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f4ff,#e8f5ff)"></div>
 
     <!-- Dots -->
     <div class="carousel-dots" id="carousel-dots"></div>
@@ -727,6 +867,14 @@
       </div>
     </div>
 
+    <!-- Кнопки кількості + "Додати в кошик" -->
+    <div class="modal-qty-row">
+      <button class="qty-btn" onclick="modalQtyChange(-1)">−</button>
+      <span class="qty-display" id="m-qty">1</span>
+      <button class="qty-btn" onclick="modalQtyChange(1)">+</button>
+      <button class="modal-add-btn" id="m-add-btn" onclick="addToCartFromModal()">+ Додати в кошик</button>
+    </div>
+
     <div class="modal-body">
       <!-- Поле для індивідуальних товарів -->
       <div class="custom-notice" id="m-custom-notice">
@@ -737,15 +885,9 @@
         <textarea id="m-custom-value" rows="2" placeholder="Вкажи деталі..."></textarea>
       </div>
 
-      <!-- Загальне поле для коментарів та побажань -->
-      <div class="field">
-        <div class="field-label">Коментар / побажання</div>
-        <textarea id="m-comment" rows="3" placeholder="Наприклад: колір чорний, надпис '...', або особливі побажання..."></textarea>
-      </div>
       <div class="notice">
         📲 Після замовлення я напишу тобі особисто для уточнення деталей та оплати.
       </div>
-      <button class="submit-btn" onclick="submitOrder()">✓ Надіслати замовлення</button>
     </div>
   </div>
 </div>
@@ -807,6 +949,87 @@ const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', ant
 let PRODUCTS = [];
 // Глобальний масив індивідуальних товарів (заповнюється при завантаженні)
 let CUSTOM_PRODUCTS = [];
+
+// ─── КОШИК ──────────────────────────────────────────────────
+// Формат: [{ id, name, price, quantity, fromCustom, emoji, customValue }]
+let cart = [];
+
+function loadCart() {
+  try {
+    const raw = localStorage.getItem('cart_v1');
+    cart = raw ? JSON.parse(raw) : [];
+  } catch(e) {
+    cart = [];
+  }
+}
+
+function saveCart() {
+  localStorage.setItem('cart_v1', JSON.stringify(cart));
+}
+
+function getCartItem(id) {
+  return cart.find(i => i.id === id);
+}
+
+function updateCartBadge() {
+  const total = cart.reduce((s, i) => s + i.quantity, 0);
+  const badge = document.getElementById('cart-badge');
+  if (total > 0) {
+    badge.textContent = total;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// Поточна кількість в модалці (не в кошику — просто UI лічильник)
+let modalQty = 1;
+
+function modalQtyChange(delta) {
+  modalQty = Math.max(1, modalQty + delta);
+  document.getElementById('m-qty').textContent = modalQty;
+}
+
+function updateModalAddBtn() {
+  if (!currentProduct) return;
+  const existing = getCartItem(currentProduct.id);
+  const btn = document.getElementById('m-add-btn');
+  if (existing) {
+    btn.textContent = `✓ В кошику (${existing.quantity} шт)`;
+    btn.classList.add('in-cart');
+  } else {
+    btn.textContent = '+ Додати в кошик';
+    btn.classList.remove('in-cart');
+  }
+}
+
+function addToCartFromModal() {
+  if (!currentProduct) return;
+  const customVal = currentProduct._isCustom
+    ? (document.getElementById('m-custom-value')?.value.trim() || '')
+    : '';
+
+  const existing = getCartItem(currentProduct.id);
+  if (existing) {
+    existing.quantity += modalQty;
+    if (currentProduct._isCustom && customVal) existing.customValue = customVal;
+  } else {
+    cart.push({
+      id: currentProduct.id,
+      name: currentProduct.name,
+      price: currentProduct.price,
+      quantity: modalQty,
+      fromCustom: currentProduct._isCustom || false,
+      emoji: currentProduct.emoji,
+      customValue: customVal
+    });
+  }
+  saveCart();
+  updateCartBadge();
+  updateModalAddBtn();
+  // Закрити модалку через мить
+  setTimeout(closeModal, 300);
+}
 
 // ─── СТОРІНКИ ───────────────────────────────────────────────
 function showPage(name) {
@@ -871,6 +1094,56 @@ let currentProduct = null;
 let carouselIndex = 0;
 let lbIndex = 0;
 
+// ─── РЕНДЕР КОШИКА ──────────────────────────────────────────
+function renderCart() {
+  const list   = document.getElementById('cart-list');
+  const footer = document.getElementById('cart-footer');
+  const totalEl = document.getElementById('cart-total');
+
+  if (!cart.length) {
+    list.innerHTML = `
+      <div class="cart-empty">
+        <div class="cart-empty-ico">🛒</div>
+        <div class="cart-empty-title">Кошик порожній</div>
+        <div class="cart-empty-sub">Додай товари з каталогу</div>
+      </div>`;
+    footer.style.display = 'none';
+    return;
+  }
+
+  footer.style.display = '';
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  totalEl.textContent = total + ' ₴';
+
+  list.innerHTML = cart.map(item => `
+    <div class="cart-item" id="cart-item-${item.id}">
+      <div class="cart-item-emoji">${item.emoji}</div>
+      <div class="cart-item-info">
+        <div class="cart-item-name">${item.name}</div>
+        <div class="cart-item-price">${item.price} ₴ × ${item.quantity} = ${item.price * item.quantity} ₴</div>
+        ${item.customValue ? `<div class="cart-item-price" style="color:var(--tg-blue)">${item.customValue}</div>` : ''}
+      </div>
+      <div class="cart-item-controls">
+        <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, -1)">−</button>
+        <span class="cart-qty-val" id="cart-qty-${item.id}">${item.quantity}</span>
+        <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, 1)">+</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function cartQtyChange(id, delta) {
+  const item = getCartItem(id);
+  if (!item) return;
+  item.quantity += delta;
+  if (item.quantity <= 0) {
+    cart = cart.filter(i => i.id !== id);
+  }
+  saveCart();
+  updateCartBadge();
+  renderCart(); // повний перерендер (анімація — в Етапі 5)
+}
+
 // ─── НАВІГАЦІЯ МІЖ СТОРІНКАМИ ───────────────────────────────
 function switchPage(page, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -881,6 +1154,8 @@ function switchPage(page, btn) {
 
   const tabsWrap = document.getElementById('cat-tabs-wrap');
   if (tabsWrap) tabsWrap.style.display = page === 'products' ? '' : 'none';
+
+  if (page === 'cart') renderCart();
 }
 
 // ─── ЗАВАНТАЖЕННЯ ТОВАРІВ ────────────────────────────────────
@@ -1145,7 +1420,6 @@ function openModal(id, source = 'main') {
     chipEl.style.display = 'none';
   }
 
-  document.getElementById('m-comment').value = '';
   // Якщо товар є індивідуальним, показуємо спеціальне поле для деталей замовлення та відповідну плашку. Це дозволяє користувачам надавати додаткову інформацію для індивідуальних замовлень, що є важливим для правильного виготовлення товару.
   const noticeEl = document.getElementById('m-custom-notice');
   const wrapEl   = document.getElementById('m-custom-field-wrap');
@@ -1162,6 +1436,11 @@ function openModal(id, source = 'main') {
     wrapEl.classList.remove('visible');
   }
   buildCarousel(currentProduct.photos);
+
+  // Скидаємо лічильник модалки
+  modalQty = 1;
+  document.getElementById('m-qty').textContent = '1';
+  updateModalAddBtn();
 
   const scrollY = window.scrollY;
   document.body.classList.add('modal-open');
@@ -1186,6 +1465,13 @@ function closeModal() {
   document.body.classList.remove('modal-open');
   document.body.style.top = '';
   window.scrollTo(0, scrollY);
+}
+
+// Додатковий обробник для закриття модального вікна при натисканні на бекдроп. Це покращує користувацький досвід, дозволяючи легко закривати модальне вікно, не шукаючи конкретну кнопку закриття.
+function closeIfBackdrop(event) {
+  if (event.target === document.getElementById('modal-backdrop')) {
+    closeModal();
+  }
 }
 
 // ─── SWIPE TO CLOSE MODAL ───────────────────────────────────
@@ -1286,17 +1572,25 @@ function initModalSwipe() {
 
 // ─── ORDER ──────────────────────────────────────────────────
 async function submitOrder() {
-  if (!currentProduct) return;
-  const comment = document.getElementById('m-comment').value.trim();
+  if (!cart.length) return;
+  const comment = document.getElementById('cart-comment').value.trim();
   const tg   = window.Telegram?.WebApp;
   const user = tg?.initDataUnsafe?.user;
 
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+
   const payload = {
-    action:       'order',
-    product_id:   currentProduct.id,
-    product_name: currentProduct.name,
-    price:        currentProduct.price,
-    comment:      comment || '',
+    action: 'order',
+    items: cart.map(i => ({
+      product_id:   i.id,
+      product_name: i.name,
+      price:        i.price,
+      quantity:     i.quantity,
+      fromCustom:   i.fromCustom,
+      customValue:  i.customValue || ''
+    })),
+    total_price:  total,
+    comment:      comment,
     user:         user?.username ? '@' + user.username : (user?.first_name || 'невідомо'),
     user_id:      user?.id || null,
     first_name:   user?.first_name || '',
@@ -1309,18 +1603,22 @@ async function submitOrder() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    closeModal();
-    setTimeout(() => {
-      document.getElementById('success-screen').classList.add('open');
-    }, 250);
+    // Очищаємо кошик після успішного замовлення
+    cart = [];
+    saveCart();
+    updateCartBadge();
+    document.getElementById('success-screen').classList.add('open');
   } catch(e) {
     console.error('Помилка відправки:', e);
-    alert('❌ Не вдалось надіслати замовлення. Перевір з\'єднання і спробуй ще раз.');
+    alert("❌ Не вдалось надіслати замовлення. Перевір з'єднання і спробуй ще раз.");
   }
 }
 
 function backToCatalog() {
   document.getElementById('success-screen').classList.remove('open');
+  // Повертаємось на сторінку товарів
+  const productsBtn = document.querySelector('.nav-btn[data-page="products"]');
+  if (productsBtn) switchPage('products', productsBtn);
 }
 
 // ─── СКРОЛ ТАБІВ МИШКОЮ ─────────────────────────────────────
@@ -1398,6 +1696,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       applyTheme(Telegram.WebApp.colorScheme);
     });
   }
+
+  // Завантажуємо кошик з localStorage
+  loadCart();
+  updateCartBadge();
 
   // Скелетон
   document.getElementById('grid').innerHTML = Array(6).fill(`
