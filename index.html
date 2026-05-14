@@ -29,6 +29,19 @@
     --border: rgba(255,255,255,0.08);
   }
 
+  body.dark .bottom-nav {
+    border-top-color: rgba(255,255,255,0.06);
+  }
+  
+  body.dark .tab {
+    background: rgba(255,255,255,0.08);
+    color: var(--muted);
+  }
+  body.dark .tab.active {
+    background: var(--tg-blue);
+    color: #fff;
+  }
+
   body.dark .header {
     background: #1a3a52;
   }
@@ -84,19 +97,20 @@
   /* CATEGORY TABS */
   .tabs {
     display: flex; gap: 6px;
-    padding: 12px 14px 0;
+    padding: 8px 14px 8px;
     overflow-x: auto; scrollbar-width: none;
   }
   .tabs::-webkit-scrollbar { display: none; }
+
   .tab {
     padding: 6px 14px; border-radius: 20px;
     font-size: 12px; font-weight: 700;
     border: none; cursor: pointer; white-space: nowrap;
-    background: rgba(255,255,255,0.18);
-    color: rgba(255,255,255,0.85);
+    background: var(--border);
+    color: var(--muted);
     transition: all .2s;
   }
-  .tab.active { background: #fff; color: var(--tg-blue); }
+  .tab.active { background: var(--tg-blue); color: #fff; }
 
   /* GRID */
   .section-label {
@@ -494,6 +508,76 @@
   /* Catalog */
   #catalog { overflow-y: auto; }
 
+  /* CATEGORY TABS WRAP */
+  .cat-tabs-wrap {
+    position: fixed;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    left: 0; right: 0;
+    z-index: 49;
+    background: none;
+    border: none;
+    padding-bottom: 6px;
+  }
+  
+  /* Блюр-градієнт над bottom nav */
+  .blur-fade {
+    position: fixed;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    left: 0; right: 0;
+    height: 80px;
+    background: linear-gradient(to bottom, transparent, var(--bg) 75%);
+    pointer-events: none;
+    z-index: 48;
+  }
+
+  .tabs { padding: 8px 14px 8px; }
+
+  /* BOTTOM NAV */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: var(--card-bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    z-index: 50;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px; border: none; background: none;
+    cursor: pointer; padding: 6px 0;
+    color: var(--muted); transition: color .2s;
+    position: relative;
+  }
+  .nav-btn.active { color: var(--tg-blue); }
+  .nav-icon { font-size: 20px; line-height: 1; position: relative; display: inline-block; }
+  .nav-label { font-size: 10px; font-weight: 700; }
+  .cart-badge {
+    position: absolute; top: -4px; right: -8px;
+    background: var(--accent); color: #fff;
+    font-size: 9px; font-weight: 800;
+    min-width: 16px; height: 16px;
+    border-radius: 8px; padding: 0 3px;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1;
+  }
+
+  /* PAGES */
+  .page { display: none; }
+  .page.active { display: block; padding-bottom: calc(60px + 44px + env(safe-area-inset-bottom) + 8px); }
+
+  /* Заглушки для сторінок */
+  .page-placeholder {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 60px 20px; text-align: center;
+    color: var(--muted);
+  }
+  .page-placeholder .ph-icon { font-size: 52px; margin-bottom: 12px; }
+  .page-placeholder .ph-title { font-size: 17px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+  .page-placeholder .ph-sub { font-size: 13px; line-height: 1.5; }
+
   /* SKELETON */
   .skeleton-card {
     background: var(--card-bg);
@@ -533,9 +617,50 @@
   </div>
 </div>
 
-<div id="catalog">
-  <div class="section-label" id="section-label">Всі товари</div>
-  <div class="grid" id="grid"></div>
+<!-- CATEGORY TABS -->
+<div class="cat-tabs-wrap" id="cat-tabs-wrap">
+  <div class="tabs" id="tabs">
+    <button class="tab active" onclick="filterCat(this,'all')">🏠 Всі</button>
+    <button class="tab" onclick="filterCat(this,'toy')">🧸 Іграшки</button>
+    <button class="tab" onclick="filterCat(this,'key')">🔑 Брелки</button>
+    <button class="tab" onclick="filterCat(this,'anti')">🧠 Антистрес</button>
+  </div>
+</div>
+
+<!-- PAGE: Товари -->
+<div class="page active" id="page-products">
+  <div id="catalog">
+    <div class="section-label" id="section-label">Всі товари</div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <div class="blur-fade" id="blur-fade"></div>
+</div>
+
+<!-- PAGE: Акції -->
+<div class="page" id="page-sales">
+  <div class="page-placeholder">
+    <div class="ph-icon">🔥</div>
+    <div class="ph-title">Акції</div>
+    <div class="ph-sub">Буде реалізовано в Етапі 3</div>
+  </div>
+</div>
+
+<!-- PAGE: Індивідуальне -->
+<div class="page" id="page-custom">
+  <div class="page-placeholder">
+    <div class="ph-icon">✏️</div>
+    <div class="ph-title">Індивідуальне замовлення</div>
+    <div class="ph-sub">Буде реалізовано в Етапі 3</div>
+  </div>
+</div>
+
+<!-- PAGE: Кошик -->
+<div class="page" id="page-cart">
+  <div class="page-placeholder">
+    <div class="ph-icon">🛒</div>
+    <div class="ph-title">Кошик порожній</div>
+    <div class="ph-sub">Буде реалізовано в Етапі 4</div>
+  </div>
 </div>
 
 <!-- PRODUCT MODAL -->
@@ -602,6 +727,25 @@
   <button class="success-back" onclick="backToCatalog()">← Переглянути ще товари</button>
 </div>
 
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="nav-btn active" data-page="products" onclick="switchPage('products', this)">
+    <span class="nav-icon">🛍️</span>
+    <span class="nav-label">Товари</span>
+  </button>
+  <button class="nav-btn" data-page="sales" onclick="switchPage('sales', this)">
+    <span class="nav-icon">🔥</span>
+    <span class="nav-label">Акції</span>
+  </button>
+  <button class="nav-btn" data-page="custom" onclick="switchPage('custom', this)">
+    <span class="nav-icon">✏️</span>
+    <span class="nav-label">Індивідуальне</span>
+  </button>
+  <button class="nav-btn" data-page="cart" onclick="switchPage('cart', this)">
+    <span class="nav-icon">🛒<span class="cart-badge" id="cart-badge" style="display:none">0</span></span>
+    <span class="nav-label">Кошик</span>
+  </button>
+</nav>
 <script>
 
 // Хелпер для ImgBB (і будь-яких прямих посилань)
@@ -622,6 +766,18 @@ let currentCat = 'all';
 let currentProduct = null;
 let carouselIndex = 0;
 let lbIndex = 0;
+
+// ─── НАВІГАЦІЯ МІЖ СТОРІНКАМИ ───────────────────────────────
+function switchPage(page, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const tabsWrap = document.getElementById('cat-tabs-wrap');
+  if (tabsWrap) tabsWrap.style.display = page === 'products' ? '' : 'none';
+}
 
 // ─── ЗАВАНТАЖЕННЯ ТОВАРІВ ────────────────────────────────────
 async function loadProducts() {
