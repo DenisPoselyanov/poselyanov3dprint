@@ -692,7 +692,8 @@
   /* ===== CART PAGE ===== */
   .cart-page {
     display: flex; flex-direction: column;
-    min-height: calc(100vh - 60px);
+    height: calc(100vh - 60px);
+    overflow: hidden;
   }
 
   /* Список товарів у кошику з прокруткою */
@@ -743,8 +744,6 @@
     padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     background: var(--card-bg);
-    position: sticky;
-    bottom: 60px; /* висота bottom-nav */
   }
 
   /* Поле для коментаря до замовлення в кошику */
