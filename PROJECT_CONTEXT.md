@@ -13,6 +13,10 @@
 - **products.json:** https://github.com/DenisPoselyanov/poselyanov3dprint/blob/main/products.json
 - **Хостинг міні-апп:** https://denisposelyanov.github.io/poselyanov3dprint/
 
+Якщо не завантажуються дані то ось raw посилання:
+https://raw.githubusercontent.com/DenisPoselyanov/poselyanov3dprint/refs/heads/main/index.html
+https://raw.githubusercontent.com/DenisPoselyanov/poselyanov3dprint/refs/heads/main/bot.py
+https://raw.githubusercontent.com/DenisPoselyanov/poselyanov3dprint/refs/heads/main/products.json)
 ---
 
 ## 📱 Що це за проект
