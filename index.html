@@ -401,6 +401,15 @@
   }
   .modal-close:active { background: #e0e0e0; }
 
+  .modal-share-btn {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--bg); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: var(--muted);
+    transition: background .15s;
+  }
+  .modal-share-btn:active { background: #e0e0e0; }
+
   /* Інформаційний блок з назвою, матеріалом та ціною в модальному вікні */
   .modal-product {
     display: flex; align-items: center; gap: 12px;
@@ -975,7 +984,7 @@
     cursor: pointer;
     visibility: hidden;
   }
-  
+
   .gift-toast.show {
     transform: translateY(0);
     opacity: 1;
@@ -1190,7 +1199,10 @@
 
     <div class="modal-header">
       <span class="modal-title">Замовлення</span>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="modal-share-btn" onclick="shareProduct()" title="Поділитись">🔗</button>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
     </div>
 
     <div class="modal-product">
@@ -2303,6 +2315,19 @@ function backToCatalog() {
   // Повертаємось на сторінку товарів
   const productsBtn = document.querySelector('.nav-btn[data-page="products"]');
   if (productsBtn) switchPage('products', productsBtn);
+}
+
+// ─── ПОДІЛИТИСЬ ТОВАРОМ ───────────────────────────────────
+function shareProduct() {
+  if (!currentProduct) return;
+  const link = `https://t.me/poselyanov3dprint_bot?startapp=product_${currentProduct.id}`;
+  if (navigator.share) {
+    navigator.share({ title: currentProduct.name, url: link });
+  } else {
+    navigator.clipboard?.writeText(link).then(() => {
+      Telegram.WebApp?.showPopup({ message: '🔗 Посилання скопійовано!' });
+    });
+  }
 }
 
 // ─── СКРОЛ ТАБІВ МИШКОЮ ─────────────────────────────────────
