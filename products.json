@@ -52,7 +52,11 @@
     "id": 5,
     "cat": "key",
     "emoji": "❤️",
-    "photos": [],
+    "photos": [
+      "https://i.ibb.co/9mwT0H0L/image.png",
+      "https://i.ibb.co/WWF0xmCB/image.png",
+      "https://i.ibb.co/F4df3ZBw/image.png"
+    ],
     "name": "Брелок-серце",
     "mat": "PLA · будь-який колір",
     "price": 50,
