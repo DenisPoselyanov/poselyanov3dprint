@@ -570,6 +570,14 @@
   .page { display: none; }
   .page.active { display: block; }
 
+  #page-cart.active {
+    padding-bottom: 0 !important;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 60px - env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
+
   /* Сторінка акцій — звичайний грид, без табів */
   #page-sales .section-label { padding: 16px 14px 8px; }
 
@@ -613,6 +621,14 @@
   /* PAGES */
   .page { display: none; }
   .page.active { display: block; padding-bottom: calc(60px + 44px + env(safe-area-inset-bottom) + 8px); }
+
+  #page-cart { padding-bottom: 0 !important; }
+  #page-cart.active {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 72px - 60px - env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
 
   /* Заглушки для сторінок */
   .page-placeholder {
@@ -691,9 +707,7 @@
 
   /* ===== CART PAGE ===== */
   .cart-page {
-    display: flex; flex-direction: column;
-    height: calc(100vh - 60px);
-    overflow: hidden;
+    display: contents;
   }
 
   /* Список товарів у кошику з прокруткою */
@@ -741,9 +755,14 @@
   /* Підвал кошика */
   .cart-footer {
     flex-shrink: 0;
-    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    padding: 12px;
+    padding-bottom: 40px;
     border-top: 1px solid var(--border);
     background: var(--card-bg);
+    /* фіксуємо над навігацією */
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
   }
 
   /* Поле для коментаря до замовлення в кошику */
@@ -834,6 +853,129 @@
     border-radius: 0 0 0 var(--radius);
     transition: width linear;
   }
+
+  /* ===== БЛОК ПОДАРУНКУ В КОШИКУ ===== */
+  .cart-gift-block {
+    background: linear-gradient(135deg, #fff8e1, #fff3cd);
+    border: 1.5px solid #FFD54F;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 12px;
+    animation: fadeInUp .3s ease both;
+    transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease, max-height .3s ease, margin .3s ease, padding .3s ease;
+    max-height: 200px;
+    overflow: hidden;
+  }
+
+  /* Анімація приховування блоку подарунку при видаленні */
+  .cart-gift-block.hiding {
+    transform: translateX(-110%);
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  /* Темна тема для блоку подарунку в кошику */
+  body.dark .cart-gift-block {
+    background: linear-gradient(135deg, #2a2200, #1e1a00);
+    border-color: #856c00;
+  }
+  .cart-gift-emoji { font-size: 30px; flex-shrink: 0; }
+  .cart-gift-info { flex: 1; min-width: 0; }
+  .cart-gift-title {
+    font-size: 11px; font-weight: 800; color: #E65100;
+    text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px;
+  }
+  body.dark .cart-gift-title { color: #FFB74D; }
+  .cart-gift-name {
+    font-size: 13px; font-weight: 700; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cart-gift-free {
+    font-size: 11px; color: #4CAF50; font-weight: 700;
+  }
+  .cart-gift-change {
+    font-size: 11px; font-weight: 700; color: var(--tg-blue);
+    background: none; border: none; cursor: pointer;
+    padding: 4px 0;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .cart-gift-change:active { opacity: .7; }
+
+  /* ===== МОДАЛКА ВИБОРУ ПОДАРУНКУ ===== */
+  .gift-modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    align-items: flex-end;
+  }
+  .gift-modal-backdrop.open { display: flex; }
+  .gift-modal {
+    background: var(--card-bg);
+    border-radius: 24px 24px 0 0;
+    width: 100%;
+    max-height: 70vh;
+    overflow-y: auto;
+    animation: slideUp .28s cubic-bezier(.34,1.2,.64,1);
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .gift-modal-title {
+    font-size: 16px; font-weight: 800;
+    padding: 18px 18px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .gift-modal-close {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--bg); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: var(--muted);
+  }
+  .gift-option {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    margin: 0 10px 4px;
+    transition: background .15s;
+  }
+  .gift-option:active { background: var(--border); }
+  .gift-option.selected { background: rgba(42,171,238,0.12); }
+  .gift-option-emoji { font-size: 28px; flex-shrink: 0; }
+  .gift-option-info { flex: 1; }
+  .gift-option-name { font-size: 13px; font-weight: 700; color: var(--text); }
+  .gift-option-price { font-size: 11px; color: var(--muted); }
+  .gift-option-check { font-size: 18px; color: var(--tg-blue); flex-shrink: 0; }
+
+  /* ===== ТОСТ ПРИ ДОДАВАННІ ПОДАРУНКУ ===== */
+  .gift-toast {
+    position: fixed;
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    left: 12px; right: 12px;
+    background: linear-gradient(135deg, #FF9800, #FF6B35);
+    color: #fff;
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px;
+    z-index: 150;
+    box-shadow: 0 4px 20px rgba(255,107,53,0.4);
+    transform: translateY(20px);
+    opacity: 0;
+    transition: transform .35s cubic-bezier(.34,1.56,.64,1), opacity .35s ease;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .gift-toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  .gift-toast-emoji { font-size: 26px; flex-shrink: 0; }
+  .gift-toast-text { flex: 1; }
+  .gift-toast-title { font-size: 13px; font-weight: 800; margin-bottom: 1px; }
+  .gift-toast-sub { font-size: 11px; opacity: .85; }
 </style>
 </head>
 <body>
@@ -975,6 +1117,27 @@
   <button class="success-back" onclick="backToCatalog()">← Переглянути ще товари</button>
 </div>
 
+<!-- GIFT CHOICE MODAL -->
+<div class="gift-modal-backdrop" id="gift-modal-backdrop" onclick="closeGiftModalIfBackdrop(event)">
+  <div class="gift-modal" id="gift-modal">
+    <div class="modal-handle"></div>
+    <div class="gift-modal-title">
+      🎁 Обери подарунок
+      <button class="gift-modal-close" onclick="closeGiftModal()">✕</button>
+    </div>
+    <div id="gift-options-list"></div>
+  </div>
+</div>
+
+<!-- GIFT TOAST -->
+<div class="gift-toast" id="gift-toast" onclick="goToCart()">
+  <div class="gift-toast-emoji">🎁</div>
+  <div class="gift-toast-text">
+    <div class="gift-toast-title">У кошику є подарунок!</div>
+    <div class="gift-toast-sub">Зайди в кошик та обери його 🎉</div>
+  </div>
+</div>
+
 <!-- BOTTOM NAV -->
 <nav class="bottom-nav" id="bottom-nav">
   <button class="nav-btn active" data-page="products" onclick="switchPage('products', this)">
@@ -1108,7 +1271,16 @@ function addToCartFromModal() {
   saveCart();
   updateCartBadge();
   updateModalAddBtn();
+  // Якщо це новий товар (не було в кошику) і тепер їх 3 — показуємо тост про подарунок
+  if (cart.length === 3 && !existing) showGiftToast();
   setTimeout(closeModal, 300);
+}
+
+// Показуємо тост про подарунок при досягненні 3 товарів в кошику
+function goToCart() {
+  const cartBtn = document.querySelector('.nav-btn[data-page="cart"]');
+  if (cartBtn) switchPage('cart', cartBtn);
+  document.getElementById('gift-toast').classList.remove('show');
 }
 
 // ─── СТОРІНКИ ───────────────────────────────────────────────
@@ -1166,22 +1338,19 @@ function buildCard(p, i, isCustom) {
             ${p.oldPrice ? `<div class="card-price-old">${p.oldPrice} ₴</div>` : ''}
             <div class="card-price${p.oldPrice ? ' has-discount' : ''}">${p.price} ₴</div>
           </div>
-          <button class="card-btn${inCart ? ' in-cart' : ''}" onclick="event.stopPropagation(); openModal(${p.id}, '${source}')">${inCart ? `✓ В кошику` : 'Замовити'}</button>
+          <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id}, '${source}')">Замовити</button>
         </div>
       </div>
     </div>`;
 }
 
-// Оновлює бейдж "В кошику" на всіх картках з цим товаром (якщо товар є в кошику — показує кількість, якщо немає — ховає бейдж)
+// Оновлює бейдж "в кошику" на всіх картках з однаковим id (якщо товар додано або оновлено в кошику)
 function updateCardBadge(id) {
   const cartItem = getCartItem(id);
-  const inCart = !!cartItem;
 
-  // Шукаємо всі картки з цим товаром (може бути в кількох гридах одночасно)
   document.querySelectorAll(`.card[data-id="${id}"]`).forEach(card => {
-    // Бейдж
     let badge = card.querySelector('.card-in-cart-badge');
-    if (inCart) {
+    if (cartItem && cartItem.quantity > 0) {
       if (!badge) {
         badge = document.createElement('div');
         badge.className = 'card-in-cart-badge';
@@ -1190,18 +1359,6 @@ function updateCardBadge(id) {
       badge.textContent = `✓ ${cartItem.quantity} шт`;
     } else {
       if (badge) badge.remove();
-    }
-
-    // Кнопка
-    const btn = card.querySelector('.card-btn');
-    if (btn) {
-      if (inCart) {
-        btn.textContent = '✓ В кошику';
-        btn.classList.add('in-cart');
-      } else {
-        btn.textContent = 'Замовити';
-        btn.classList.remove('in-cart');
-      }
     }
   });
 }
@@ -1214,6 +1371,85 @@ let lbIndex = 0;
 // ─── РЕНДЕР КОШИКА ──────────────────────────────────────────
 // Зберігаємо таймери видалення: { id -> { timeoutId, item } }
 const pendingRemovals = {};
+
+// ─── ПОДАРУНОК ──────────────────────────────────────────────
+// Повертає список товарів, що можуть бути подарунком (gift:true, price<=100)
+function getGiftCandidates() {
+  return PRODUCTS.filter(p => p.gift === true && p.price <= 100);
+}
+
+// Перевіряємо, чи потрібен подарунок (3+ унікальних позицій в кошику)
+function shouldShowGift() {
+  return cart.length >= 3;
+}
+
+// Поточний обраний подарунок (об'єкт товару або null)
+let selectedGift = null;
+
+// Автоматично обирає випадковий подарунок зі списку кандидатів
+function pickRandomGift(exclude = null) {
+  const candidates = getGiftCandidates().filter(p => !exclude || p.id !== exclude?.id);
+  if (!candidates.length) return getGiftCandidates()[0] || null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+let giftToastTimeout = null;
+function showGiftToast() {
+  const toast = document.getElementById('gift-toast');
+  if (!toast) return;
+  clearTimeout(giftToastTimeout);
+  toast.classList.add('show');
+  giftToastTimeout = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 3500);
+}
+
+// Відкриває модалку вибору подарунку
+function openGiftModal() {
+  const candidates = getGiftCandidates();
+  const list = document.getElementById('gift-options-list');
+  list.innerHTML = candidates.map(p => `
+    <div class="gift-option${selectedGift?.id === p.id ? ' selected' : ''}" onclick="selectGift(${p.id})">
+      <div class="gift-option-emoji">${p.emoji}</div>
+      <div class="gift-option-info">
+        <div class="gift-option-name">${p.name}</div>
+        <div class="gift-option-price">${p.mat} · безкоштовно</div>
+      </div>
+      ${selectedGift?.id === p.id ? '<div class="gift-option-check">✓</div>' : ''}
+    </div>
+  `).join('');
+  document.getElementById('gift-modal-backdrop').classList.add('open');
+}
+
+function closeGiftModal() {
+  document.getElementById('gift-modal-backdrop').classList.remove('open');
+}
+
+function closeGiftModalIfBackdrop(e) {
+  if (e.target === document.getElementById('gift-modal-backdrop')) closeGiftModal();
+}
+
+function selectGift(id) {
+  selectedGift = PRODUCTS.find(p => p.id === id) || null;
+  closeGiftModal();
+  renderCart(); // оновлюємо блок подарунку
+}
+
+// Будує HTML блоку подарунку
+function buildGiftBlock() {
+  if (!selectedGift) return '';
+  return `
+    <div class="cart-gift-block" id="cart-gift-block">
+      <div class="cart-gift-emoji">🎁</div>
+      <div class="cart-gift-info">
+        <div class="cart-gift-title">Подарунок від нас!</div>
+        <div class="cart-gift-name">${selectedGift.name}</div>
+        <div class="cart-gift-free">Безкоштовно</div>
+      </div>
+      <button class="cart-gift-change" onclick="openGiftModal()">Обрати інший ↻</button>
+    </div>
+  `;
+}
 
 function renderCart() {
   const list   = document.getElementById('cart-list');
@@ -1237,8 +1473,15 @@ function renderCart() {
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   totalEl.textContent = total + ' ₴';
 
+  // Перевіряємо чи потрібен подарунок
+  if (shouldShowGift()) {
+    if (!selectedGift) selectedGift = pickRandomGift();
+  } else {
+    selectedGift = null;
+  }
+
   // Рендеримо товари в кошику
-  list.innerHTML = cart.map(item => `
+  list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => `
     <div class="cart-item" id="cart-item-${item.id}">
       <div class="cart-item-emoji">${item.emoji}</div>
       <div class="cart-item-info">
@@ -1314,7 +1557,19 @@ function cartQtyChange(id, delta) {
     const savedItem = { ...item };
     cart = cart.filter(i => i.id !== id);
     saveCart();
+    // Оновлюємо бейджі на картках
     updateCartBadge();
+    // Якщо після видалення товару в кошику менше 3 унікальних позицій — прибираємо подарунок
+    updateCardBadge(id);
+    // Якщо подарунок більше не потрібен — прибираємо його з кошика та скидаємо вибір
+    if (!shouldShowGift() && selectedGift) {
+      selectedGift = null;
+      const giftBlock = document.getElementById('cart-gift-block');
+      if (giftBlock) {
+        giftBlock.classList.add('hiding');
+        setTimeout(() => { giftBlock.remove(); }, 300);
+      }
+    } 
 
     // Анімуємо слайд вліво
     const el = document.getElementById(`cart-item-${id}`);
@@ -1382,7 +1637,14 @@ function switchPage(page, btn) {
   const tabsWrap = document.getElementById('cat-tabs-wrap');
   if (tabsWrap) tabsWrap.style.display = page === 'products' ? '' : 'none';
 
-  if (page === 'cart') renderCart();
+  // Рендеримо сторінки, які не рендерились раніше
+  if (page === 'cart') {
+    renderCart();
+    // Прокручуємо кошик вгору при відкритті
+    const cartScroll = document.getElementById('cart-list');
+    // Якщо є товари що очікують видалення — прокручуємо до них
+    if (cartScroll) cartScroll.scrollTop = 0;
+  }
 }
 
 // ─── ЗАВАНТАЖЕННЯ ТОВАРІВ ────────────────────────────────────
@@ -1799,6 +2061,7 @@ async function submitOrder() {
     })),
     total_price:  total,
     comment:      comment,
+    gift:         (shouldShowGift() && selectedGift) ? selectedGift.name : null,
     user:         user?.username ? '@' + user.username : (user?.first_name || 'невідомо'),
     user_id:      user?.id || null,
     first_name:   user?.first_name || '',
@@ -1813,6 +2076,7 @@ async function submitOrder() {
     });
     // Очищаємо кошик після успішного замовлення
     cart = [];
+    selectedGift = null;
     saveCart();
     updateCartBadge();
     document.getElementById('success-screen').classList.add('open');
