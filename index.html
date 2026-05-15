@@ -1430,7 +1430,8 @@ function addToCartFromModal() {
   updateModalAddBtn();
   // Якщо зараз відкрита сторінка кошика — оновлюємо її
   const mainItemsCount = cart.filter(i => !i.fromCustom).length;
-  // Показуємо тост про подарунок при досягненні 3 товарів в кошику (рахуємо тільки неіндивідуальні товари)
+  // Показуємо тост про подарунок при досягненні 3 товарів в кошику, якщо це не оновлення існуючого товару і не індивідуальний товар
+  if (mainItemsCount === 3 && !existing && !currentProduct._isCustom) showGiftToast();
   setTimeout(closeModal, 300);
 }
 // Показуємо тост про подарунок при досягненні 3 товарів в кошику
