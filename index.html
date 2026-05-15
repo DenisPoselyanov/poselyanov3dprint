@@ -1088,6 +1088,76 @@
     background: linear-gradient(135deg, #0a2200, #0d1f00);
     border-color: #4a7c4a;
   }
+  /* ===== БЛОК КУПОНІВ ===== */
+  .coupon-chip {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    color: var(--muted);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+    transition: border-color .2s, color .2s, background .2s;
+    font-family: 'Nunito', sans-serif;
+  }
+  .coupon-chip:hover, .coupon-chip.active {
+    border-color: var(--tg-blue);
+    color: var(--tg-blue);
+    background: rgba(var(--tg-blue-rgb, 58,130,246), .07);
+  }
+
+  /* Блок для введення купона зі стилями для різних станів (звичайний, наведенню, активний, успішний, помилка) */
+  .coupon-wrap { margin: 10px 0; }
+  .coupon-toggle {
+    background: none; border: 1.5px dashed var(--border-color, #ccc);
+    color: var(--text-muted); border-radius: 12px; padding: 10px 16px;
+    font-size: 14px; cursor: pointer; width: 100%; text-align: left;
+    transition: border-color .2s, color .2s, background .2s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .coupon-toggle:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light, #fff3ed); }
+  .coupon-toggle.active { border-color: var(--accent); color: var(--accent); border-style: solid; }
+  .coupon-input-wrap {
+    margin-top: 8px;
+    animation: slideDown .2s ease;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .coupon-row { display: flex; gap: 8px; }
+  .coupon-input {
+    flex: 1; padding: 9px 11px; border: 1.5px solid var(--border-color, #ccc);
+    border-radius: 12px; font-size: 13px; background: var(--card-bg);
+    color: var(--text); outline: none; letter-spacing: 2px; font-weight: 700;
+    text-transform: uppercase; transition: border-color .2s;
+  }
+  .coupon-input:focus { border-color: var(--accent); }
+  .coupon-input:disabled { opacity: .6; }
+  .coupon-btn {
+    padding: 11px 18px; background: var(--accent); color: #fff;
+    border: none; border-radius: 12px; font-size: 14px; font-weight: 700;
+    cursor: pointer; white-space: nowrap; transition: opacity .2s, transform .1s;
+  }
+  .coupon-btn:active { transform: scale(.97); }
+  .coupon-btn:disabled { opacity: .5; cursor: default; }
+  .coupon-status {
+    margin-top: 8px; font-size: 13px; min-height: 0;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 20px; font-weight: 600;
+    transition: all .2s;
+  }
+  .coupon-status:empty { padding: 0; }
+  .coupon-status.success { color: #16a34a; background: #dcfce7; }
+  .coupon-status.error   { color: #dc2626; background: #fee2e2; }
+  .coupon-status.loading { color: var(--text-muted); background: none; font-weight: 400; }
+
+  /* Рядок знижки в підсумку */
+  .cart-discount-row {
+    display: flex; justify-content: space-between;
+    font-size: 14px; color: #22c55e; font-weight: 600;
+    margin: 2px 0;
+  }
 </style>
 </head>
 <body>
@@ -1169,10 +1239,28 @@
   <div class="cart-page">
     <div class="cart-scroll" id="cart-list"></div>
     <div class="cart-footer" id="cart-footer" style="display:none">
-      <div class="cart-comment-label">Коментар / побажання</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+        <div class="cart-comment-label" style="margin-bottom:0;">Коментар / побажання</div>
+        <button class="coupon-chip" id="couponToggle" onclick="toggleCoupon()">🏷️ Промокод</button>
+      </div>
       <textarea class="cart-comment" id="cart-comment" rows="2" placeholder="Колір, написи, особливі побажання..."></textarea>
+
+      <div class="coupon-input-wrap" id="couponInputWrap" style="display:none">
+        <div class="coupon-row">
+          <input type="text" id="couponInput" class="coupon-input" placeholder="Код купону" maxlength="32"
+                oninput="this.value = this.value.toUpperCase()"
+                onkeydown="if(event.key==='Enter') applyCoupon()">
+          <button class="coupon-btn" id="couponBtn" onclick="applyCoupon()">Застосувати</button>
+        </div>
+        <div class="coupon-status" id="couponStatus"></div>
+      </div>
+
       <div class="cart-total-row">
         <span class="cart-total-label">Разом:</span>
+        <div class="cart-discount-row" id="cartDiscountRow" style="display:none">
+          <span class="discount-label"></span>
+          <span class="discount-amount"></span>
+        </div>
         <span class="cart-total-sum" id="cart-total">0 ₴</span>
       </div>
       <button class="cart-submit-btn" onclick="submitOrder()">✓ Оформити замовлення</button>
@@ -1683,7 +1771,25 @@ function renderCart() {
   // Інакше — показуємо товари та підвал з сумою
   footer.style.display = '';
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-  totalEl.textContent = total + ' ₴';
+
+  // Розрахунок з урахуванням знижки (якщо застосовано купон)
+  const rawTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const discount = appliedCoupon ? appliedCoupon.discount : 0;
+  const finalTotal = rawTotal - discount;
+
+  // Оновлюємо рядок зі знижкою в кошику — показуємо його тільки якщо є знижка, і ховаємо якщо знижки немає
+  const discountRow = document.getElementById('cartDiscountRow');
+  if (discountRow) {
+    if (discount > 0) {
+      discountRow.style.display = 'flex';
+      discountRow.querySelector('.discount-amount').textContent = `-${discount} ₴`;
+      discountRow.querySelector('.discount-label').textContent = `🎟️ ${appliedCoupon.code}`;
+    } else {
+      discountRow.style.display = 'none';
+    }
+  }
+
+  totalEl.textContent = `${finalTotal} ₴`;
 
   // Перевіряємо чи потрібен подарунок
   if (shouldShowGift()) {
@@ -2467,6 +2573,76 @@ document.addEventListener('keydown', e => {
   }
 });
 });
+
+/// ─── КУПОНИ ───────────────────────────────────────────────
+let appliedCoupon = null; // { code, type, value, discount }
+
+// Логіка для показу/приховування поля вводу купона. Це дозволяє користувачам легко отримати доступ до поля для введення купона, коли вони хочуть його застосувати, та приховати його, коли воно не потрібно, зберігаючи інтерфейс чистим.
+function toggleCoupon() {
+  const wrap = document.getElementById('couponInputWrap');
+  const btn = document.getElementById('couponToggle');
+  const isHidden = wrap.style.display === 'none' || wrap.style.display === '';
+  wrap.style.display = isHidden ? 'block' : 'none';
+  btn.classList.toggle('active', isHidden);
+  if (isHidden) document.getElementById('couponInput').focus();
+}
+
+async function applyCoupon() {
+  const input = document.getElementById('couponInput');
+  const statusEl = document.getElementById('couponStatus');
+  const btn = document.getElementById('couponBtn');
+  const code = input.value.trim().toUpperCase();
+
+  if (!code) return;
+
+  // Якщо натисли "Скасувати" (купон вже застосовано)
+  if (appliedCoupon && btn.textContent === 'Скасувати') {
+    appliedCoupon = null;
+    input.value = '';
+    input.disabled = false;
+    btn.textContent = 'Застосувати';
+    btn.disabled = false;
+    statusEl.textContent = '';
+    statusEl.className = 'coupon-status';
+    renderCart(); // оновити суму
+    return;
+  }
+
+  // Завантаження
+  statusEl.textContent = 'Перевіряємо...';
+  statusEl.className = 'coupon-status loading';
+  btn.disabled = true;
+
+  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0;
+
+  try {
+    const res = await fetch('http://localhost:8080/check_coupon', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, user_id: userId, cart_total: cartTotal })
+    });
+    const data = await res.json();
+
+    if (data.valid) {
+      appliedCoupon = { code, type: data.type, value: data.value, discount: data.discount };
+      statusEl.textContent = data.message;
+      statusEl.className = 'coupon-status success';
+      input.disabled = true;
+      btn.textContent = 'Скасувати';
+      btn.disabled = false;
+      renderCart(); // оновити суму із знижкою
+    } else {
+      statusEl.textContent = data.message;
+      statusEl.className = 'coupon-status error';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    statusEl.textContent = 'Помилка з\'єднання ❌';
+    statusEl.className = 'coupon-status error';
+    btn.disabled = false;
+  }
+}
 
 // Реклама (промо) — автоматична карусель з можливістю свайпів та навігації по точках.
 (function() {
