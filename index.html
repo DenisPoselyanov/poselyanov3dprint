@@ -511,7 +511,7 @@
   /* Catalog */
   #catalog { overflow-y: auto; }
 
-  /* CATEGORY TABS WRAP */
+  /* Фіксовані таби категорій над навігацією */
   .cat-tabs-wrap {
     position: fixed;
     bottom: calc(60px + env(safe-area-inset-bottom));
@@ -520,6 +520,12 @@
     background: none;
     border: none;
     padding-bottom: 6px;
+    pointer-events: none;
+  }
+
+  /* Дозволяємо кліки тільки по табам, а не по всьому блоку */
+  .cat-tabs-wrap .tabs {
+    pointer-events: auto;
   }
   
   /* Блюр-градієнт над bottom nav */
@@ -965,13 +971,15 @@
     transform: translateY(20px);
     opacity: 0;
     transition: transform .35s cubic-bezier(.34,1.56,.64,1), opacity .35s ease;
-    pointer-events: auto;
+    pointer-events: none;
     cursor: pointer;
   }
   .gift-toast.show {
     transform: translateY(0);
     opacity: 1;
+    pointer-events: auto;
   }
+  
   .gift-toast-emoji { font-size: 26px; flex-shrink: 0; }
   .gift-toast-text { flex: 1; }
   .gift-toast-title { font-size: 13px; font-weight: 800; margin-bottom: 1px; }
@@ -2318,7 +2326,8 @@ function backToCatalog() {
 (function() {
   let isDown = false, startY, scrollTop, scrollEl, didDrag = false;
   document.addEventListener('mousedown', e => {
-    if (e.target.closest('.modal-backdrop, .bottom-nav, .tabs, .header')) return;
+    // Щоб не було конфліктів з кліками по інтерактивним елементам, ми перевіряємо, чи клік був не по модалці, навігації, табах та інших елементах, де скрол не потрібен. Це дозволяє користувачам взаємодіяти з цими елементами без випадкового скролінгу сторінки.
+    if (e.target.closest('.modal-backdrop, .bottom-nav, .tabs, .tab, .header, .cat-tabs-wrap')) return;
     scrollEl = document.scrollingElement || document.documentElement;
     if (scrollEl.scrollHeight <= scrollEl.clientHeight) scrollEl = document.body;
     isDown = true;
@@ -2346,12 +2355,16 @@ function backToCatalog() {
       scrollEl.scrollTop = scrollTop - dy;
     }
   });
+
+  // Додатковий обробник для запобігання спрацьовування кліків після завершення свайпу. Якщо користувач тільки що завершив свайп, ми зупиняємо поширення події кліку, щоб не було випадкових взаємодій з елементами під час скролінгу.
   document.addEventListener('click', e => {
     if (didDrag) {
-      e.stopPropagation();
+      if (!e.target.closest('.bottom-nav, .tab, .cat-tabs-wrap')) {
+        e.stopPropagation();
+      }
       didDrag = false;
     }
-  }, true); // capture — перехоплює до будь-якого onclick
+  }, true);
 })();
 
 // ─── INIT ────────────────────────────────────────────────────
