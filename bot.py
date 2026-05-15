@@ -19,6 +19,10 @@ from telegram.ext import (
     CallbackQueryHandler, filters, ContextTypes
 )
 
+# Завантажуємо змінні середовища з .env файлу, щоб не зберігати конфіденційні дані (як-от токен бота) прямо в коді.
+from dotenv import load_dotenv
+load_dotenv()
+
 # =============================================
 BOT_TOKEN  = os.environ.get("BOT_TOKEN")
 OWNER_ID   = -1003739884073
@@ -57,7 +61,6 @@ def get_product_by_id(product_id: int):
 
 
 # ─── БАЗА ДАНИХ ─────────────────────────────────────────────
-
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     conn.execute("""
@@ -71,19 +74,31 @@ def init_db():
     """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS orders (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER,
+            username          TEXT,
+            first_name        TEXT,
+            total_price       INTEGER,
+            comment           TEXT,
+            gift_product_name TEXT,
+            status            TEXT DEFAULT 'new',
+            ordered_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS order_items (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id      INTEGER,
-            username     TEXT,
+            order_id     INTEGER,
+            product_id   INTEGER,
             product_name TEXT,
             price        INTEGER,
-            comment      TEXT,
-            status       TEXT DEFAULT 'pending',
-            ordered_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            quantity     INTEGER DEFAULT 1
         )
     """)
     conn.commit()
     conn.close()
 
+# Зберігаємо користувача при першому контакті з ботом (або ігноруємо, якщо вже є)
 def save_user(user):
     conn = sqlite3.connect(DB_FILE)
     conn.execute("""
@@ -93,13 +108,26 @@ def save_user(user):
     conn.commit()
     conn.close()
 
-def save_order(user_id, username, product_name, price, comment):
+# Зберігаємо замовлення з деталізацією по товарах в окремій таблиці order_items
+def save_order(user_id, username, first_name, items, total_price, comment, gift_product_name=None):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.execute("""
-        INSERT INTO orders (user_id, username, product_name, price, comment, status)
-        VALUES (?, ?, ?, ?, ?, 'pending')
-    """, (user_id, username, product_name, price, comment))
+        INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'new')
+    """, (user_id, username, first_name, total_price, comment, gift_product_name))
     order_id = cursor.lastrowid
+    for item in items:
+        conn.execute("""
+            INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
+            VALUES (?, ?, ?, ?, ?)
+        """, (order_id, item.get('id', 0), item.get('product_name', '—'), item.get('price', 0), item.get('quantity', 1)))
+
+    # Якщо є подарунок, додаємо його як окремий рядок в order_items з ціною 0 і спеціальною назвою для зручності відображення в звітах і повідомленнях
+    if gift_product_name:
+        conn.execute("""
+            INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
+            VALUES (?, 0, ?, 0, 1)
+        """, (order_id, f"🎁 {gift_product_name} (безкоштовно)"))
     conn.commit()
     conn.close()
     return order_id
@@ -111,12 +139,23 @@ def get_stats():
     order_confirmed  = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'confirmed'").fetchone()[0]
     order_draft      = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'draft'").fetchone()[0]
     order_cancelled  = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'cancelled'").fetchone()[0]
-    earned           = conn.execute("SELECT SUM(price) FROM orders WHERE status = 'confirmed'").fetchone()[0] or 0
+    earned = conn.execute("SELECT SUM(total_price) FROM orders WHERE status = 'confirmed'").fetchone()[0] or 0
     recent           = conn.execute(
         "SELECT name, username FROM users ORDER BY joined_at DESC LIMIT 10"
     ).fetchall()
+
+    # Витягуємо топ-5 найпопулярніших товарів серед підтверджених замовлень
+    top_products = conn.execute("""
+        SELECT oi.product_name, SUM(oi.quantity) as cnt
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE o.status = 'confirmed'
+        GROUP BY oi.product_name
+        ORDER BY cnt DESC
+        LIMIT 5
+    """).fetchall()
     conn.close()
-    return user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent
+    return user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent, top_products
 
 def update_order_status(order_id: int, status: str):
     conn = sqlite3.connect(DB_FILE)
@@ -158,19 +197,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != 718746623:
         return
-    user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent = get_stats()
+    user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent, top_products = get_stats()
     lines = [
         f"📊 *Статистика*\n",
         f"👥 Користувачів: *{user_count}*",
         f"📦 Замовлень всього: *{order_count}*",
-        f"  ✅ Підтверджених: *{order_confirmed}*",
-        f"  ❓ Під питанням: *{order_draft}*",
-        f"  ❌ Відмінених: *{order_cancelled}*\n",
+        f"✅ Підтверджених: *{order_confirmed}*",
+        f"❓ Під питанням: *{order_draft}*",
+        f"❌ Відмінених: *{order_cancelled}*\n",
         f"💰 Зароблено: *{earned} ₴*\n",
         f"🕐 Останні користувачі:",
     ]
     for name, username in recent:
         lines.append(f"• {name} {username}")
+
+    # Виводимо топ-5 найпопулярніших товарів серед підтверджених замовлень    
+    if top_products:
+        lines.append(f"\n🏆 *Топ товари:*")
+        for name, cnt in top_products:
+            lines.append(f"• {name} — {cnt} шт")
     await update.message.reply_text("\n".join(lines), parse_mode='Markdown')
 
 
@@ -178,61 +223,77 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != 718746623:
         return
 
+    # Якщо команда є відповіддю на повідомлення, беремо текст звідти, ігноруючи аргументи після ID. Інакше беремо текст з аргументів.
     args = context.args
-    if not args or len(args) < 2:
+    reply = update.message.reply_to_message
+    
+    # Якщо є відповідь на повідомлення, використовуємо її текст, ігноруючи додаткові аргументи після ID. Інакше беремо текст з аргументів.
+    if not reply:
         await update.message.reply_text(
-            "Використання: `/broadcast <id товару> <текст>`\n\n"
-            "Приклад: `/broadcast 1 Новий хіт в каталозі! 🔥`",
+            "Відповідай (reply) на повідомлення командою:\n"
+            "`/broadcast` — без товару\n"
+            "`/broadcast 1` — з кнопкою товару",
             parse_mode='Markdown'
         )
         return
 
-    try:
-        product_id = int(args[0])
-    except ValueError:
-        await update.message.reply_text("❌ ID товару має бути числом.", parse_mode='Markdown')
-        return
+    # Якщо в аргументах є ID товару, намагаємося його знайти. Якщо товар не знайдено, повідомляємо адміністратору і припиняємо розсилку.
+    product_id = int(args[0]) if args else None
+    product = get_product_by_id(product_id) if product_id else None
 
-    text = ' '.join(args[1:])
-    product = get_product_by_id(product_id)
-
-    if not product:
+    if product_id and not product:
         await update.message.reply_text(f"❌ Товар з ID `{product_id}` не знайдено.", parse_mode='Markdown')
         return
 
-    markup = InlineKeyboardMarkup([[
-        InlineKeyboardButton(
-            "🛍️ Переглянути товар",
-            url=f"https://t.me/poselyanov3dprint_bot?startapp=product_{product_id}"
-        )
-    ]])
-
-    photo_url = product.get('photos', [])
-    photo_url = photo_url[0] if photo_url else None
+    if product:
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "🛍️ Переглянути товар",
+                url=f"https://t.me/poselyanov3dprint_bot?startapp=product_{product_id}"
+            )
+        ]])
+        photo_url = product.get('photos', [None])[0]
+    else:
+        markup = None
+        photo_url = None
 
     users = get_all_users()
     sent, failed = 0, 0
 
+    # Логування кількості користувачів, яким буде надіслано розсилку. Це допоможе відстежувати охоплення та ефективність розсилки, а також виявляти потенційні проблеми з доставкою.
+    logger.info(f"📨 Розсилка → {len(users)} користувачів")
+
     for (user_id,) in users:
         try:
-            if photo_url:
+            if reply.photo:
+                await context.bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=reply.chat.id,
+                    message_id=reply.message_id,
+                    reply_markup=markup
+                )
+            elif photo_url:
                 await context.bot.send_photo(
                     chat_id=user_id,
                     photo=photo_url,
-                    caption=text,
+                    caption=reply.text or "",
+                    caption_entities=reply.entities or [],
                     reply_markup=markup
                 )
             else:
-                await context.bot.send_message(
+                await context.bot.copy_message(
                     chat_id=user_id,
-                    text=text,
+                    from_chat_id=reply.chat.id,
+                    message_id=reply.message_id,
                     reply_markup=markup
                 )
             sent += 1
-        except Exception:
-            set_blocked(user_id, True)
+        except Exception as e:
+            logger.warning(f"Broadcast error for {user_id}: {e}")
+            if "bot was blocked" in str(e) or "user is deactivated" in str(e):
+                set_blocked(user_id, True)
             failed += 1
-
+    # Після завершення розсилки надсилаємо адміністратору звіт про кількість успішних і неуспішних доставок. Це дозволяє адміністратору оцінити ефективність розсилки та виявити потенційні проблеми з доставкою, такі як блокування бота користувачами.
     await update.message.reply_text(
         f"📨 Розсилка завершена\n✅ Надіслано: *{sent}*\n❌ Заблоковано: *{failed}*",
         parse_mode='Markdown'
@@ -259,12 +320,13 @@ async def handle_order(request):
     username    = data.get('user', 'невідомо')
     user_id     = data.get('user_id')
     first_name  = data.get('first_name', '')
+    gift        = data.get('gift')  # може бути None або словником з даними подарунка
 
     # Формуємо назву для збереження в БД (всі товари через кому)
     product_name = ', '.join(i.get('product_name', '—') for i in items)
 
-    # Зберігаємо замовлення в базі даних
-    order_id = save_order(user_id or 0, username, product_name, total_price, comment)
+    # Зберігаємо замовлення в базі даних і отримуємо його ID для подальшого використання в логах і кнопках
+    order_id = save_order(user_id or 0, username, first_name, items, total_price, comment, gift)
 
     # Логування замовлення
     logger.info(f"📦 ЗАМОВЛЕННЯ #{order_id}  {product_name}  {total_price}₴  від {username}")
@@ -282,7 +344,11 @@ async def handle_order(request):
                 f"  • {i.get('product_name','—')} × {i.get('quantity',1)}"
                 for i in items
             )
-            line = f"📦 *Товари:*\n{items_lines}\n💰 *Разом: {total_price} ₴*"
+            line = f"📦 *Товари:*\n{items_lines}"
+            gift = data.get('gift')
+            if gift:
+                line += f"\n  🎁 {gift} — *безкоштовно*"
+            line += f"\n💰 *Разом: {total_price} ₴*"
             if comment:
                 line += f"\n📝 _{comment}_"
             
@@ -339,12 +405,19 @@ async def handle_order(request):
             line += f" _{i['customValue']}_"
         items_text += line + '\n'
 
+    # Формуємо текст для власника з деталізацією замовлення і кнопками для зміни статусу
     owner_text = (
-        f"🔔 *НОВЕ ЗАМОВЛЕННЯ #{order_id}*\n\n"
+        f"🔔 <b>НОВЕ ЗАМОВЛЕННЯ #{order_id}</b>\n\n"
         f"👤 Від: {username}\n\n"
-        f"📦 *Товари:*\n{items_text}\n"
-        f"💰 *Разом: {total_price} ₴*\n"
+        f"📦 <b>Товари:</b>\n{items_text}\n"
+        f"💰 <b>Разом: {total_price} ₴</b>\n"
     )
+    gift = data.get('gift')
+
+    # Якщо є подарунок, додаємо його в текст замовлення для власника
+    if gift:
+        owner_text += f"🎁 Подарунок: {gift} — безкоштовно\n"
+    # Якщо клієнт залишив коментар, додаємо його в текст замовлення для власника
     if comment:
         owner_text += f"📝 Коментар: _{comment}_\n"
 
@@ -366,7 +439,7 @@ async def handle_order(request):
         await bot_app.bot.send_message(
             chat_id=OWNER_ID,
             text=owner_text,
-            parse_mode='Markdown',
+            parse_mode='HTML',
             reply_markup=markup
         )
         logger.info(f"✅ Надіслано в канал")
@@ -431,11 +504,15 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return
 
-    await query.edit_message_text(
-        text=query.message.text + f"\n\n*Статус: {label}*",
-        parse_mode='Markdown',
-        reply_markup=markup
-    )
+    # Оновлюємо текст повідомлення, додаючи статус в кінець. Якщо кнопка "Написати" була, вона залишиться (крім випадку скасування, коли всі кнопки зникають).
+    try:
+        await query.edit_message_text(
+            text=query.message.text + f"\n\n*Статус: {label}*",
+            parse_mode='Markdown',
+            reply_markup=markup
+        )
+    except Exception:
+        pass
 
 
 # ─── ЗАПУСК ─────────────────────────────────────────────────
