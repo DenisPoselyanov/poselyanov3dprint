@@ -973,13 +973,16 @@
     transition: transform .35s cubic-bezier(.34,1.56,.64,1), opacity .35s ease;
     pointer-events: none;
     cursor: pointer;
+    visibility: hidden;
   }
+  
   .gift-toast.show {
     transform: translateY(0);
     opacity: 1;
     pointer-events: auto;
+    visibility: visible;
   }
-  
+
   .gift-toast-emoji { font-size: 26px; flex-shrink: 0; }
   .gift-toast-text { flex: 1; }
   .gift-toast-title { font-size: 13px; font-weight: 800; margin-bottom: 1px; }
