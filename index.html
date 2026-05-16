@@ -797,15 +797,18 @@
     background: var(--bg); resize: none;
     transition: border-color .2s;
     line-height: 1.4;
-    margin-bottom: 10px;
+    margin-bottom: 0;
   }
   .cart-comment:focus { outline: none; border-color: var(--tg-blue); }
+
+  /* Ряд з загальною сумою та кнопкою оформлення замовлення в кошику */
   .cart-total-row {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 14px; margin-top: 14px; transition: all .5s cubic-bezier(.4,0,.2,1);
   }
+  /* Текст "Загальна сума" в кошику */
   .cart-total-label { font-size: 13px; color: var(--muted); font-weight: 600; }
-  .cart-total-sum { font-size: 20px; font-weight: 800; color: var(--text); }
+  .cart-total-sum { font-size: 20px; font-weight: 800; color: var(--text); transition: color .4s ease; }
   .cart-submit-btn {
     width: 100%; padding: 14px;
     background: var(--tg-blue); color: #fff;
@@ -1118,7 +1121,8 @@
   .coupon-toggle:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light, #fff3ed); }
   .coupon-toggle.active { border-color: var(--accent); color: var(--accent); border-style: solid; }
   .coupon-input-wrap {
-    margin-top: 8px;
+    display: flex; flex-direction: column;
+    margin-top: 6px; margin-bottom: 6px;
     animation: slideDown .2s ease;
   }
   @keyframes slideDown {
@@ -1132,7 +1136,7 @@
     color: var(--text); outline: none; letter-spacing: 2px; font-weight: 700;
     text-transform: uppercase; transition: border-color .2s;
   }
-  .coupon-input:focus { border-color: var(--accent); }
+  .coupon-input:focus { border-color: var(--tg-blue); }
   .coupon-input:disabled { opacity: .6; }
   .coupon-btn {
     padding: 11px 18px; background: #fff; color: var(--tg-blue);
@@ -1142,12 +1146,18 @@
   .coupon-btn:active { transform: scale(.97); }
   .coupon-btn:disabled { opacity: .5; cursor: default; }
   .coupon-status {
-    margin-top: 8px; font-size: 13px; min-height: 0;
+    font-size: 13px; font-weight: 600;
     display: inline-flex; align-items: center; gap: 5px;
-    padding: 4px 10px; border-radius: 20px; font-weight: 600;
-    transition: all .2s;
+    border-radius: 10px; transition: all .2s;
+    max-height: 0; overflow: hidden; opacity: 0; margin-top: 0;
+    transition: max-height .25s ease, opacity .2s ease, margin-top .2s ease;
   }
-  .coupon-status:empty { padding: 0; }
+  .coupon-status:not(:empty) {
+    max-height: 40px; opacity: 1; 
+    margin-top: 6px;
+    margin-bottom: 10px;
+    padding: 4px 10px;
+  }
   .coupon-status.success { color: #16a34a; background: #dcfce7; }
   .coupon-status.error   { color: #dc2626; background: #fee2e2; }
   .coupon-status.loading { color: var(--text-muted); background: none; font-weight: 400; }
@@ -1157,17 +1167,23 @@
     font-size: 13px; font-weight: 600; color: var(--muted);
     text-decoration: line-through;
     display: grid; grid-template-rows: 0fr; opacity: 0;
-    transition: grid-template-rows .35s ease, opacity .3s ease;
+    transition: grid-template-rows .5s cubic-bezier(.4,0,.2,1), opacity .4s ease;
   }
   .cart-old-price.visible {
     grid-template-rows: 1fr; opacity: 1;
   }
-  @keyframes countDown {
-    from { transform: translateY(-8px); opacity: 0; }
-    to   { transform: translateY(0);    opacity: 1; }
+
+  /* Анімації для рядка знижки при появі та зміні ціни */
+  @keyframes priceDown {
+    0%   { transform: translateY(-12px); opacity: 0; }
+    100% { transform: translateY(0);     opacity: 1; }
   }
-  .cart-total-sum.updated {
-    animation: countDown .35s ease;
+  @keyframes priceUp {
+    0%   { transform: translateY(12px);  opacity: 0; }
+    100% { transform: translateY(0);     opacity: 1; }
+  }
+  .cart-total-sum { font-size: 20px; font-weight: 800; color: var(--text); transition: color .3s; }
+  .cart-total-sum.discounted { color: var(--tg-blue);
   }
 </style>
 </head>
@@ -1250,20 +1266,20 @@
   <div class="cart-page">
     <div class="cart-scroll" id="cart-list"></div>
     <div class="cart-footer" id="cart-footer" style="display:none">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
         <div class="cart-comment-label" style="margin-bottom:0;">Коментар / побажання</div>
         <button class="coupon-chip" id="couponToggle" onclick="toggleCoupon()">🏷️ Промокод</button>
       </div>
       <textarea class="cart-comment" id="cart-comment" rows="2" placeholder="Колір, написи, особливі побажання..."></textarea>
-
       <div class="coupon-input-wrap" id="couponInputWrap" style="display:none">
+        <div class="coupon-status" id="couponStatus"></div>
         <div class="coupon-row">
-          <input type="text" id="couponInput" class="coupon-input" placeholder="Код купону" maxlength="32"
+          <input type="text" id="couponInput" class="coupon-input" placeholder="" maxlength="32"
                 oninput="this.value = this.value.toUpperCase()"
                 onkeydown="if(event.key==='Enter') applyCoupon()">
           <button class="coupon-btn" id="couponBtn" onclick="applyCoupon()">Застосувати</button>
         </div>
-        <div class="coupon-status" id="couponStatus"></div>
+        
       </div>
 
       <div class="cart-total-row">
@@ -1802,11 +1818,28 @@ function renderCart() {
 
   // Анімація зміни ціни
   const totalEl2 = document.getElementById('cart-total');
-  totalEl2.classList.remove('updated');
-  void totalEl2.offsetWidth; // reflow
-  totalEl2.classList.add('updated');
-  totalEl2.textContent = `${finalTotal} ₴`;
+  const prevTotal = parseInt(totalEl2.textContent) || 0;
+  const isDiscount = finalTotal < prevTotal;
 
+  function animatePrice(el, from, to) {
+    const duration = 800;
+    const start = performance.now();
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = isDiscount ? 'priceDown .7s ease' : 'priceUp .7s ease';
+    function step(now) {
+      const p = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      el.textContent = `${Math.round(from + (to - from) * ease)} ₴`;
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Запускаємо анімацію зміни ціни при оновленні кошика
+  animatePrice(totalEl2, prevTotal, finalTotal);
+  // Додаємо клас для зміни кольору ціни, якщо вона знизилась
+  totalEl2.classList.toggle('discounted', finalTotal < rawTotal);
   // Перевіряємо чи потрібен подарунок
   if (shouldShowGift()) {
     if (!selectedGift) selectedGift = pickRandomGift();
@@ -2598,7 +2631,7 @@ function toggleCoupon() {
   const wrap = document.getElementById('couponInputWrap');
   const btn = document.getElementById('couponToggle');
   const isHidden = wrap.style.display === 'none' || wrap.style.display === '';
-  wrap.style.display = isHidden ? 'block' : 'none';
+  wrap.style.display = isHidden ? 'flex' : 'none';
   btn.classList.toggle('active', isHidden);
   if (isHidden) document.getElementById('couponInput').focus();
 }
