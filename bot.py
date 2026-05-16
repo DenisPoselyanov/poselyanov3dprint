@@ -12,7 +12,7 @@ import sqlite3
 from pathlib import Path
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+    KeyboardButton, ReplyKeyboardMarkup, WebAppInfo, BotCommandScopeChat
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -108,6 +108,7 @@ def init_db():
             one_per_user INTEGER DEFAULT 0,  -- 1 = один раз на юзера
             active       INTEGER DEFAULT 1,
             expires_at   TIMESTAMP           -- NULL = без терміну
+            personal_user_id INTEGER          -- NULL = публічний, інакше прив'язаний до юзера
         )
     """)
 
@@ -419,6 +420,257 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+# Функція для отримання активних купонів, які можна використати при оформленні замовлення. Вона витягує з бази даних всі купони, які відповідають умовам активності (не вичерпано, не прострочено, особисті або публічні) і повертає їх у вигляді списку рядків для відображення користувачу.
+def get_my_coupons(user_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    rows = conn.execute("""
+        SELECT code, type, value, min_order, uses_max, uses_count,
+               one_per_user, expires_at
+        FROM coupons
+        WHERE active = 1
+          AND personal_user_id = ?
+          AND (expires_at IS NULL OR expires_at > datetime('now'))
+          AND (uses_max = 0 OR uses_count < uses_max)
+    """, (user_id,)).fetchall()
+    conn.close()
+    return rows
+
+# Команда для перегляду персональних купонів користувача, яка витягує з бази даних всі активні купони, прив'язані до цього користувача, і формує зручне текстове повідомлення з деталями кожного купона (тип знижки, умови використання, термін дії) для відправки користувачу. Якщо купонів немає, вона надсилає відповідне повідомлення з підказкою слідкувати за новинами для отримання знижок.
+async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    rows = get_my_coupons(user_id)
+
+    if not rows:
+        await update.message.reply_text(
+            "🎟️ У тебе поки немає персональних купонів\n\n"
+            "Слідкуй за новинами — іноді ми даруємо знижки! 🎁"
+        )
+        return
+
+    months = ['січ','лют','бер','кві','тра','чер','лип','сер','вер','жов','лис','гру']
+
+    text = "🎟️ <b>Твої купони:</b>\n" + "─" * 22 + "\n\n"
+
+    for code, ctype, value, min_order, uses_max, uses_count, one_per_user, expires_at in rows:
+        label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
+        text += f"🏷️ <b><code>{code}</code></b> — знижка {label}\n"
+
+        if min_order:
+            text += f"   • Від суми: {min_order} ₴\n"
+
+        if one_per_user:
+            used = uses_count > 0
+            text += f"   • {'⛔ Вже використано' if used else '⚡ Одноразовий'}\n"
+        elif uses_max:
+            left = uses_max - uses_count
+            text += f"   • Залишилось використань: {left}\n"
+
+        if expires_at:
+            try:
+                dt = datetime.strptime(expires_at[:10], "%Y-%m-%d")
+                exp_fmt = f"{dt.day} {months[dt.month-1]} {dt.year}"
+            except Exception:
+                exp_fmt = expires_at[:10]
+            text += f"   • Діє до: {exp_fmt}\n"
+        else:
+            text += f"   • Безстроковий ♾️\n"
+
+        text += "\n"
+
+    text += "─" * 22 + "\n"
+    text += "Введи код в кошику при оформленні замовлення 🛍️"
+
+    await update.message.reply_text(text, parse_mode='HTML')
+
+# /sales — поточні акції з products.json
+async def sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sale_items = [p for p in PRODUCTS_CACHE if p.get('oldPrice')]
+
+    if not sale_items:
+        await update.message.reply_text(
+            "😔 Зараз акцій немає\n\n"
+            "Слідкуй за оновленнями — знижки з'являться незабаром! 🔔"
+        )
+        return
+
+    text = "🔥 <b>Поточні акції:</b>\n" + "─" * 22 + "\n\n"
+
+    for p in sale_items:
+        emoji = p.get('emoji', '📦')
+        name = p.get('name', '—')
+        price = p.get('price', 0)
+        old_price = p.get('oldPrice', 0)
+        discount = old_price - price
+        percent = round(discount / old_price * 100)
+
+        text += f"{emoji} <b>{name}</b>\n"
+        text += f"   💸 <s>{old_price} ₴</s> → <b>{price} ₴</b>\n"
+        text += f"   🏷️ Економія: {discount} ₴ ({percent}%)\n\n"
+
+    text += "─" * 22 + "\n"
+    text += "Відкрий каталог щоб замовити 👇"
+
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🛍️ Відкрити каталог", web_app=WebAppInfo(url=WEBAPP_URL))
+    ]])
+    await update.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+
+
+# /status — статус останнього замовлення
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    order = conn.execute("""
+        SELECT id, total_price, status, ordered_at
+        FROM orders
+        WHERE user_id = ?
+        ORDER BY ordered_at DESC
+        LIMIT 1
+    """, (user_id,)).fetchone()
+    conn.close()
+
+    if not order:
+        await update.message.reply_text(
+            "📭 У тебе поки немає замовлень\n\n"
+            "Відкрий каталог і зроби перше замовлення! 🛍️"
+        )
+        return
+
+    status_labels = {
+        'new':       ('🕐', 'Очікує підтвердження', 'Денис скоро зв\'яжеться з тобою'),
+        'confirmed': ('✅', 'Підтверджено', 'Замовлення прийнято у роботу!'),
+        'cancelled': ('❌', 'Скасовано', 'Якщо є питання — напиши Денису'),
+        'draft':     ('📝', 'Під питанням', 'Денис уточнює деталі замовлення'),
+    }
+
+    months = ['січ','лют','бер','кві','тра','чер','лип','сер','вер','жов','лис','гру']
+    icon, label, hint = status_labels.get(order['status'], ('❔', order['status'], ''))
+
+    try:
+        dt = datetime.strptime(order['ordered_at'][:10], "%Y-%m-%d")
+        date_fmt = f"{dt.day} {months[dt.month-1]} {dt.year}"
+    except Exception:
+        date_fmt = order['ordered_at'][:10] if order['ordered_at'] else '—'
+
+    text = (
+        f"📦 <b>Останнє замовлення #{order['id']}</b>\n"
+        f"📅 {date_fmt}  ·  💰 {order['total_price']} ₴\n\n"
+        f"{icon} <b>{label}</b>\n"
+        f"<i>{hint}</i>"
+    )
+    await update.message.reply_text(text, parse_mode='HTML')
+
+
+# /contact — контакти
+async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "📬 <b>Контакти</b>\n"
+        "──────────────────────\n\n"
+        "👤 <b>Денис Поселянов</b>\n"
+        "💬 Написати особисто: @denisposelyanov\n"
+        "🤖 Бот магазину: @poselyanov3dprint_bot\n\n"
+        "⏰ Відповідає зазвичай протягом кількох годин\n"
+    )
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("💬 Написати Денису", url="https://t.me/denisposelyanov")
+    ]])
+    await update.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+
+# Команда для перегляду історії замовлень користувача, яка витягує останні 10 замовлень з бази даних і формує зручне текстове повідомлення з деталями кожного замовлення (статус, дата, товари, сума, коментарі) для відправки користувачу. Якщо замовлень немає, вона надсилає відповідне повідомлення з підказкою зробити перше замовлення.
+async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+
+    orders = conn.execute("""
+        SELECT id, total_price, status, ordered_at, comment, gift_product_name,
+               coupon_code, discount_amount
+        FROM orders
+        WHERE user_id = ?
+        ORDER BY ordered_at DESC
+        LIMIT 10
+    """, (user_id,)).fetchall()
+
+    if not orders:
+        await update.message.reply_text(
+            "📭 У тебе поки немає замовлень\n\n"
+            "Відкрий каталог і зроби перше замовлення! 🛍️"
+        )
+        conn.close()
+        return
+
+    status_labels = {
+        'new':       ('🕐', 'Очікує'),
+        'confirmed': ('✅', 'Підтверджено'),
+        'cancelled': ('❌', 'Скасовано'),
+        'draft':     ('📝', 'Під питанням'),
+    }
+
+    first_name = update.message.from_user.first_name
+    text = f"📦 <b>Замовлення {first_name}:</b>\n"
+    text += "─" * 22 + "\n\n"
+
+    for o in orders:
+        icon, label = status_labels.get(o['status'], ('❔', o['status']))
+        date_raw = o['ordered_at'] or ''
+        date = date_raw[:10] if date_raw else '—'
+
+        # Дата у форматі "16 трав 2026"
+        try:
+            dt = datetime.strptime(date, "%Y-%m-%d")
+            months = ['січ','лют','бер','кві','тра','чер','лип','сер','вер','жов','лис','гру']
+            date_fmt = f"{dt.day} {months[dt.month-1]} {dt.year}"
+        except Exception:
+            date_fmt = date
+
+        text += f"{icon} <b>Замовлення #{o['id']}</b>  ·  {date_fmt}\n"
+
+        # Товари
+        items = conn.execute("""
+            SELECT product_name, price, quantity
+            FROM order_items
+            WHERE order_id = ?
+        """, (o['id'],)).fetchall()
+
+        for item in items:
+            name = item['product_name']
+            qty = item['quantity']
+            price = item['price']
+            if price == 0:
+                # подарунок (вже містить emoji 🎁)
+                text += f"   {name}\n"
+            else:
+                subtotal = price * qty
+                qty_str = f" × {qty}" if qty > 1 else ""
+                text += f"   • {name}{qty_str} — {subtotal} ₴\n"
+
+        # Купон
+        if o['coupon_code'] and o['discount_amount']:
+            original = (o['total_price'] or 0) + (o['discount_amount'] or 0)
+            text += f"   🏷️ Купон <code>{o['coupon_code']}</code>: −{o['discount_amount']} ₴\n"
+            text += f"   💰 <b>Разом: {original} → {o['total_price']} ₴</b>\n"
+        else:
+            text += f"   💰 <b>Разом: {o['total_price']} ₴</b>\n"
+
+        # Статус рядком
+        text += f"   {icon} {label}\n"
+
+        # Коментар
+        if o['comment']:
+            text += f"   📝 <i>{o['comment']}</i>\n"
+
+        text += "\n"
+
+    conn.close()
+
+    # Підказка
+    total_orders = len(orders)
+    text += "─" * 22 + "\n"
+    text += f"Показано останніх замовлень: <b>{total_orders}</b>"
+
+    await update.message.reply_text(text, parse_mode='HTML')
+
 # Команда для управління купонами, яка дозволяє адміністраторам створювати, переглядати, активувати і деактивувати купони зі знижками. Вона підтримує різні формати знижок (відсоткові і фіксовані), а також додаткові параметри для обмеження використання купонів (мінімальна сума замовлення, максимальна кількість використань, використання одним користувачем і термін дії). Команда має підкоманди для кожної операції (add, list, disable, enable) і відповідає повідомленнями з результатами операцій у форматі Markdown.
 async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != 718746623:
@@ -427,14 +679,25 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if not args:
         await update.message.reply_text(
-            "Команди:\n"
-            "`/coupon add КОД percent 20` — знижка 20%\n"
-            "`/coupon add КОД fixed 50` — знижка 50 ₴\n"
-            "  опції: `min=200` `max=10` `once` `expires=2025-12-31`\n"
-            "`/coupon list` — всі купони\n"
-            "`/coupon disable КОД` — вимкнути купон\n"
-            "`/coupon enable КОД` — увімкнути купон",
-            parse_mode='Markdown'
+            "🎟️ <b>Управління купонами</b>\n"
+            "──────────────────────\n\n"
+            "<b>Створити купон:</b>\n"
+            "<code>/coupon add КОД percent 20</code> — знижка 20%\n"
+            "<code>/coupon add КОД fixed 50</code> — знижка 50 ₴\n\n"
+            "<b>Додаткові опції:</b>\n"
+            "• <code>min=200</code> — мінімальна сума замовлення\n"
+            "• <code>max=10</code> — максимум використань\n"
+            "• <code>once</code> — одноразовий (один юзер — один раз)\n"
+            "• <code>expires=2025-12-31</code> — термін дії\n"
+            "• <code>user=123456789</code> — персональний (тільки для цього юзера)\n\n"
+            "<b>Приклади:</b>\n"
+            "<code>/coupon add ЛІТО percent 15 min=300 expires=2026-08-31</code>\n"
+            "<code>/coupon add VIP fixed 100 once user=718746623</code>\n\n"
+            "<b>Інші команди:</b>\n"
+            "<code>/coupon list</code> — всі купони\n"
+            "<code>/coupon disable КОД</code> — вимкнути\n"
+            "<code>/coupon enable КОД</code> — увімкнути",
+            parse_mode='HTML'
         )
         return
 
@@ -449,8 +712,8 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Значення має бути числом")
             return
 
-        # Опціональні параметри
-        min_order = 0; uses_max = 0; one_per_user = 0; expires_at = None
+        # Додаткові параметри з дефолтними значеннями:
+        min_order = 0; uses_max = 0; one_per_user = 0; expires_at = None; personal_user_id = None
         for opt in args[4:]:
             if opt.startswith('min='):
                 min_order = int(opt[4:])
@@ -460,17 +723,21 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 one_per_user = 1
             elif opt.startswith('expires='):
                 expires_at = opt[8:]
+            elif opt.startswith('user='):
+                personal_user_id = int(opt[5:])
 
         conn = sqlite3.connect(DB_FILE)
         try:
             conn.execute("""
                 INSERT OR REPLACE INTO coupons
-                (code, type, value, min_order, uses_max, one_per_user, active, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-            """, (code, ctype, value, min_order, uses_max, one_per_user, expires_at))
+                (code, type, value, min_order, uses_max, one_per_user, active, expires_at, personal_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+            """, (code, ctype, value, min_order, uses_max, one_per_user, expires_at, personal_user_id))
             conn.commit()
             label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
-            await update.message.reply_text(f"✅ Купон `{code}` створено! Знижка {label}", parse_mode='Markdown')
+            user_str = f" для юзера `{personal_user_id}`" if personal_user_id else ""
+            await update.message.reply_text(f"✅ Купон `{code}` створено! Знижка {label}{user_str}", parse_mode='Markdown')
+
         except Exception as e:
             await update.message.reply_text(f"❌ Помилка: {e}")
         finally:
@@ -777,6 +1044,11 @@ def main():
     bot_app.add_handler(CommandHandler("stats",     stats))
     bot_app.add_handler(CommandHandler("broadcast", broadcast))
     bot_app.add_handler(CommandHandler("coupon", coupon_cmd))
+    bot_app.add_handler(CommandHandler("history", history))
+    bot_app.add_handler(CommandHandler("mycoupons", mycoupons))
+    bot_app.add_handler(CommandHandler("sales",    sales))
+    bot_app.add_handler(CommandHandler("status",   status_cmd))
+    bot_app.add_handler(CommandHandler("contact",  contact))
     bot_app.add_handler(CallbackQueryHandler(order_action, pattern=r"^(confirm|draft|cancel)_"))
 
     async def run():
@@ -799,6 +1071,33 @@ def main():
                 drop_pending_updates=True,
             )
             logger.info("🤖 Бот запущено  →  очікую замовлення...")
+            # Встановлюємо адмін-команди для себе
+            from telegram import BotCommandScopeChat
+            await bot_app.bot.set_my_commands(
+                commands=[
+                    ("history",   "📦 Мої замовлення"),
+                    ("mycoupons", "🎟️ Мої купони"),
+                    ("stats",     "📊 Статистика"),
+                    ("broadcast", "📨 Розсилка"),
+                    ("coupon",    "🎟️ Керування купонами"),
+                    ("myid",      "🪪 Мій ID"),
+                    ("sales",     "🔥 Акції"),
+                    ("status",    "📋 Статус замовлення"),
+                    ("contact",   "📬 Контакти"),
+                ],
+                scope=BotCommandScopeChat(chat_id=718746623)  # тільки ти
+            )
+
+            # Команди для звичайних юзерів
+            await bot_app.bot.set_my_commands(
+                commands=[
+                    ("history",   "📦 Мої замовлення"),
+                    ("mycoupons", "🎟️ Мої купони"),
+                    ("sales",     "🔥 Акції"),
+                    ("status",    "📋 Статус замовлення"),
+                    ("contact",   "📬 Контакти"),
+                ],
+            )
             await asyncio.Event().wait()
 
     asyncio.run(run())
