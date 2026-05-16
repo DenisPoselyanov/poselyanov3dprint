@@ -2234,14 +2234,17 @@ function initLightboxSwipe() {
   });
 
     // --- два пальці = зум ---
+    let wasPinch = false;
     l.addEventListener('touchstart', e => {
       if (e.touches.length === 2) {
+        wasPinch = true;
         lbPinchDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
         lbSwipeX = null;
       } else {
+        wasPinch = false;
         lbSwipeX = e.touches[0].clientX;
         lbSwipeY = e.touches[0].clientY;
         lbPinchDist = null;
@@ -2252,8 +2255,9 @@ function initLightboxSwipe() {
   l.addEventListener('touchend', e => {
     lbPinchDist = null;
 
-    // Якщо був pinch — скидаємо зум і виходимо
-    if (e.touches.length === 0 && lbZoom > 1) {
+    // Якщо був зум, то скидаємо його і не обробляємо свайп
+    if (wasPinch) {
+      wasPinch = false;
       lbZoom = 1;
       const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
       if (img) {
