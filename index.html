@@ -2411,8 +2411,12 @@ function initModalSwipe() {
   while (modal.firstChild) newModal.appendChild(modal.firstChild);
   modal.parentNode.replaceChild(newModal, modal);
 
-  const m = document.getElementById('modal');
+  // Обробник для початку дотику. Якщо користувач торкнувся поза межами каруселі, ми фіксуємо початкову позицію по Y для подальшого визначення напрямку свайпа.
   m.addEventListener('touchstart', e => {
+    if (e.target.closest('.carousel-wrap, .carousel-slide')) {
+      modalSwipeStartY = null;
+      return;
+    }
     modalSwipeStartY = e.touches[0].clientY;
   }, { passive: true });
 
@@ -2420,7 +2424,7 @@ function initModalSwipe() {
   m.addEventListener('touchmove', e => {
     if (modalSwipeStartY === null) return;
     const dy = e.touches[0].clientY - modalSwipeStartY;
-    if (dy > 0) {
+    if (dy > 20) {
       m.style.transform = `translateY(${dy}px)`;
       m.style.transition = 'none';
     }
@@ -2430,7 +2434,7 @@ function initModalSwipe() {
     if (modalSwipeStartY === null) return;
     const dy = e.changedTouches[0].clientY - modalSwipeStartY;
 
-    if (dy > 80) {
+    if (dy > 140) {
       m.style.transition = 'transform .25s ease';
       m.style.transform = `translateY(100%)`;
       setTimeout(() => {
@@ -2472,7 +2476,7 @@ function initModalSwipe() {
     mouseDown = false;
     const dy = e.clientY - modalSwipeStartY;
 
-    if (dy > 80) {
+    if (dy > 140) {
       m.style.transition = 'transform .25s ease';
       m.style.transform = `translateY(100%)`;
       setTimeout(() => {
