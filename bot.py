@@ -549,7 +549,14 @@ async def handle_order(request):
             gift = data.get('gift')
             if gift:
                 line += f"\n  🎁 {gift} — *безкоштовно*"
-            line += f"\n💰 *Разом: {total_price} ₴*"
+                
+            # Якщо замовлення було оформлено з купоном, додаємо інформацію про купон і знижку в текст підтвердження для клієнта, а також показуємо оригінальну ціну зі зачеркуванням для наочності. Це дозволяє клієнту бачити вигоду від використання купона і підвищує задоволеність від покупки.
+            if discount_amount and coupon_code:
+                original_price = total_price + discount_amount
+                line += f"\n🏷️ *Купон {coupon_code}:* −{discount_amount} ₴"
+                line += f"\n💰 *Разом: ~~{original_price}~~ {total_price} ₴*"
+            else:
+                line += f"\n💰 *Разом: {total_price} ₴*"
             if comment:
                 line += f"\n📝 _{comment}_"
             
