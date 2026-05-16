@@ -2216,6 +2216,10 @@ function initLightboxSwipe() {
   lb.parentNode.replaceChild(newLb, lb);
 
   const l = document.getElementById('lightbox');
+  // Закриваємо лайтбокс при кліку на бекдроп (поза зоною зображення)
+  l.addEventListener('click', e => {
+    if (e.target === l) closeLightbox();
+  });
   let lbZoom = 1;
   let lbPinchDist = null;
 
@@ -2229,19 +2233,30 @@ function initLightboxSwipe() {
     setTimeout(() => { lb.classList.remove('open'); lb.style.opacity = ''; lb.style.transition = ''; }, 220);
   });
 
-  // --- два пальці = зум ---
-  l.addEventListener('touchstart', e => {
-    if (e.touches.length === 2) {
-      lbPinchDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      lbSwipeX = null; // скасовуємо свайп
-    } else {
-      lbSwipeX = e.touches[0].clientX;
-      lbSwipeY = e.touches[0].clientY;
+    // --- два пальці = зум ---
+    l.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) {
+        lbPinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        lbSwipeX = null;
+      } else {
+        lbSwipeX = e.touches[0].clientX;
+        lbSwipeY = e.touches[0].clientY;
+        lbPinchDist = null;
+      }
+    }, { passive: true });
+
+    // --- відпускання пальців ---
+    l.addEventListener('touchend', e => {
       lbPinchDist = null;
-    }
+      // Скидаємо зум після відпускання пальців
+      if (lbZoom > 1) {
+        lbZoom = 1;
+        const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
+        if (img) { img.style.transition = 'transform .3s ease'; img.style.transform = ''; setTimeout(() => img.style.transition = '', 300); }
+      }
   }, { passive: true });
 
   l.addEventListener('touchmove', e => {
@@ -2289,14 +2304,22 @@ function initLightboxSwipe() {
     updateLightbox();
   }, { passive: false });
 
-  // --- Ctrl + колесо = зум ---
+  // --- колесо миші + Ctrl = зум ---
   l.addEventListener('wheel', e => {
     if (!e.ctrlKey) return;
     e.preventDefault();
     const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
     if (!img) return;
     lbZoom = Math.min(Math.max(lbZoom * (e.deltaY < 0 ? 1.1 : 0.9), 1), 4);
-    img.style.transform = lbZoom > 1 ? `scale(${lbZoom})` : '';
+    if (lbZoom <= 1) {
+      lbZoom = 1;
+      img.style.transition = 'transform .3s ease';
+      img.style.transform = '';
+      setTimeout(() => img.style.transition = '', 300);
+    } else {
+      img.style.transition = 'none';
+      img.style.transform = `scale(${lbZoom})`;
+    }
   }, { passive: false });
 }
 
@@ -2410,6 +2433,8 @@ function initModalSwipe() {
   const newModal = modal.cloneNode(false);
   while (modal.firstChild) newModal.appendChild(modal.firstChild);
   modal.parentNode.replaceChild(newModal, modal);
+  // Тепер newModal — це новий елемент з тими ж дітьми, але без старих обробників подій, що дозволяє нам додавати нові обробники для свайпів без ризику конфліктів з каруселлю.
+  const m = document.getElementById('modal');
 
   // Обробник для початку дотику. Якщо користувач торкнувся поза межами каруселі, ми фіксуємо початкову позицію по Y для подальшого визначення напрямку свайпа.
   m.addEventListener('touchstart', e => {
