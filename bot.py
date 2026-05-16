@@ -5,11 +5,14 @@ Denis 3D Print — Telegram Bot
 from datetime import datetime, timedelta
 from aiohttp import web
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
 import sqlite3
 from pathlib import Path
+from urllib.parse import parse_qsl
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, WebAppInfo, BotCommandScopeChat
@@ -25,10 +28,19 @@ load_dotenv()
 
 # =============================================
 BOT_TOKEN  = os.environ.get("BOT_TOKEN")
-OWNER_ID   = -1003739884073
+OWNER_ID   = int(os.environ.get("OWNER_ID", "-1003739884073"))
 WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"
 DB_FILE    = "users.db"
 PRODUCTS_FILE = "products.json"
+CUSTOM_PRODUCTS_FILE = "custom_products.json"
+# Локально: false (працює без initData). На проді: true
+VALIDATE_INIT_DATA = os.environ.get("VALIDATE_INIT_DATA", "false").lower() in ("1", "true", "yes")
+CORS_ORIGINS = [
+    o.strip() for o in os.environ.get(
+        "CORS_ORIGINS",
+        "https://denisposelyanov.github.io,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5500,http://127.0.0.1:5500",
+    ).split(",") if o.strip()
+]
 # =============================================
 
 logging.basicConfig(
@@ -46,18 +58,170 @@ logger = logging.getLogger(__name__)
 
 # ─── ТОВАРИ ─────────────────────────────────────────────────
 
-def load_products():
-    if Path(PRODUCTS_FILE).exists():
-        return json.loads(Path(PRODUCTS_FILE).read_text(encoding='utf-8'))
+def load_products_file(path: str):
+    p = Path(path)
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
     return []
 
-PRODUCTS_CACHE = load_products()  # ← завантажується один раз при старті
+_products_mtime = 0.0
+_custom_mtime = 0.0
+PRODUCTS_CACHE = load_products_file(PRODUCTS_FILE)
+CUSTOM_PRODUCTS_CACHE = load_products_file(CUSTOM_PRODUCTS_FILE)
+
+
+def reload_products_cache(force: bool = False):
+    """Перезавантажує products.json / custom_products.json якщо файл змінився."""
+    global PRODUCTS_CACHE, CUSTOM_PRODUCTS_CACHE, _products_mtime, _custom_mtime
+    changed = False
+    for path, attr_mtime, attr_cache in (
+        (PRODUCTS_FILE, "_products_mtime", "PRODUCTS_CACHE"),
+        (CUSTOM_PRODUCTS_FILE, "_custom_mtime", "CUSTOM_PRODUCTS_CACHE"),
+    ):
+        fp = Path(path)
+        if not fp.exists():
+            continue
+        mtime = fp.stat().st_mtime
+        current_mtime = _products_mtime if path == PRODUCTS_FILE else _custom_mtime
+        if force or mtime != current_mtime:
+            data = load_products_file(path)
+            if path == PRODUCTS_FILE:
+                PRODUCTS_CACHE = data
+                _products_mtime = mtime
+            else:
+                CUSTOM_PRODUCTS_CACHE = data
+                _custom_mtime = mtime
+            changed = True
+            logger.info("🔄 Оновлено кеш: %s (%s товарів)", path, len(data))
+    return changed
+
 
 def get_product_by_id(product_id: int):
-    for p in PRODUCTS_CACHE:
-        if p['id'] == product_id:
+    reload_products_cache()
+    if not product_id:
+        return None
+    for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE:
+        if p.get("id") == product_id:
             return p
     return None
+
+
+def validate_telegram_init_data(init_data: str) -> dict | None:
+    if not init_data or not BOT_TOKEN:
+        return None
+    try:
+        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+        received_hash = parsed.pop("hash", None)
+        if not received_hash:
+            return None
+        check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
+        secret = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+        calc = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+        if calc != received_hash:
+            return None
+        user = json.loads(parsed.get("user", "{}")) if parsed.get("user") else {}
+        return {
+            "user_id": user.get("id"),
+            "username": user.get("username"),
+            "first_name": user.get("first_name"),
+        }
+    except Exception:
+        return None
+
+
+def cors_headers(request: web.Request) -> dict:
+    origin = request.headers.get("Origin", "")
+    allow = "*"
+    if origin and (origin in CORS_ORIGINS or "*" in CORS_ORIGINS):
+        allow = origin
+    elif CORS_ORIGINS and CORS_ORIGINS[0] != "*":
+        allow = CORS_ORIGINS[0]
+    return {
+        "Access-Control-Allow-Origin": allow,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data",
+    }
+
+
+def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None, web.Response | None]:
+    init_data = request.headers.get("X-Telegram-Init-Data") or data.get("init_data") or ""
+    auth = validate_telegram_init_data(init_data) if init_data else None
+
+    if VALIDATE_INIT_DATA:
+        if not auth or not auth.get("user_id"):
+            return None, web.json_response(
+                {"ok": False, "error": "invalid_init_data"},
+                status=403,
+                headers=cors_headers(request),
+            )
+        return auth, None
+
+    if auth and auth.get("user_id"):
+        return auth, None
+
+    uid = data.get("user_id")
+    if uid:
+        return {
+            "user_id": uid,
+            "username": (data.get("tg_username") or data.get("username") or "").lstrip("@"),
+            "first_name": data.get("first_name") or "",
+        }, None
+
+    return {"user_id": 0, "username": "", "first_name": ""}, None
+
+
+def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
+    """Перерахунок суми на сервері. Повертає (ok, result_dict|error_message)."""
+    reload_products_cache()
+    if not items:
+        return False, "Порожній кошик"
+
+    subtotal = 0
+    normalized = []
+
+    for raw in items:
+        pid = int(raw.get("product_id") or raw.get("id") or 0)
+        qty = max(1, min(99, int(raw.get("quantity", 1))))
+        product = get_product_by_id(pid)
+
+        if product:
+            price = int(product["price"])
+            name = product["name"]
+        elif raw.get("fromCustom"):
+            price = int(raw.get("price", 0))
+            name = raw.get("product_name") or "—"
+            if price <= 0:
+                return False, f"Невідомий індивідуальний товар (id {pid})"
+        else:
+            return False, f"Невідомий товар (id {pid})"
+
+        subtotal += price * qty
+        normalized.append({
+            "product_id": pid,
+            "product_name": name,
+            "price": price,
+            "quantity": qty,
+            "customValue": raw.get("customValue") or "",
+            "fromCustom": bool(raw.get("fromCustom")),
+        })
+
+    discount = 0
+    if coupon_code:
+        coupon_result = check_coupon(coupon_code, user_id, subtotal)
+        if not coupon_result.get("valid"):
+            return False, coupon_result.get("message", "Невалідний купон")
+        discount = int(coupon_result.get("discount", 0))
+
+    server_total = max(0, subtotal - discount)
+    if server_total != int(client_total):
+        return False, f"Сума не збігається (клієнт {client_total}, сервер {server_total})"
+
+    return True, {
+        "items": normalized,
+        "subtotal": subtotal,
+        "discount": discount,
+        "total_price": server_total,
+    }
 
 
 # ─── БАЗА ДАНИХ ─────────────────────────────────────────────
@@ -147,7 +311,13 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
         conn.execute("""
             INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
             VALUES (?, ?, ?, ?, ?)
-        """, (order_id, item.get('id', 0), item.get('product_name', '—'), item.get('price', 0), item.get('quantity', 1)))
+        """, (
+            order_id,
+            int(item.get("product_id") or item.get("id") or 0),
+            item.get("product_name", "—"),
+            int(item.get("price", 0)),
+            int(item.get("quantity", 1)),
+        ))
 
     # Якщо є подарунок, додаємо його як окремий рядок в order_items з ціною 0 і спеціальною назвою для зручності відображення в звітах і повідомленнях
     if gift_product_name:
@@ -777,18 +947,31 @@ async def handle_order(request):
     try:
         data = await request.json()
     except Exception:
-        return web.Response(status=400, text="Bad JSON")
+        return web.Response(status=400, text="Bad JSON", headers=cors_headers(request))
 
-    # Витягуємо дані замовлення
-    items       = data.get('items', [])
-    total_price = data.get('total_price', 0)
-    comment     = data.get('comment', '').strip()
-    username    = data.get('user', 'невідомо')
-    user_id     = data.get('user_id')
-    first_name  = data.get('first_name', '')
-    gift        = data.get('gift')  # може бути None або словником з даними подарунка
-    coupon_code     = data.get('coupon_code')
-    discount_amount = data.get('discount_amount', 0)
+    auth, err = resolve_request_user(request, data)
+    if err:
+        return err
+
+    user_id = auth.get("user_id") or data.get("user_id") or 0
+    first_name = auth.get("first_name") or data.get("first_name", "")
+    tg_username = auth.get("username") or data.get("tg_username")
+    username = data.get("user") or (f"@{tg_username}" if tg_username else "невідомо")
+
+    items = data.get("items", [])
+    client_total = int(data.get("total_price", 0))
+    comment = (data.get("comment") or "").strip()
+    gift = data.get("gift")
+    coupon_code = (data.get("coupon_code") or "").strip() or None
+
+    ok, result = validate_order_payload(items, coupon_code, user_id, client_total)
+    if not ok:
+        return web.json_response({"ok": False, "error": result}, status=400, headers=cors_headers(request))
+
+    items = result["items"]
+    total_price = result["total_price"]
+    discount_amount = result["discount"]
+    coupon_code = coupon_code if discount_amount else None
 
     # Формуємо назву для збереження в БД (всі товари через кому)
     product_name = ', '.join(i.get('product_name', '—') for i in items)
@@ -930,49 +1113,41 @@ async def handle_order(request):
     except Exception as e:
         logger.error(f"❌ Помилка надсилання в канал: {e}")
 
-    return web.Response(
-        text="ok",
-        headers={
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type'
-        }
-    )
+    return web.Response(text="ok", headers=cors_headers(request))
 
-# Новий HTTP хендлер для обробки CORS preflight запитів, який відповідає на OPTIONS запити з необхідними заголовками для дозволу крос-доменних запитів від веб-додатку. Це забезпечує правильну взаємодію між веб-додатком і сервером бота при оформленні замовлення, дозволяючи веб-додатку виконувати POST запити до цього хендлера без проблем з CORS.
+
 async def handle_options(request):
-    return web.Response(
-        headers={
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type'
-        }
-    )
+    return web.Response(headers=cors_headers(request))
 
 # Новий HTTP хендлер для перевірки купона, який приймає код купона, ID користувача і загальну суму кошика, виконує всі необхідні перевірки валідності купона і повертає результат у вигляді JSON-об'єкта з інформацією про валідність купона, тип і значення знижки, а також повідомлення для клієнта. Цей хендлер дозволяє веб-додатку динамічно перевіряти купони при оформленні замовлення і відображати відповідні повідомлення клієнту.
 async def handle_check_coupon(request):
     try:
         data = await request.json()
     except Exception:
-        return web.Response(status=400, text="Bad JSON")
+        return web.Response(status=400, text="Bad JSON", headers=cors_headers(request))
 
-    code       = data.get('code', '').strip()
-    user_id    = data.get('user_id', 0)
-    cart_total = data.get('cart_total', 0)
+    auth, err = resolve_request_user(request, data)
+    if err:
+        return err
+
+    code = (data.get("code") or "").strip()
+    user_id = auth.get("user_id") or data.get("user_id", 0)
+    cart_total = int(data.get("cart_total", 0))
 
     if not code:
         result = {"valid": False, "message": "Введи код купону"}
     else:
         result = check_coupon(code, user_id, cart_total)
 
-    return web.Response(
-        text=json.dumps(result, ensure_ascii=False),
-        content_type='application/json',
-        headers={
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type'
-        }
+    return web.json_response(result, headers=cors_headers(request))
+
+
+async def reload_products_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != 718746623:
+        return
+    reload_products_cache(force=True)
+    await update.message.reply_text(
+        f"✅ Кеш оновлено: products={len(PRODUCTS_CACHE)}, custom={len(CUSTOM_PRODUCTS_CACHE)}"
     )
 
 async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1036,6 +1211,11 @@ confirmation_messages = {}  # {user_id: {"message_id": int, "text": str, "time":
 def main():
     global bot_app
     init_db()
+    reload_products_cache(force=True)
+    logger.info(
+        "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom",
+        VALIDATE_INIT_DATA, len(PRODUCTS_CACHE), len(CUSTOM_PRODUCTS_CACHE),
+    )
 
     bot_app = Application.builder().token(BOT_TOKEN).build()
 
@@ -1049,6 +1229,7 @@ def main():
     bot_app.add_handler(CommandHandler("sales",    sales))
     bot_app.add_handler(CommandHandler("status",   status_cmd))
     bot_app.add_handler(CommandHandler("contact",  contact))
+    bot_app.add_handler(CommandHandler("reload_products", reload_products_cmd))
     bot_app.add_handler(CallbackQueryHandler(order_action, pattern=r"^(confirm|draft|cancel)_"))
 
     async def run():
