@@ -220,7 +220,8 @@ def check_coupon(code: str, user_id: int, cart_total: int):
         conn.close()
         return {"valid": False, "message": "Купон не знайдено ❌"}
 
-    cols = [d[0] for d in conn.execute("PRAGMA table_info(coupons)").description]
+    # Створюємо словник з даними купона для зручності доступу до полів за іменами. Це дозволяє легко перевіряти умови використання купона і формувати повідомлення для клієнта.
+    cols = [d[0] for d in conn.execute("SELECT * FROM coupons LIMIT 0").description]
     c = dict(zip(cols, row))
 
     if not c['active']:

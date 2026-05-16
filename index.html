@@ -1783,7 +1783,7 @@ function renderCart() {
     if (discount > 0) {
       discountRow.style.display = 'flex';
       discountRow.querySelector('.discount-amount').textContent = `-${discount} ₴`;
-      discountRow.querySelector('.discount-label').textContent = `🎟️ ${appliedCoupon.code}`;
+      discountRow.querySelector('.discount-label').textContent = '';
     } else {
       discountRow.style.display = 'none';
     }
