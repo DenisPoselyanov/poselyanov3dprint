@@ -2426,6 +2426,7 @@ async function submitOrder() {
   const tg   = window.Telegram?.WebApp;
   const user = tg?.initDataUnsafe?.user;
 
+  // Розраховуємо загальну суму замовлення, враховуючи кількість кожного товару. Це дозволяє нам отримати точну суму, яку користувач повинен сплатити, враховуючи всі товари в кошику.
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
   const payload = {
@@ -2439,6 +2440,8 @@ async function submitOrder() {
       customValue:  i.customValue || ''
     })),
     total_price:  total,
+    coupon_code:    appliedCoupon ? appliedCoupon.code : '',
+    discount_amount: discount,
     comment:      comment,
     gift:         (shouldShowGift() && selectedGift) ? selectedGift.name : null,
     user:         user?.username ? '@' + user.username : (user?.first_name || 'невідомо'),
@@ -2455,6 +2458,8 @@ async function submitOrder() {
     });
     // Очищаємо кошик після успішного замовлення
     cart = [];
+    appliedCoupon = null;
+    updateCart();
     selectedGift = null;
     saveCart();
     updateCartBadge();
