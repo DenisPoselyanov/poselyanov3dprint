@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Denis 3D Print</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -127,7 +129,7 @@
     border: none; cursor: pointer; white-space: nowrap;
     background: rgba(0,0,0,0.08);
     color: #6b6b81;
-    transition: all .2s;
+    transition: background .2s, color .2s;
   }
   body.dark .tab {
     background: rgba(255,255,255,0.12);
@@ -832,7 +834,7 @@
   /* Ряд з загальною сумою та кнопкою оформлення замовлення в кошику */
   .cart-total-row {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 14px; margin-top: 14px; transition: all .5s cubic-bezier(.4,0,.2,1);
+    margin-bottom: 14px; margin-top: 14px; transition: margin .5s cubic-bezier(.4,0,.2,1);
   }
   /* Текст "Загальна сума" в кошику */
   .cart-total-label { font-size: 13px; color: var(--muted); font-weight: 600; }
@@ -908,8 +910,8 @@
     padding: 12px 14px;
     margin-bottom: 10px;
     display: flex; align-items: center; gap: 12px;
-    animation: fadeInUp .3s ease both;
-    transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease, max-height .3s ease, margin .3s ease, padding .3s ease;
+    /* animation: fadeInUp .3s ease both; */
+    transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease;
     max-height: 200px;
     overflow: hidden;
   }
@@ -918,10 +920,6 @@
   .cart-gift-block.hiding {
     transform: translateX(-110%);
     opacity: 0;
-    max-height: 0;
-    margin-bottom: 0;
-    padding-top: 0;
-    padding-bottom: 0;
   }
 
   /* Темна тема для блоку подарунку в кошику */
@@ -1176,7 +1174,7 @@
   .coupon-status {
     font-size: 13px; font-weight: 600;
     display: inline-flex; align-items: center; gap: 5px;
-    border-radius: 10px; transition: all .2s;
+    border-radius: 10px;
     max-height: 0; overflow: hidden; opacity: 0; margin-top: 0;
     transition: max-height .25s ease, opacity .2s ease, margin-top .2s ease;
   }
@@ -2268,7 +2266,7 @@ function buildCard(p, i, isCustom) {
   const cartItem = getCartItem(p.id);
   const inCart = !!cartItem;
   return `
-    <div class="card" data-id="${p.id}" style="animation-delay:${i * 0.05}s" onclick="openModal(${p.id}, '${source}')">
+    <div class="card" data-id="${p.id}" style="${_firstRender ? 'animation-delay:' + Math.min(i * 0.05, 0.3) + 's' : 'animation:none'}" onclick="openModal(${p.id}, '${source}')">
       <div class="card-img">
         ${hasPhotos ? `<img src="${p.photos[0]}" alt="${p.name}" loading="lazy">` : ''}
         <span style="position:relative;z-index:1">${hasPhotos ? '' : p.emoji}</span>
@@ -2311,6 +2309,8 @@ function updateCardBadge(id) {
 }
 
 let currentCat = 'all';
+let _lastCartTotal = 0;
+let _firstRender = true;
 let currentProduct = null;
 let carouselIndex = 0;
 let lbIndex = 0;
@@ -2362,7 +2362,7 @@ function openGiftModal() {
       <div class="gift-option${selectedGift?.id === p.id ? ' selected' : ''}" onclick="selectGift(${p.id})">
             <div class="gift-option-emoji" onclick="event.stopPropagation(); previewGift(${p.id})" style="cursor:pointer;position:relative;width:36px;height:36px;flex-shrink:0;" title="Переглянути товар">
         ${p.photos && p.photos.length > 0
-          ? `<img src="${p.photos[0]}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${p.name}">`
+          ? `<img src="${p.photos[0]}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${p.name}" decoding="async" loading="lazy">`
           : p.emoji}
       </div>
       <div class="gift-option-info">
@@ -2457,15 +2457,18 @@ function renderCart() {
 
   // Анімація зміни ціни
   const totalEl2 = document.getElementById('cart-total');
-  const prevTotal = parseInt(totalEl2.textContent) || 0;
+  // Порівнюємо з останньою відомою сумою в кошику, щоб визначити напрямок анімації (знижка чи збільшення)
+  const prevTotal = _lastCartTotal;
   const isDiscount = finalTotal < prevTotal;
 
   function animatePrice(el, from, to) {
     const duration = 800;
     const start = performance.now();
+    // Скидаємо анімацію, щоб можна було запустити її знову при наступній зміні ціни
     el.style.animation = 'none';
-    void el.offsetWidth;
-    el.style.animation = isDiscount ? 'priceDown .7s ease' : 'priceUp .7s ease';
+    requestAnimationFrame(() => {
+      el.style.animation = isDiscount ? 'priceDown .7s ease' : 'priceUp .7s ease';
+    });
     function step(now) {
       const p = Math.min((now - start) / duration, 1);
       const ease = 1 - Math.pow(1 - p, 3);
@@ -2475,8 +2478,15 @@ function renderCart() {
     requestAnimationFrame(step);
   }
 
-  // Запускаємо анімацію зміни ціни при оновленні кошика
-  animatePrice(totalEl2, prevTotal, finalTotal);
+  // Якщо сума змінилась — запускаємо анімацію, інакше просто оновлюємо текст без анімації
+  if (prevTotal !== finalTotal) {
+    animatePrice(totalEl2, prevTotal, finalTotal);
+  } else {
+    totalEl2.style.animation = 'none';  
+    totalEl2.textContent = `${finalTotal} ₴`;
+  }
+  // Оновлюємо останню відому суму в кошику після анімації
+  _lastCartTotal = finalTotal;
   // Додаємо клас для зміни кольору ціни, якщо вона знизилась
   totalEl2.classList.toggle('discounted', finalTotal < rawTotal);
   // Перевіряємо чи потрібен подарунок
@@ -2491,7 +2501,7 @@ function renderCart() {
     <div class="cart-item" id="cart-item-${item.id}">
       <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : 'main'}')" style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer;">
         ${item.photos && item.photos.length > 0
-          ? `<img src="${item.photos[0]}" style="width:42px;height:42px;object-fit:cover;pointer-events:none;" alt="${item.name}">`
+          ? `<img src="${item.photos[0]}" style="width:42px;height:42px;object-fit:cover;pointer-events:none;" alt="${item.name}" decoding="async" loading="lazy">`
           : item.emoji}
       </div>
       <div class="cart-item-info">
@@ -2685,6 +2695,10 @@ function renderGrid(cat) {
     return;
   }
   grid.innerHTML = items.map((p, i) => buildCard(p, i, false)).join('');
+  _firstRender = false;
+  setTimeout(() => {
+    document.querySelectorAll('#grid .card').forEach(c => c.style.animation = 'none');
+  }, 700);
 }
 
 function filterCat(el, cat) {
@@ -2718,7 +2732,7 @@ function buildCarousel(photos) {
 
   track.innerHTML = photos.map((url, i) => `
     <div class="carousel-slide" onclick="openLightbox(${i})">
-      <img src="${url}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}">
+      <img src="${url}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async">
       ${isGif(url) ? '<div class="gif-badge">GIF</div>' : ''}
     </div>
   `).join('');
@@ -2804,7 +2818,7 @@ function openLightbox(startIndex) {
   const dots  = document.getElementById('lb-dots');
 
   track.innerHTML = photos.map((url, i) =>
-    `<div class="lightbox-slide"><img src="${url}" alt="фото ${i+1}" loading="lazy"></div>`
+    `<div class="lightbox-slide"><img src="${url}" alt="фото ${i+1}" loading="lazy" decoding="async"></div>`
   ).join('');
 
   dots.innerHTML = photos.map((_, i) =>
@@ -2841,18 +2855,18 @@ function closeLightbox() {
 
 let lbSwipeX = null;
 let lbSwipeY = null;
-// Ініціалізація свайпів для лайтбоксу: один палець — навігація, два пальці — зум, свайп вниз — закрити
+// Ініціалізація свайпів для лайтбокса: один палець — навігація і закриття, два пальці — зум
 function initLightboxSwipe() {
-  const lb = document.getElementById('lightbox');
-  const newLb = lb.cloneNode(false);
-  while (lb.firstChild) newLb.appendChild(lb.firstChild);
-  lb.parentNode.replaceChild(newLb, lb);
+  if (window._lbSwipeController) window._lbSwipeController.abort();
+  const controller = new AbortController();
+  window._lbSwipeController = controller;
+  const signal = controller.signal;
 
   const l = document.getElementById('lightbox');
   // Закриваємо лайтбокс при кліку на бекдроп (поза зоною зображення)
   l.addEventListener('click', e => {
     if (e.target === l) closeLightbox();
-  });
+  }, { signal });
   let lbZoom = 1;
   let lbPinchDist = null;
 
@@ -2864,7 +2878,7 @@ function initLightboxSwipe() {
     lb.style.transition = 'opacity .22s ease, transform .22s ease';
     lb.style.opacity = '0';
     setTimeout(() => { lb.classList.remove('open'); lb.style.opacity = ''; lb.style.transition = ''; }, 220);
-  });
+  }, { signal });
 
     // --- два пальці = зум ---
     let wasPinch = false;
@@ -2882,7 +2896,7 @@ function initLightboxSwipe() {
         lbSwipeY = e.touches[0].clientY;
         lbPinchDist = null;
       }
-    }, { passive: true });
+    }, { passive: true, signal });
 
   // --- відпускання пальців (зум + свайп) ---
   l.addEventListener('touchend', e => {
@@ -2930,7 +2944,7 @@ function initLightboxSwipe() {
     const photos = currentProduct?.photos || [];
     lbIndex = (lbIndex + (e.deltaY > 0 ? 1 : -1) + photos.length) % photos.length;
     updateLightbox();
-  }, { passive: false });
+  }, { passive: false, signal });
 
   // --- колесо миші + Ctrl = зум ---
   l.addEventListener('wheel', e => {
@@ -2948,7 +2962,7 @@ function initLightboxSwipe() {
       img.style.transition = 'none';
       img.style.transform = `scale(${lbZoom})`;
     }
-  }, { passive: false });
+  }, { passive: false, signal });
 
     // --- відпускання Ctrl = скидаємо зум ---
   document.addEventListener('keyup', e => {
@@ -2962,7 +2976,7 @@ function initLightboxSwipe() {
       img.style.transformOrigin = 'center center';
       setTimeout(() => img.style.transition = '', 300);
     }
-  });
+  }, { signal });
 }
 
 // ─── МОДАЛЬНЕ ВІКНО ТОВАРУ ───────────────────────────────────────────────
@@ -3031,29 +3045,29 @@ function openModal(id, source = 'main') {
   document.getElementById('modal').classList.remove('modal-close-anim');
 }
 
+// Закриває модальне вікно з анімацією, скидає зум і позицію слайдів каруселі, розблоковує скрол сторінки та оновлює бейджі на картках товарів. Якщо модальне вікно було відкрито з подарунком, після закриття ми відкриваємо модальне вікно вибору подарунка.
 function closeModal() {
   zoomScale = 1;
   document.querySelectorAll('.carousel-slide img').forEach(img => img.style.transform = '');
   const modal    = document.getElementById('modal');
   const backdrop = document.getElementById('modal-backdrop');
+  const scrollY  = parseInt(document.body.style.top || '0') * -1;
 
   modal.classList.add('modal-close-anim');
+
   setTimeout(() => {
     backdrop.classList.remove('open');
     modal.classList.remove('modal-close-anim');
+    document.body.classList.remove('modal-open');
+    document.body.style.top = '';
+    window.scrollTo(0, scrollY);
     if (currentProduct) updateCardBadge(currentProduct.id);
   }, 220);
-
-  const scrollY = parseInt(document.body.style.top || '0') * -1;
-  document.body.classList.remove('modal-open');
 
   if (window._giftModalWasOpen) {
     window._giftModalWasOpen = false;
     setTimeout(openGiftModal, 280);
   }
-
-  document.body.style.top = '';
-  window.scrollTo(0, scrollY);
 }
 
 // Додатковий обробник для закриття модального вікна при натисканні на бекдроп. Це покращує користувацький досвід, дозволяючи легко закривати модальне вікно, не шукаючи конкретну кнопку закриття.
@@ -3067,15 +3081,13 @@ function closeIfBackdrop(event) {
 let modalSwipeY = null;
 let modalSwipeStartY = null;
 
-// Ініціалізація свайпів для модального вікна. Це дозволяє користувачам закривати модальне вікно, свайпаючи його вниз, що є інтуїтивним жестом на мобільних пристроях.
+// Ініціалізація свайпів для модального вікна: якщо користувач тягне модальне вікно вниз, ми переміщаємо його відповідно до руху пальця, створюючи ефект "витягування" модального вікна. Якщо користувач відпускає його після достатнього переміщення, ми закриваємо модальне вікно.
 function initModalSwipe() {
-  // Щоб уникнути конфліктів з внутрішніми свайпами каруселі, ми клонуємо модальне вікно та замінюємо його, що дозволяє нам мати чисті обробники подій для свайпів.
-  const modal = document.getElementById('modal');
-  // Клонування модального вікна без дочірніх елементів
-  const newModal = modal.cloneNode(false);
-  while (modal.firstChild) newModal.appendChild(modal.firstChild);
-  modal.parentNode.replaceChild(newModal, modal);
-  // Тепер newModal — це новий елемент з тими ж дітьми, але без старих обробників подій, що дозволяє нам додавати нові обробники для свайпів без ризику конфліктів з каруселлю.
+  if (window._modalSwipeController) window._modalSwipeController.abort();
+  const controller = new AbortController();
+  window._modalSwipeController = controller;
+  const signal = controller.signal;
+
   const m = document.getElementById('modal');
 
   // Обробник для початку дотику. Якщо користувач торкнувся поза межами каруселі, ми фіксуємо початкову позицію по Y для подальшого визначення напрямку свайпа.
@@ -3085,10 +3097,10 @@ function initModalSwipe() {
       return;
     }
     modalSwipeStartY = e.touches[0].clientY;
-  }, { passive: true });
+  }, { passive: true, signal });
 
   // Обробник для руху пальцем. Якщо користувач рухає пальцем вниз, ми переміщаємо модальне вікно відповідно до руху пальця, створюючи ефект "витягування" модального вікна. Якщо користувач використовує два пальці, ми обробляємо це як жест зуму для зображення в каруселі.
-  l.addEventListener('touchmove', e => {
+  m.addEventListener('touchmove', e => {
     if (e.touches.length === 2 && lbPinchDist !== null) {
       const newDist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
@@ -3097,7 +3109,7 @@ function initModalSwipe() {
       lbZoom = Math.min(Math.max(lbZoom * (newDist / lbPinchDist), 1), 4);
       lbPinchDist = newDist;
 
-      const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
+      const img = document.getElementById('lightbox').querySelectorAll('.lightbox-slide img')[lbIndex];
       if (img) {
         // Центр між двома пальцями відносно картинки
         const rect = img.getBoundingClientRect();
@@ -3107,7 +3119,12 @@ function initModalSwipe() {
         img.style.transform = lbZoom > 1 ? `scale(${lbZoom})` : '';
       }
     }
-  }, { passive: true });
+    // Якщо користувач рухає одним пальцем і початкова позиція зафіксована, ми переміщаємо модальне вікно відповідно до руху пальця по Y, створюючи ефект "витягування" модального вікна. Якщо користувач використовує два пальці, ми не обробляємо цей рух як свайп для закриття.
+    if (modalSwipeStartY !== null && e.touches.length === 1) {
+      const dy = e.touches[0].clientY - modalSwipeStartY;
+      if (dy > 0) m.style.transform = `translateY(${dy}px)`;
+    }
+  }, { passive: true, signal });
 
   m.addEventListener('touchend', e => {
     if (modalSwipeStartY === null) return;
@@ -3132,13 +3149,13 @@ function initModalSwipe() {
       setTimeout(() => { m.style.transition = ''; }, 300);
     }
     modalSwipeStartY = null;
-  }, { passive: true });
+  }, { passive: true, signal });
     let mouseDown = false;
 
   m.addEventListener('mousedown', e => {
     mouseDown = true;
     modalSwipeStartY = e.clientY;
-  });
+  }, { signal });
 
   m.addEventListener('mousemove', e => {
     if (!mouseDown || modalSwipeStartY === null) return;
@@ -3147,7 +3164,7 @@ function initModalSwipe() {
       m.style.transform = `translateY(${dy}px)`;
       m.style.transition = 'none';
     }
-  });
+  }, { signal });
 
   // Обробник для руху миші. Якщо користувач тягне модальне вікно вниз, ми переміщаємо його відповідно до руху миші, створюючи ефект "витягування" модального вікна.
   m.addEventListener('mouseup', e => {
@@ -3174,7 +3191,7 @@ function initModalSwipe() {
       setTimeout(() => { m.style.transition = ''; }, 300);
     }
     modalSwipeStartY = null;
-  });
+  }, { signal });
 }
 
 // ─── ORDER ──────────────────────────────────────────────────
@@ -3356,14 +3373,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Ховаємо хедер при скролі
   let lastScrollY = 0;
   const header = document.querySelector('.header');
+  // Функція для обробки скролу, яка визначає напрямок скролу та відповідно показує або ховає хедер. Якщо користувач скролить вниз і пройшов більше 60px, хедер ховається, щоб забезпечити більше простору для перегляду контенту. Якщо користувач скролить вгору, хедер знову з'являється, забезпечуючи легкий доступ до навігації.
   function handleScroll() {
-    const y = document.documentElement.scrollTop || document.body.scrollTop || window.scrollY;
+    const y = window.scrollY;
     header.classList.toggle('hidden', y > lastScrollY && y > 60);
     lastScrollY = y;
   }
+  // Додаємо обробник скролу з пасивною опцією для покращення продуктивності. Це дозволяє браузеру оптимізувати обробку події скролу, забезпечуючи більш плавний досвід користувача, особливо на мобільних пристроях.
   window.addEventListener('scroll', handleScroll, { passive: true });
-  document.addEventListener('scroll', handleScroll, { passive: true });
-  document.body.addEventListener('scroll', handleScroll, { passive: true });
 
   renderGrid('all');
   renderSales();
