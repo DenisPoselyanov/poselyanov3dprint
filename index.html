@@ -83,7 +83,12 @@
     padding: 16px;
     position: sticky; top: 0; z-index: 10;
     flex-shrink: 0;
+    transition: transform .3s ease;
   }
+
+  /* Приховуємо хедер при скролі вниз, показуємо при скролі вгору */
+  .header.hidden { transform: translateY(-100%); }
+
   .header-top { display: flex; align-items: center; gap: 10px; }
   .header-logo {
     width: 38px; height: 38px; border-radius: 50%;
@@ -276,6 +281,10 @@
     position: relative;
     overflow: hidden;
   }
+
+  /* Забороняємо браузеру інтерпретувати жести на зображеннях, щоб не конфліктувати з жестами каруселі */
+  .carousel-slide img { touch-action: none; }
+
   .carousel-slide img,
   .carousel-slide .slide-emoji {
     max-width: 100%; max-height: 100%;
@@ -2101,31 +2110,55 @@ function updateCarousel() {
   });
 }
 
+// Навігація каруселлю (dir: -1 для вліво, 1 для вправо)
 function carouselNav(dir) {
   const photos = currentProduct?.photos || [];
   carouselIndex = (carouselIndex + dir + photos.length) % photos.length;
   updateCarousel();
+  const prev = getActiveSlide()?.querySelector('img');
+  if (prev) prev.style.transform = '';
+  zoomScale = 1;
 }
 
 let carSwipeX = null;
-function initCarouselSwipe() {
-  const wrap = document.getElementById('carousel-wrap');
-  const newWrap = wrap.cloneNode(false);
-  while (wrap.firstChild) newWrap.appendChild(wrap.firstChild);
-  wrap.parentNode.replaceChild(newWrap, wrap);
+let pinchDist = null; // відстань між пальцями
+let zoomScale = 1;    // поточний зум активного слайду
 
+function getActiveSlide() {
+  return document.querySelectorAll('.carousel-slide')[carouselIndex];
+}
+
+// Ініціалізація свайпів для каруселі: один палець — навігація, два пальці — зум
+function initCarouselSwipe() {
+  // ... (клонування залишити як є) ...
   const w = document.getElementById('carousel-wrap');
-  w.addEventListener('touchstart', e => { carSwipeX = e.touches[0].clientX; }, { passive: true });
+
+  // --- свайп між фото (один палець) ---
+  w.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      carSwipeX = e.touches[0].clientX;
+      pinchDist = null;
+    } else if (e.touches.length === 2) {
+      carSwipeX = null;
+      pinchDist = null; // більше не потрібен
+    }
+  }, { passive: true });
+
+  // --- свайп між фото (один палець) ---
   w.addEventListener('touchend', e => {
     if (carSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - carSwipeX;
-    if (Math.abs(dx) > 40) carouselNav(dx < 0 ? 1 : -1);
+    if (zoomScale <= 1 && Math.abs(dx) > 40) carouselNav(dx < 0 ? 1 : -1);
     carSwipeX = null;
   }, { passive: true });
 
-  w.querySelectorAll('.carousel-slide').forEach((s, i) => {
-    s.addEventListener('click', () => openLightbox(i));
-  });
+  // --- колесо миші = навігація між фото ---
+  w.addEventListener('wheel', e => {
+    if (e.ctrlKey) return;
+    if (zoomScale > 1) return;
+    e.preventDefault();
+    carouselNav(e.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
 }
 
 // ─── LIGHTBOX ───────────────────────────────────────────────
@@ -2159,9 +2192,13 @@ function updateLightbox(animate = true) {
   });
 }
 
+// Закриває лайтбокс з анімацією затемнення і зсувом вниз, скидає зум і позицію слайдів, щоб при наступному відкритті вони були в початковому стані
 function closeLightbox() {
   const l = document.getElementById('lightbox');
+  // Додаємо клас для анімації закриття (з затемненням і зсувом вниз), який триває 220ms
   l.classList.add('closing');
+  // Скидаємо зум і позицію всіх слайдів, щоб при наступному відкритті вони були в початковому стані
+  l.querySelectorAll('.lightbox-slide img').forEach(img => img.style.transform = '');
   setTimeout(() => {
     l.classList.remove('open');
     l.classList.remove('closing');
@@ -2171,6 +2208,7 @@ function closeLightbox() {
 
 let lbSwipeX = null;
 let lbSwipeY = null;
+// Ініціалізація свайпів для лайтбоксу: один палець — навігація, два пальці — зум, свайп вниз — закрити
 function initLightboxSwipe() {
   const lb = document.getElementById('lightbox');
   const newLb = lb.cloneNode(false);
@@ -2178,49 +2216,88 @@ function initLightboxSwipe() {
   lb.parentNode.replaceChild(newLb, lb);
 
   const l = document.getElementById('lightbox');
+  let lbZoom = 1;
+  let lbPinchDist = null;
+
+  // закрити кнопкою
   l.querySelector('.lightbox-close').addEventListener('click', () => {
+    lbZoom = 1;
+    l.querySelectorAll('.lightbox-slide img').forEach(img => img.style.transform = '');
     const lb = document.getElementById('lightbox');
     lb.style.transition = 'opacity .22s ease, transform .22s ease';
     lb.style.opacity = '0';
-    setTimeout(() => {
-      lb.classList.remove('open');
-      lb.style.opacity = '';
-      lb.style.transition = '';
-    }, 220);
+    setTimeout(() => { lb.classList.remove('open'); lb.style.opacity = ''; lb.style.transition = ''; }, 220);
   });
+
+  // --- два пальці = зум ---
   l.addEventListener('touchstart', e => {
-    lbSwipeX = e.touches[0].clientX;
-    lbSwipeY = e.touches[0].clientY;
+    if (e.touches.length === 2) {
+      lbPinchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      lbSwipeX = null; // скасовуємо свайп
+    } else {
+      lbSwipeX = e.touches[0].clientX;
+      lbSwipeY = e.touches[0].clientY;
+      lbPinchDist = null;
+    }
   }, { passive: true });
+
+  l.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && lbPinchDist !== null) {
+      const newDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      lbZoom = Math.min(Math.max(lbZoom * (newDist / lbPinchDist), 1), 4);
+      lbPinchDist = newDist;
+      const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
+      if (img) img.style.transform = lbZoom > 1 ? `scale(${lbZoom})` : '';
+    }
+  }, { passive: true });
+
+  // --- один палець = свайп ---
   l.addEventListener('touchend', e => {
+    lbPinchDist = null;
     if (lbSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - lbSwipeX;
     const dy = e.changedTouches[0].clientY - lbSwipeY;
 
-    if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
-      const l = document.getElementById('lightbox');
+    if (lbZoom <= 1 && Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
       l.style.transition = 'opacity .22s ease, transform .22s ease';
       l.style.opacity = '0';
       l.style.transform = `translateY(${dy > 0 ? '80px' : '-80px'})`;
-      setTimeout(() => {
-        l.classList.remove('open');
-        l.style.opacity = '';
-        l.style.transform = '';
-        l.style.transition = '';
-      }, 220);
-      lbSwipeX = null;
-      lbSwipeY = null;
-      return;
+      setTimeout(() => { l.classList.remove('open'); l.style.opacity = ''; l.style.transform = ''; l.style.transition = ''; lbZoom = 1; }, 220);
+      lbSwipeX = null; return;
     }
-
     const photos = currentProduct?.photos || [];
-    if (Math.abs(dx) > 40) {
+    if (lbZoom <= 1 && Math.abs(dx) > 40) {
       lbIndex = (lbIndex + (dx < 0 ? 1 : -1) + photos.length) % photos.length;
       updateLightbox();
     }
-    lbSwipeX = null;
-    lbSwipeY = null;
+    lbSwipeX = null; lbSwipeY = null;
   }, { passive: true });
+
+  // --- колесо миші = навігація ---
+  l.addEventListener('wheel', e => {
+    if (e.ctrlKey) return;
+    if (lbZoom > 1) return;
+    e.preventDefault();
+    const photos = currentProduct?.photos || [];
+    lbIndex = (lbIndex + (e.deltaY > 0 ? 1 : -1) + photos.length) % photos.length;
+    updateLightbox();
+  }, { passive: false });
+
+  // --- Ctrl + колесо = зум ---
+  l.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
+    if (!img) return;
+    lbZoom = Math.min(Math.max(lbZoom * (e.deltaY < 0 ? 1.1 : 0.9), 1), 4);
+    img.style.transform = lbZoom > 1 ? `scale(${lbZoom})` : '';
+  }, { passive: false });
 }
 
 // ─── МОДАЛЬНЕ ВІКНО ТОВАРУ ───────────────────────────────────────────────
@@ -2289,8 +2366,9 @@ function openModal(id, source = 'main') {
   document.getElementById('modal').classList.remove('modal-close-anim');
 }
 
-// Закриття модального вікна з анімацією. Додаємо клас для анімації закриття, який плавно приховує модальне вікно, та після завершення анімації видаляємо клас для бекдропа, що робить його невидимим. Також відновлюємо скрол сторінки до попередньої позиції, забезпечуючи плавний перехід назад до основного контенту.
 function closeModal() {
+  zoomScale = 1;
+  document.querySelectorAll('.carousel-slide img').forEach(img => img.style.transform = '');
   const modal    = document.getElementById('modal');
   const backdrop = document.getElementById('modal-backdrop');
 
@@ -2298,20 +2376,17 @@ function closeModal() {
   setTimeout(() => {
     backdrop.classList.remove('open');
     modal.classList.remove('modal-close-anim');
-    // Точкове оновлення бейджів — без перерендеру гриду
     if (currentProduct) updateCardBadge(currentProduct.id);
   }, 220);
 
   const scrollY = parseInt(document.body.style.top || '0') * -1;
   document.body.classList.remove('modal-open');
 
-  // Якщо модалка подарунку була відкрита — відкриваємо її знову після закриття модалки товару. Це дозволяє користувачам легко повернутися до вибору подарунку після перегляду інформації про товар, що покращує взаємодію між цими двома модальними вікнами.
   if (window._giftModalWasOpen) {
     window._giftModalWasOpen = false;
     setTimeout(openGiftModal, 280);
   }
 
-  // Відновлюємо скрол сторінки до попередньої позиції після закриття модального вікна. Це забезпечує плавний перехід назад до основного контенту, дозволяючи користувачам продовжити перегляд з того місця, де вони були перед відкриттям модального вікна.
   document.body.style.top = '';
   window.scrollTo(0, scrollY);
 }
@@ -2589,6 +2664,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Завантажуємо товари та рендеримо першу категорію
   await loadProducts();
+
+  // Логіка для приховування хедера при скролі вниз та показу при скролі вгору. Це дозволяє збільшити видиму область контенту при перегляді, особливо на мобільних пристроях, де кожен піксель екрану важливий.
+  let lastScrollY = 0;
+  const header = document.querySelector('.header');
+  document.querySelector('.page.active')?.addEventListener('scroll', () => {
+    // ... але краще слухати на window або конкретному scroll-контейнері
+  }, { passive: true });
+
+  // При скролі вниз ховаємо хедер, при скролі вгору показуємо. Це дозволяє збільшити видиму область контенту при перегляді, особливо на мобільних пристроях, де кожен піксель екрану важливий.
+  document.addEventListener('scroll', () => {
+    const y = window.scrollY;
+    header.classList.toggle('hidden', y > lastScrollY && y > 60);
+    lastScrollY = y;
+  }, { passive: true });
+
   renderGrid('all');
   renderSales();
 
