@@ -2426,8 +2426,10 @@ async function submitOrder() {
   const tg   = window.Telegram?.WebApp;
   const user = tg?.initDataUnsafe?.user;
 
-  // Розраховуємо загальну суму замовлення, враховуючи кількість кожного товару. Це дозволяє нам отримати точну суму, яку користувач повинен сплатити, враховуючи всі товари в кошику.
-  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  // Розрахунок загальної суми замовлення з урахуванням кількості кожного товару та застосованої знижки. Це дозволяє нам отримати точну суму, яку користувач повинен сплатити, враховуючи всі товари в кошику та можливі знижки від купонів.
+  const rawTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const discount = appliedCoupon ? appliedCoupon.discount : 0;
+  const total = rawTotal - discount;
 
   const payload = {
     action: 'order',
