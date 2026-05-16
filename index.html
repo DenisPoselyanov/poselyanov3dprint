@@ -1153,10 +1153,21 @@
   .coupon-status.loading { color: var(--text-muted); background: none; font-weight: 400; }
 
   /* Рядок знижки в підсумку */
-  .cart-discount-row {
-    display: flex; justify-content: space-between;
-    font-size: 14px; color: #22c55e; font-weight: 600;
-    margin: 2px 0;
+  .cart-old-price {
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    text-decoration: line-through;
+    max-height: 0; overflow: hidden; opacity: 0;
+    transition: max-height .3s ease, opacity .3s ease;
+  }
+  .cart-old-price.visible {
+    max-height: 30px; opacity: 1;
+  }
+  @keyframes countDown {
+    from { transform: translateY(-8px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  .cart-total-sum.updated {
+    animation: countDown .35s ease;
   }
 </style>
 </head>
@@ -1255,14 +1266,15 @@
         <div class="coupon-status" id="couponStatus"></div>
       </div>
 
+      /* Рядок для відображення знижки, який з'являється при застосуванні купона або акції */
       <div class="cart-total-row">
         <span class="cart-total-label">Разом:</span>
-        <div class="cart-discount-row" id="cartDiscountRow" style="display:none">
-          <span class="discount-label"></span>
-          <span class="discount-amount"></span>
+        <div style="display:flex; flex-direction:column; align-items:flex-end;">
+          <span class="cart-old-price" id="cartOldPrice"></span>
+          <span class="cart-total-sum" id="cart-total">0 ₴</span>
         </div>
-        <span class="cart-total-sum" id="cart-total">0 ₴</span>
       </div>
+
       <button class="cart-submit-btn" onclick="submitOrder()">✓ Оформити замовлення</button>
     </div>
   </div>
@@ -1777,19 +1789,24 @@ function renderCart() {
   const discount = appliedCoupon ? appliedCoupon.discount : 0;
   const finalTotal = rawTotal - discount;
 
-  // Оновлюємо рядок зі знижкою в кошику — показуємо його тільки якщо є знижка, і ховаємо якщо знижки немає
-  const discountRow = document.getElementById('cartDiscountRow');
-  if (discountRow) {
+  // Показуємо стару ціну з перекресленням, якщо є знижка
+  const oldPriceEl = document.getElementById('cartOldPrice');
+  if (oldPriceEl) {
     if (discount > 0) {
-      discountRow.style.display = 'flex';
-      discountRow.querySelector('.discount-amount').textContent = `-${discount} ₴`;
-      discountRow.querySelector('.discount-label').textContent = '';
+      oldPriceEl.textContent = `${rawTotal} ₴`;
+      oldPriceEl.classList.add('visible');
     } else {
-      discountRow.style.display = 'none';
+      oldPriceEl.classList.remove('visible');
+      oldPriceEl.textContent = '';
     }
   }
 
-  totalEl.textContent = `${finalTotal} ₴`;
+  // Анімація зміни ціни
+  const totalEl2 = document.getElementById('cart-total');
+  totalEl2.classList.remove('updated');
+  void totalEl2.offsetWidth; // reflow
+  totalEl2.classList.add('updated');
+  totalEl2.textContent = `${finalTotal} ₴`;
 
   // Перевіряємо чи потрібен подарунок
   if (shouldShowGift()) {
