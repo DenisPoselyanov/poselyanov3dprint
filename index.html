@@ -78,7 +78,7 @@
     background: var(--bg);
     color: var(--text);
     height: 100%;
-    overflow-x: hidden;
+    overflow: hidden;
   }
 
   /* HEADER */
@@ -89,11 +89,33 @@
     position: fixed; top: 0; left: 0; right: 0; z-index: 10;
     transition: transform .3s ease;
   }
-  .header.hidden { transform: translateY(-100%); }
+  .header.hidden {
+    transform: translateY(-100%);
+    pointer-events: none;
+  }
   .header-top { display: flex; align-items: center; justify-content: center; }
   .header-sub { display: none; }
 
-  body { padding-top: 68px; }
+  /* Контент скролиться в #main-scroll, не в window */
+  #main-scroll {
+    position: fixed;
+    top: 68px;
+    left: 0;
+    right: 0;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    transition: top .3s ease;
+  }
+  /* Коли хедер сховано — контент піднімається вгору (без сірої смуги) */
+  .header.hidden ~ #main-scroll:not(.cart-mode) {
+    top: 0;
+  }
+  #main-scroll.cart-mode {
+    overflow: hidden;
+  }
 
   .header-logo {
     width: 200px; height: 48px;
@@ -258,19 +280,10 @@
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-  }
-  .modal.modal-enter {
-    animation: slideUp .28s cubic-bezier(.34,1.2,.64,1);
-  }
-  @keyframes slideUp {
-    from { transform: translateY(100%); opacity: .6; }
-    to   { transform: translateY(0); opacity: 1; }
-  }
-  .modal-close-anim {
-    animation: slideDown .22s ease forwards;
-  }
-  @keyframes slideDown {
-    to { transform: translateY(100%); opacity: 0; }
+    transform: translateY(0);
+    opacity: 1;
+    transition: transform .26s cubic-bezier(.34,1.2,.64,1), opacity .22s ease;
+    will-change: transform;
   }
 
   .modal-handle {
@@ -621,7 +634,8 @@
     padding-bottom: 0 !important;
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 60px - env(safe-area-inset-bottom));
+    height: 100%;
+    min-height: 100%;
     overflow: hidden;
   }
 
@@ -673,7 +687,8 @@
   #page-cart.active {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - 72px - 60px - env(safe-area-inset-bottom));
+    height: 100%;
+    min-height: 100%;
     overflow: hidden;
   }
 
@@ -1864,6 +1879,7 @@
   </div>
 </div>
 
+<div id="main-scroll">
 <!-- PAGE: Товари -->
 <div class="page active" id="page-products">
   <div class="section-label" id="section-label">Всі товари</div>
@@ -1945,9 +1961,10 @@
     </div>
   </div>
 </div>
+</div>
 
 <!-- PRODUCT MODAL -->
-<div class="modal-backdrop" id="modal-backdrop" onpointerdown="closeIfBackdrop(event)">
+<div class="modal-backdrop" id="modal-backdrop" onclick="closeIfBackdrop(event)">
   <div class="modal" id="modal">
     <div class="modal-handle"></div>
 
@@ -1967,7 +1984,7 @@
       <span class="modal-title">Замовлення</span>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="modal-share-btn" onclick="shareProduct()" title="Поділитись">🔗</button>
-        <button type="button" class="modal-close" onpointerdown="event.stopPropagation(); event.preventDefault(); closeModal()">✕</button>
+        <button type="button" class="modal-close" onclick="event.stopPropagation(); closeModal()">✕</button>
       </div>
     </div>
 
@@ -2648,6 +2665,50 @@ function updateCartTotal() {
   if (footer) footer.style.display = cart.length || Object.keys(pendingRemovals).length ? '' : 'none';
 }
 
+// ─── ХЕДЕР: ХОВАННЯ ПРИ СКРОЛІ ───────────────────────────────
+let headerLastScrollY = 0;
+
+function getMainScrollEl() {
+  return document.getElementById('main-scroll');
+}
+
+function getMainScrollTop() {
+  return getMainScrollEl()?.scrollTop || 0;
+}
+
+function isCartPageActive() {
+  return document.getElementById('page-cart')?.classList.contains('active');
+}
+
+function resetHeaderScrollState(page) {
+  const header = document.getElementById('main-header');
+  const mainScroll = getMainScrollEl();
+  header?.classList.remove('hidden');
+  if (mainScroll) {
+    mainScroll.classList.toggle('cart-mode', page === 'cart');
+    if (page !== 'cart') mainScroll.scrollTop = 0;
+  }
+  headerLastScrollY = page === 'cart' ? 0 : getMainScrollTop();
+}
+
+function updateHeaderOnScroll(scrollTop) {
+  const header = document.getElementById('main-header');
+  if (!header) return;
+
+  if (isCartPageActive() || document.body.classList.contains('modal-open')) {
+    header.classList.remove('hidden');
+    return;
+  }
+
+  const hide = scrollTop > headerLastScrollY && scrollTop > 60;
+  header.classList.toggle('hidden', hide);
+  headerLastScrollY = scrollTop;
+}
+
+function handleMainScroll() {
+  updateHeaderOnScroll(getMainScrollTop());
+}
+
 // ─── НАВІГАЦІЯ МІЖ СТОРІНКАМИ ───────────────────────────────
 function switchPage(page, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -2659,17 +2720,13 @@ function switchPage(page, btn) {
   const tabsWrap = document.getElementById('cat-tabs-wrap');
   if (tabsWrap) tabsWrap.style.display = page === 'products' ? '' : 'none';
 
-  // Рендеримо сторінки, які не рендерились раніше
+  resetHeaderScrollState(page);
+
   if (page === 'cart') {
     renderCart();
-    // Прокручуємо кошик вгору при відкритті
     const cartScroll = document.getElementById('cart-list');
-    // Якщо є товари що очікують видалення — прокручуємо до них
     if (cartScroll) cartScroll.scrollTop = 0;
   }
-  
-  // Рендеримо акції при першому відкритті сторінки
-  document.querySelector('.header')?.classList.remove('hidden');
 }
 
 // ─── ЗАВАНТАЖЕННЯ ТОВАРІВ ────────────────────────────────────
@@ -2982,12 +3039,34 @@ function initLightboxSwipe() {
 }
 
 // ─── МОДАЛЬНЕ ВІКНО ТОВАРУ ───────────────────────────────────────────────
-function openModal(id, source = 'main') {
-  if (Date.now() < modalIgnoreOpenUntil) return; // запобігаємо випадковому відкриттю модального вікна відразу після закриття (наприклад, при свайпі для закриття, щоб не відкривалось знову від цього ж свайпу)
+let modalIsClosing = false;
+let modalSavedScrollY = 0;
+let modalIgnoreOpenUntil = 0;
+
+function finishModalClose() {
+  const backdrop = document.getElementById('modal-backdrop');
+  const modalEl = document.getElementById('modal');
+  modalIsClosing = false;
   if (modalCloseTimer) {
     clearTimeout(modalCloseTimer);
     modalCloseTimer = null;
   }
+  backdrop.classList.remove('open');
+  modalEl.style.transform = '';
+  modalEl.style.opacity = '';
+  modalEl.style.transition = '';
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  const mainScroll = getMainScrollEl();
+  if (mainScroll) mainScroll.scrollTop = modalSavedScrollY;
+  else window.scrollTo(0, modalSavedScrollY);
+  headerLastScrollY = modalSavedScrollY;
+  document.getElementById('main-header')?.classList.remove('hidden');
+  if (currentProduct) updateCardBadge(currentProduct.id);
+}
+
+function openModal(id, source = 'main') {
+  if (modalIsClosing || Date.now() < modalIgnoreOpenUntil) return;
 
   const pool = source === 'custom' ? CUSTOM_PRODUCTS : PRODUCTS; // вибираємо пул товарів в залежності від джерела (основний каталог чи індивідуальні замовлення)
   currentProduct = pool.find(p => p.id === id);
@@ -3041,87 +3120,89 @@ function openModal(id, source = 'main') {
   document.getElementById('m-qty').textContent = modalQty;
   updateModalAddBtn();
 
-  // Блокування скролу сторінки при відкритті модального вікна. Це забезпечує фокус користувача на модальному вікні та запобігає випадковому скролінгу фону, що може бути дезорієнтуючим.
-  const scrollY = window.scrollY;
+  modalSavedScrollY = getMainScrollTop();
   document.body.classList.add('modal-open');
-  document.body.style.top = `-${scrollY}px`;
+  document.body.style.top = `-${modalSavedScrollY}px`;
 
-  // Відкриваємо модальне вікно з анімацією. Додаємо клас для бекдропа, який робить його видимим, та ініціалізуємо обробники свайпів для модального вікна, що дозволяє користувачам закривати його жестами.
   const modalEl = document.getElementById('modal');
-  document.getElementById('modal-backdrop').classList.add('open');
+  const backdrop = document.getElementById('modal-backdrop');
+  backdrop.classList.add('open');
   initModalSwipe();
-  modalEl.classList.remove('modal-close-anim');
-  modalEl.style.transform = '';
-  modalEl.style.transition = '';
-  modalEl.classList.remove('modal-enter');
-  void modalEl.offsetWidth;
-  modalEl.classList.add('modal-enter');
+
+  modalEl.style.transition = 'none';
+  modalEl.style.transform = 'translateY(100%)';
+  modalEl.style.opacity = '0.6';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      modalEl.style.transition = 'transform .28s cubic-bezier(.34,1.2,.64,1), opacity .22s ease';
+      modalEl.style.transform = 'translateY(0)';
+      modalEl.style.opacity = '1';
+    });
+  });
 }
 
-// Закриває модальне вікно з анімацією, скидає зум і позицію слайдів, оновлює бейджі на картках та відкриває модальне вікно подарунка якщо воно було відкрито раніше. Це забезпечує плавний перехід при закритті модального вікна та підтримує актуальний стан інтерфейсу.
-function closeModal() {
+function closeModal(dragOffset = 0) {
   const backdrop = document.getElementById('modal-backdrop');
   const modalEl = document.getElementById('modal');
-  if (!backdrop.classList.contains('open')) return;
-  if (modalEl.classList.contains('modal-close-anim') && modalCloseTimer) return;
+  if (!backdrop.classList.contains('open') || modalIsClosing) return;
 
-  if (modalCloseTimer) clearTimeout(modalCloseTimer);
-  modalIgnoreOpenUntil = Date.now() + 500;
-  blockModalGhostClicks(500);
+  modalIsClosing = true;
+  modalIgnoreOpenUntil = Date.now() + 400;
+
+  if (window._modalSwipeController) {
+    window._modalSwipeController.abort();
+    window._modalSwipeController = null;
+  }
 
   zoomScale = 1;
   document.querySelectorAll('.carousel-slide img').forEach(img => { img.style.transform = ''; });
 
-  const scrollY = parseInt(document.body.style.top || '0', 10) * -1;
-  modalEl.style.transform = '';
-  modalEl.style.transition = '';
-  modalEl.classList.remove('modal-enter');
-  modalEl.classList.add('modal-close-anim');
+  const startY = dragOffset > 0 ? dragOffset : 0;
+  modalEl.style.transition = 'none';
+  modalEl.style.transform = `translateY(${startY}px)`;
+  modalEl.style.opacity = startY > 80 ? '0.4' : '1';
 
-  modalCloseTimer = setTimeout(() => {
-    modalCloseTimer = null;
-    backdrop.classList.remove('open');
-    modalEl.classList.remove('modal-close-anim');
-    document.body.classList.remove('modal-open');
-    document.body.style.top = '';
-    window.scrollTo(0, scrollY);
-    if (currentProduct) updateCardBadge(currentProduct.id);
-  }, 220);
-
-  if (window._giftModalWasOpen) {
-    window._giftModalWasOpen = false;
-    setTimeout(openGiftModal, 280);
-  }
-}
-
-function blockModalGhostClicks(ms) {
-  if (window._modalClickBlocker) {
-    document.removeEventListener('click', window._modalClickBlocker, true);
-    clearTimeout(window._modalClickBlockTimer);
-  }
-  window._modalClickBlocker = e => {
-    if (e.target.closest('.card, .card-btn, .cart-item-emoji')) {
-      e.stopPropagation();
-      e.preventDefault();
+  let closeFinished = false;
+  const onDone = () => {
+    if (closeFinished) return;
+    closeFinished = true;
+    modalEl.removeEventListener('transitionend', onTransitionEnd);
+    if (modalCloseTimer) {
+      clearTimeout(modalCloseTimer);
+      modalCloseTimer = null;
     }
+    finishModalClose();
   };
-  document.addEventListener('click', window._modalClickBlocker, true);
-  window._modalClickBlockTimer = setTimeout(() => {
-    document.removeEventListener('click', window._modalClickBlocker, true);
-    window._modalClickBlocker = null;
-  }, ms);
+  const onTransitionEnd = e => {
+    if (e.target !== modalEl || e.propertyName !== 'transform') return;
+    onDone();
+  };
+
+  modalEl.addEventListener('transitionend', onTransitionEnd);
+  if (modalCloseTimer) clearTimeout(modalCloseTimer);
+  modalCloseTimer = setTimeout(onDone, 320);
+
+  requestAnimationFrame(() => {
+    modalEl.style.transition = 'transform .26s ease, opacity .22s ease';
+    modalEl.style.transform = 'translateY(100%)';
+    modalEl.style.opacity = '0';
+  });
+
+  const reopenGift = window._giftModalWasOpen;
+  if (reopenGift) window._giftModalWasOpen = false;
+  setTimeout(() => {
+    if (reopenGift) openGiftModal();
+  }, 300);
 }
 
-// Закриває модальне вікно при кліку на бекдроп, але тільки якщо клік був саме по бекдропу, а не по самому модальному вікну або його вмісту. Це дозволяє користувачам закривати модальне вікно, натискаючи поза його межами, що є інтуїтивним жестом для закриття.
 function closeIfBackdrop(event) {
+  if (modalIsClosing) return;
   if (event.target !== document.getElementById('modal-backdrop')) return;
-  event.preventDefault();
   closeModal();
 }
 
 // ─── SWIPE TO CLOSE MODAL ───────────────────────────────────
 let modalCloseTimer = null;
-let modalIgnoreOpenUntil = 0;
 let modalSwipeY = null;
 let modalSwipeStartY = null;
 
@@ -3175,14 +3256,13 @@ function initModalSwipe() {
     const dy = e.changedTouches[0].clientY - modalSwipeStartY;
 
     if (dy > 140) {
-      m.style.transition = '';
-      m.style.transform = '';
-      closeModal();
-    } else {
-      m.style.transition = 'transform .3s cubic-bezier(.34,1.2,.64,1)';
-      m.style.transform = '';
-      setTimeout(() => { m.style.transition = ''; }, 300);
+      modalSwipeStartY = null;
+      closeModal(dy);
+      return;
     }
+    m.style.transition = 'transform .3s cubic-bezier(.34,1.2,.64,1)';
+    m.style.transform = '';
+    setTimeout(() => { m.style.transition = ''; }, 300);
     modalSwipeStartY = null;
   }, { passive: true, signal });
     let mouseDown = false;
@@ -3212,14 +3292,13 @@ function initModalSwipe() {
     const dy = e.clientY - modalSwipeStartY;
 
     if (dy > 140) {
-      m.style.transition = '';
-      m.style.transform = '';
-      closeModal();
-    } else {
-      m.style.transition = 'transform .3s cubic-bezier(.34,1.2,.64,1)';
-      m.style.transform = '';
-      setTimeout(() => { m.style.transition = ''; }, 300);
+      modalSwipeStartY = null;
+      closeModal(dy);
+      return;
     }
+    m.style.transition = 'transform .3s cubic-bezier(.34,1.2,.64,1)';
+    m.style.transform = '';
+    setTimeout(() => { m.style.transition = ''; }, 300);
     modalSwipeStartY = null;
   }, { signal });
 }
@@ -3328,7 +3407,8 @@ function shareProduct() {
   document.addEventListener('mousedown', e => {
     // Щоб не було конфліктів з кліками по інтерактивним елементам, ми перевіряємо, чи клік був не по модалці, навігації, табах та інших елементах, де скрол не потрібен. Це дозволяє користувачам взаємодіяти з цими елементами без випадкового скролінгу сторінки.
     if (e.target.closest('.modal-backdrop, .bottom-nav, .tabs, .tab, .header, .cat-tabs-wrap')) return;
-    scrollEl = document.scrollingElement || document.documentElement;
+    if (isCartPageActive()) return;
+    scrollEl = getMainScrollEl() || document.scrollingElement || document.documentElement;
     if (scrollEl.scrollHeight <= scrollEl.clientHeight) scrollEl = document.body;
     isDown = true;
     didDrag = false;
@@ -3400,17 +3480,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Завантажуємо товари та рендеримо першу категорію
   await loadProducts();
 
-  // Ховаємо хедер при скролі
-  let lastScrollY = 0;
-  const header = document.querySelector('.header');
-  // Функція для обробки скролу, яка визначає напрямок скролу та відповідно показує або ховає хедер. Якщо користувач скролить вниз і пройшов більше 60px, хедер ховається, щоб забезпечити більше простору для перегляду контенту. Якщо користувач скролить вгору, хедер знову з'являється, забезпечуючи легкий доступ до навігації.
-  function handleScroll() {
-    const y = window.scrollY;
-    header.classList.toggle('hidden', y > lastScrollY && y > 60);
-    lastScrollY = y;
+  resetHeaderScrollState('products');
+  const mainScrollEl = getMainScrollEl();
+  if (mainScrollEl) {
+    mainScrollEl.addEventListener('scroll', handleMainScroll, { passive: true });
   }
-  // Додаємо обробник скролу з пасивною опцією для покращення продуктивності. Це дозволяє браузеру оптимізувати обробку події скролу, забезпечуючи більш плавний досвід користувача, особливо на мобільних пристроях.
-  window.addEventListener('scroll', handleScroll, { passive: true });
+  const cartListEl = document.getElementById('cart-list');
+  if (cartListEl) {
+    cartListEl.addEventListener('scroll', () => {
+      if (isCartPageActive()) {
+        document.getElementById('main-header')?.classList.remove('hidden');
+      }
+    }, { passive: true });
+  }
 
   renderGrid('all');
   renderSales();
