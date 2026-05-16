@@ -801,7 +801,7 @@
   }
   .cart-comment:focus { outline: none; border-color: var(--tg-blue); }
   .cart-total-row {
-    display: flex; justify-content: space-between; align-items: baseline;
+    display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 10px;
   }
   .cart-total-label { font-size: 13px; color: var(--muted); font-weight: 600; }
@@ -1135,8 +1135,8 @@
   .coupon-input:focus { border-color: var(--accent); }
   .coupon-input:disabled { opacity: .6; }
   .coupon-btn {
-    padding: 11px 18px; background: var(--accent); color: #fff;
-    border: none; border-radius: 12px; font-size: 14px; font-weight: 700;
+    padding: 11px 18px; background: #fff; color: var(--tg-blue);
+    border: 1.5px solid var(--tg-blue); border-radius: 12px; font-size: 14px; font-weight: 700;
     cursor: pointer; white-space: nowrap; transition: opacity .2s, transform .1s;
   }
   .coupon-btn:active { transform: scale(.97); }
@@ -1156,11 +1156,11 @@
   .cart-old-price {
     font-size: 13px; font-weight: 600; color: var(--muted);
     text-decoration: line-through;
-    max-height: 0; overflow: hidden; opacity: 0;
-    transition: max-height .3s ease, opacity .3s ease;
+    display: grid; grid-template-rows: 0fr; opacity: 0;
+    transition: grid-template-rows .35s ease, opacity .3s ease;
   }
   .cart-old-price.visible {
-    max-height: 30px; opacity: 1;
+    grid-template-rows: 1fr; opacity: 1;
   }
   @keyframes countDown {
     from { transform: translateY(-8px); opacity: 0; }
@@ -1269,7 +1269,7 @@
       <div class="cart-total-row">
         <span class="cart-total-label">Разом:</span>
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
-          <span class="cart-old-price" id="cartOldPrice"></span>
+          <span class="cart-old-price" id="cartOldPrice"><span></span></span>
           <span class="cart-total-sum" id="cart-total">0 ₴</span>
         </div>
       </div>
@@ -1788,15 +1788,15 @@ function renderCart() {
   const discount = appliedCoupon ? appliedCoupon.discount : 0;
   const finalTotal = rawTotal - discount;
 
-  // Показуємо стару ціну з перекресленням, якщо є знижка
+  // Показуємо стару ціну з анімацією, якщо є знижка
   const oldPriceEl = document.getElementById('cartOldPrice');
   if (oldPriceEl) {
     if (discount > 0) {
-      oldPriceEl.textContent = `${rawTotal} ₴`;
+      oldPriceEl.querySelector('span').textContent = `${rawTotal} ₴`;
       oldPriceEl.classList.add('visible');
     } else {
       oldPriceEl.classList.remove('visible');
-      oldPriceEl.textContent = '';
+      setTimeout(() => oldPriceEl.querySelector('span').textContent = '', 350);
     }
   }
 
