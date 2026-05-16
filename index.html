@@ -99,22 +99,24 @@
   /* Контент скролиться в #main-scroll, не в window */
   #main-scroll {
     position: fixed;
-    top: 68px;
+    top: 0;
     left: 0;
     right: 0;
     bottom: calc(60px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+    padding-top: 68px;
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
-    transition: top .3s ease;
+    transition: padding-top .3s ease;
   }
-  /* Коли хедер сховано — контент піднімається вгору (без сірої смуги) */
-  .header.hidden ~ #main-scroll:not(.cart-mode) {
-    top: 0;
+  #main-scroll.header-collapsed:not(.cart-mode) {
+    padding-top: 0;
   }
   #main-scroll.cart-mode {
     overflow: hidden;
+    padding-top: 68px;
   }
 
   .header-logo {
@@ -2666,7 +2668,14 @@ function updateCartTotal() {
 }
 
 // ─── ХЕДЕР: ХОВАННЯ ПРИ СКРОЛІ ───────────────────────────────
+const HEADER_SCROLL_HEIGHT = 68;
+const HEADER_HIDE_AFTER_Y = 72;
+const HEADER_DIR_DELTA = 12;
+
 let headerLastScrollY = 0;
+let headerIsHidden = false;
+let headerScrollLock = false;
+let headerToggleUntil = 0;
 
 function getMainScrollEl() {
   return document.getElementById('main-scroll');
@@ -2680,11 +2689,35 @@ function isCartPageActive() {
   return document.getElementById('page-cart')?.classList.contains('active');
 }
 
+function setHeaderHidden(hidden) {
+  if (headerIsHidden === hidden) return;
+
+  const header = document.getElementById('main-header');
+  const mainScroll = getMainScrollEl();
+  if (!header || !mainScroll || isCartPageActive()) return;
+
+  headerIsHidden = hidden;
+  header.classList.toggle('hidden', hidden);
+  mainScroll.classList.toggle('header-collapsed', hidden);
+
+  headerScrollLock = true;
+  headerToggleUntil = Date.now() + 320;
+  const nextTop = Math.max(0, mainScroll.scrollTop + (hidden ? HEADER_SCROLL_HEIGHT : -HEADER_SCROLL_HEIGHT));
+  mainScroll.scrollTop = nextTop;
+  headerLastScrollY = nextTop;
+  requestAnimationFrame(() => {
+    headerScrollLock = false;
+  });
+}
+
 function resetHeaderScrollState(page) {
   const header = document.getElementById('main-header');
   const mainScroll = getMainScrollEl();
+  headerIsHidden = false;
+  headerScrollLock = false;
   header?.classList.remove('hidden');
   if (mainScroll) {
+    mainScroll.classList.remove('header-collapsed');
     mainScroll.classList.toggle('cart-mode', page === 'cart');
     if (page !== 'cart') mainScroll.scrollTop = 0;
   }
@@ -2693,15 +2726,29 @@ function resetHeaderScrollState(page) {
 
 function updateHeaderOnScroll(scrollTop) {
   const header = document.getElementById('main-header');
-  if (!header) return;
+  if (!header || headerScrollLock || Date.now() < headerToggleUntil) return;
 
   if (isCartPageActive() || document.body.classList.contains('modal-open')) {
-    header.classList.remove('hidden');
+    if (headerIsHidden) setHeaderHidden(false);
+    else {
+      header.classList.remove('hidden');
+      getMainScrollEl()?.classList.remove('header-collapsed');
+    }
+    headerLastScrollY = scrollTop;
     return;
   }
 
-  const hide = scrollTop > headerLastScrollY && scrollTop > 60;
-  header.classList.toggle('hidden', hide);
+  const delta = scrollTop - headerLastScrollY;
+  if (Math.abs(delta) < HEADER_DIR_DELTA) return;
+
+  if (scrollTop <= 8) {
+    setHeaderHidden(false);
+  } else if (!headerIsHidden && delta > 0 && scrollTop > HEADER_HIDE_AFTER_Y) {
+    setHeaderHidden(true);
+  } else if (headerIsHidden && delta < 0) {
+    setHeaderHidden(false);
+  }
+
   headerLastScrollY = scrollTop;
 }
 
@@ -3060,8 +3107,11 @@ function finishModalClose() {
   const mainScroll = getMainScrollEl();
   if (mainScroll) mainScroll.scrollTop = modalSavedScrollY;
   else window.scrollTo(0, modalSavedScrollY);
+  headerIsHidden = false;
+  headerToggleUntil = 0;
   headerLastScrollY = modalSavedScrollY;
   document.getElementById('main-header')?.classList.remove('hidden');
+  mainScroll?.classList.remove('header-collapsed');
   if (currentProduct) updateCardBadge(currentProduct.id);
 }
 
