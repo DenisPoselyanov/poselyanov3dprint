@@ -258,6 +258,8 @@
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+  }
+  .modal.modal-enter {
     animation: slideUp .28s cubic-bezier(.34,1.2,.64,1);
   }
   @keyframes slideUp {
@@ -1945,7 +1947,7 @@
 </div>
 
 <!-- PRODUCT MODAL -->
-<div class="modal-backdrop" id="modal-backdrop" onclick="closeIfBackdrop(event)">
+<div class="modal-backdrop" id="modal-backdrop" onpointerdown="closeIfBackdrop(event)">
   <div class="modal" id="modal">
     <div class="modal-handle"></div>
 
@@ -1965,7 +1967,7 @@
       <span class="modal-title">Замовлення</span>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="modal-share-btn" onclick="shareProduct()" title="Поділитись">🔗</button>
-        <button class="modal-close" onclick="closeModal()">✕</button>
+        <button type="button" class="modal-close" onpointerdown="event.stopPropagation(); event.preventDefault(); closeModal()">✕</button>
       </div>
     </div>
 
@@ -2981,8 +2983,13 @@ function initLightboxSwipe() {
 
 // ─── МОДАЛЬНЕ ВІКНО ТОВАРУ ───────────────────────────────────────────────
 function openModal(id, source = 'main') {
-  // В залежності від джерела (основні товари чи індивідуальні), ми шукаємо товар у відповідному масиві. Це дозволяє нам підтримувати окремі набори товарів для різних категорій, якщо це необхідно.
-  const pool = source === 'custom' ? CUSTOM_PRODUCTS : PRODUCTS;
+  if (Date.now() < modalIgnoreOpenUntil) return; // запобігаємо випадковому відкриттю модального вікна відразу після закриття (наприклад, при свайпі для закриття, щоб не відкривалось знову від цього ж свайпу)
+  if (modalCloseTimer) {
+    clearTimeout(modalCloseTimer);
+    modalCloseTimer = null;
+  }
+
+  const pool = source === 'custom' ? CUSTOM_PRODUCTS : PRODUCTS; // вибираємо пул товарів в залежності від джерела (основний каталог чи індивідуальні замовлення)
   currentProduct = pool.find(p => p.id === id);
   if (!currentProduct) return;
   currentProduct._isCustom = source === 'custom';
@@ -3040,24 +3047,41 @@ function openModal(id, source = 'main') {
   document.body.style.top = `-${scrollY}px`;
 
   // Відкриваємо модальне вікно з анімацією. Додаємо клас для бекдропа, який робить його видимим, та ініціалізуємо обробники свайпів для модального вікна, що дозволяє користувачам закривати його жестами.
+  const modalEl = document.getElementById('modal');
   document.getElementById('modal-backdrop').classList.add('open');
   initModalSwipe();
-  document.getElementById('modal').classList.remove('modal-close-anim');
+  modalEl.classList.remove('modal-close-anim');
+  modalEl.style.transform = '';
+  modalEl.style.transition = '';
+  modalEl.classList.remove('modal-enter');
+  void modalEl.offsetWidth;
+  modalEl.classList.add('modal-enter');
 }
 
-// Закриває модальне вікно з анімацією, скидає зум і позицію слайдів каруселі, розблоковує скрол сторінки та оновлює бейджі на картках товарів. Якщо модальне вікно було відкрито з подарунком, після закриття ми відкриваємо модальне вікно вибору подарунка.
+// Закриває модальне вікно з анімацією, скидає зум і позицію слайдів, оновлює бейджі на картках та відкриває модальне вікно подарунка якщо воно було відкрито раніше. Це забезпечує плавний перехід при закритті модального вікна та підтримує актуальний стан інтерфейсу.
 function closeModal() {
-  zoomScale = 1;
-  document.querySelectorAll('.carousel-slide img').forEach(img => img.style.transform = '');
-  const modal    = document.getElementById('modal');
   const backdrop = document.getElementById('modal-backdrop');
-  const scrollY  = parseInt(document.body.style.top || '0') * -1;
+  const modalEl = document.getElementById('modal');
+  if (!backdrop.classList.contains('open')) return;
+  if (modalEl.classList.contains('modal-close-anim') && modalCloseTimer) return;
 
-  modal.classList.add('modal-close-anim');
+  if (modalCloseTimer) clearTimeout(modalCloseTimer);
+  modalIgnoreOpenUntil = Date.now() + 500;
+  blockModalGhostClicks(500);
 
-  setTimeout(() => {
+  zoomScale = 1;
+  document.querySelectorAll('.carousel-slide img').forEach(img => { img.style.transform = ''; });
+
+  const scrollY = parseInt(document.body.style.top || '0', 10) * -1;
+  modalEl.style.transform = '';
+  modalEl.style.transition = '';
+  modalEl.classList.remove('modal-enter');
+  modalEl.classList.add('modal-close-anim');
+
+  modalCloseTimer = setTimeout(() => {
+    modalCloseTimer = null;
     backdrop.classList.remove('open');
-    modal.classList.remove('modal-close-anim');
+    modalEl.classList.remove('modal-close-anim');
     document.body.classList.remove('modal-open');
     document.body.style.top = '';
     window.scrollTo(0, scrollY);
@@ -3070,14 +3094,34 @@ function closeModal() {
   }
 }
 
-// Додатковий обробник для закриття модального вікна при натисканні на бекдроп. Це покращує користувацький досвід, дозволяючи легко закривати модальне вікно, не шукаючи конкретну кнопку закриття.
-function closeIfBackdrop(event) {
-  if (event.target === document.getElementById('modal-backdrop')) {
-    closeModal();
+function blockModalGhostClicks(ms) {
+  if (window._modalClickBlocker) {
+    document.removeEventListener('click', window._modalClickBlocker, true);
+    clearTimeout(window._modalClickBlockTimer);
   }
+  window._modalClickBlocker = e => {
+    if (e.target.closest('.card, .card-btn, .cart-item-emoji')) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  };
+  document.addEventListener('click', window._modalClickBlocker, true);
+  window._modalClickBlockTimer = setTimeout(() => {
+    document.removeEventListener('click', window._modalClickBlocker, true);
+    window._modalClickBlocker = null;
+  }, ms);
+}
+
+// Закриває модальне вікно при кліку на бекдроп, але тільки якщо клік був саме по бекдропу, а не по самому модальному вікну або його вмісту. Це дозволяє користувачам закривати модальне вікно, натискаючи поза його межами, що є інтуїтивним жестом для закриття.
+function closeIfBackdrop(event) {
+  if (event.target !== document.getElementById('modal-backdrop')) return;
+  event.preventDefault();
+  closeModal();
 }
 
 // ─── SWIPE TO CLOSE MODAL ───────────────────────────────────
+let modalCloseTimer = null;
+let modalIgnoreOpenUntil = 0;
 let modalSwipeY = null;
 let modalSwipeStartY = null;
 
@@ -3092,7 +3136,7 @@ function initModalSwipe() {
 
   // Обробник для початку дотику. Якщо користувач торкнувся поза межами каруселі, ми фіксуємо початкову позицію по Y для подальшого визначення напрямку свайпа.
   m.addEventListener('touchstart', e => {
-    if (e.target.closest('.carousel-wrap, .carousel-slide')) {
+    if (e.target.closest('.carousel-wrap, .carousel-slide, .modal-close, .modal-share-btn, button, input, textarea')) {
       modalSwipeStartY = null;
       return;
     }
@@ -3131,18 +3175,9 @@ function initModalSwipe() {
     const dy = e.changedTouches[0].clientY - modalSwipeStartY;
 
     if (dy > 140) {
-      m.style.transition = 'transform .25s ease';
-      m.style.transform = `translateY(100%)`;
-      setTimeout(() => {
-        m.style.transition = '';
-        m.style.transform = '';
-        document.getElementById('modal-backdrop').classList.remove('open');
-        m.classList.remove('modal-close-anim');
-        const scrollY = parseInt(document.body.style.top || '0') * -1;
-        document.body.classList.remove('modal-open');
-        document.body.style.top = '';
-        window.scrollTo(0, scrollY);
-      }, 250);
+      m.style.transition = '';
+      m.style.transform = '';
+      closeModal();
     } else {
       m.style.transition = 'transform .3s cubic-bezier(.34,1.2,.64,1)';
       m.style.transform = '';
@@ -3153,6 +3188,10 @@ function initModalSwipe() {
     let mouseDown = false;
 
   m.addEventListener('mousedown', e => {
+    if (e.target.closest('.modal-close, .modal-share-btn, button, input, textarea')) {
+      modalSwipeStartY = null;
+      return;
+    }
     mouseDown = true;
     modalSwipeStartY = e.clientY;
   }, { signal });
@@ -3173,18 +3212,9 @@ function initModalSwipe() {
     const dy = e.clientY - modalSwipeStartY;
 
     if (dy > 140) {
-      m.style.transition = 'transform .25s ease';
-      m.style.transform = `translateY(100%)`;
-      setTimeout(() => {
-        m.style.transition = '';
-        m.style.transform = '';
-        document.getElementById('modal-backdrop').classList.remove('open');
-        m.classList.remove('modal-close-anim');
-        const scrollY = parseInt(document.body.style.top || '0') * -1;
-        document.body.classList.remove('modal-open');
-        document.body.style.top = '';
-        window.scrollTo(0, scrollY);
-      }, 250);
+      m.style.transition = '';
+      m.style.transform = '';
+      closeModal();
     } else {
       m.style.transition = 'transform .3s cubic-bezier(.34,1.2,.64,1)';
       m.style.transform = '';
