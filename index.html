@@ -1266,7 +1266,6 @@
         <div class="coupon-status" id="couponStatus"></div>
       </div>
 
-      /* Рядок для відображення знижки, який з'являється при застосуванні купона або акції */
       <div class="cart-total-row">
         <span class="cart-total-label">Разом:</span>
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
@@ -2694,6 +2693,14 @@ async function applyCoupon() {
       promoSwipeX = null;
       startPromoTimer();
     }, { passive: true });
+
+    // Додатковий обробник для навігації між слайдами за допомогою колеса миші. Це дозволяє користувачам швидко перегортати слайди, використовуючи колесо прокрутки, що може бути зручним на десктопах.
+    scroll.addEventListener('wheel', e => {
+      e.preventDefault();
+      stopPromoTimer();
+      promoNav(e.deltaY > 0 ? 1 : -1);
+      startPromoTimer();
+    }, { passive: false });
   }
 
   function updatePromo() {
