@@ -2248,33 +2248,23 @@ function initLightboxSwipe() {
       }
     }, { passive: true });
 
-    // --- відпускання пальців ---
-    l.addEventListener('touchend', e => {
-      lbPinchDist = null;
-      // Скидаємо зум після відпускання пальців
-      if (lbZoom > 1) {
-        lbZoom = 1;
-        const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
-        if (img) { img.style.transition = 'transform .3s ease'; img.style.transform = ''; setTimeout(() => img.style.transition = '', 300); }
-      }
-  }, { passive: true });
-
-  l.addEventListener('touchmove', e => {
-    if (e.touches.length === 2 && lbPinchDist !== null) {
-      const newDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      lbZoom = Math.min(Math.max(lbZoom * (newDist / lbPinchDist), 1), 4);
-      lbPinchDist = newDist;
-      const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
-      if (img) img.style.transform = lbZoom > 1 ? `scale(${lbZoom})` : '';
-    }
-  }, { passive: true });
-
-  // --- один палець = свайп ---
+  // --- відпускання пальців (зум + свайп) ---
   l.addEventListener('touchend', e => {
     lbPinchDist = null;
+
+    // Якщо був pinch — скидаємо зум і виходимо
+    if (e.touches.length === 0 && lbZoom > 1) {
+      lbZoom = 1;
+      const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
+      if (img) {
+        img.style.transition = 'transform .3s ease';
+        img.style.transform = '';
+        setTimeout(() => img.style.transition = '', 300);
+      }
+      lbSwipeX = null;
+      return;
+    }
+
     if (lbSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - lbSwipeX;
     const dy = e.changedTouches[0].clientY - lbSwipeY;
@@ -2321,6 +2311,19 @@ function initLightboxSwipe() {
       img.style.transform = `scale(${lbZoom})`;
     }
   }, { passive: false });
+
+    // --- відпускання Ctrl = скидаємо зум ---
+  document.addEventListener('keyup', e => {
+    if (e.key !== 'Control') return;
+    if (lbZoom <= 1) return;
+    lbZoom = 1;
+    const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
+    if (img) {
+      img.style.transition = 'transform .3s ease';
+      img.style.transform = '';
+      setTimeout(() => img.style.transition = '', 300);
+    }
+  });
 }
 
 // ─── МОДАЛЬНЕ ВІКНО ТОВАРУ ───────────────────────────────────────────────
