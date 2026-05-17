@@ -301,7 +301,7 @@
     height: 260px;
     overflow: hidden;
     background: linear-gradient(135deg, #f0f4ff, #e8f5ff);
-    touch-action: pan-y;
+    touch-action: none;
     user-select: none;
   }
   .carousel-track {
@@ -328,6 +328,7 @@
     object-fit: cover;
     width: 100%; height: 100%;
     pointer-events: none;
+    will-change: transform;
   }
   .carousel-slide .slide-emoji {
     display: flex; align-items: center; justify-content: center;
@@ -379,7 +380,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    touch-action: pan-y;
+    touch-action: none;
     transition: opacity .22s ease, transform .22s ease;
   }
   .lightbox.open { display: flex; animation: lbIn .2s ease; }
@@ -410,6 +411,7 @@
     object-fit: contain;
     border-radius: 8px;
     pointer-events: none;
+    will-change: transform;
   }
   .lightbox-slide .slide-emoji {
     font-size: 100px;
@@ -2280,13 +2282,63 @@ function carouselNav(dir) {
   carouselIndex = (carouselIndex + dir + photos.length) % photos.length;
   updateCarousel();
   const prev = getActiveSlide()?.querySelector('img');
-  if (prev) prev.style.transform = '';
+  if (prev) resetImageZoom(prev, false);
   zoomScale = 1;
+  carPinching = false;
+  pinchDist = null;
+}
+
+const ZOOM_MAX = 4;
+
+function pinchTouchesDistance(touches) {
+  return Math.hypot(
+    touches[0].clientX - touches[1].clientX,
+    touches[0].clientY - touches[1].clientY
+  );
+}
+
+function pinchTouchesCenter(touches) {
+  return {
+    x: (touches[0].clientX + touches[1].clientX) / 2,
+    y: (touches[0].clientY + touches[1].clientY) / 2,
+  };
+}
+
+function zoomOriginPercents(img, centerX, centerY) {
+  const rect = img.getBoundingClientRect();
+  if (!rect.width || !rect.height) return { x: 50, y: 50 };
+  return {
+    x: Math.min(100, Math.max(0, ((centerX - rect.left) / rect.width) * 100)),
+    y: Math.min(100, Math.max(0, ((centerY - rect.top) / rect.height) * 100)),
+  };
+}
+
+function applyPinchZoom(img, scale, centerX, centerY) {
+  if (!img) return;
+  const o = zoomOriginPercents(img, centerX, centerY);
+  img.style.transition = 'none';
+  img.style.transformOrigin = `${o.x}% ${o.y}%`;
+  img.style.transform = scale > 1.001 ? `scale(${scale})` : '';
+}
+
+function resetImageZoom(img, animate = true) {
+  if (!img) return;
+  if (animate) {
+    img.style.transition = 'transform .35s cubic-bezier(.34,1.2,.64,1)';
+    img.style.transform = '';
+    img.style.transformOrigin = 'center center';
+    setTimeout(() => { img.style.transition = ''; }, 350);
+  } else {
+    img.style.transition = '';
+    img.style.transform = '';
+    img.style.transformOrigin = '';
+  }
 }
 
 let carSwipeX = null;
-let pinchDist = null; // відстань між пальцями
-let zoomScale = 1;    // поточний зум активного слайду
+let pinchDist = null;
+let zoomScale = 1;
+let carPinching = false;
 
 function getActiveSlide() {
   return document.querySelectorAll('.carousel-slide')[carouselIndex];
@@ -2294,29 +2346,55 @@ function getActiveSlide() {
 
 // Ініціалізація свайпів для каруселі: один палець — навігація, два пальці — зум
 function initCarouselSwipe() {
-  // ... (клонування залишити як є) ...
   const w = document.getElementById('carousel-wrap');
 
-  // --- свайп між фото (один палець) ---
   w.addEventListener('touchstart', e => {
     if (e.touches.length === 1) {
-      carSwipeX = e.touches[0].clientX;
+      if (zoomScale <= 1) carSwipeX = e.touches[0].clientX;
       pinchDist = null;
+      carPinching = false;
     } else if (e.touches.length === 2) {
       carSwipeX = null;
-      pinchDist = null; // більше не потрібен
+      pinchDist = pinchTouchesDistance(e.touches);
+      carPinching = true;
     }
   }, { passive: true });
 
-  // --- свайп між фото (один палець) ---
+  w.addEventListener('touchmove', e => {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    const img = getActiveSlide()?.querySelector('img');
+    if (!img) return;
+    if (pinchDist === null) {
+      pinchDist = pinchTouchesDistance(e.touches);
+      return;
+    }
+    const newDist = pinchTouchesDistance(e.touches);
+    const center = pinchTouchesCenter(e.touches);
+    zoomScale = Math.min(Math.max(zoomScale * (newDist / pinchDist), 1), ZOOM_MAX);
+    pinchDist = newDist;
+    carPinching = true;
+    carSwipeX = null;
+    applyPinchZoom(img, zoomScale, center.x, center.y);
+  }, { passive: false });
+
   w.addEventListener('touchend', e => {
+    if (carPinching) {
+      pinchDist = null;
+      if (e.touches.length > 0) return;
+      carPinching = false;
+      const img = getActiveSlide()?.querySelector('img');
+      zoomScale = 1;
+      resetImageZoom(img, true);
+      carSwipeX = null;
+      return;
+    }
     if (carSwipeX === null) return;
     const dx = e.changedTouches[0].clientX - carSwipeX;
     if (zoomScale <= 1 && Math.abs(dx) > 40) carouselNav(dx < 0 ? 1 : -1);
     carSwipeX = null;
   }, { passive: true });
 
-  // --- колесо миші = навігація між фото ---
   w.addEventListener('wheel', e => {
     if (e.ctrlKey) return;
     if (zoomScale > 1) return;
@@ -2354,6 +2432,7 @@ function updateLightbox(animate = true) {
   document.querySelectorAll('.lb-dot').forEach((d, i) => {
     d.classList.toggle('active', i === lbIndex);
   });
+  document.querySelectorAll('.lightbox-slide img').forEach(img => resetImageZoom(img, false));
 }
 
 // Закриває лайтбокс з анімацією затемнення і зсувом вниз, скидає зум і позицію слайдів, щоб при наступному відкритті вони були в початковому стані
@@ -2362,7 +2441,7 @@ function closeLightbox() {
   // Додаємо клас для анімації закриття (з затемненням і зсувом вниз), який триває 220ms
   l.classList.add('closing');
   // Скидаємо зум і позицію всіх слайдів, щоб при наступному відкритті вони були в початковому стані
-  l.querySelectorAll('.lightbox-slide img').forEach(img => img.style.transform = '');
+  l.querySelectorAll('.lightbox-slide img').forEach(img => resetImageZoom(img, false));
   setTimeout(() => {
     l.classList.remove('open');
     l.classList.remove('closing');
@@ -2386,113 +2465,125 @@ function initLightboxSwipe() {
   }, { signal });
   let lbZoom = 1;
   let lbPinchDist = null;
+  let lbPinching = false;
 
-  // закрити кнопкою
-  l.querySelector('.lightbox-close').addEventListener('click', () => {
+  function getLbImg() {
+    return l.querySelectorAll('.lightbox-slide img')[lbIndex];
+  }
+
+  function resetLbZoom(animate = true) {
     lbZoom = 1;
-    l.querySelectorAll('.lightbox-slide img').forEach(img => img.style.transform = '');
+    lbPinchDist = null;
+    lbPinching = false;
+    resetImageZoom(getLbImg(), animate);
+  }
+
+  l.querySelector('.lightbox-close').addEventListener('click', () => {
+    resetLbZoom(false);
+    l.querySelectorAll('.lightbox-slide img').forEach(img => resetImageZoom(img, false));
     const lb = document.getElementById('lightbox');
     lb.style.transition = 'opacity .22s ease, transform .22s ease';
     lb.style.opacity = '0';
     setTimeout(() => { lb.classList.remove('open'); lb.style.opacity = ''; lb.style.transition = ''; }, 220);
   }, { signal });
 
-    // --- два пальці = зум ---
-    let wasPinch = false;
-    l.addEventListener('touchstart', e => {
-      if (e.touches.length === 2) {
-        wasPinch = true;
-        lbPinchDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-        lbSwipeX = null;
-      } else {
-        wasPinch = false;
+  l.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      lbPinching = true;
+      lbPinchDist = pinchTouchesDistance(e.touches);
+      lbSwipeX = null;
+    } else if (e.touches.length === 1 && !lbPinching) {
+      if (lbZoom <= 1) {
         lbSwipeX = e.touches[0].clientX;
         lbSwipeY = e.touches[0].clientY;
-        lbPinchDist = null;
       }
-    }, { passive: true, signal });
+      lbPinchDist = null;
+    }
+  }, { passive: true, signal });
 
-  // --- відпускання пальців (зум + свайп) ---
+  l.addEventListener('touchmove', e => {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    const img = getLbImg();
+    if (!img) return;
+    if (lbPinchDist === null) {
+      lbPinchDist = pinchTouchesDistance(e.touches);
+      lbPinching = true;
+      return;
+    }
+    const newDist = pinchTouchesDistance(e.touches);
+    const center = pinchTouchesCenter(e.touches);
+    lbZoom = Math.min(Math.max(lbZoom * (newDist / lbPinchDist), 1), ZOOM_MAX);
+    lbPinchDist = newDist;
+    lbPinching = true;
+    lbSwipeX = null;
+    applyPinchZoom(img, lbZoom, center.x, center.y);
+  }, { passive: false, signal });
+
   l.addEventListener('touchend', e => {
-    lbPinchDist = null;
-
-    // Якщо був зум, то скидаємо його і не обробляємо свайп
-    if (wasPinch) {
-      wasPinch = false;
-      lbZoom = 1;
-      const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
-      if (img) {
-        img.style.transition = 'transform .3s ease';
-        img.style.transform = '';
-        img.style.transformOrigin = 'center center';
-        setTimeout(() => img.style.transition = '', 300);
-      }
+    if (lbPinching) {
+      lbPinchDist = null;
+      if (e.touches.length > 0) return;
+      resetLbZoom(true);
       lbSwipeX = null;
       return;
     }
 
-    if (lbSwipeX === null) return;
+    if (lbSwipeX === null || lbZoom > 1) return;
     const dx = e.changedTouches[0].clientX - lbSwipeX;
     const dy = e.changedTouches[0].clientY - lbSwipeY;
 
-    if (lbZoom <= 1 && Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
+    if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) {
       l.style.transition = 'opacity .22s ease, transform .22s ease';
       l.style.opacity = '0';
       l.style.transform = `translateY(${dy > 0 ? '80px' : '-80px'})`;
-      setTimeout(() => { l.classList.remove('open'); l.style.opacity = ''; l.style.transform = ''; l.style.transition = ''; lbZoom = 1; }, 220);
-      lbSwipeX = null; return;
+      setTimeout(() => {
+        l.classList.remove('open');
+        l.style.opacity = '';
+        l.style.transform = '';
+        l.style.transition = '';
+        resetLbZoom(false);
+      }, 220);
+      lbSwipeX = null;
+      return;
     }
     const photos = currentProduct?.photos || [];
-    if (lbZoom <= 1 && Math.abs(dx) > 40) {
+    if (Math.abs(dx) > 40) {
       lbIndex = (lbIndex + (dx < 0 ? 1 : -1) + photos.length) % photos.length;
+      lbZoom = 1;
       updateLightbox();
     }
-    lbSwipeX = null; lbSwipeY = null;
-  }, { passive: true });
+    lbSwipeX = null;
+    lbSwipeY = null;
+  }, { passive: true, signal });
 
-  // --- колесо миші = навігація ---
   l.addEventListener('wheel', e => {
     if (e.ctrlKey) return;
     if (lbZoom > 1) return;
     e.preventDefault();
     const photos = currentProduct?.photos || [];
     lbIndex = (lbIndex + (e.deltaY > 0 ? 1 : -1) + photos.length) % photos.length;
+    lbZoom = 1;
     updateLightbox();
   }, { passive: false, signal });
 
-  // --- колесо миші + Ctrl = зум ---
   l.addEventListener('wheel', e => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
+    const img = getLbImg();
     if (!img) return;
-    lbZoom = Math.min(Math.max(lbZoom * (e.deltaY < 0 ? 1.1 : 0.9), 1), 4);
+    lbZoom = Math.min(Math.max(lbZoom * (e.deltaY < 0 ? 1.1 : 0.9), 1), ZOOM_MAX);
     if (lbZoom <= 1) {
-      lbZoom = 1;
-      img.style.transition = 'transform .3s ease';
-      img.style.transform = '';
-      setTimeout(() => img.style.transition = '', 300);
+      resetLbZoom(true);
     } else {
-      img.style.transition = 'none';
-      img.style.transform = `scale(${lbZoom})`;
+      applyPinchZoom(img, lbZoom, e.clientX, e.clientY);
     }
   }, { passive: false, signal });
 
-    // --- відпускання Ctrl = скидаємо зум ---
   document.addEventListener('keyup', e => {
     if (e.key !== 'Control') return;
     if (lbZoom <= 1) return;
-    lbZoom = 1;
-    const img = l.querySelectorAll('.lightbox-slide img')[lbIndex];
-    if (img) {
-      img.style.transition = 'transform .3s ease';
-      img.style.transform = '';
-      img.style.transformOrigin = 'center center';
-      setTimeout(() => img.style.transition = '', 300);
-    }
+    resetLbZoom(true);
   }, { signal });
 }
 
@@ -2616,7 +2707,9 @@ function closeModal(dragOffset = 0) {
   }
 
   zoomScale = 1;
-  document.querySelectorAll('.carousel-slide img').forEach(img => { img.style.transform = ''; });
+  carPinching = false;
+  pinchDist = null;
+  document.querySelectorAll('.carousel-slide img').forEach(img => resetImageZoom(img, false));
 
   const startY = dragOffset > 0 ? dragOffset : 0;
   modalEl.style.transition = 'none';
@@ -2687,25 +2780,6 @@ function initModalSwipe() {
 
   // Обробник для руху пальцем. Якщо користувач рухає пальцем вниз, ми переміщаємо модальне вікно відповідно до руху пальця, створюючи ефект "витягування" модального вікна. Якщо користувач використовує два пальці, ми обробляємо це як жест зуму для зображення в каруселі.
   m.addEventListener('touchmove', e => {
-    if (e.touches.length === 2 && lbPinchDist !== null) {
-      const newDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      lbZoom = Math.min(Math.max(lbZoom * (newDist / lbPinchDist), 1), 4);
-      lbPinchDist = newDist;
-
-      const img = document.getElementById('lightbox').querySelectorAll('.lightbox-slide img')[lbIndex];
-      if (img) {
-        // Центр між двома пальцями відносно картинки
-        const rect = img.getBoundingClientRect();
-        const cx = ((e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left) / rect.width * 100;
-        const cy = ((e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top) / rect.height * 100;
-        img.style.transformOrigin = `${cx}% ${cy}%`;
-        img.style.transform = lbZoom > 1 ? `scale(${lbZoom})` : '';
-      }
-    }
-    // Якщо користувач рухає одним пальцем і початкова позиція зафіксована, ми переміщаємо модальне вікно відповідно до руху пальця по Y, створюючи ефект "витягування" модального вікна. Якщо користувач використовує два пальці, ми не обробляємо цей рух як свайп для закриття.
     if (modalSwipeStartY !== null && e.touches.length === 1) {
       const dy = e.touches[0].clientY - modalSwipeStartY;
       if (dy > 0) m.style.transform = `translateY(${dy}px)`;
