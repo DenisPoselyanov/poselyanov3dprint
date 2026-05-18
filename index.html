@@ -459,6 +459,56 @@
   .modal-share-btn:active { background: #e0e0e0; }
 
   /* Інформаційний блок з назвою, матеріалом та ціною в модальному вікні */
+  .filament-block {
+    padding: 0 18px 12px;
+    border-bottom: 1px solid var(--hairline, rgba(0,0,0,.06));
+  }
+  body.dark .filament-block {
+    border-bottom-color: rgba(255,255,255,.08);
+  }
+  .filament-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .filament-hint {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.35;
+    margin-bottom: 10px;
+  }
+  .filament-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .filament-swatch {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid rgba(0,0,0,.18);
+    background: var(--fil-bg, #ccc);
+    padding: 0;
+    flex-shrink: 0;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  body.dark .filament-swatch {
+    border-color: rgba(255,255,255,.28);
+  }
+  .filament-swatch.selected {
+    box-shadow: 0 0 0 3px var(--tg-blue, #3390ec);
+    transform: scale(1.06);
+  }
+  .filament-swatch:active {
+    transform: scale(0.95);
+  }
+
   .modal-product {
     display: flex; align-items: center; gap: 12px;
     margin: 16px 18px 12px;
@@ -1375,6 +1425,12 @@
       </div>
     </div>
 
+    <div class="filament-block" id="m-filament-block" style="display:none">
+      <div class="filament-label">Філамент PLA</div>
+      <div class="filament-hint" id="m-filament-hint">Обери колір PLA-філаменту для друку цього товару.</div>
+      <div class="filament-swatches" id="m-filament-swatches"></div>
+    </div>
+
     <!-- Кнопки кількості + "Додати в кошик" -->
     <div class="modal-qty-row">
       <button class="qty-btn" onclick="modalQtyChange(-1)">−</button>
@@ -1505,6 +1561,13 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function escapeAttr(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
+}
+
 function setGridHtml(grid, html) {
   const tpl = document.createElement('template');
   tpl.innerHTML = html;
@@ -1529,6 +1592,18 @@ const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', ant
 let PRODUCTS = [];
 // Глобальний масив індивідуальних товарів (заповнюється при завантаженні)
 let CUSTOM_PRODUCTS = [];
+// Кольори філаменту (filaments.json)
+let FILAMENTS = [];
+let modalFilamentId = null;
+
+function availableFilaments() {
+  return FILAMENTS.filter(f => f.available);
+}
+
+/** false у products.json → без вибору кольору для цього товару */
+function productWantsFilamentChoice(p) {
+  return !!(p && !p._isCustom && p.filamentChoice !== false);
+}
 
 // ─── КОШИК ──────────────────────────────────────────────────
 // Формат: [{ id, name, price, quantity, fromCustom, emoji, customValue }]
@@ -1624,6 +1699,20 @@ function addToCartFromModal() {
     ? (document.getElementById('m-custom-value')?.value.trim() || '')
     : '';
 
+  const wantFil = productWantsFilamentChoice(currentProduct);
+  const av = availableFilaments();
+  let filamentId = '';
+  let filamentName = '';
+  if (wantFil && av.length) {
+    const fm = av.find(f => f.id === modalFilamentId);
+    if (!fm) {
+      alert('Обери колір філаменту.');
+      return;
+    }
+    filamentId = fm.id;
+    filamentName = fm.name;
+  }
+
   // Якщо товар вже в кошику — оновлюємо кількість та кастомізацію (якщо індивідуальний)
   const existing = getCartItem(currentProduct.id);
 
@@ -1637,11 +1726,20 @@ function addToCartFromModal() {
       cart = cart.filter(i => i.id !== currentProduct.id);
     } else {
       if (currentProduct._isCustom && customVal) existing.customValue = customVal;
+      if (!currentProduct._isCustom) {
+        if (wantFil && av.length) {
+          existing.filamentId = filamentId;
+          existing.filamentName = filamentName;
+        } else {
+          delete existing.filamentId;
+          delete existing.filamentName;
+        }
+      }
     }
   } else {
     if (modalQty > 0) {
       // Якщо товару ще не було в кошику і кількість > 0 — додаємо його
-      cart.push({
+      const row = {
         id: currentProduct.id,
         name: currentProduct.name,
         price: currentProduct.price,
@@ -1650,7 +1748,12 @@ function addToCartFromModal() {
         emoji: currentProduct.emoji,
         photos: currentProduct.photos || [],
         customValue: customVal
-      });
+      };
+      if (wantFil && av.length) {
+        row.filamentId = filamentId;
+        row.filamentName = filamentName;
+      }
+      cart.push(row);
     }
   }
   saveCart();
@@ -1941,6 +2044,7 @@ function renderCart() {
       <div class="cart-item-info">
         <div class="cart-item-name">${item.name}</div>
         <div class="cart-item-price">${item.price} ₴ × ${item.quantity} = ${item.price * item.quantity} ₴</div>
+        ${!item.fromCustom && item.filamentName ? `<div class="cart-item-price" style="color:var(--muted);font-size:12px;margin-top:2px;">🎨 ${escapeHtml(item.filamentName)}</div>` : ''}
         ${item.customValue ? `<div class="cart-item-price" style="color:var(--tg-blue)">${item.customValue}</div>` : ''}
       </div>
       <div class="cart-item-controls">
@@ -2200,6 +2304,60 @@ async function loadProducts() {
     document.getElementById('grid').innerHTML =
       '<div class="empty"><div class="empty-ico">😕</div>Не вдалось завантажити товари. Спробуй пізніше.</div>';
   }
+}
+
+async function loadFilaments() {
+  try {
+    const r = await fetch('filaments.json');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    FILAMENTS = await r.json();
+  } catch (e) {
+    console.error('Помилка завантаження filaments.json:', e);
+    FILAMENTS = [];
+  }
+}
+
+function defaultFilamentId() {
+  const av = availableFilaments();
+  return av[0]?.id || '';
+}
+
+function onFilamentPick(fid) {
+  const f = availableFilaments().find(x => x.id === fid);
+  if (!f) return;
+  modalFilamentId = fid;
+  renderFilamentSwatches();
+}
+
+function renderFilamentSwatches() {
+  const sw = document.getElementById('m-filament-swatches');
+  if (!sw) return;
+  const list = availableFilaments();
+  sw.innerHTML = list.map(f => {
+    const sel = f.id === modalFilamentId ? ' selected' : '';
+    const hx = String(f.hex || '#ccc').replace(/[<>"']/g, '');
+    const id = String(f.id || '').replace(/[<>"']/g, '');
+    return `<button type="button" class="filament-swatch${sel}" style="--fil-bg:${hx}" data-fid="${id}" title="${escapeAttr(f.name)}" aria-label="${escapeAttr(f.name)}"></button>`;
+  }).join('');
+  sw.querySelectorAll('.filament-swatch').forEach(btn => {
+    btn.addEventListener('click', () => onFilamentPick(btn.dataset.fid));
+  });
+}
+
+function setupModalFilamentPicker() {
+  const block = document.getElementById('m-filament-block');
+  const av = availableFilaments();
+  if (!currentProduct || !productWantsFilamentChoice(currentProduct) || !av.length) {
+    if (block) block.style.display = 'none';
+    modalFilamentId = null;
+    return;
+  }
+  const existing = getCartItem(currentProduct.id);
+  let fid = existing?.filamentId || defaultFilamentId();
+  if (!av.find(f => f.id === fid)) fid = defaultFilamentId();
+  modalFilamentId = fid;
+  block.style.display = '';
+  renderFilamentSwatches();
 }
 
 // ─── РЕНДЕР ГРИДУ ТОВАРІВ ЗА КАТЕГОРІЄЮ ───────────────────────────────
@@ -2665,6 +2823,7 @@ function openModal(id, source = 'main') {
     wrapEl.classList.remove('visible');
   }
   buildCarousel(currentProduct.photos);
+  setupModalFilamentPicker();
 
   // Встановлюємо лічильник = кількість в кошику (або 1 якщо немає)
   const existingInCart = getCartItem(currentProduct.id);
@@ -2771,7 +2930,7 @@ function initModalSwipe() {
 
   // Обробник для початку дотику. Якщо користувач торкнувся поза межами каруселі, ми фіксуємо початкову позицію по Y для подальшого визначення напрямку свайпа.
   m.addEventListener('touchstart', e => {
-    if (e.target.closest('.carousel-wrap, .carousel-slide, .modal-close, .modal-share-btn, button, input, textarea')) {
+    if (e.target.closest('.carousel-wrap, .carousel-slide, .modal-close, .modal-share-btn, .filament-block, .filament-swatch, button, input, textarea')) {
       modalSwipeStartY = null;
       return;
     }
@@ -2803,7 +2962,7 @@ function initModalSwipe() {
     let mouseDown = false;
 
   m.addEventListener('mousedown', e => {
-    if (e.target.closest('.modal-close, .modal-share-btn, button, input, textarea')) {
+    if (e.target.closest('.modal-close, .modal-share-btn, .filament-block, .filament-swatch, button, input, textarea')) {
       modalSwipeStartY = null;
       return;
     }
@@ -2858,7 +3017,9 @@ async function submitOrder() {
       price:        i.price,
       quantity:     i.quantity,
       fromCustom:   i.fromCustom,
-      customValue:  i.customValue || ''
+      customValue:  i.customValue || '',
+      filament_id: i.fromCustom ? '' : (i.filamentId || ''),
+      filament_name: i.fromCustom ? '' : (i.filamentName || ''),
     })),
     total_price:  total,
     coupon_code:    appliedCoupon ? appliedCoupon.code : '',
@@ -3027,7 +3188,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   `).join('');
   
   // Завантажуємо товари та рендеримо першу категорію
-  await loadProducts();
+  await Promise.all([loadProducts(), loadFilaments()]);
 
   resetHeaderScrollState('products');
   const mainScrollEl = getMainScrollEl();

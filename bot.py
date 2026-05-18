@@ -33,6 +33,7 @@ WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"
 DB_FILE    = "users.db"
 PRODUCTS_FILE = "products.json"
 CUSTOM_PRODUCTS_FILE = "custom_products.json"
+FILAMENTS_FILE = "filaments.json"
 # Локально: false (працює без initData). На проді: true
 VALIDATE_INIT_DATA = os.environ.get("VALIDATE_INIT_DATA", "false").lower() in ("1", "true", "yes")
 CORS_ORIGINS = [
@@ -68,6 +69,33 @@ _products_mtime = 0.0
 _custom_mtime = 0.0
 PRODUCTS_CACHE = load_products_file(PRODUCTS_FILE)
 CUSTOM_PRODUCTS_CACHE = load_products_file(CUSTOM_PRODUCTS_FILE)
+
+_filaments_mtime = 0.0
+FILAMENTS_CACHE: list = []
+
+
+def load_filaments_file(path: str = FILAMENTS_FILE):
+    p = Path(path)
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    return []
+
+
+def reload_filaments_cache(force: bool = False):
+    """Перезавантажує filaments.json при зміні файлу."""
+    global FILAMENTS_CACHE, _filaments_mtime
+    fp = Path(FILAMENTS_FILE)
+    if not fp.exists():
+        return False
+    mtime = fp.stat().st_mtime
+    if force or mtime != _filaments_mtime:
+        FILAMENTS_CACHE = load_filaments_file()
+        _filaments_mtime = mtime
+        return True
+    return False
+
+
+reload_filaments_cache(force=True)
 
 
 def reload_products_cache(force: bool = False):
@@ -173,6 +201,7 @@ def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None,
 def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
     """Перерахунок суми на сервері. Повертає (ok, result_dict|error_message)."""
     reload_products_cache()
+    reload_filaments_cache()
     if not items:
         return False, "Порожній кошик"
 
@@ -195,6 +224,26 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         else:
             return False, f"Невідомий товар (id {pid})"
 
+        filament_id = str(raw.get("filament_id") or raw.get("filamentId") or "").strip()
+        filament_name = ""
+        if raw.get("fromCustom"):
+            filament_id = ""
+            filament_name = ""
+        else:
+            no_filament_choice = bool(
+                product and product.get("filamentChoice") is False
+            )
+            if no_filament_choice:
+                filament_id = ""
+                filament_name = ""
+            elif filament_id:
+                meta = next((f for f in FILAMENTS_CACHE if f.get("id") == filament_id), None)
+                if not meta:
+                    return False, f"Невідомий колір філаменту ({filament_id})"
+                if not meta.get("available"):
+                    return False, f"Колір «{meta.get('name', '')}» зараз недоступний для замовлення"
+                filament_name = str(meta.get("name") or "").strip()
+
         subtotal += price * qty
         normalized.append({
             "product_id": pid,
@@ -203,6 +252,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
             "quantity": qty,
             "customValue": raw.get("customValue") or "",
             "fromCustom": bool(raw.get("fromCustom")),
+            "filament_id": filament_id,
+            "filament_name": filament_name,
         })
 
     discount = 0
@@ -286,6 +337,30 @@ def init_db():
             used_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS filament_colors (
+            id         TEXT PRIMARY KEY,
+            name       TEXT NOT NULL,
+            hex        TEXT,
+            available  INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
+    oi_cols = [row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()]
+    if "filament" not in oi_cols:
+        conn.execute("ALTER TABLE order_items ADD COLUMN filament TEXT DEFAULT ''")
+
+    for r in load_filaments_file():
+        conn.execute(
+            "INSERT OR REPLACE INTO filament_colors (id, name, hex, available) VALUES (?, ?, ?, ?)",
+            (
+                r.get("id"),
+                r.get("name"),
+                r.get("hex") or "",
+                1 if r.get("available") else 0,
+            ),
+        )
+
     conn.commit()
     conn.close()
 
@@ -308,15 +383,17 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
     """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount))
     order_id = cursor.lastrowid
     for item in items:
+        fl = (item.get("filament_name") or item.get("filament_id") or "").strip()
         conn.execute("""
-            INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO order_items (order_id, product_id, product_name, price, quantity, filament)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
             order_id,
             int(item.get("product_id") or item.get("id") or 0),
             item.get("product_name", "—"),
             int(item.get("price", 0)),
             int(item.get("quantity", 1)),
+            fl,
         ))
 
     # Якщо є подарунок, додаємо його як окремий рядок в order_items з ціною 0 і спеціальною назвою для зручності відображення в звітах і повідомленнях
@@ -798,7 +875,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Товари
         items = conn.execute("""
-            SELECT product_name, price, quantity
+            SELECT product_name, price, quantity, filament
             FROM order_items
             WHERE order_id = ?
         """, (o['id'],)).fetchall()
@@ -807,13 +884,15 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = item['product_name']
             qty = item['quantity']
             price = item['price']
+            fl = (item['filament'] or '').strip()
             if price == 0:
                 # подарунок (вже містить emoji 🎁)
                 text += f"   {name}\n"
             else:
                 subtotal = price * qty
                 qty_str = f" × {qty}" if qty > 1 else ""
-                text += f"   • {name}{qty_str} — {subtotal} ₴\n"
+                fl_str = f" · 🎨 {fl}" if fl else ""
+                text += f"   • {name}{qty_str} — {subtotal} ₴{fl_str}\n"
 
         # Купон
         if o['coupon_code'] and o['discount_amount']:
@@ -994,6 +1073,7 @@ async def handle_order(request):
             # Формуємо текст для підтвердження клієнту
             items_lines = '\n'.join(
                 f"  • {i.get('product_name','—')} × {i.get('quantity',1)}"
+                + (f" · 🎨 {i['filament_name']}" if i.get('filament_name') else "")
                 for i in items
             )
             line = f"📦 *Товари:*\n{items_lines}"
@@ -1060,6 +1140,8 @@ async def handle_order(request):
     items_text = ''
     for i in items:
         line = f"  • {i.get('product_name','—')} × {i.get('quantity',1)} — {i.get('price',0) * i.get('quantity',1)} ₴"
+        if i.get('filament_name'):
+            line += f" · 🎨 {i['filament_name']}"
         if i.get('customValue'):
             line += f" _{i['customValue']}_"
         items_text += line + '\n'
@@ -1146,8 +1228,9 @@ async def reload_products_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     if update.effective_user.id != 718746623:
         return
     reload_products_cache(force=True)
+    reload_filaments_cache(force=True)
     await update.message.reply_text(
-        f"✅ Кеш оновлено: products={len(PRODUCTS_CACHE)}, custom={len(CUSTOM_PRODUCTS_CACHE)}"
+        f"✅ Кеш оновлено: products={len(PRODUCTS_CACHE)}, custom={len(CUSTOM_PRODUCTS_CACHE)}, filaments={len(FILAMENTS_CACHE)}"
     )
 
 async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1212,9 +1295,10 @@ def main():
     global bot_app
     init_db()
     reload_products_cache(force=True)
+    reload_filaments_cache(force=True)
     logger.info(
-        "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom",
-        VALIDATE_INIT_DATA, len(PRODUCTS_CACHE), len(CUSTOM_PRODUCTS_CACHE),
+        "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom | філаментів: %s",
+        VALIDATE_INIT_DATA, len(PRODUCTS_CACHE), len(CUSTOM_PRODUCTS_CACHE), len(FILAMENTS_CACHE),
     )
 
     bot_app = Application.builder().token(BOT_TOKEN).build()

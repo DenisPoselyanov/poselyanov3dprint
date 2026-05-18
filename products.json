@@ -104,6 +104,7 @@
     "photos": [],
     "name": "Спінер-куб",
     "mat": "PLA+PETG · крутиться",
+    "filamentChoice": false,
     "price": 110,
     "hot": false,
     "gift": false
@@ -115,6 +116,7 @@
     "photos": [],
     "name": "Pop-it кнопки",
     "mat": "TPU · м'який силіконовий",
+    "filamentChoice": false,
     "price": 80,
     "hot": true,
     "gift": false

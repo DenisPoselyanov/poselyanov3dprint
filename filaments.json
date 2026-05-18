@@ -1,0 +1,22 @@
+[
+  {"id": "white", "name": "Білий", "hex": "#f0f0f0", "available": true},
+  {"id": "black", "name": "Чорний", "hex": "#1a1a1a", "available": true},
+  {"id": "gray", "name": "Сірий", "hex": "#8a8a8a", "available": false},
+  {"id": "red", "name": "Червоний", "hex": "#c62828", "available": false},
+  {"id": "blue", "name": "Синій", "hex": "#1565c0", "available": false},
+  {"id": "sky", "name": "Блакитний", "hex": "#4fc3f7", "available": false},
+  {"id": "navy", "name": "Темно-синій", "hex": "#0d1b3e", "available": false},
+  {"id": "green", "name": "Зелений", "hex": "#2e7d32", "available": true},
+  {"id": "lime", "name": "Лайм", "hex": "#aed581", "available": false},
+  {"id": "yellow", "name": "Жовтий", "hex": "#fdd835", "available": false},
+  {"id": "orange", "name": "Помаранчевий", "hex": "#ef6c00", "available": true},
+  {"id": "purple", "name": "Фіолетовий", "hex": "#6a1b9a", "available": false},
+  {"id": "pink", "name": "Рожевий", "hex": "#ec407a", "available": false},
+  {"id": "brown", "name": "Коричневий", "hex": "#5d4037", "available": false},
+  {"id": "beige", "name": "Бежевий", "hex": "#d7ccc8", "available": false},
+  {"id": "gold", "name": "Золотистий", "hex": "#c9a227", "available": false},
+  {"id": "silver", "name": "Сріблястий", "hex": "#b0bec5", "available": false},
+  {"id": "transparent", "name": "Натуральний / прозорий", "hex": "#e8dcc8", "available": false},
+  {"id": "turquoise", "name": "Бірюзовий", "hex": "#00897b", "available": false},
+  {"id": "magenta", "name": "Пурпурний", "hex": "#ad1457", "available": false}
+]
