@@ -1724,7 +1724,21 @@ function updateModalAddBtn() {
 function updateModalLayoutForMode() {
   const qtyRow = document.getElementById('m-qty-row');
   const giftNotice = document.getElementById('m-gift-preview-notice');
-  if (qtyRow) qtyRow.style.display = modalGiftPreview ? 'none' : '';
+  if (qtyRow) {
+    if (modalGiftPreview) {
+      qtyRow.style.display = 'flex';
+      const qtyCtrls = qtyRow.querySelectorAll('.qty-btn, .qty-display');
+      qtyCtrls.forEach(el => el.style.display = 'none');
+      const btn = qtyRow.querySelector('.modal-add-btn');
+      if (btn) btn.style.flex = '1';
+    } else {
+      qtyRow.style.display = '';
+      const qtyCtrls = qtyRow.querySelectorAll('.qty-btn, .qty-display');
+      qtyCtrls.forEach(el => el.style.display = '');
+      const btn = qtyRow.querySelector('.modal-add-btn');
+      if (btn) btn.style.flex = '1';
+    }
+  }
   if (giftNotice) giftNotice.classList.toggle('visible', modalGiftPreview);
   updateModalAddBtn();
 }
