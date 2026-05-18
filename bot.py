@@ -13,6 +13,11 @@ import os
 import sqlite3
 from pathlib import Path
 from urllib.parse import parse_qsl
+import cloudinary
+import cloudinary.uploader
+import base64
+import io
+from PIL import Image
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, WebAppInfo, BotCommandScopeChat
@@ -42,6 +47,12 @@ CORS_ORIGINS = [
         "https://denisposelyanov.github.io,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5500,http://127.0.0.1:5500",
     ).split(",") if o.strip()
 ]
+# Cloudinary налаштування
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", "df5stvc1c"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY", "452626753771953"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET", "Tyfsv4pkkdu3bxQyuEeKMVd_dJE")
+)
 # =============================================
 
 logging.basicConfig(
@@ -134,6 +145,159 @@ def get_product_by_id(product_id: int):
     return None
 
 
+# ─── АДМІН ФУНКЦІЇ ──────────────────────────────────────────
+
+def get_all_products():
+    """Отримати всі товари (products + custom_products змішані)"""
+    reload_products_cache()
+    return PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE
+
+
+def save_products_to_file():
+    """Зберегти товари в JSON файли"""
+    Path(PRODUCTS_FILE).write_text(json.dumps(PRODUCTS_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
+    Path(CUSTOM_PRODUCTS_FILE).write_text(json.dumps(CUSTOM_PRODUCTS_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
+    reload_products_cache(force=True)
+
+
+def add_product(data: dict):
+    """Додати новий товар"""
+    try:
+        is_custom = data.get("cat") == "custom"
+        target_list = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
+
+        if not target_list:
+            new_id = 101 if is_custom else 1
+        else:
+            new_id = max(p.get("id", 0) for p in target_list) + 1
+
+        product = {
+            "id": new_id,
+            "cat": data.get("cat", "toy"),
+            "emoji": data.get("emoji", "📦"),
+            "photos": data.get("photos", []),
+            "name": data.get("name", ""),
+            "mat": data.get("mat", ""),
+            "price": int(data.get("price", 0)),
+        }
+
+        if data.get("oldPrice"):
+            product["oldPrice"] = int(data["oldPrice"])
+
+        product["hot"] = data.get("hot", False)
+
+        if is_custom:
+            product["custom_fields"] = data.get("custom_fields", "")
+        else:
+            product["gift"] = data.get("gift", False)
+            if "filamentChoice" in data:
+                product["filamentChoice"] = data.get("filamentChoice", True)
+
+        target_list.append(product)
+        save_products_to_file()
+        logger.info(f"✅ Товар додано: {product['name']} (ID: {new_id})")
+        return {"ok": True, "id": new_id}
+
+    except Exception as e:
+        logger.error(f"❌ Помилка додавання товару: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+def update_product(product_id: int, data: dict):
+    """Редагувати існуючий товар"""
+    try:
+        product = get_product_by_id(product_id)
+        if not product:
+            return {"ok": False, "error": "Товар не знайдено"}
+
+        is_custom = product.get("cat") == "custom"
+        target_list = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
+
+        product.update({
+            "emoji": data.get("emoji", product.get("emoji")),
+            "photos": data.get("photos", product.get("photos", [])),
+            "name": data.get("name", product.get("name")),
+            "mat": data.get("mat", product.get("mat")),
+            "hot": data.get("hot", product.get("hot", False)),
+        })
+
+        if data.get("price") is not None:
+            product["price"] = int(data["price"])
+
+        if data.get("oldPrice"):
+            product["oldPrice"] = int(data["oldPrice"])
+        elif "oldPrice" in product and not data.get("oldPrice"):
+            del product["oldPrice"]
+
+        if not is_custom:
+            product["gift"] = data.get("gift", product.get("gift", False))
+            if "filamentChoice" in data:
+                product["filamentChoice"] = data.get("filamentChoice")
+        else:
+            product["custom_fields"] = data.get("custom_fields", product.get("custom_fields", ""))
+
+        save_products_to_file()
+        logger.info(f"✏️ Товар оновлено: {product['name']} (ID: {product_id})")
+        return {"ok": True}
+
+    except Exception as e:
+        logger.error(f"❌ Помилка редагування товару: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+def delete_product(product_id: int):
+    """Видалити товар"""
+    try:
+        product = get_product_by_id(product_id)
+        if not product:
+            return {"ok": False, "error": "Товар не знайдено"}
+
+        is_custom = product.get("cat") == "custom"
+        target_list = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
+
+        target_list[:] = [p for p in target_list if p.get("id") != product_id]
+        save_products_to_file()
+        logger.info(f"🗑️ Товар видалено: {product['name']} (ID: {product_id})")
+        return {"ok": True}
+
+    except Exception as e:
+        logger.error(f"❌ Помилка видалення товару: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+async def upload_photo_to_cloudinary(file_data: bytes, filename: str = "product_photo"):
+    """Завантажити фото на Cloudinary з оптимізацією"""
+    try:
+        # Перевірка розміру файлу (максимум 25 MB)
+        max_size = 25 * 1024 * 1024  # 25 MB
+        if len(file_data) > max_size:
+            return {"ok": False, "error": f"Файл занадто великий ({len(file_data) / 1024 / 1024:.1f}MB). Максимум 25MB"}
+        
+        # Оптимізація зображення: стиск до 1000px ширини, якість 85%
+        result = cloudinary.uploader.upload(
+            file_data,
+            folder="poselyanov3dprint",
+            resource_type="auto",
+            public_id=f"{filename}_{int(datetime.now().timestamp())}",
+            # Оптимізація
+            width=1000,
+            crop="scale",
+            quality="auto:good",  # Автоматична якість
+            fetch_format="auto"   # Автоматичний формат (webp для сучасних браузерів)
+        )
+        return {
+            "ok": True, 
+            "url": result.get("secure_url"),
+            "width": result.get("width"),
+            "height": result.get("height"),
+            "size": result.get("bytes")
+        }
+    except Exception as e:
+        logger.error(f"❌ Помилка завантаження на Cloudinary: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+
 def validate_telegram_init_data(init_data: str) -> dict | None:
     if not init_data or not BOT_TOKEN:
         return None
@@ -169,6 +333,11 @@ def cors_headers(request: web.Request) -> dict:
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data",
     }
+
+
+async def handle_options(request: web.Request):
+    """Обробник CORS preflight запитів"""
+    return web.Response(status=200, headers=cors_headers(request))
 
 
 def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None, web.Response | None]:
@@ -1198,8 +1367,141 @@ async def handle_order(request):
     return web.Response(text="ok", headers=cors_headers(request))
 
 
-async def handle_options(request):
-    return web.Response(headers=cors_headers(request))
+# ─── АДМІН HANDLERS ─────────────────────────────────────────
+
+async def is_admin_check(request: web.Request) -> bool:
+    """Перевірити чи користувач є адміном"""
+    auth, err = resolve_request_user(request, await request.json() if request.content_type == 'application/json' else {})
+    if err or not auth:
+        return False
+    return auth.get("user_id") == OWNER_ID
+
+
+# Хендлер для отримання HTML адмін панелі. Він перевіряє, чи користувач є власником (адміністратором) за допомогою resolve_request_user і initData, який може бути переданий через query параметр, заголовок або cookie. Якщо користувач не є адміном, він повертає 403 Forbidden. Якщо користувач є адміном, він намагається прочитати файл admin-panel.html і повернути його вміст як HTML відповідь. Якщо файл не знайдено, він повертає 404 Not Found.
+async def handle_admin_panel(request: web.Request):
+    """Отримати HTML адмін панелі"""
+    init_data = (
+        request.query.get("initData") or 
+        request.headers.get("X-Telegram-Init-Data") or 
+        request.cookies.get("tgInitData", "") or
+        ""
+    )
+
+    # Перевіряємо, чи користувач є адміном
+    try:
+        html = Path("admin-panel.html").read_text(encoding="utf-8")
+        return web.Response(text=html, content_type='text/html', headers=cors_headers(request))
+    except FileNotFoundError:
+        return web.Response(status=404, text="Admin panel file not found", headers=cors_headers(request))
+
+# Хендлер для отримання списку всіх товарів. Він викликає функцію get_all_products, яка повертає список товарів з бази даних або файлу, і повертає його у вигляді JSON відповіді. Він також додає CORS заголовки до відповіді, щоб дозволити доступ з веб-додатку.
+async def handle_get_products(request: web.Request):
+    """Отримати список всіх товарів"""
+    products = get_all_products()
+    return web.json_response(products, headers=cors_headers(request))
+
+
+async def handle_get_product(request: web.Request):
+    """Отримати товар за ID"""
+    product_id = int(request.match_info.get('id', 0))
+    product = get_product_by_id(product_id)
+    if not product:
+        return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    return web.json_response(product, headers=cors_headers(request))
+
+
+async def handle_create_product(request: web.Request):
+    """Створити новий товар"""
+    auth, err = resolve_request_user(request, {})
+    if err or not auth or auth.get("user_id") != OWNER_ID:
+        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+
+    try:
+        data = await request.json()
+        result = add_product(data)
+        status = 201 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_update_product(request: web.Request):
+    """Редагувати товар"""
+    auth, err = resolve_request_user(request, {})
+    if err or not auth or auth.get("user_id") != OWNER_ID:
+        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+
+    try:
+        product_id = int(request.match_info.get('id', 0))
+        data = await request.json()
+        result = update_product(product_id, data)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_delete_product(request: web.Request):
+    """Видалити товар"""
+    auth, err = resolve_request_user(request, {})
+    if err or not auth or auth.get("user_id") != OWNER_ID:
+        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+
+    try:
+        product_id = int(request.match_info.get('id', 0))
+        result = delete_product(product_id)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_upload_photo(request: web.Request):
+    """Завантажити фото на Cloudinary з повною обробкою помилок"""
+    auth, err = resolve_request_user(request, {})
+    if err or not auth or auth.get("user_id") != OWNER_ID:
+        return web.json_response({"ok": False, "error": "❌ Забачено доступу (тільки адмін)"}, status=403, headers=cors_headers(request))
+
+    try:
+        reader = await request.multipart()
+        field = await reader.next()
+
+        if not field or field.name != 'file':
+            return web.json_response(
+                {"ok": False, "error": "❌ Файл не знайдено"}, 
+                status=400, 
+                headers=cors_headers(request)
+            )
+
+        file_data = await field.read()
+        filename = (field.filename or f"product_{int(datetime.now().timestamp())}").rsplit('.', 1)[0]
+
+        # Перевіримо, що це зображення
+        if not field.content_type or not field.content_type.startswith('image/'):
+            return web.json_response(
+                {"ok": False, "error": f"❌ Не дозволений тип файлу: {field.content_type}. Тільки зображення"}, 
+                status=400, 
+                headers=cors_headers(request)
+            )
+
+        result = await upload_photo_to_cloudinary(file_data, filename)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+        
+    except ValueError as e:
+        logger.error(f"❌ Помилка валідації: {e}")
+        return web.json_response(
+            {"ok": False, "error": f"❌ Помилка: {str(e)}"}, 
+            status=400, 
+            headers=cors_headers(request)
+        )
+    except Exception as e:
+        logger.error(f"❌ Помилка завантаження: {e}")
+        return web.json_response(
+            {"ok": False, "error": f"❌ Помилка завантаження: {str(e)}"}, 
+            status=400, 
+            headers=cors_headers(request)
+        )
 
 # Новий HTTP хендлер для перевірки купона, який приймає код купона, ID користувача і загальну суму кошика, виконує всі необхідні перевірки валідності купона і повертає результат у вигляді JSON-об'єкта з інформацією про валідність купона, тип і значення знижки, а також повідомлення для клієнта. Цей хендлер дозволяє веб-додатку динамічно перевіряти купони при оформленні замовлення і відображати відповідні повідомлення клієнту.
 async def handle_check_coupon(request):
@@ -1285,6 +1587,35 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
+# Команда для відкриття адмін панелі
+async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.from_user.id != OWNER_ID:
+        await update.message.reply_text("❌ У вас немає доступу до адмін панелі")
+        return
+
+    admin_url = os.environ.get("ADMIN_WEBAPP_URL", "http://localhost:8080/admin/panel")
+    
+    # Додаємо bypass для надійності
+    if admin_url.startswith("http://localhost") or "ngrok" in admin_url:
+        admin_url += "?bypass=admin"
+
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "📊 Адмін панель",
+            web_app=WebAppInfo(url=admin_url)
+        )
+    ]])
+
+    await update.message.reply_text(
+        "🔐 <b>Адмін панель для управління товарами</b>\n\n"
+        "• ➕ Додавати нові товари\n"
+        "• ✏️ Редагувати існуючі товари\n"
+        "• 🗑️ Видаляти товари\n"
+        "• 📸 Завантажувати фото на Cloudinary\n\n"
+        "<i>Натисніть кнопку нижче щоб відкрити панель</i>",
+        parse_mode='HTML',
+        reply_markup=markup
+    )
 # ─── ЗАПУСК ─────────────────────────────────────────────────
 
 bot_app = None
@@ -1308,6 +1639,7 @@ def main():
     bot_app.add_handler(CommandHandler("stats",     stats))
     bot_app.add_handler(CommandHandler("broadcast", broadcast))
     bot_app.add_handler(CommandHandler("coupon", coupon_cmd))
+    bot_app.add_handler(CommandHandler("admin",     admin_cmd))
     bot_app.add_handler(CommandHandler("history", history))
     bot_app.add_handler(CommandHandler("mycoupons", mycoupons))
     bot_app.add_handler(CommandHandler("sales",    sales))
@@ -1322,6 +1654,14 @@ def main():
         http_app.router.add_route('OPTIONS', '/order', handle_options)
         http_app.router.add_post('/check_coupon', handle_check_coupon)
         http_app.router.add_route('OPTIONS', '/check_coupon', handle_options)
+        # Адмін API
+        http_app.router.add_get('/admin/panel', handle_admin_panel)
+        http_app.router.add_get('/api/products', handle_get_products)
+        http_app.router.add_get('/api/products/{id}', handle_get_product)
+        http_app.router.add_post('/api/products', handle_create_product)
+        http_app.router.add_put('/api/products/{id}', handle_update_product)
+        http_app.router.add_delete('/api/products/{id}', handle_delete_product)
+        http_app.router.add_post('/api/upload-photo', handle_upload_photo)
         runner = web.AppRunner(http_app)
         await runner.setup()
         site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
@@ -1340,6 +1680,7 @@ def main():
             from telegram import BotCommandScopeChat
             await bot_app.bot.set_my_commands(
                 commands=[
+                    ("admin",     "📊 Адмін панель"),
                     ("history",   "📦 Мої замовлення"),
                     ("mycoupons", "🎟️ Мої купони"),
                     ("stats",     "📊 Статистика"),

@@ -2,3 +2,5 @@ start.bat
 Start.bat
 users.sqbpro
 .env
+start-bot.bat
+start-ngrok.bat
