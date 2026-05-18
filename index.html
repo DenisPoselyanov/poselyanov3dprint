@@ -713,6 +713,23 @@
   }
   .custom-notice.visible { display: block; }
 
+  .gift-preview-notice {
+    background: #FFF8E1;
+    border-left: 3px solid #FFB300;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #6D4C00;
+    line-height: 1.5;
+    margin: 0 18px 12px;
+    display: none;
+  }
+  .gift-preview-notice.visible { display: block; }
+  body.dark .gift-preview-notice {
+    background: rgba(255, 179, 0, 0.12);
+    color: #FFCC80;
+  }
+
   /* Бейдж "В кошику" на картці */
   .card-in-cart-badge {
     position: absolute; top: 6px; right: 6px;
@@ -1323,7 +1340,7 @@
           <div class="promo-card-icon">🎁</div>
           <div class="promo-card-info">
             <div class="promo-card-title">Безкоштовний подарунок</div>
-            <div class="promo-card-sub">Додай 3+ різних товари в кошик і обери подарунок на свій смак</div>
+            <div class="promo-card-sub">Додай 3+ товари з каталогу «Товари» в кошик і обери подарунок на свій смак</div>
           </div>
         </div>
         <div class="promo-card discount">
@@ -1431,8 +1448,12 @@
       <div class="filament-swatches" id="m-filament-swatches"></div>
     </div>
 
+    <div class="gift-preview-notice" id="m-gift-preview-notice">
+      🎁 Це перегляд подарунку. Обери колір (якщо доступно) і натисни «Обрати подарунком» — товар не потрапить у кошик окремою позицією.
+    </div>
+
     <!-- Кнопки кількості + "Додати в кошик" -->
-    <div class="modal-qty-row">
+    <div class="modal-qty-row" id="m-qty-row">
       <button class="qty-btn" onclick="modalQtyChange(-1)">−</button>
       <span class="qty-display" id="m-qty">1</span>
       <button class="qty-btn" onclick="modalQtyChange(1)">+</button>
@@ -1595,6 +1616,8 @@ let CUSTOM_PRODUCTS = [];
 // Кольори філаменту (filaments.json)
 let FILAMENTS = [];
 let modalFilamentId = null;
+let modalGiftPreview = false;
+let modalCartSource = 'products';
 
 function availableFilaments() {
   return FILAMENTS.filter(f => f.available);
@@ -1681,8 +1704,14 @@ function modalQtyChange(delta) {
 
 function updateModalAddBtn() {
   if (!currentProduct) return;
-  const existing = getCartItem(currentProduct.id);
   const btn = document.getElementById('m-add-btn');
+  if (modalGiftPreview) {
+    const picked = selectedGift?.id === currentProduct.id;
+    btn.textContent = picked ? '✓ Обрано як подарунок' : '🎁 Обрати подарунком';
+    btn.classList.toggle('in-cart', picked);
+    return;
+  }
+  const existing = getCartItem(currentProduct.id);
   if (existing) {
     btn.textContent = `✓ В кошику (${existing.quantity} шт)`;
     btn.classList.add('in-cart');
@@ -1692,9 +1721,56 @@ function updateModalAddBtn() {
   }
 }
 
+function updateModalLayoutForMode() {
+  const qtyRow = document.getElementById('m-qty-row');
+  const giftNotice = document.getElementById('m-gift-preview-notice');
+  if (qtyRow) qtyRow.style.display = modalGiftPreview ? 'none' : '';
+  if (giftNotice) giftNotice.classList.toggle('visible', modalGiftPreview);
+  updateModalAddBtn();
+}
+
+function formatGiftForOrder() {
+  if (!selectedGift) return null;
+  const name = selectedGift.name || '';
+  const fl = selectedGift.filamentName;
+  return fl ? `${name} (${fl})` : name;
+}
+
+function confirmGiftFromModal() {
+  if (!currentProduct || !modalGiftPreview) return;
+  const wantFil = productWantsFilamentChoice(currentProduct);
+  const av = availableFilaments();
+  let filamentId = '';
+  let filamentName = '';
+  if (wantFil && av.length) {
+    const fm = av.find(f => f.id === modalFilamentId);
+    if (!fm) {
+      alert('Обери колір філаменту для подарунку.');
+      return;
+    }
+    filamentId = fm.id;
+    filamentName = fm.name;
+  }
+  selectedGift = {
+    id: currentProduct.id,
+    name: currentProduct.name,
+    mat: currentProduct.mat,
+    emoji: currentProduct.emoji,
+    photos: currentProduct.photos || [],
+    filamentId,
+    filamentName,
+  };
+  renderCart();
+  setTimeout(closeModal, 300);
+}
+
 // Додавання товару в кошик з модального вікна
 function addToCartFromModal() {
   if (!currentProduct) return;
+  if (modalGiftPreview) {
+    confirmGiftFromModal();
+    return;
+  }
   const customVal = currentProduct._isCustom
     ? (document.getElementById('m-custom-value')?.value.trim() || '')
     : '';
@@ -1745,6 +1821,7 @@ function addToCartFromModal() {
         price: currentProduct.price,
         quantity: modalQty,
         fromCustom: currentProduct._isCustom || false,
+        addedFrom: currentProduct._isCustom ? 'custom' : modalCartSource,
         emoji: currentProduct.emoji,
         photos: currentProduct.photos || [],
         customValue: customVal
@@ -1760,9 +1837,8 @@ function addToCartFromModal() {
   updateCartBadge();
   updateModalAddBtn();
   // Якщо зараз відкрита сторінка кошика — оновлюємо її
-  const mainItemsCount = cart.filter(i => !i.fromCustom).length;
-  // Показуємо тост про подарунок при досягненні 3 товарів в кошику, якщо це не оновлення існуючого товару і не індивідуальний товар
-  if (mainItemsCount === 3 && !existing && !currentProduct._isCustom) showGiftToast();
+  const giftEligibleCount = cart.filter(i => !i.fromCustom && (i.addedFrom || 'products') === 'products').length;
+  if (giftEligibleCount === 3 && !existing && !currentProduct._isCustom && modalCartSource === 'products') showGiftToast();
   setTimeout(closeModal, 300);
 }
 // Показуємо тост про подарунок при досягненні 3 товарів в кошику
@@ -1780,7 +1856,7 @@ function renderSales() {
     grid.innerHTML = '<div class="empty"><div class="empty-ico">🏷️</div>Акцій поки немає</div>';
     return;
   }
-  setGridHtml(grid, items.map((p, i) => buildCard(p, i, false)).join(''));
+  setGridHtml(grid, items.map((p, i) => buildCard(p, i, false, 'sales')).join(''));
 }
 
 // ─── СТОРІНКА ІНДИВІДУАЛЬНЕ ─────────────────────────────────
@@ -1794,12 +1870,12 @@ function renderCustom() {
 }
 
 // ─── СПІЛЬНИЙ РЕНДЕР КАРТКИ ──────────────────────────────────
-function buildCard(p, i, isCustom) {
+function buildCard(p, i, isCustom, pageSource) {
   const hasPhotos = p.photos && p.photos.length > 0;
   const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
   const safeName = escapeHtml(p.name);
   const safeMat = escapeHtml(p.mat);
-  const source = isCustom ? 'custom' : 'main';
+  const source = isCustom ? 'custom' : (pageSource || 'products');
   const cartItem = getCartItem(p.id);
   const inCart = !!cartItem;
   return `
@@ -1862,9 +1938,9 @@ function getGiftCandidates() {
   return PRODUCTS.filter(p => p.gift === true && p.price <= 100);
 }
 
-// Перевіряє чи має користувач право на подарунок (3 і більше товарів в кошику, що не з індивідуальних замовлень)
+// Перевіряє право на подарунок: 3+ позиції зі сторінки «Товари» (не акції, не індивідуальне)
 function shouldShowGift() {
-  return cart.filter(i => !i.fromCustom).length >= 3;
+  return cart.filter(i => !i.fromCustom && (i.addedFrom || 'products') === 'products').length >= 3;
 }
 
 // Поточний обраний подарунок (об'єкт товару або null)
@@ -1899,12 +1975,12 @@ function openGiftModal() {
       <div class="gift-option${selectedGift?.id === p.id ? ' selected' : ''}" onclick="selectGift(${p.id})">
             <div class="gift-option-emoji" onclick="event.stopPropagation(); previewGift(${p.id})" style="cursor:pointer;position:relative;width:36px;height:36px;flex-shrink:0;" title="Переглянути товар">
         ${p.photos && p.photos.length > 0
-          ? `<img src="${p.photos[0]}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${p.name}" decoding="async" loading="lazy">`
+          ? `<img src="${p.photos[0]}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${escapeHtml(p.name)}" decoding="async" loading="lazy">`
           : p.emoji}
       </div>
       <div class="gift-option-info">
-        <div class="gift-option-name">${p.name}</div>
-        <div class="gift-option-price">${p.mat} · безкоштовно</div>
+        <div class="gift-option-name">${escapeHtml(p.name)}</div>
+        <div class="gift-option-price">${escapeHtml(p.mat)}${selectedGift?.id === p.id && selectedGift.filamentName ? ` · 🎨 ${escapeHtml(selectedGift.filamentName)}` : ''} · безкоштовно</div>
       </div>
       ${selectedGift?.id === p.id ? '<div class="gift-option-check">✓</div>' : ''}
     </div>
@@ -1919,10 +1995,9 @@ function closeGiftModal() {
 
 // Показуємо модалку з інформацією про подарунок при натисканні на кнопку "👁" в опції подарунку
 function previewGift(id) {
-  // Запам'ятовуємо що модалка подарунку була відкрита
   window._giftModalWasOpen = true;
   closeGiftModal();
-  openModal(id);
+  openModal(id, 'products', { giftPreview: true });
 }
 
 // Закриває модалку вибору подарунку при кліку на бекдроп
@@ -1932,10 +2007,21 @@ function closeGiftModalIfBackdrop(e) {
 
 // Вибір подарунку з модалки (запам'ятовуємо вибраний подарунок та оновлюємо кошик)
 function selectGift(id) {
-  selectedGift = PRODUCTS.find(p => p.id === id) || null;
+  const p = PRODUCTS.find(x => x.id === id);
+  if (!p) return;
+  const keepFilament = selectedGift?.id === id
+    ? { filamentId: selectedGift.filamentId, filamentName: selectedGift.filamentName }
+    : {};
+  selectedGift = {
+    id: p.id,
+    name: p.name,
+    mat: p.mat,
+    emoji: p.emoji,
+    photos: p.photos || [],
+    ...keepFilament,
+  };
   renderCart();
-  // Якщо вибір подарунку відбувся не через модалку (наприклад, через кнопку "Обрати інший") — показуємо тост
-  openGiftModal();
+  closeGiftModal();
 }
 
 // Будує HTML блоку подарунку
@@ -1946,7 +2032,7 @@ function buildGiftBlock() {
       <div class="cart-gift-emoji">🎁</div>
       <div class="cart-gift-info">
         <div class="cart-gift-title">Подарунок від нас!</div>
-        <div class="cart-gift-name">${selectedGift.name}</div>
+        <div class="cart-gift-name">${escapeHtml(selectedGift.name)}${selectedGift.filamentName ? ` · 🎨 ${escapeHtml(selectedGift.filamentName)}` : ''}</div>
         <div class="cart-gift-free">Безкоштовно</div>
       </div>
       <button class="cart-gift-change" onclick="openGiftModal()">Обрати інший ↻</button>
@@ -2036,7 +2122,7 @@ function renderCart() {
   // Спочатку рендеримо товарні позиції, потім — якщо потрібно — блок з подарунком, а потім — плашки "Повернути" для товарів що очікують видалення
   list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => `
     <div class="cart-item" id="cart-item-${item.id}">
-      <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : 'main'}')" style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer;">
+      <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}')" style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer;">
         ${item.photos && item.photos.length > 0
           ? `<img src="${item.photos[0]}" style="width:42px;height:42px;object-fit:cover;pointer-events:none;" alt="${item.name}" decoding="async" loading="lazy">`
           : item.emoji}
@@ -2352,8 +2438,15 @@ function setupModalFilamentPicker() {
     modalFilamentId = null;
     return;
   }
-  const existing = getCartItem(currentProduct.id);
-  let fid = existing?.filamentId || defaultFilamentId();
+  let fid;
+  if (modalGiftPreview) {
+    fid = (selectedGift?.id === currentProduct.id && selectedGift.filamentId)
+      ? selectedGift.filamentId
+      : defaultFilamentId();
+  } else {
+    const existing = getCartItem(currentProduct.id);
+    fid = existing?.filamentId || defaultFilamentId();
+  }
   if (!av.find(f => f.id === fid)) fid = defaultFilamentId();
   modalFilamentId = fid;
   block.style.display = '';
@@ -2371,7 +2464,7 @@ function renderGrid(cat) {
     grid.innerHTML = '<div class="empty"><div class="empty-ico">🤷</div>Товарів поки немає</div>';
     return;
   }
-  setGridHtml(grid, items.map((p, i) => buildCard(p, i, false)).join(''));
+  setGridHtml(grid, items.map((p, i) => buildCard(p, i, false, 'products')).join(''));
   _firstRender = false;
   setTimeout(() => {
     document.querySelectorAll('#grid .card').forEach(c => c.style.animation = 'none');
@@ -2773,12 +2866,17 @@ function finishModalClose() {
   document.getElementById('main-header')?.classList.remove('hidden');
   mainScroll?.classList.remove('header-collapsed');
   if (currentProduct) updateCardBadge(currentProduct.id);
+  modalGiftPreview = false;
+  modalCartSource = 'products';
 }
 
-function openModal(id, source = 'main') {
+function openModal(id, source = 'products', options = {}) {
   if (modalIsClosing || Date.now() < modalIgnoreOpenUntil) return;
 
-  const pool = source === 'custom' ? CUSTOM_PRODUCTS : PRODUCTS; // вибираємо пул товарів в залежності від джерела (основний каталог чи індивідуальні замовлення)
+  modalGiftPreview = !!options.giftPreview;
+  modalCartSource = source === 'custom' ? 'custom' : source;
+
+  const pool = source === 'custom' ? CUSTOM_PRODUCTS : PRODUCTS;
   currentProduct = pool.find(p => p.id === id);
   if (!currentProduct) return;
   currentProduct._isCustom = source === 'custom';
@@ -2824,11 +2922,13 @@ function openModal(id, source = 'main') {
   }
   buildCarousel(currentProduct.photos);
   setupModalFilamentPicker();
+  updateModalLayoutForMode();
 
-  // Встановлюємо лічильник = кількість в кошику (або 1 якщо немає)
-  const existingInCart = getCartItem(currentProduct.id);
-  modalQty = existingInCart ? existingInCart.quantity : 1;
-  document.getElementById('m-qty').textContent = modalQty;
+  if (!modalGiftPreview) {
+    const existingInCart = getCartItem(currentProduct.id);
+    modalQty = existingInCart ? existingInCart.quantity : 1;
+    document.getElementById('m-qty').textContent = modalQty;
+  }
   updateModalAddBtn();
 
   modalSavedScrollY = getMainScrollTop();
@@ -3025,7 +3125,7 @@ async function submitOrder() {
     coupon_code:    appliedCoupon ? appliedCoupon.code : '',
     discount_amount: discount,
     comment:      comment,
-    gift:         (shouldShowGift() && selectedGift) ? selectedGift.name : null,
+    gift:         (shouldShowGift() && selectedGift) ? formatGiftForOrder() : null,
     user:         user?.username ? '@' + user.username : (user?.first_name || 'невідомо'),
     user_id:      user?.id || null,
     first_name:   user?.first_name || '',
