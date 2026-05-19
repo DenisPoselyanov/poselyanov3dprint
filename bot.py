@@ -21,7 +21,8 @@ import io
 from PIL import Image
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    KeyboardButton, ReplyKeyboardMarkup, WebAppInfo, BotCommandScopeChat
+    KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
+    BotCommandScopeChat, BotCommandScopeAllPrivateChats
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -1801,16 +1802,20 @@ def main():
                 scope=BotCommandScopeChat(chat_id=718746623)  # тільки ти
             )
 
-            # Команди для звичайних юзерів
+            # Команди для звичайних юзерів (окремо для всіх приватних чатів,
+            # щоб /catalog гарантовано з'являвся у швидкому меню команд)
+            user_commands = [
+                ("catalog", "🛍️ Відкрити каталог"),
+                ("history", "📦 Мої замовлення"),
+                ("mycoupons", "🎟️ Мої купони"),
+                ("sales", "🔥 Акції"),
+                ("status", "📋 Статус замовлення"),
+                ("contact", "📬 Контакти"),
+            ]
+            await bot_app.bot.set_my_commands(commands=user_commands)
             await bot_app.bot.set_my_commands(
-                commands=[
-                    ("catalog", "🛍️ Відкрити каталог"),
-                    ("history",   "📦 Мої замовлення"),
-                    ("mycoupons", "🎟️ Мої купони"),
-                    ("sales",     "🔥 Акції"),
-                    ("status",    "📋 Статус замовлення"),
-                    ("contact",   "📬 Контакти"),
-                ],
+                commands=user_commands,
+                scope=BotCommandScopeAllPrivateChats(),
             )
             await asyncio.Event().wait()
 
