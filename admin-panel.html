@@ -33,6 +33,7 @@
             align-items: center;
             flex-wrap: wrap;
             gap: 20px;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
         }
 
         .header h1 {
@@ -68,6 +69,11 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
         }
 
         .btn-primary {
@@ -77,7 +83,7 @@
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
         }
 
         .btn-danger {
@@ -87,6 +93,8 @@
 
         .btn-danger:hover {
             background: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(231, 76, 60, 0.3);
         }
 
         .btn-secondary {
@@ -96,6 +104,8 @@
 
         .btn-secondary:hover {
             background: #7f8c8d;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(149, 165, 166, 0.3);
         }
 
         .content {
@@ -116,35 +126,64 @@
             gap: 8px;
         }
 
+        .category-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            padding: 10px 16px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #666;
+        }
+
+        .chip:hover {
+            border-color: #667eea;
+            color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        .chip.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: #667eea;
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .chip span {
+            font-size: 16px;
+        }
+
         .search-box input {
             flex: 1;
             padding: 10px 16px;
             border: 2px solid #ddd;
             border-radius: 8px;
             font-size: 14px;
-        }
-
-        .filter-tabs {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .tab {
-            padding: 8px 16px;
-            border: 2px solid #ddd;
-            background: white;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 14px;
             transition: all 0.3s ease;
         }
 
-        .tab.active {
-            background: #667eea;
-            color: white;
+        .search-box input:focus {
             border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
+
+        .search-box select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
 
         .products-grid {
             display: grid;
@@ -162,12 +201,17 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
+            cursor: pointer;
         }
 
         .product-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             border-left-color: #764ba2;
+        }
+
+        .product-card:active {
+            transform: translateY(-2px);
         }
 
         .product-header {
@@ -282,12 +326,19 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
             z-index: 1000;
             align-items: center;
             justify-content: center;
             padding: 20px;
             overflow-y: auto;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .modal.active {
@@ -302,6 +353,13 @@
             padding: 30px;
             max-height: 85vh;
             overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         .modal-header {
@@ -378,7 +436,7 @@
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
-            background: #f0f2ff;
+            background: linear-gradient(135deg, #f0f2ff 0%, #e8eaff 100%);
         }
 
         .drag-drop.active {
@@ -470,6 +528,42 @@
             position: relative;
             width: 90px;
             height: 90px;
+            cursor: grab;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .preview-item.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+            transform: scale(1.05);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+
+        .preview-item.drag-over {
+            transform: scale(1.1);
+            box-shadow: 0 0 0 3px #667eea;
+        }
+
+        .preview-item:first-child img {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        .preview-item:first-child::before {
+            content: '📷';
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            width: 24px;
+            height: 24px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            z-index: 2;
         }
 
         .preview-item img {
@@ -478,6 +572,7 @@
             object-fit: cover;
             border-radius: 8px;
             border: 2px solid #ddd;
+            pointer-events: none;
         }
 
         .preview-item .remove {
@@ -497,6 +592,7 @@
             font-size: 16px;
             font-weight: bold;
             transition: all 0.2s ease;
+            z-index: 3;
         }
 
         .preview-item .remove:hover {
@@ -504,20 +600,31 @@
             transform: scale(1.1);
         }
 
+        .preview-item .remove:active {
+            transform: scale(0.9);
+        }
+
         .empty-state {
             text-align: center;
-            padding: 60px 20px;
+            padding: 80px 20px;
             color: #999;
         }
 
         .empty-state-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
+            font-size: 80px;
+            margin-bottom: 24px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
         }
 
         .empty-state p {
-            font-size: 16px;
-            margin-bottom: 20px;
+            font-size: 18px;
+            margin-bottom: 24px;
+            color: #666;
         }
 
         .loading {
@@ -552,15 +659,37 @@
         .category-toy { background: #fff3cd; color: #856404; }
         .category-key { background: #cfe2ff; color: #084298; }
         .category-anti { background: #f8d7da; color: #842029; }
+        .category-gifts { background: #d1e7dd; color: #0f5132; }
+        .category-home { background: #cff4fc; color: #055160; }
+        .category-gadget { background: #e2d9f3; color: #4c2f7e; }
+        .category-tool { background: #f3d9d9; color: #7e2f2f; }
         .category-custom { background: #d1ecf1; color: #0c5460; }
 
         @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                border-radius: 12px;
+            }
+
             .header {
                 flex-direction: column;
                 text-align: center;
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 20px;
             }
 
             .header-stats {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .btn {
                 width: 100%;
                 justify-content: center;
             }
@@ -577,9 +706,45 @@
                 flex-direction: column;
             }
 
+            .search-box input {
+                width: 100%;
+            }
+
+            .category-chips {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .chip {
+                flex: 1;
+                min-width: calc(50% - 4px);
+                justify-content: center;
+                font-size: 13px;
+                padding: 8px 12px;
+            }
+
             .modal-content {
                 max-height: 90vh;
                 max-width: 95vw;
+                padding: 20px;
+            }
+
+            .modal-header {
+                font-size: 18px;
+            }
+
+            .form-buttons {
+                flex-direction: column;
+            }
+
+            .product-actions {
+                flex-direction: column;
+            }
+
+            .toast {
+                left: 10px;
+                right: 10px;
+                max-width: none;
             }
         }
     </style>
@@ -600,15 +765,38 @@
         <div class="content">
             <div class="toolbar">
                 <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="🔍 Пошук товару...">
-                    <select id="categoryFilter" onchange="filterProducts()">
-                        <option value="">Всі категорії</option>
-                        <option value="toy">🧸 Іграшка</option>
-                        <option value="key">🔑 Брелок</option>
-                        <option value="anti">✋ Антистрес</option>
-                        <option value="custom">🎨 Персоналізований</option>
-                    </select>
+                    <input type="text" id="searchInput" placeholder="🔍 Пошук товару..." oninput="filterProducts()">
                 </div>
+                <div class="category-chips" id="categoryChips">
+                    <button class="chip active" data-value="" onclick="selectCategory('')">
+                        <span>📦</span> Всі
+                    </button>
+                    <button class="chip" data-value="toy" onclick="selectCategory('toy')">
+                        <span>🧸</span> Іграшки
+                    </button>
+                    <button class="chip" data-value="key" onclick="selectCategory('key')">
+                        <span>🔑</span> Брелки
+                    </button>
+                    <button class="chip" data-value="anti" onclick="selectCategory('anti')">
+                        <span>🧠</span> Антистрес
+                    </button>
+                    <button class="chip" data-value="gifts" onclick="selectCategory('gifts')">
+                        <span>🎁</span> Подарунки
+                    </button>
+                    <button class="chip" data-value="home" onclick="selectCategory('home')">
+                        <span>🏠</span> Для дому
+                    </button>
+                    <button class="chip" data-value="gadget" onclick="selectCategory('gadget')">
+                        <span>📲</span> Гаджети
+                    </button>
+                    <button class="chip" data-value="tool" onclick="selectCategory('tool')">
+                        <span>⚒️</span> Інструменти
+                    </button>
+                    <button class="chip" data-value="custom" onclick="selectCategory('custom')">
+                        <span>✏️</span> Індивідуальне
+                    </button>
+                </div>
+                <input type="hidden" id="categoryFilter" value="">
             </div>
 
             <div id="loading" class="loading" style="display: none;">
@@ -641,10 +829,14 @@
                     <label>Категорія</label>
                     <select name="cat" required onchange="updateCategoryFields()">
                         <option value="">Вибрати категорію...</option>
-                        <option value="toy">🧸 Іграшка</option>
-                        <option value="key">🔑 Брелок</option>
-                        <option value="anti">✋ Антистрес</option>
-                        <option value="custom">🎨 Персоналізований</option>
+                        <option value="toy">🧸 Іграшки</option>
+                        <option value="key">🔑 Брелки</option>
+                        <option value="anti">🧠 Антистрес</option>
+                        <option value="gifts">🎁 Подарунки та декор</option>
+                        <option value="home">� Для дому</option>
+                        <option value="gadget">📲 Для гаджетів</option>
+                        <option value="tool">⚒️ Інструменти та приладдя</option>
+                        <option value="custom">✏️ Індивідуальне</option>
                     </select>
                     <div class="form-error">Категорія вимагається</div>
                 </div>
@@ -718,6 +910,7 @@
         function initTelegramWebApp() {
             const tg = window.Telegram?.WebApp;
             if (tg) {
+                tgInitData = tg.initData || '';
                 tg.ready();
                 tg.expand();
                 tgInitData = tg.initData;
@@ -747,29 +940,65 @@
         // ═══════════════════════════════════════════════════════════
 
         async function loadProducts() {
+            const loading = document.getElementById('loading');
+            const productsContainer = document.getElementById('products');
+            
             try {
-                const res = await fetch(API_BASE + '/products');
+                loading.style.display = 'flex';
+                productsContainer.style.opacity = '0.5';
+                
+                const res = await fetch(API_BASE + '/products', {
+                    headers: { 'X-Telegram-Init-Data': tgInitData }
+                });
                 if (!res.ok) throw new Error('Помилка завантаження');
                 const products = await res.json();
+
+                // Зберігаємо всі товари глобально для фільтрації
+                allProducts = products;
 
                 // Оновлюємо лічильник
                 document.getElementById('totalProducts').textContent = products.length;
 
-                // Фільтрація
-                const search = document.getElementById('searchInput')?.value?.toLowerCase() || '';
-                const cat = document.getElementById('categoryFilter')?.value || '';
-
-                const filtered = products.filter(p => {
-                    const matchSearch = !search || p.name.toLowerCase().includes(search);
-                    const matchCat = !cat || p.cat === cat;
-                    return matchSearch && matchCat;
-                });
-
-                renderProducts(filtered);
+                // Застосовуємо фільтрацію
+                filterProducts();
             } catch (e) {
                 console.error('loadProducts error:', e);
                 showToast('Помилка завантаження товарів', 'error');
+            } finally {
+                loading.style.display = 'none';
+                productsContainer.style.opacity = '1';
             }
+        }
+
+        // Функція фільтрації товарів
+        function filterProducts() {
+            const search = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+            const cat = document.getElementById('categoryFilter')?.value || '';
+
+            const filtered = allProducts.filter(p => {
+                const matchSearch = !search || p.name.toLowerCase().includes(search);
+                const matchCat = !cat || p.cat === cat;
+                return matchSearch && matchCat;
+            });
+
+            renderProducts(filtered);
+        }
+
+        // Вибір категорії через chips
+        function selectCategory(value) {
+            // Оновлюємо приховане поле
+            document.getElementById('categoryFilter').value = value;
+            
+            // Оновлюємо активний стан chips
+            document.querySelectorAll('.chip').forEach(chip => {
+                chip.classList.remove('active');
+                if (chip.dataset.value === value) {
+                    chip.classList.add('active');
+                }
+            });
+            
+            // Фільтруємо товари
+            filterProducts();
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -789,13 +1018,17 @@
             empty.style.display = 'none';
             container.innerHTML = products.map(p => {
                 const categoryMap = {
-                    toy: '🧸 Іграшка',
-                    key: '🔑 Брелок',
-                    anti: '✋ Антистрес',
-                    custom: '🎨 Персоналізований'
+                    toy: '🧸 Іграшки',
+                    key: '🔑 Брелки',
+                    anti: '🧠 Антистрес',
+                    gifts: '🎁 Подарунки та декор',
+                    home: '� Для дому',
+                    gadget: '📲 Для гаджетів',
+                    tool: '⚒️ Інструменти та приладдя',
+                    custom: '✏️ Індивідуальне'
                 };
 
-                const discount = p.oldPrice ? Math.round((p.oldPrice - p.price) / p.oldPrice * 100) : 0;
+                const discount = p.oldPrice && p.oldPrice > 0 ? Math.round((p.oldPrice - p.price) / p.oldPrice * 100) : 0;
 
                 return `
                     <div class="product-card">
@@ -849,9 +1082,17 @@
             currentProductId = null;
             uploadedPhotos = [];
             document.getElementById('modalTitle').textContent = '➕ Додати новий товар';
-            document.getElementById('productForm').reset();
+            const form = document.getElementById('productForm');
+            form.reset();
+            
+            // Очищаємо помилки валідації
+            document.querySelectorAll('.form-group').forEach(group => {
+                group.classList.remove('has-error');
+                const input = group.querySelector('input, select, textarea');
+                if (input) input.classList.remove('error');
+            });
+            
             document.getElementById('photoPreview').innerHTML = '';
-            document.getElementById('categoryFilter').value = '';
             updateCategoryFields();
             document.getElementById('modal').classList.add('active');
         }
@@ -874,7 +1115,9 @@
 
         async function editProduct(id) {
             try {
-                const res = await fetch(API_BASE + `/products/${id}`);
+                const res = await fetch(API_BASE + `/products/${id}`, {
+                    headers: { 'X-Telegram-Init-Data': tgInitData }
+                });
                 if (!res.ok) throw new Error('Not found');
 
                 const product = await res.json();
@@ -915,7 +1158,10 @@
             if (!confirm('Ви впевнені? Цей товар буде видалено назавжди!')) return;
 
             try {
-                const res = await fetch(API_BASE + `/products/${id}`, { method: 'DELETE' });
+                const res = await fetch(API_BASE + `/products/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-Telegram-Init-Data': tgInitData }
+                });
                 if (res.ok) {
                     showToast('Товар видалено ✅', 'success');
                     loadProducts();
@@ -951,6 +1197,28 @@
 
         fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
+        // Вставка фото через CTRL+V
+        document.addEventListener('paste', async (e) => {
+            const modal = document.getElementById('modal');
+            if (!modal.classList.contains('active')) return;
+
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            const files = [];
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const file = items[i].getAsFile();
+                    if (file) files.push(file);
+                }
+            }
+
+            if (files.length > 0) {
+                e.preventDefault();
+                handleFiles(files);
+            }
+        });
+
         async function handleFiles(files) {
             for (let file of files) {
                 if (!file.type.startsWith('image/')) {
@@ -961,9 +1229,15 @@
                 const formData = new FormData();
                 formData.append('file', file);
 
+                // Показуємо індикатор завантаження
+                const dragDropText = document.querySelector('.drag-drop-text');
+                const originalText = dragDropText.textContent;
+                dragDropText.textContent = '⏳ Завантаження...';
+
                 try {
                     const res = await fetch(API_BASE + '/upload-photo', {
                         method: 'POST',
+                        headers: { 'X-Telegram-Init-Data': tgInitData },
                         body: formData
                     });
                     const data = await res.json();
@@ -973,10 +1247,12 @@
                         updatePhotoPreview();
                         showToast(`Фото завантажено ✅`, 'success');
                     } else {
-                        showToast('Помилка завантаження фото', 'error');
+                        showToast('Помилка завантаження фото: ' + (data.error || 'Невідома помилка'), 'error');
                     }
                 } catch (e) {
                     showToast('Помилка завантаження', 'error');
+                } finally {
+                    dragDropText.textContent = originalText;
                 }
             }
         }
@@ -984,11 +1260,133 @@
         function updatePhotoPreview() {
             const preview = document.getElementById('photoPreview');
             preview.innerHTML = uploadedPhotos.map((url, i) => `
-                <div class="preview-item">
+                <div class="preview-item" draggable="true" data-index="${i}">
                     <img src="${url}" alt="фото">
                     <button type="button" class="remove" onclick="removePhoto(${i})">×</button>
                 </div>
             `).join('');
+
+            // Додаємо drag and drop події
+            const items = preview.querySelectorAll('.preview-item');
+            items.forEach(item => {
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragend', handleDragEnd);
+                item.addEventListener('dragover', handleDragOver);
+                item.addEventListener('drop', handleDrop);
+                item.addEventListener('dragleave', handleDragLeave);
+                
+                // Touch події для мобільних
+                item.addEventListener('touchstart', handleTouchStart, { passive: false });
+                item.addEventListener('touchmove', handleTouchMove, { passive: false });
+                item.addEventListener('touchend', handleTouchEnd);
+            });
+        }
+
+        let draggedItem = null;
+        let draggedIndex = null;
+        let touchTimer = null;
+        let isDragging = false;
+
+        function handleDragStart(e) {
+            draggedItem = this;
+            draggedIndex = parseInt(this.dataset.index);
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            document.querySelectorAll('.preview-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            draggedItem = null;
+            draggedIndex = null;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (this !== draggedItem) {
+                this.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            if (this === draggedItem) return;
+
+            const targetIndex = parseInt(this.dataset.index);
+            movePhoto(draggedIndex, targetIndex);
+        }
+
+        // Touch події для мобільних
+        function handleTouchStart(e) {
+            const touch = e.touches[0];
+            this.dataset.startX = touch.clientX;
+            this.dataset.startY = touch.clientY;
+            
+            // Long press для початку drag
+            touchTimer = setTimeout(() => {
+                isDragging = true;
+                draggedItem = this;
+                draggedIndex = parseInt(this.dataset.index);
+                this.classList.add('dragging');
+            }, 500);
+        }
+
+        function handleTouchMove(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            const element = document.elementFromPoint(touch.clientX, touch.clientY);
+            const targetItem = element?.closest('.preview-item');
+            
+            document.querySelectorAll('.preview-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            
+            if (targetItem && targetItem !== draggedItem) {
+                targetItem.classList.add('drag-over');
+            }
+        }
+
+        function handleTouchEnd(e) {
+            clearTimeout(touchTimer);
+            
+            if (!isDragging) return;
+            
+            const touch = e.changedTouches[0];
+            const element = document.elementFromPoint(touch.clientX, touch.clientY);
+            const targetItem = element?.closest('.preview-item');
+            
+            if (targetItem && targetItem !== draggedItem) {
+                const targetIndex = parseInt(targetItem.dataset.index);
+                movePhoto(draggedIndex, targetIndex);
+            }
+            
+            isDragging = false;
+            draggedItem?.classList.remove('dragging');
+            document.querySelectorAll('.preview-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            draggedItem = null;
+            draggedIndex = null;
+        }
+
+        function movePhoto(fromIndex, toIndex) {
+            if (fromIndex === toIndex) return;
+            
+            // Переміщуємо фото в масиві
+            const [movedPhoto] = uploadedPhotos.splice(fromIndex, 1);
+            uploadedPhotos.splice(toIndex, 0, movedPhoto);
+            
+            // Оновлюємо превью
+            updatePhotoPreview();
         }
 
         function removePhoto(i) {
@@ -1004,9 +1402,32 @@
             e.preventDefault();
             const form = e.target;
 
-            // Валідація
-            if (!form.name.value.trim()) {
-                form.name.classList.add('error');
+            // Валідація всіх обов'язкових полів
+            let isValid = true;
+            const requiredFields = ['name', 'cat', 'emoji', 'price', 'mat'];
+            
+            requiredFields.forEach(fieldName => {
+                const field = form.querySelector(`[name="${fieldName}"]`);
+                const group = field.closest('.form-group');
+                
+                if (!field.value.trim()) {
+                    field.classList.add('error');
+                    group.classList.add('has-error');
+                    isValid = false;
+                } else {
+                    field.classList.remove('error');
+                    group.classList.remove('has-error');
+                }
+            });
+
+            // Валідація категорії
+            if (!form.cat.value) {
+                form.cat.classList.add('error');
+                form.cat.closest('.form-group').classList.add('has-error');
+                isValid = false;
+            }
+
+            if (!isValid) {
                 showToast('Заповніть усі обов\'язкові поля', 'error');
                 return;
             }
@@ -1030,12 +1451,19 @@
             }
 
             try {
+                const submitBtn = form.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                submitBtn.textContent = '⏳ Збереження...';
+
                 const method = currentProductId ? 'PUT' : 'POST';
                 const url = currentProductId ? API_BASE + `/products/${currentProductId}` : API_BASE + '/products';
 
                 const res = await fetch(url, {
                     method,
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData
+                    },
                     body: JSON.stringify(data)
                 });
 
@@ -1049,6 +1477,10 @@
                 }
             } catch (e) {
                 showToast('Помилка: ' + e.message, 'error');
+            } finally {
+                const submitBtn = form.querySelector('button[type="submit"]');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Зберегти товар';
             }
         });
 
@@ -1070,6 +1502,20 @@
 
         loadProducts();
         setInterval(loadProducts, 30000); // Оновлення кожні 30 секунд
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // Закриття модального вікна при кліку на фон
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target.id === 'modal') {
+                closeModal();
+            }
+        });
     </script>
 </body>
 </html>

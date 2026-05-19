@@ -4,15 +4,16 @@
     "cat": "toy",
     "emoji": "🐉",
     "photos": [
-      "https://i.ibb.co/Q3vjzRJc/IMG-0246.gif",
       "https://i.ibb.co/m5fFZNBJ/IMG-0244.png",
+      "https://i.ibb.co/Q3vjzRJc/IMG-0246.gif",
       "https://i.ibb.co/3mF9zKCp/image.png"
     ],
     "name": "Fidget-спіраль",
     "mat": "PLA · один або два кольори",
     "price": 300,
     "hot": true,
-    "gift": false
+    "gift": false,
+    "filamentChoice": true
   },
   {
     "id": 2,

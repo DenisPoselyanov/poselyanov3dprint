@@ -1378,6 +1378,14 @@ async def is_admin_check(request: web.Request) -> bool:
 
 
 # Хендлер для отримання HTML адмін панелі. Він перевіряє, чи користувач є власником (адміністратором) за допомогою resolve_request_user і initData, який може бути переданий через query параметр, заголовок або cookie. Якщо користувач не є адміном, він повертає 403 Forbidden. Якщо користувач є адміном, він намагається прочитати файл admin-panel.html і повернути його вміст як HTML відповідь. Якщо файл не знайдено, він повертає 404 Not Found.
+async def handle_index(request: web.Request):
+    """Отримати HTML головної сторінки"""
+    try:
+        html = Path("index.html").read_text(encoding="utf-8")
+        return web.Response(text=html, content_type='text/html', headers=cors_headers(request))
+    except FileNotFoundError:
+        return web.Response(status=404, text="Index file not found", headers=cors_headers(request))
+
 async def handle_admin_panel(request: web.Request):
     """Отримати HTML адмін панелі"""
     init_data = (
@@ -1413,7 +1421,10 @@ async def handle_get_product(request: web.Request):
 async def handle_create_product(request: web.Request):
     """Створити новий товар"""
     auth, err = resolve_request_user(request, {})
-    if err or not auth or auth.get("user_id") != OWNER_ID:
+    if err:
+        return err
+    # Локально без валідації дозволяємо без перевірки OWNER_ID
+    if VALIDATE_INIT_DATA and (not auth or auth.get("user_id") != OWNER_ID):
         return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
 
     try:
@@ -1428,7 +1439,10 @@ async def handle_create_product(request: web.Request):
 async def handle_update_product(request: web.Request):
     """Редагувати товар"""
     auth, err = resolve_request_user(request, {})
-    if err or not auth or auth.get("user_id") != OWNER_ID:
+    if err:
+        return err
+    # Локально без валідації дозволяємо без перевірки OWNER_ID
+    if VALIDATE_INIT_DATA and (not auth or auth.get("user_id") != OWNER_ID):
         return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
 
     try:
@@ -1444,7 +1458,10 @@ async def handle_update_product(request: web.Request):
 async def handle_delete_product(request: web.Request):
     """Видалити товар"""
     auth, err = resolve_request_user(request, {})
-    if err or not auth or auth.get("user_id") != OWNER_ID:
+    if err:
+        return err
+    # Локально без валідації дозволяємо без перевірки OWNER_ID
+    if VALIDATE_INIT_DATA and (not auth or auth.get("user_id") != OWNER_ID):
         return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
 
     try:
@@ -1459,7 +1476,10 @@ async def handle_delete_product(request: web.Request):
 async def handle_upload_photo(request: web.Request):
     """Завантажити фото на Cloudinary з повною обробкою помилок"""
     auth, err = resolve_request_user(request, {})
-    if err or not auth or auth.get("user_id") != OWNER_ID:
+    if err:
+        return err
+    # Локально без валідації дозволяємо без перевірки OWNER_ID
+    if VALIDATE_INIT_DATA and (not auth or auth.get("user_id") != OWNER_ID):
         return web.json_response({"ok": False, "error": "❌ Забачено доступу (тільки адмін)"}, status=403, headers=cors_headers(request))
 
     try:
@@ -1654,6 +1674,8 @@ def main():
         http_app.router.add_route('OPTIONS', '/order', handle_options)
         http_app.router.add_post('/check_coupon', handle_check_coupon)
         http_app.router.add_route('OPTIONS', '/check_coupon', handle_options)
+        # Головна сторінка
+        http_app.router.add_get('/', handle_index)
         # Адмін API
         http_app.router.add_get('/admin/panel', handle_admin_panel)
         http_app.router.add_get('/api/products', handle_get_products)
