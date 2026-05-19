@@ -33,7 +33,8 @@ load_dotenv()
 
 # =============================================
 BOT_TOKEN  = os.environ.get("BOT_TOKEN")
-OWNER_ID   = int(os.environ.get("OWNER_ID", "-1003739884073"))
+OWNER_ID   = int(os.environ.get("OWNER_ID", "718746623"))
+ORDERS_CHAT_ID = int(os.environ.get("ORDERS_CHAT_ID", str(OWNER_ID)))
 WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"
 DB_FILE    = "users.db"
 PRODUCTS_FILE = "products.json"
@@ -1356,12 +1357,12 @@ async def handle_order(request):
 
     try:
         await bot_app.bot.send_message(
-            chat_id=OWNER_ID,
+            chat_id=ORDERS_CHAT_ID,
             text=owner_text,
             parse_mode='HTML',
             reply_markup=markup
         )
-        logger.info(f"✅ Надіслано в канал")
+        logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
     except Exception as e:
         logger.error(f"❌ Помилка надсилання в канал: {e}")
 
