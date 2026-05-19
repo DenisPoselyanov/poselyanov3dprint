@@ -183,8 +183,8 @@ def add_product(data: dict):
 
         if data.get("oldPrice"):
             product["oldPrice"] = int(data["oldPrice"])
-
-        product["hot"] = data.get("hot", False)
+            product["hot"] = data.get("hot", False)
+            product["stlLink"] = data.get("stlLink", "")  # Додаємо поле для посилання на STL файл
 
         if is_custom:
             product["custom_fields"] = data.get("custom_fields", "")
@@ -216,9 +216,10 @@ def update_product(product_id: int, data: dict):
         product.update({
             "emoji": data.get("emoji", product.get("emoji")),
             "photos": data.get("photos", product.get("photos", [])),
-            "name": data.get("name", product.get("name")),
+                        "name": data.get("name", product.get("name")),
             "mat": data.get("mat", product.get("mat")),
             "hot": data.get("hot", product.get("hot", False)),
+            "stlLink": data.get("stlLink", product.get("stlLink", "")),  # Додаємо поле для посилання на STL файл
         })
 
         if data.get("price") is not None:
@@ -1386,6 +1387,44 @@ async def handle_index(request: web.Request):
     except FileNotFoundError:
         return web.Response(status=404, text="Index file not found", headers=cors_headers(request))
 
+async def handle_static(request: web.Request):
+    """Обслуговування статичних файлів"""
+    file_path = request.match_info.get('path', '')
+    
+    # Безпека: не дозволяємо доступ до файлів за межами поточної директорії
+    if '..' in file_path or file_path.startswith('/'):
+        return web.Response(status=403, text="Access denied", headers=cors_headers(request))
+    
+    try:
+        file = Path(file_path)
+        if not file.exists():
+            return web.Response(status=404, text="File not found", headers=cors_headers(request))
+        
+        # Визначаємо content type на основі розширення
+        content_types = {
+            '.html': 'text/html',
+            '.css': 'text/css',
+            '.js': 'application/javascript',
+            '.json': 'application/json',
+            '.svg': 'image/svg+xml',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.ico': 'image/x-icon',
+            '.woff': 'font/woff',
+            '.woff2': 'font/woff2',
+            '.ttf': 'font/ttf',
+        }
+        
+        ext = file.suffix.lower()
+        content_type = content_types.get(ext, 'application/octet-stream')
+        
+        content = file.read_bytes()
+        return web.Response(body=content, content_type=content_type, headers=cors_headers(request))
+    except Exception as e:
+        return web.Response(status=500, text=str(e), headers=cors_headers(request))
+
 async def handle_admin_panel(request: web.Request):
     """Отримати HTML адмін панелі"""
     init_data = (
@@ -1497,9 +1536,10 @@ async def handle_upload_photo(request: web.Request):
         filename = (field.filename or f"product_{int(datetime.now().timestamp())}").rsplit('.', 1)[0]
 
         # Перевіримо, що це зображення
-        if not field.content_type or not field.content_type.startswith('image/'):
+        content_type = field.headers.get('Content-Type', '')
+        if not content_type or not content_type.startswith('image/'):
             return web.json_response(
-                {"ok": False, "error": f"❌ Не дозволений тип файлу: {field.content_type}. Тільки зображення"}, 
+                {"ok": False, "error": f"❌ Не дозволений тип файлу: {content_type}. Тільки зображення"}, 
                 status=400, 
                 headers=cors_headers(request)
             )
@@ -1670,12 +1710,11 @@ def main():
 
     async def run():
         http_app = web.Application()
+        # API маршрути (перші, щоб не перехоплювалися статичними файлами)
         http_app.router.add_post('/order', handle_order)
         http_app.router.add_route('OPTIONS', '/order', handle_options)
         http_app.router.add_post('/check_coupon', handle_check_coupon)
         http_app.router.add_route('OPTIONS', '/check_coupon', handle_options)
-        # Головна сторінка
-        http_app.router.add_get('/', handle_index)
         # Адмін API
         http_app.router.add_get('/admin/panel', handle_admin_panel)
         http_app.router.add_get('/api/products', handle_get_products)
@@ -1684,6 +1723,10 @@ def main():
         http_app.router.add_put('/api/products/{id}', handle_update_product)
         http_app.router.add_delete('/api/products/{id}', handle_delete_product)
         http_app.router.add_post('/api/upload-photo', handle_upload_photo)
+        # Головна сторінка
+        http_app.router.add_get('/', handle_index)
+        # Статичні файли (останній, як catch-all)
+        http_app.router.add_get('/{path:.*}', handle_static)
         runner = web.AppRunner(http_app)
         await runner.setup()
         site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))

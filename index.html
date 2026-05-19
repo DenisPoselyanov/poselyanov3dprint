@@ -458,6 +458,14 @@
   }
   .modal-share-btn:active { background: #e0e0e0; }
 
+  .modal-stl-btn {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--bg); border: none; cursor: pointer;
+    font-size: 14px; display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  .modal-stl-btn:active { background: #e0e0e0; }
+  
   /* Інформаційний блок з назвою, матеріалом та ціною в модальному вікні */
   .filament-block {
     padding: 0 18px 12px;
@@ -1424,6 +1432,7 @@
     <div class="modal-header">
       <span class="modal-title">Замовлення</span>
       <div style="display:flex;gap:8px;align-items:center">
+        <button class="modal-stl-btn" id="modal-stl-btn" onclick="openStlLink()" title="Відкрити STL файл">📐</button>
         <button class="modal-share-btn" onclick="shareProduct()" title="Поділитись">🔗</button>
         <button type="button" class="modal-close" onclick="event.stopPropagation(); closeModal()">✕</button>
       </div>
@@ -2427,6 +2436,12 @@ function onFilamentPick(fid) {
   if (!f) return;
   modalFilamentId = fid;
   renderFilamentSwatches();
+  
+  // Оновлюємо текст підказки з назвою обраного кольору
+  const hintEl = document.getElementById('m-filament-hint');
+  if (hintEl) {
+    hintEl.textContent = `Обрано: ${f.name}`;
+  }
 }
 
 function renderFilamentSwatches() {
@@ -2461,10 +2476,17 @@ function setupModalFilamentPicker() {
     const existing = getCartItem(currentProduct.id);
     fid = existing?.filamentId || defaultFilamentId();
   }
-  if (!av.find(f => f.id === fid)) fid = defaultFilamentId();
+    if (!av.find(f => f.id === fid)) fid = defaultFilamentId();
   modalFilamentId = fid;
   block.style.display = '';
   renderFilamentSwatches();
+  
+  // Встановлюємо початковий текст з назвою обраного кольору
+  const selectedFilament = av.find(f => f.id === fid);
+  const hintEl = document.getElementById('m-filament-hint');
+  if (hintEl && selectedFilament) {
+    hintEl.textContent = `Обрано: ${selectedFilament.name}`;
+  }
 }
 
 // ─── РЕНДЕР ГРИДУ ТОВАРІВ ЗА КАТЕГОРІЄЮ ───────────────────────────────
@@ -2938,12 +2960,19 @@ function openModal(id, source = 'products', options = {}) {
   setupModalFilamentPicker();
   updateModalLayoutForMode();
 
-  if (!modalGiftPreview) {
+    if (!modalGiftPreview) {
     const existingInCart = getCartItem(currentProduct.id);
     modalQty = existingInCart ? existingInCart.quantity : 1;
     document.getElementById('m-qty').textContent = modalQty;
   }
-  updateModalAddBtn();
+    updateModalAddBtn();
+
+    // Зберігаємо stlLink перед requestAnimationFrame
+    const productStlLink = currentProduct.stlLink;
+    const tg = window.Telegram?.WebApp;
+    const userId = tg?.initDataUnsafe?.user?.id;
+    // Кнопка STL показується тільки для адміністратора
+    const isAdmin = userId === 718746623;
 
   modalSavedScrollY = getMainScrollTop();
   document.body.classList.add('modal-open');
@@ -2957,13 +2986,25 @@ function openModal(id, source = 'products', options = {}) {
   modalEl.style.transition = 'none';
   modalEl.style.transform = 'translateY(100%)';
   modalEl.style.opacity = '0.6';
-  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       modalEl.style.transition = 'transform .28s cubic-bezier(.34,1.2,.64,1), opacity .22s ease';
       modalEl.style.transform = 'translateY(0)';
       modalEl.style.opacity = '1';
     });
   });
+  
+    // Показуємо кнопку STL для адміна, якщо є посилання (одразу, без затримки)
+    const stlBtn = document.getElementById('modal-stl-btn');
+    if (stlBtn) {
+      if (isAdmin && productStlLink) {
+        stlBtn.style.display = 'flex';
+        stlBtn.dataset.stlLink = productStlLink;
+      } else {
+        stlBtn.style.display = 'none';
+        stlBtn.dataset.stlLink = '';
+      }
+    }
 }
 
 function closeModal(dragOffset = 0) {
@@ -3169,6 +3210,20 @@ function backToCatalog() {
 }
 
 // ─── ПОДІЛИТИСЬ ТОВАРОМ ───────────────────────────────────
+// Функція для відкриття STL посилання (тільки для адміна)
+function openStlLink() {
+  const stlBtn = document.getElementById('modal-stl-btn');
+  const stlLink = stlBtn?.dataset?.stlLink;
+  if (stlLink) {
+    const tg = window.Telegram?.WebApp;
+    if (tg && tg.openLink) {
+      tg.openLink(stlLink);
+    } else {
+      window.open(stlLink, '_blank');
+    }
+  }
+}
+
 async function shareProduct() {
   if (!currentProduct) return;
   const link = `https://t.me/poselyanov3dprint_bot?startapp=product_${currentProduct.id}`;

@@ -864,6 +864,11 @@
                     <div class="form-error">Матеріал вимагається</div>
                 </div>
 
+                <div class="form-group">
+                    <label>Посилання на STL файл (для адміна)</label>
+                    <input type="url" name="stlLink" placeholder="https://example.com/file.stl">
+                </div>
+
                 <div id="standardFields">
                     <div class="form-group">
                         <label>Опції товару</label>
@@ -1133,6 +1138,7 @@
                 form.price.value = product.price;
                 form.oldPrice.value = product.oldPrice || '';
                 form.mat.value = product.mat;
+                form.stlLink.value = product.stlLink || '';
 
                 if (product.cat === 'custom') {
                     form.custom_fields.value = product.custom_fields || '';
@@ -1439,6 +1445,7 @@
                 price: parseInt(form.price.value),
                 oldPrice: form.oldPrice.value ? parseInt(form.oldPrice.value) : null,
                 mat: form.mat.value.trim(),
+                stlLink: form.stlLink.value.trim(),
                 photos: uploadedPhotos,
             };
 
