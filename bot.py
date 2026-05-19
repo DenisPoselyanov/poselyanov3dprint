@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from aiohttp import web
 import asyncio
 import hashlib
+import html
 import hmac
 import json
 import logging
@@ -1321,13 +1322,26 @@ async def handle_order(request):
         except Exception as e:
             logger.error(f"Помилка підтвердження клієнту: {e}")
 
+    # Формуємо клікабельні назви товарів для адмін-повідомлення
+    # (відкриває конкретний товар у боті через deep-link startapp=product_<id>)
     items_text = ''
+    bot_link_base = "https://t.me/poselyanov3dprint_bot?startapp=product_"
+
+    def _product_link(name: str, product_id: int | None):
+        safe_name = html.escape(name or "—")
+        if product_id:
+            return f'<a href="{bot_link_base}{product_id}">{safe_name}</a>'
+        return safe_name
+
     for i in items:
-        line = f"  • {i.get('product_name','—')} × {i.get('quantity',1)} — {i.get('price',0) * i.get('quantity',1)} ₴"
+        product_name = i.get('product_name', '—')
+        product_id = int(i.get('product_id') or 0)
+        linked_name = _product_link(product_name, product_id)
+        line = f"  • {linked_name} × {i.get('quantity',1)} — {i.get('price',0) * i.get('quantity',1)} ₴"
         if i.get('filament_name'):
-            line += f" · 🎨 {i['filament_name']}"
+            line += f" · 🎨 {html.escape(i['filament_name'])}"
         if i.get('customValue'):
-            line += f" _{i['customValue']}_"
+            line += f" <i>{html.escape(i['customValue'])}</i>"
         items_text += line + '\n'
 
     # Формуємо текст замовлення для власника, включаючи інформацію про товари, загальну суму, коментар клієнта, подарунок і купон зі знижкою, якщо вони є. Це дозволяє власнику отримувати повну інформацію про замовлення і приймати рішення про його обробку.
@@ -1346,13 +1360,23 @@ async def handle_order(request):
     # Якщо замовлення було оформлено з купоном, додаємо інформацію про купон і знижку в текст замовлення для власника, щоб він бачив, який купон був використаний і яку знижку він надав. Це допомагає власнику краще розуміти замовлення і приймати рішення про його обробку.
     gift = data.get('gift')
 
-    # Якщо є подарунок, додаємо його в текст замовлення для власника
+    # Якщо є подарунок, додаємо клікабельне посилання (якщо знайдено відповідний товар)
     if gift:
-        owner_text += f"🎁 Подарунок: {gift} — безкоштовно\n"
+        gift_name = str(gift).strip()
+        gift_product = next(
+            (p for p in (PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE)
+             if str(p.get("name", "")).strip().lower() == gift_name.lower()),
+            None,
+        )
+        if gift_product and gift_product.get("id"):
+            gift_link = f'<a href="{bot_link_base}{int(gift_product.get("id"))}">{html.escape(gift_name)}</a>'
+            owner_text += f"🎁 Подарунок: {gift_link} — безкоштовно\n"
+        else:
+            owner_text += f"🎁 Подарунок: {html.escape(gift_name)} — безкоштовно\n"
 
     # Якщо клієнт залишив коментар, додаємо його в текст замовлення для власника
     if comment:
-        owner_text += f"📝 Коментар: _{comment}_\n"
+        owner_text += f"📝 Коментар: <i>{html.escape(comment)}</i>\n"
 
     status_buttons = [
         InlineKeyboardButton("✅ Підтвердити",     callback_data=f"confirm_{order_id}"),
@@ -1751,6 +1775,9 @@ def main():
         async with bot_app:
             await bot_app.initialize()
             await bot_app.start()
+            # Якщо раніше був увімкнений webhook (або інший інстанс),
+            # примусово скидаємо його перед polling, щоб уникнути Conflict.
+            await bot_app.bot.delete_webhook(drop_pending_updates=True)
             await bot_app.updater.start_polling(
                 allowed_updates=Update.ALL_TYPES,
                 drop_pending_updates=True,
