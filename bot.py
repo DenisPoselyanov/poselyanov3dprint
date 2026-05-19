@@ -706,17 +706,30 @@ def get_all_users():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.message.from_user)
 
-    keyboard = [[
-        KeyboardButton(
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
             "🛍️ Відкрити каталог",
             web_app=WebAppInfo(url=WEBAPP_URL)
         )
-    ]]
+    ]])
+
     await update.message.reply_text(
         "👋 Привіт! Я — Poselyanov 3D Print\n\n"
         "Роблю 3D-принти на замовлення:\n"
         "Натисни кнопку нижче щоб переглянути каталог 👇",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        reply_markup=markup
+    )
+
+async def catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "🛍️ Відкрити каталог",
+            web_app=WebAppInfo(url=WEBAPP_URL)
+        )
+    ]])
+    await update.message.reply_text(
+        "🛍️ Каталог Poselyanov 3D Print 👇",
+        reply_markup=markup
     )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1694,7 +1707,8 @@ def main():
     )
 
     bot_app = Application.builder().token(BOT_TOKEN).build()
-
+    
+    bot_app.add_handler(CommandHandler("catalog", catalog))
     bot_app.add_handler(CommandHandler("start",     start))
     bot_app.add_handler(CommandHandler("myid",      myid))
     bot_app.add_handler(CommandHandler("stats",     stats))
@@ -1763,6 +1777,7 @@ def main():
             # Команди для звичайних юзерів
             await bot_app.bot.set_my_commands(
                 commands=[
+                    ("catalog", "🛍️ Відкрити каталог"),
                     ("history",   "📦 Мої замовлення"),
                     ("mycoupons", "🎟️ Мої купони"),
                     ("sales",     "🔥 Акції"),

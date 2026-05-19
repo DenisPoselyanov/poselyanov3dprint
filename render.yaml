@@ -4,6 +4,8 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
+    pullRequestPreviews:
+      autoDeploy: false
     envVars:
       - key: BOT_TOKEN
         sync: false
