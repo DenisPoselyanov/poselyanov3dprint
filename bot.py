@@ -1256,7 +1256,7 @@ async def handle_order(request):
             if discount_amount and coupon_code:
                 original_price = total_price + discount_amount
                 line += f"\n🏷️ *Купон {coupon_code}:* −{discount_amount} ₴"
-                line += f"\n💰 *Разом: ~~{original_price}~~ {total_price} ₴*"
+                line += f"\n💰 *Разом: {original_price} → {total_price} ₴*"
             else:
                 line += f"\n💰 *Разом: {total_price} ₴*"
             if comment:
