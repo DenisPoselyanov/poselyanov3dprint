@@ -855,16 +855,34 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Функція для отримання активних купонів, які можна використати при оформленні замовлення. Вона витягує з бази даних всі купони, які відповідають умовам активності (не вичерпано, не прострочено, особисті або публічні) і повертає їх у вигляді списку рядків для відображення користувачу.
 def get_my_coupons(user_id: int):
+    """Повертає купони, доступні користувачу:
+    - персональні (personal_user_id = user_id)
+    - публічні (personal_user_id IS NULL)
+    з урахуванням строку дії, ліміту використань та one_per_user.
+    """
     conn = sqlite3.connect(DB_FILE)
     rows = conn.execute("""
-        SELECT code, type, value, min_order, uses_max, uses_count,
-               one_per_user, expires_at
-        FROM coupons
-        WHERE active = 1
-          AND personal_user_id = ?
-          AND (expires_at IS NULL OR expires_at > datetime('now'))
-          AND (uses_max = 0 OR uses_count < uses_max)
-    """, (user_id,)).fetchall()
+        SELECT
+            c.code,
+            c.type,
+            c.value,
+            c.min_order,
+            c.uses_max,
+            c.uses_count,
+            c.one_per_user,
+            c.expires_at,
+            EXISTS(
+                SELECT 1
+                FROM coupon_uses cu
+                WHERE cu.code = c.code AND cu.user_id = ?
+            ) AS used_by_user
+        FROM coupons c
+        WHERE c.active = 1
+          AND (c.personal_user_id IS NULL OR c.personal_user_id = ?)
+          AND (c.expires_at IS NULL OR c.expires_at > datetime('now'))
+          AND (c.uses_max = 0 OR c.uses_count < c.uses_max)
+        ORDER BY c.personal_user_id DESC, c.code ASC
+    """, (user_id, user_id)).fetchall()
     conn.close()
     return rows
 
@@ -884,7 +902,7 @@ async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "🎟️ <b>Твої купони:</b>\n" + "─" * 22 + "\n\n"
 
-    for code, ctype, value, min_order, uses_max, uses_count, one_per_user, expires_at in rows:
+    for code, ctype, value, min_order, uses_max, uses_count, one_per_user, expires_at, used_by_user in rows:
         label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
         text += f"🏷️ <b><code>{code}</code></b> — знижка {label}\n"
 
@@ -892,10 +910,9 @@ async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"   • Від суми: {min_order} ₴\n"
 
         if one_per_user:
-            used = uses_count > 0
-            text += f"   • {'⛔ Вже використано' if used else '⚡ Одноразовий'}\n"
+            text += f"   • {'⛔ Вже використано' if used_by_user else '⚡ Одноразовий'}\n"
         elif uses_max:
-            left = uses_max - uses_count
+            left = max(0, uses_max - uses_count)
             text += f"   • Залишилось використань: {left}\n"
 
         if expires_at:
@@ -903,7 +920,7 @@ async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 dt = datetime.strptime(expires_at[:10], "%Y-%m-%d")
                 exp_fmt = f"{dt.day} {months[dt.month-1]} {dt.year}"
             except Exception:
-                exp_fmt = expires_at[:10]
+                exp_fmt = str(expires_at)[:10]
             text += f"   • Діє до: {exp_fmt}\n"
         else:
             text += f"   • Безстроковий ♾️\n"
@@ -1675,13 +1692,27 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return
 
-    # Оновлюємо текст повідомлення, додаючи статус в кінець. Якщо кнопка "Написати" була, вона залишиться (крім випадку скасування, коли всі кнопки зникають).
+    # Оновлюємо текст повідомлення зі статусом.
+    # Важливо: для confirm/draft зберігаємо HTML (і всі посилання на товари),
+    # а для cancel спеціально прибираємо HTML-посилання з тексту.
     try:
-        await query.edit_message_text(
-            text=query.message.text + f"\n\n*Статус: {label}*",
-            parse_mode='Markdown',
-            reply_markup=markup
-        )
+        if action == "cancel":
+            # plain text без HTML-лінків
+            base_text = query.message.text or ""
+            new_text = base_text + f"\n\nСтатус: {label}"
+            await query.edit_message_text(
+                text=new_text,
+                reply_markup=markup
+            )
+        else:
+            # зберігаємо HTML-розмітку оригінального повідомлення
+            base_html = getattr(query.message, "text_html", None) or html.escape(query.message.text or "")
+            new_html = base_html + f"\n\n<b>Статус: {html.escape(label)}</b>"
+            await query.edit_message_text(
+                text=new_html,
+                parse_mode='HTML',
+                reply_markup=markup
+            )
     except Exception:
         pass
 
