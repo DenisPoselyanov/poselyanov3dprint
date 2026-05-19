@@ -1553,7 +1553,7 @@
 const API_BASE = (() => {
   const h = location.hostname;
   if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8080';
-  return window.__API_BASE__ || 'http://localhost:8080';
+  return window.__API_BASE__ || 'https://poselyanov3dprint-1.onrender.com';
 })();
 
 function apiHeaders() {
