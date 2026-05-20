@@ -45,6 +45,8 @@ CUSTOM_PRODUCTS_FILE = "custom_products.json"
 FILAMENTS_FILE = "filaments.json"
 # Локально: false (працює без initData). На проді: true
 VALIDATE_INIT_DATA = os.environ.get("VALIDATE_INIT_DATA", "false").lower() in ("1", "true", "yes")
+# Акція -10% на замовлення від 500 грн: true - увімкнено, false - вимкнено
+PROMOTION_ENABLED = os.environ.get("PROMOTION_ENABLED", "true").lower() in ("1", "true", "yes")
 CORS_ORIGINS = [
     o.strip() for o in os.environ.get(
         "CORS_ORIGINS",
@@ -437,14 +439,23 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
             return False, coupon_result.get("message", "Невалідний купон")
         discount = int(coupon_result.get("discount", 0))
 
-    server_total = max(0, subtotal - discount)
+    # Обчислюємо суму після застосування купона
+    after_coupon_total = max(0, subtotal - discount)
+    
+    # Перевіряємо акцію -10% на замовлення від 500 грн
+    promotion_discount = check_promotion(after_coupon_total)
+    
+    # Загальна сума з урахуванням обох знижок
+    server_total = max(0, after_coupon_total - promotion_discount)
+    
     if server_total != int(client_total):
         return False, f"Сума не збігається (клієнт {client_total}, сервер {server_total})"
 
     return True, {
         "items": normalized,
         "subtotal": subtotal,
-        "discount": discount,
+        "coupon_discount": discount,
+        "promotion_discount": promotion_discount,
         "total_price": server_total,
     }
 
@@ -689,6 +700,23 @@ def check_coupon(code: str, user_id: int, cart_total: int):
         "discount": discount,
         "message": f"Купон застосовано! Знижка {label} ✅"
     }
+
+def check_promotion(cart_total: int):
+    """
+    Перевіряє, чи діє акція -10% на замовлення від 500 грн
+    Повертає розмір знижки, якщо акція діє
+    """
+    if not PROMOTION_ENABLED:
+        return 0
+    
+    PROMOTION_MIN_AMOUNT = 500  # мінімальна сума для акції
+    PROMOTION_DISCOUNT_RATE = 0.10  # 10% знижка
+    
+    if cart_total >= PROMOTION_MIN_AMOUNT:
+        discount = int(cart_total * PROMOTION_DISCOUNT_RATE)
+        return discount
+    return 0
+
 
 def update_order_status(order_id: int, status: str):
     conn = sqlite3.connect(DB_FILE)
@@ -1281,18 +1309,21 @@ async def handle_order(request):
 
     items = result["items"]
     total_price = result["total_price"]
-    discount_amount = result["discount"]
-    coupon_code = coupon_code if discount_amount else None
+    coupon_discount = result.get("coupon_discount", 0)
+    promotion_discount = result.get("promotion_discount", 0)
+    total_discount = coupon_discount + promotion_discount
+    coupon_code = coupon_code if coupon_discount else None
 
     # Формуємо назву для збереження в БД (всі товари через кому)
     product_name = ', '.join(i.get('product_name', '—') for i in items)
 
     # Зберігаємо замовлення в базі даних і отримуємо його ID для подальшого використання в логах і кнопках
-    order_id = save_order(user_id or 0, username, first_name, items, total_price, comment, gift, coupon_code, discount_amount)
+    order_id = save_order(user_id or 0, username, first_name, items, total_price, comment, gift, coupon_code, total_discount)
 
     # Логування нового замовлення з інформацією про ID замовлення, назву товару, загальну суму, інформацію про купон і знижку (якщо є) і ім'я користувача. Це дозволяє відстежувати всі замовлення, які надходять через веб-додаток, і отримувати повну інформацію про них для подальшої обробки.
-    coupon_info = f"  🏷️ {coupon_code} −{discount_amount}₴" if coupon_code else ""
-    logger.info(f"📦 ЗАМОВЛЕННЯ #{order_id}  {product_name}  {total_price}₴{coupon_info}  від {username}")
+    coupon_info = f"  🏷️ {coupon_code} −{coupon_discount}₴" if coupon_code else ""
+    promotion_info = f"  🔥 Акція −{promotion_discount}₴" if promotion_discount > 0 else ""
+    logger.info(f"📦 ЗАМОВЛЕННЯ #{order_id}  {product_name}  {total_price}₴{coupon_info}{promotion_info}  від {username}")
 
     # Підтвердження клієнту
     
@@ -1313,10 +1344,15 @@ async def handle_order(request):
             if gift:
                 line += f"\n  🎁 {gift} — *безкоштовно*"
 
-            # Якщо замовлення було оформлено з купоном, додаємо інформацію про купон і знижку в текст підтвердження для клієнта, а також показуємо оригінальну ціну зі зачеркуванням для наочності. Це дозволяє клієнту бачити вигоду від використання купона і підвищує задоволеність від покупки.
-            if discount_amount and coupon_code:
-                original_price = total_price + discount_amount
-                line += f"\n🏷️ *Купон {coupon_code}:* −{discount_amount} ₴"
+            # Якщо замовлення було оформлено з купоном або акцією, додаємо інформацію про знижки в текст підтвердження для клієнта
+            if total_discount > 0:
+                original_price = total_price + total_discount
+                discount_lines = []
+                if coupon_discount > 0 and coupon_code:
+                    discount_lines.append(f"🏷️ *Купон {coupon_code}:* −{coupon_discount} ₴")
+                if promotion_discount > 0:
+                    discount_lines.append(f"🔥 *Акція -10%:* −{promotion_discount} ₴")
+                line += "\n" + "\n".join(discount_lines)
                 line += f"\n💰 *Разом: {original_price} → {total_price} ₴*"
             else:
                 line += f"\n💰 *Разом: {total_price} ₴*"
@@ -1397,9 +1433,14 @@ async def handle_order(request):
         f"👤 Від: {username}\n\n"
         f"📦 <b>Товари:</b>\n{items_text}\n"
     )
-    if coupon_code and discount_amount:
-        original_price = total_price + discount_amount
-        owner_text += f"🏷️ Купон: <b>{coupon_code}</b> −{discount_amount} ₴\n"
+    if total_discount > 0:
+        original_price = total_price + total_discount
+        discount_lines = []
+        if coupon_discount > 0 and coupon_code:
+            discount_lines.append(f"🏷️ Купон: <b>{coupon_code}</b> −{coupon_discount} ₴")
+        if promotion_discount > 0:
+            discount_lines.append(f"🔥 Акція -10%: −{promotion_discount} ₴")
+        owner_text += "\n".join(discount_lines) + "\n"
         owner_text += f"💰 <b>Разом: {original_price} → {total_price} ₴</b>\n"
     else:
         owner_text += f"💰 <b>Разом: {total_price} ₴</b>\n"
