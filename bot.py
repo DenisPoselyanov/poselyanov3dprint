@@ -501,6 +501,11 @@ def init_db():
         )
     """)
 
+    # Додаємо колонку personal_user_id, якщо її немає (для старих баз)
+    c_cols = [row[1] for row in conn.execute("PRAGMA table_info(coupons)").fetchall()]
+    if "personal_user_id" not in c_cols:
+        conn.execute("ALTER TABLE coupons ADD COLUMN personal_user_id INTEGER")
+
     # Таблиця для зберігання інформації про використання купонів, щоб можна було відстежувати, хто і коли їх використовував, а також для реалізації обмежень на кількість використань і використання одним користувачем.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS coupon_uses (
