@@ -1831,12 +1831,15 @@ def main():
         async with bot_app:
             await bot_app.initialize()
             await bot_app.start()
-            # Якщо раніше був увімкнений webhook (або інший інстанс),
-            # примусово скидаємо його перед polling, щоб уникнути Conflict.
+            # Якщо раніше був увімкнений webhook — скидаємо перед polling.
             await bot_app.bot.delete_webhook(drop_pending_updates=True)
+            # Критично для Render: короткий timeout зменшує "хвіст" старого процесу
+            # під час rolling deploy, щоб не ловити довгі Conflict.
             await bot_app.updater.start_polling(
                 allowed_updates=Update.ALL_TYPES,
                 drop_pending_updates=True,
+                timeout=10,
+                poll_interval=0.5,
             )
             logger.info("🤖 Бот запущено  →  очікую замовлення...")
             # Встановлюємо адмін-команди для себе
