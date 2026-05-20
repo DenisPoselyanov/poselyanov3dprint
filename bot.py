@@ -1801,6 +1801,14 @@ def main():
     bot_app.add_handler(CommandHandler("status",   status_cmd))
     bot_app.add_handler(CommandHandler("contact",  contact))
     bot_app.add_handler(CommandHandler("reload_products", reload_products_cmd))
+    # Додатково ловимо текстові варіанти кнопки/команди купонів,
+    # якщо користувач надсилає саме текст, а не slash-команду.
+    bot_app.add_handler(
+        MessageHandler(
+            filters.TEXT & filters.Regex(r"^(?:/mycoupons|🎟️ Мої купони)$"),
+            mycoupons,
+        )
+    )
     bot_app.add_handler(CallbackQueryHandler(order_action, pattern=r"^(confirm|draft|cancel)_"))
 
     async def run():
