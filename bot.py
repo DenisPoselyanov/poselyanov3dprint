@@ -38,7 +38,8 @@ BOT_TOKEN  = os.environ.get("BOT_TOKEN")
 OWNER_ID   = int(os.environ.get("OWNER_ID", "718746623"))
 ORDERS_CHAT_ID = int(os.environ.get("ORDERS_CHAT_ID", str(OWNER_ID)))
 WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"
-DB_FILE    = "users.db"
+# Для Render краще використовувати шлях на Persistent Disk, напр. /var/data/users.db
+DB_FILE    = os.environ.get("DB_FILE", "users.db")
 PRODUCTS_FILE = "products.json"
 CUSTOM_PRODUCTS_FILE = "custom_products.json"
 FILAMENTS_FILE = "filaments.json"
@@ -770,44 +771,66 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != 718746623:
         return
 
-    # Якщо команда є відповіддю на повідомлення, беремо текст звідти, ігноруючи аргументи після ID. Інакше беремо текст з аргументів.
     args = context.args
     reply = update.message.reply_to_message
-    
-    # Якщо є відповідь на повідомлення, використовуємо її текст, ігноруючи додаткові аргументи після ID. Інакше беремо текст з аргументів.
+
     if not reply:
         await update.message.reply_text(
             "Відповідай (reply) на повідомлення командою:\n"
-            "`/broadcast` — без товару\n"
-            "`/broadcast 1` — з кнопкою товару",
+            "`/broadcast` — усім\n"
+            "`/broadcast <product_id>` — усім + кнопка товару\n"
+            "`/broadcast u:<user_id>` — конкретному юзеру\n"
+            "`/broadcast u:<user_id> <product_id>` — конкретному юзеру + кнопка товару",
             parse_mode='Markdown'
         )
         return
 
-    # Якщо в аргументах є ID товару, намагаємося його знайти. Якщо товар не знайдено, повідомляємо адміністратору і припиняємо розсилку.
-    product_id = int(args[0]) if args else None
-    product = get_product_by_id(product_id) if product_id else None
+    target_user_id = None
+    product_id = None
 
+    for arg in args:
+        a = str(arg).strip().lower()
+        if a.startswith("u:"):
+            try:
+                target_user_id = int(a[2:])
+            except ValueError:
+                await update.message.reply_text("❌ Невірний формат user_id. Приклад: `/broadcast u:123456789`", parse_mode='Markdown')
+                return
+        else:
+            try:
+                product_id = int(arg)
+            except ValueError:
+                await update.message.reply_text("❌ Невірний аргумент. Дозволено тільки `u:<user_id>` та `product_id`.", parse_mode='Markdown')
+                return
+
+    product = get_product_by_id(product_id) if product_id else None
     if product_id and not product:
         await update.message.reply_text(f"❌ Товар з ID `{product_id}` не знайдено.", parse_mode='Markdown')
         return
 
     if product:
-        markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton(
-                "🛍️ Переглянути товар",
-                url=f"https://t.me/poselyanov3dprint_bot?startapp=product_{product_id}"
-            )
-        ]])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+            "🛍️ Переглянути товар",
+            url=f"https://t.me/poselyanov3dprint_bot?startapp=product_{product_id}"
+        )]])
         photo_url = product.get('photos', [None])[0]
     else:
         markup = None
         photo_url = None
 
-    users = get_all_users()
-    sent, failed = 0, 0
+    if target_user_id:
+        known_users = {uid for (uid,) in get_all_users()}
+        if target_user_id not in known_users:
+            await update.message.reply_text(
+                f"❌ Користувач `{target_user_id}` не знайдений у базі бота (або заблокований).",
+                parse_mode='Markdown'
+            )
+            return
+        users = [(target_user_id,)]
+    else:
+        users = get_all_users()
 
-    # Логування кількості користувачів, яким буде надіслано розсилку. Це допоможе відстежувати охоплення та ефективність розсилки, а також виявляти потенційні проблеми з доставкою.
+    sent, failed = 0, 0
     logger.info(f"📨 Розсилка → {len(users)} користувачів")
 
     for (user_id,) in users:
@@ -840,9 +863,10 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if "bot was blocked" in str(e) or "user is deactivated" in str(e):
                 set_blocked(user_id, True)
             failed += 1
-    # Після завершення розсилки надсилаємо адміністратору звіт про кількість успішних і неуспішних доставок. Це дозволяє адміністратору оцінити ефективність розсилки та виявити потенційні проблеми з доставкою, такі як блокування бота користувачами.
+
+    audience = f"user `{target_user_id}`" if target_user_id else "всіх"
     await update.message.reply_text(
-        f"📨 Розсилка завершена\n✅ Надіслано: *{sent}*\n❌ Заблоковано: *{failed}*",
+        f"📨 Розсилка завершена ({audience})\n✅ Надіслано: *{sent}*\n❌ Помилок/блокувань: *{failed}*",
         parse_mode='Markdown'
     )
 
