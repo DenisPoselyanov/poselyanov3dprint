@@ -743,6 +743,11 @@ def get_all_users():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.message.from_user)
 
+    from telegram import ReplyKeyboardRemove
+    # Видаляємо стару нижню клавіатуру, якщо вона була
+    tmp = await update.message.reply_text("⏳", reply_markup=ReplyKeyboardRemove())
+    await tmp.delete()
+
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "🛍️ Відкрити каталог",
@@ -1902,16 +1907,17 @@ def main():
             from telegram import BotCommandScopeChat
             await bot_app.bot.set_my_commands(
                 commands=[
+                    ("catalog",   "🛍️ Відкрити каталог"),
                     ("admin",     "📊 Адмін панель"),
-                    ("history",   "📦 Мої замовлення"),
-                    ("mycoupons", "🎟️ Мої купони"),
                     ("stats",     "📊 Статистика"),
-                    ("broadcast", "📨 Розсилка"),
                     ("coupon",    "🎟️ Керування купонами"),
-                    ("myid",      "🪪 Мій ID"),
-                    ("sales",     "🔥 Акції"),
+                    ("broadcast", "📨 Розсилка"),
+                    ("history",   "📦 Мої замовлення"),
                     ("status",    "📋 Статус замовлення"),
+                    ("mycoupons", "🎟️ Мої купони"),
+                    ("sales",     "🔥 Акції"),
                     ("contact",   "📬 Контакти"),
+                    ("myid",      "🪪 Мій ID"),
                 ],
                 scope=BotCommandScopeChat(chat_id=718746623)  # тільки ти
             )
@@ -1919,12 +1925,12 @@ def main():
             # Команди для звичайних юзерів (окремо для всіх приватних чатів,
             # щоб /catalog гарантовано з'являвся у швидкому меню команд)
             user_commands = [
-                ("catalog", "🛍️ Відкрити каталог"),
-                ("history", "📦 Мої замовлення"),
+                ("catalog",   "🛍️ Відкрити каталог"),
+                ("history",   "📦 Мої замовлення"),
+                ("status",    "📋 Статус замовлення"),
                 ("mycoupons", "🎟️ Мої купони"),
-                ("sales", "🔥 Акції"),
-                ("status", "📋 Статус замовлення"),
-                ("contact", "📬 Контакти"),
+                ("sales",     "🔥 Акції"),
+                ("contact",   "📬 Контакти"),
             ]
             await bot_app.bot.set_my_commands(commands=user_commands)
             await bot_app.bot.set_my_commands(
