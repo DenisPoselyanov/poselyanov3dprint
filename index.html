@@ -2086,7 +2086,9 @@ function renderCart() {
 
   // Розрахунок з урахуванням знижки (якщо застосовано купон)
   const rawTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-  const discount = appliedCoupon ? appliedCoupon.discount : 0;
+  const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
+  const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
+  const discount = couponDiscount + promotionDiscount;
   const finalTotal = rawTotal - discount;
 
   // Показуємо стару ціну з анімацією, якщо є знижка
@@ -2142,6 +2144,16 @@ function renderCart() {
     selectedGift = null;
   }
 
+  const promoBlock = promotionDiscount > 0 ? `
+    <div class="cart-item" style="border: 1px solid var(--tg-blue); background: rgba(0, 122, 255, 0.05); margin-top: 10px;">
+      <div class="cart-item-emoji" style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);">🎁</div>
+      <div class="cart-item-info">
+        <div class="cart-item-name">Акція -10%</div>
+        <div class="cart-item-price" style="color:var(--tg-blue)">−${promotionDiscount} ₴</div>
+      </div>
+    </div>
+  ` : '';
+
   // Спочатку рендеримо товарні позиції, потім — якщо потрібно — блок з подарунком, а потім — плашки "Повернути" для товарів що очікують видалення
   list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => `
     <div class="cart-item" id="cart-item-${item.id}">
@@ -2162,7 +2174,7 @@ function renderCart() {
         <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, 1)">+</button>
       </div>
     </div>
-  `).join('');
+  `).join('') + promoBlock;
 
   // Відновлюємо плашки "Повернути" для товарів що ще не видалились
   Object.values(pendingRemovals).forEach(({ item, endsAt }) => {
@@ -2276,6 +2288,17 @@ function cartQtyChange(id, delta) {
   saveCart();
   updateCartBadge();
 
+  // Якщо може бути акція -10% (немає купону і сума може перетнути 500 грн або вже більше 500 грн, коли сума змінюється) - просто перемальовуємо кошик
+  if (!appliedCoupon) {
+    const rawTotalAfter = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+    const wasPromo = (rawTotalAfter - item.price * delta) >= 500;
+    const isPromo = rawTotalAfter >= 500;
+    if (wasPromo || isPromo) {
+      renderCart();
+      return;
+    }
+  }
+
   // Точкове оновлення — без повного перерендеру
   const qtyEl = document.getElementById(`cart-qty-${id}`);
   const priceEl = document.querySelector(`#cart-item-${id} .cart-item-price`);
@@ -2288,7 +2311,11 @@ function updateCartTotal() {
   const totalEl = document.getElementById('cart-total');
   const footer  = document.getElementById('cart-footer');
   if (!totalEl) return;
-  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const rawTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
+  const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
+  const discount = couponDiscount + promotionDiscount;
+  const total = rawTotal - discount;
   totalEl.textContent = total + ' ₴';
   if (footer) footer.style.display = cart.length || Object.keys(pendingRemovals).length ? '' : 'none';
 }
@@ -3161,7 +3188,9 @@ async function submitOrder() {
 
   // Розрахунок загальної суми замовлення з урахуванням кількості кожного товару та застосованої знижки. Це дозволяє нам отримати точну суму, яку користувач повинен сплатити, враховуючи всі товари в кошику та можливі знижки від купонів.
   const rawTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-  const discount = appliedCoupon ? appliedCoupon.discount : 0;
+  const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
+  const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
+  const discount = couponDiscount + promotionDiscount;
   const total = rawTotal - discount;
 
   const payload = {

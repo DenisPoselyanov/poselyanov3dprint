@@ -443,7 +443,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
     after_coupon_total = max(0, subtotal - discount)
     
     # Перевіряємо акцію -10% на замовлення від 500 грн
-    promotion_discount = check_promotion(after_coupon_total)
+    # Якщо купон застосовано, акція відключається (не підсумовується)
+    promotion_discount = 0 if coupon_code else check_promotion(after_coupon_total)
     
     # Загальна сума з урахуванням обох знижок
     server_total = max(0, after_coupon_total - promotion_discount)
