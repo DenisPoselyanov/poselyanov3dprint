@@ -1340,10 +1340,8 @@ async def handle_order(request):
                 + (f" · 🎨 {i['filament_name']}" if i.get('filament_name') else "")
                 for i in items
             )
-            line = f"📦 *Товари:*\n{items_lines}"
+            line = f"📦 *Товари:*\n{items_lines}\n"
             gift = data.get('gift')
-            if gift:
-                line += f"\n  🎁 {gift} — *безкоштовно*"
 
             # Якщо замовлення було оформлено з купоном або акцією, додаємо інформацію про знижки в текст підтвердження для клієнта
             if total_discount > 0:
@@ -1357,6 +1355,9 @@ async def handle_order(request):
                 line += f"\n💰 *Разом: {original_price} → {total_price} ₴*"
             else:
                 line += f"\n💰 *Разом: {total_price} ₴*"
+            
+            if gift:
+                line += f"\n🎁 Подарунок: {gift} — *безкоштовно*"
             if comment:
                 line += f"\n📝 _{comment}_"
             
