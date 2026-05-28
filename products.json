@@ -14,7 +14,8 @@
     "hot": true,
     "gift": false,
     "filamentChoice": true,
-    "stlLink": "https://makerworld.com/uk/models/562008-spiral-cone-fidget?from=search#profileId-481500"
+    "stlLink": "https://makerworld.com/uk/models/562008-spiral-cone-fidget?from=search#profileId-481500",
+    "pinned": true
   },
   {
     "id": 2,
@@ -112,7 +113,8 @@
     "hot": false,
     "gift": true,
     "stlLink": "https://makerworld.com/uk/models/1078824-star-fidget-keychain-stylish-fun?from=search#profileId-1070169",
-    "filamentChoice": true
+    "filamentChoice": true,
+    "pinned": true
   },
   {
     "id": 8,

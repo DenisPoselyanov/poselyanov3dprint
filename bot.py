@@ -14,6 +14,7 @@ import os
 import sqlite3
 from pathlib import Path
 from urllib.parse import parse_qsl
+from urllib.parse import urlparse
 import cloudinary
 import cloudinary.uploader
 import base64
@@ -53,6 +54,10 @@ CORS_ORIGINS = [
         "https://denisposelyanov.github.io,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5500,http://127.0.0.1:5500",
     ).split(",") if o.strip()
 ]
+
+
+def normalize_origin(value: str) -> str:
+    return (value or "").strip().rstrip("/").lower()
 # Cloudinary налаштування
 cloudinary.config(
     cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", "df5stvc1c"),
@@ -189,8 +194,10 @@ def add_product(data: dict):
 
         if data.get("oldPrice"):
             product["oldPrice"] = int(data["oldPrice"])
-            product["hot"] = data.get("hot", False)
-            product["stlLink"] = data.get("stlLink", "")  # Додаємо поле для посилання на STL файл
+        
+        product["hot"] = data.get("hot", False)
+        product["pinned"] = data.get("pinned", False)
+        product["stlLink"] = data.get("stlLink", "")  # Додаємо поле для посилання на STL файл
 
         if is_custom:
             product["custom_fields"] = data.get("custom_fields", "")
@@ -222,9 +229,10 @@ def update_product(product_id: int, data: dict):
         product.update({
             "emoji": data.get("emoji", product.get("emoji")),
             "photos": data.get("photos", product.get("photos", [])),
-                        "name": data.get("name", product.get("name")),
+            "name": data.get("name", product.get("name")),
             "mat": data.get("mat", product.get("mat")),
             "hot": data.get("hot", product.get("hot", False)),
+            "pinned": data.get("pinned", product.get("pinned", False)),
             "stlLink": data.get("stlLink", product.get("stlLink", "")),  # Додаємо поле для посилання на STL файл
         })
 
@@ -330,15 +338,19 @@ def validate_telegram_init_data(init_data: str) -> dict | None:
 
 def cors_headers(request: web.Request) -> dict:
     origin = request.headers.get("Origin", "")
+    normalized_origin = normalize_origin(origin)
+    normalized_allowed = {normalize_origin(o): o.rstrip("/") for o in CORS_ORIGINS if o.strip()}
+
     allow = "*"
-    if origin and (origin in CORS_ORIGINS or "*" in CORS_ORIGINS):
-        allow = origin
+    if normalized_origin and ("*" in CORS_ORIGINS or normalized_origin in normalized_allowed):
+        allow = origin.rstrip("/")
     elif CORS_ORIGINS and CORS_ORIGINS[0] != "*":
-        allow = CORS_ORIGINS[0]
+        allow = CORS_ORIGINS[0].rstrip("/")
     return {
         "Access-Control-Allow-Origin": allow,
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data",
+        "Vary": "Origin",
     }
 
 
@@ -372,6 +384,27 @@ def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None,
         }, None
 
     return {"user_id": 0, "username": "", "first_name": ""}, None
+
+
+def is_local_dev_origin(request: web.Request) -> bool:
+    origin = request.headers.get("Origin", "").strip()
+    if not origin:
+        return False
+    try:
+        host = (urlparse(origin).hostname or "").lower()
+        return host in {"localhost", "127.0.0.1"}
+    except Exception:
+        return False
+
+
+def is_admin_authorized(request: web.Request, auth: dict | None) -> bool:
+    # In Telegram context we still require strict owner validation.
+    if auth and auth.get("user_id") == OWNER_ID:
+        return True
+    # For local browser-based development, allow requests from localhost origins.
+    if is_local_dev_origin(request):
+        return True
+    return False
 
 
 def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
@@ -1596,7 +1629,7 @@ async def handle_create_product(request: web.Request):
     if err:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    if VALIDATE_INIT_DATA and (not auth or auth.get("user_id") != OWNER_ID):
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
         return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
 
     try:
@@ -1614,7 +1647,7 @@ async def handle_update_product(request: web.Request):
     if err:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    if VALIDATE_INIT_DATA and (not auth or auth.get("user_id") != OWNER_ID):
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
         return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
 
     try:
@@ -1633,7 +1666,7 @@ async def handle_delete_product(request: web.Request):
     if err:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    if VALIDATE_INIT_DATA and (not auth or auth.get("user_id") != OWNER_ID):
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
         return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
 
     try:
@@ -1651,7 +1684,7 @@ async def handle_upload_photo(request: web.Request):
     if err:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    if VALIDATE_INIT_DATA and (not auth or auth.get("user_id") != OWNER_ID):
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
         return web.json_response({"ok": False, "error": "❌ Забачено доступу (тільки адмін)"}, status=403, headers=cors_headers(request))
 
     try:
@@ -1871,6 +1904,7 @@ def main():
         http_app.router.add_route('OPTIONS', '/order', handle_options)
         http_app.router.add_post('/check_coupon', handle_check_coupon)
         http_app.router.add_route('OPTIONS', '/check_coupon', handle_options)
+        http_app.router.add_route('OPTIONS', '/api/{tail:.*}', handle_options)
         # Адмін API
         http_app.router.add_get('/admin/panel', handle_admin_panel)
         http_app.router.add_get('/api/products', handle_get_products)

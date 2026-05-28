@@ -4,11 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>📊 Адмін панель - Poselyanov 3D Print</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
@@ -124,6 +127,84 @@
             min-width: 200px;
             display: flex;
             gap: 8px;
+        }
+
+        .filter-wrap {
+            position: relative;
+        }
+
+        .filter-btn {
+            padding: 10px 14px;
+            border: 2px solid #ddd;
+            background: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #555;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 160px;
+            justify-content: space-between;
+        }
+
+        .filter-btn.active {
+            border-color: #667eea;
+            color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .filter-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            min-width: 240px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+            padding: 8px;
+            display: none;
+            z-index: 20;
+        }
+
+        .filter-menu.open {
+            display: block;
+        }
+
+        .filter-option {
+            width: 100%;
+            border: none;
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px 10px;
+            text-align: left;
+            cursor: pointer;
+            font-size: 14px;
+            color: #444;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .filter-option:hover {
+            background: #f3f4f6;
+        }
+
+        .filter-option.active {
+            background: #eef2ff;
+            color: #4338ca;
+            font-weight: 700;
+        }
+
+        .filter-check {
+            visibility: hidden;
+            font-weight: 800;
+        }
+
+        .filter-option.active .filter-check {
+            visibility: visible;
         }
 
         .category-chips {
@@ -305,6 +386,12 @@
             border-radius: 12px;
             font-size: 12px;
             font-weight: 600;
+        }
+
+        .tag-pinned {
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #bae6fd;
         }
 
         .product-actions {
@@ -767,34 +854,22 @@
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="🔍 Пошук товару..." oninput="filterProducts()">
                 </div>
-                <div class="category-chips" id="categoryChips">
-                    <button class="chip active" data-value="" onclick="selectCategory('')">
-                        <span>📦</span> Всі
+                <div class="filter-wrap">
+                    <button class="filter-btn" id="categoryFilterBtn" type="button" onclick="toggleCategoryMenu()">
+                        <span id="categoryFilterLabel">📦 Всі категорії</span>
+                        <span>▾</span>
                     </button>
-                    <button class="chip" data-value="toy" onclick="selectCategory('toy')">
-                        <span>🧸</span> Іграшки
-                    </button>
-                    <button class="chip" data-value="key" onclick="selectCategory('key')">
-                        <span>🔑</span> Брелки
-                    </button>
-                    <button class="chip" data-value="anti" onclick="selectCategory('anti')">
-                        <span>🧠</span> Антистрес
-                    </button>
-                    <button class="chip" data-value="gifts" onclick="selectCategory('gifts')">
-                        <span>🎁</span> Подарунки
-                    </button>
-                    <button class="chip" data-value="home" onclick="selectCategory('home')">
-                        <span>🏠</span> Для дому
-                    </button>
-                    <button class="chip" data-value="gadget" onclick="selectCategory('gadget')">
-                        <span>📲</span> Гаджети
-                    </button>
-                    <button class="chip" data-value="tool" onclick="selectCategory('tool')">
-                        <span>⚒️</span> Інструменти
-                    </button>
-                    <button class="chip" data-value="custom" onclick="selectCategory('custom')">
-                        <span>✏️</span> Індивідуальне
-                    </button>
+                    <div class="filter-menu" id="categoryFilterMenu">
+                        <button class="filter-option active" data-value="" data-label="📦 Всі категорії" type="button" onclick="selectCategory('')"><span>📦 Всі категорії</span><span class="filter-check">✓</span></button>
+                        <button class="filter-option" data-value="toy" data-label="🧸 Іграшки" type="button" onclick="selectCategory('toy')"><span>🧸 Іграшки</span><span class="filter-check">✓</span></button>
+                        <button class="filter-option" data-value="key" data-label="🔑 Брелки" type="button" onclick="selectCategory('key')"><span>🔑 Брелки</span><span class="filter-check">✓</span></button>
+                        <button class="filter-option" data-value="anti" data-label="🧠 Антистрес" type="button" onclick="selectCategory('anti')"><span>🧠 Антистрес</span><span class="filter-check">✓</span></button>
+                        <button class="filter-option" data-value="gifts" data-label="🎁 Подарунки" type="button" onclick="selectCategory('gifts')"><span>🎁 Подарунки</span><span class="filter-check">✓</span></button>
+                        <button class="filter-option" data-value="home" data-label="🏠 Для дому" type="button" onclick="selectCategory('home')"><span>🏠 Для дому</span><span class="filter-check">✓</span></button>
+                        <button class="filter-option" data-value="gadget" data-label="📲 Гаджети" type="button" onclick="selectCategory('gadget')"><span>📲 Гаджети</span><span class="filter-check">✓</span></button>
+                        <button class="filter-option" data-value="tool" data-label="⚒️ Інструменти" type="button" onclick="selectCategory('tool')"><span>⚒️ Інструменти</span><span class="filter-check">✓</span></button>
+                        <button class="filter-option" data-value="custom" data-label="✏️ Індивідуальне" type="button" onclick="selectCategory('custom')"><span>✏️ Індивідуальне</span><span class="filter-check">✓</span></button>
+                    </div>
                 </div>
                 <input type="hidden" id="categoryFilter" value="">
             </div>
@@ -874,6 +949,7 @@
                         <label>Опції товару</label>
                         <div class="checkbox-group">
                             <label><input type="checkbox" name="hot"> 🔥 Гарячий товар (популярний)</label>
+                            <label><input type="checkbox" name="pinned"> 📌 Закріплений товар (слайдер на головній)</label>
                             <label><input type="checkbox" name="gift"> 🎁 Може бути подарунком (до 100₴)</label>
                             <label><input type="checkbox" name="filamentChoice" checked> 🎨 Дозволити вибір кольору філаменту</label>
                         </div>
@@ -905,7 +981,16 @@
     </div>
 
     <script>
-        const API_BASE = '/api';
+        // API base: local frontend (5500) talks to local backend (8080).
+        // In deployed mode, use current origin + /api.
+        const API_BASE = (() => {
+            const host = window.location.hostname;
+            if (host === 'localhost' || host === '127.0.0.1') {
+                const localHost = host === '127.0.0.1' ? '127.0.0.1' : 'localhost';
+                return `${window.location.protocol}//${localHost}:8080/api`;
+            }
+            return `${window.location.origin}/api`;
+        })();
         let currentProductId = null;
         let uploadedPhotos = [];
         let allProducts = [];
@@ -952,10 +1037,10 @@
                 loading.style.display = 'flex';
                 productsContainer.style.opacity = '0.5';
                 
-                const res = await fetch(API_BASE + '/products', {
-                    headers: { 'X-Telegram-Init-Data': tgInitData }
-                });
-                if (!res.ok) throw new Error('Помилка завантаження');
+                const res = await fetch(API_BASE + '/products');
+                if (!res.ok) {
+                    throw new Error(`Помилка завантаження (${res.status} ${res.statusText})`);
+                }
                 const products = await res.json();
 
                 // Зберігаємо всі товари глобально для фільтрації
@@ -989,22 +1074,42 @@
             renderProducts(filtered);
         }
 
-        // Вибір категорії через chips
+        function toggleCategoryMenu() {
+            const menu = document.getElementById('categoryFilterMenu');
+            const btn = document.getElementById('categoryFilterBtn');
+            const isOpen = menu.classList.contains('open');
+            menu.classList.toggle('open', !isOpen);
+            btn.classList.toggle('active', !isOpen);
+        }
+
+        function closeCategoryMenu() {
+            document.getElementById('categoryFilterMenu')?.classList.remove('open');
+            document.getElementById('categoryFilterBtn')?.classList.remove('active');
+        }
+
+        // Вибір категорії через меню фільтра
         function selectCategory(value) {
-            // Оновлюємо приховане поле
             document.getElementById('categoryFilter').value = value;
-            
-            // Оновлюємо активний стан chips
-            document.querySelectorAll('.chip').forEach(chip => {
-                chip.classList.remove('active');
-                if (chip.dataset.value === value) {
-                    chip.classList.add('active');
+
+            let selectedLabel = '📦 Всі категорії';
+            document.querySelectorAll('.filter-option').forEach(option => {
+                const isActive = option.dataset.value === value;
+                option.classList.toggle('active', isActive);
+                if (isActive) {
+                    selectedLabel = option.dataset.label || selectedLabel;
                 }
             });
-            
-            // Фільтруємо товари
+
+            document.getElementById('categoryFilterLabel').textContent = selectedLabel;
+            closeCategoryMenu();
             filterProducts();
         }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.filter-wrap')) {
+                closeCategoryMenu();
+            }
+        });
 
         // ═══════════════════════════════════════════════════════════
         // РЕНДЕРИНГ ТОВАРІВ
@@ -1065,6 +1170,7 @@
 
                         <div class="product-tags">
                             ${p.hot ? '<div class="tag">🔥 Гарячий</div>' : ''}
+                            ${p.pinned ? '<div class="tag tag-pinned">📌 Закріплений</div>' : ''}
                             ${p.gift ? '<div class="tag">🎁 Подарунок</div>' : ''}
                             ${p.cat !== 'custom' && p.filamentChoice !== false ? '<div class="tag">🎨 Вибір кольору</div>' : ''}
                             ${p.custom_fields ? `<div class="tag">✍️ ${p.custom_fields}</div>` : ''}
@@ -1144,6 +1250,7 @@
                     form.custom_fields.value = product.custom_fields || '';
                 } else {
                     form.hot.checked = product.hot || false;
+                    form.pinned.checked = product.pinned || false;
                     form.gift.checked = product.gift || false;
                     form.filamentChoice.checked = product.filamentChoice !== false;
                 }
@@ -1453,6 +1560,7 @@
                 data.custom_fields = form.custom_fields.value.trim();
             } else {
                 data.hot = form.hot.checked;
+                data.pinned = form.pinned.checked;
                 data.gift = form.gift.checked;
                 data.filamentChoice = form.filamentChoice.checked;
             }
