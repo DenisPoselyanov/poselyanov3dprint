@@ -1,0 +1,74 @@
+[
+  {
+    "id": "toy",
+    "name": "Іграшки",
+    "emoji": "🧸",
+    "badgeClass": "category-toy",
+    "order": 1,
+    "active": true,
+    "quickSlot": 1
+  },
+  {
+    "id": "key",
+    "name": "Брелки",
+    "emoji": "🔑",
+    "badgeClass": "category-key",
+    "order": 6,
+    "active": true,
+    "quickSlot": null
+  },
+  {
+    "id": "anti",
+    "name": "Антистрес",
+    "emoji": "🧠",
+    "badgeClass": "category-anti",
+    "order": 2,
+    "active": true,
+    "quickSlot": 3
+  },
+  {
+    "id": "gifts",
+    "name": "Подарунки та декор",
+    "emoji": "🎁",
+    "badgeClass": "category-gifts",
+    "order": 3,
+    "active": true,
+    "quickSlot": 2
+  },
+  {
+    "id": "home",
+    "name": "Для дому",
+    "emoji": "🏠",
+    "badgeClass": "category-home",
+    "order": 4,
+    "active": true,
+    "quickSlot": 4
+  },
+  {
+    "id": "gadget",
+    "name": "Для гаджетів",
+    "emoji": "📲",
+    "badgeClass": "category-gadget",
+    "order": 5,
+    "active": true,
+    "quickSlot": null
+  },
+  {
+    "id": "tool",
+    "name": "Інструменти та приладдя",
+    "emoji": "⚒️",
+    "badgeClass": "category-tool",
+    "order": 7,
+    "active": true,
+    "quickSlot": null
+  },
+  {
+    "id": "custom",
+    "name": "Індивідуальне",
+    "emoji": "✏️",
+    "badgeClass": "category-custom",
+    "order": 8,
+    "active": true,
+    "quickSlot": null
+  }
+]

@@ -115,6 +115,80 @@
             padding: 30px;
         }
 
+        .page-nav {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .page-tab {
+            border: 2px solid #e5e7eb;
+            background: #fff;
+            color: #4b5563;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .page-tab.active {
+            border-color: #667eea;
+            color: #4338ca;
+            background: #eef2ff;
+        }
+
+        .page-section {
+            display: none;
+        }
+
+        .page-section.active {
+            display: block;
+        }
+
+        .category-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 14px 16px;
+            background: #fff;
+        }
+
+        .category-row.drag-over {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+        }
+
+        .category-row.dragging {
+            opacity: 0.7;
+        }
+
+        .category-drag-handle {
+            width: 32px;
+            min-width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px dashed #cbd5e1;
+            background: #f8fafc;
+            color: #64748b;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .category-drag-handle:active {
+            cursor: grabbing;
+        }
+
         .toolbar {
             display: flex;
             gap: 12px;
@@ -551,6 +625,81 @@
             font-weight: 600;
         }
 
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #f9fafb;
+        }
+
+        .toggle-row-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 26px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .switch-slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background-color: #d1d5db;
+            transition: 0.2s ease;
+            border-radius: 999px;
+        }
+
+        .switch-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            top: 3px;
+            background-color: white;
+            transition: 0.2s ease;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+        }
+
+        .switch input:checked + .switch-slider {
+            background-color: #10b981;
+        }
+
+        .switch input:checked + .switch-slider:before {
+            transform: translateX(20px);
+        }
+
+        .quick-status {
+            margin: 8px 0 0;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+        }
+
+        .quick-status.dirty {
+            color: #b45309;
+        }
+
+        .quick-status.saved {
+            color: #065f46;
+        }
+
         .toast {
             position: fixed;
             bottom: 20px;
@@ -842,48 +991,71 @@
             <h1>📊 Адмін панель</h1>
             <div class="header-stats">
                 <div class="stat">
-                    <div class="stat-label">Всього товарів</div>
-                    <div class="stat-value" id="totalProducts">0</div>
+                    <div class="stat-label" id="headerStatLabel">Всього товарів</div>
+                    <div class="stat-value" id="headerStatValue">0</div>
                 </div>
             </div>
-            <button class="btn btn-primary" onclick="openAddModal()">➕ Додати товар</button>
+            <button id="headerPrimaryAction" class="btn btn-primary" onclick="openAddModal()">➕ Додати товар</button>
         </div>
 
         <div class="content">
-            <div class="toolbar">
-                <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="🔍 Пошук товару..." oninput="filterProducts()">
+            <div class="page-nav">
+                <button class="page-tab active" type="button" data-page="products" onclick="switchPage('products')">📦 Товари</button>
+                <button class="page-tab" type="button" data-page="categories" onclick="switchPage('categories')">🗂️ Категорії</button>
+                <button class="page-tab" type="button" data-page="filaments" onclick="switchPage('filaments')">🎨 Філаменти</button>
+            </div>
+
+            <section id="productsPage" class="page-section active">
+                <div class="toolbar">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="🔍 Пошук товару..." oninput="filterProducts()">
+                    </div>
+                    <div class="filter-wrap">
+                        <button class="filter-btn" id="categoryFilterBtn" type="button" onclick="toggleCategoryMenu()">
+                            <span id="categoryFilterLabel">📦 Всі категорії</span>
+                            <span>▾</span>
+                        </button>
+                        <div class="filter-menu" id="categoryFilterMenu">
+                            <button class="filter-option active" data-value="" data-label="📦 Всі категорії" type="button" onclick="selectCategory('')"><span>📦 Всі категорії</span><span class="filter-check">✓</span></button>
+                        </div>
+                    </div>
+                    <input type="hidden" id="categoryFilter" value="">
                 </div>
-                <div class="filter-wrap">
-                    <button class="filter-btn" id="categoryFilterBtn" type="button" onclick="toggleCategoryMenu()">
-                        <span id="categoryFilterLabel">📦 Всі категорії</span>
-                        <span>▾</span>
-                    </button>
-                    <div class="filter-menu" id="categoryFilterMenu">
-                        <button class="filter-option active" data-value="" data-label="📦 Всі категорії" type="button" onclick="selectCategory('')"><span>📦 Всі категорії</span><span class="filter-check">✓</span></button>
-                        <button class="filter-option" data-value="toy" data-label="🧸 Іграшки" type="button" onclick="selectCategory('toy')"><span>🧸 Іграшки</span><span class="filter-check">✓</span></button>
-                        <button class="filter-option" data-value="key" data-label="🔑 Брелки" type="button" onclick="selectCategory('key')"><span>🔑 Брелки</span><span class="filter-check">✓</span></button>
-                        <button class="filter-option" data-value="anti" data-label="🧠 Антистрес" type="button" onclick="selectCategory('anti')"><span>🧠 Антистрес</span><span class="filter-check">✓</span></button>
-                        <button class="filter-option" data-value="gifts" data-label="🎁 Подарунки" type="button" onclick="selectCategory('gifts')"><span>🎁 Подарунки</span><span class="filter-check">✓</span></button>
-                        <button class="filter-option" data-value="home" data-label="🏠 Для дому" type="button" onclick="selectCategory('home')"><span>🏠 Для дому</span><span class="filter-check">✓</span></button>
-                        <button class="filter-option" data-value="gadget" data-label="📲 Гаджети" type="button" onclick="selectCategory('gadget')"><span>📲 Гаджети</span><span class="filter-check">✓</span></button>
-                        <button class="filter-option" data-value="tool" data-label="⚒️ Інструменти" type="button" onclick="selectCategory('tool')"><span>⚒️ Інструменти</span><span class="filter-check">✓</span></button>
-                        <button class="filter-option" data-value="custom" data-label="✏️ Індивідуальне" type="button" onclick="selectCategory('custom')"><span>✏️ Індивідуальне</span><span class="filter-check">✓</span></button>
+
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                </div>
+
+                <div id="products" class="products-grid"></div>
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    <div class="empty-state-icon">📦</div>
+                    <p>Товари не знайдено</p>
+                    <button class="btn btn-primary" onclick="openAddModal()">➕ Додати перший товар</button>
+                </div>
+            </section>
+
+            <section id="categoriesPage" class="page-section">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <h2 style="font-size:20px;">🗂️ Керування категоріями</h2>
+                    <button class="btn btn-primary" type="button" onclick="openCategoryModal()">➕ Додати категорію</button>
+                </div>
+                <div id="categoriesList" style="margin-top:16px; display:grid; gap:12px;"></div>
+                <div style="margin-top: 20px; border-top: 1px dashed #e5e7eb; padding-top: 16px;">
+                    <h3 style="font-size:16px; margin-bottom: 10px;">⚡ Швидкі категорії (сторінка "Товари")</h3>
+                    <div id="quickCategoriesList" style="display:grid; gap:10px;"></div>
+                    <div id="quickCategoriesStatus" class="quick-status">Усі зміни збережено</div>
+                    <div style="margin-top: 12px; display:flex; justify-content:flex-end;">
+                        <button id="saveQuickCategoriesBtn" class="btn btn-primary" type="button" onclick="saveQuickCategories()" style="max-width:220px;" disabled>💾 Зберегти швидкі категорії</button>
                     </div>
                 </div>
-                <input type="hidden" id="categoryFilter" value="">
-            </div>
+            </section>
 
-            <div id="loading" class="loading" style="display: none;">
-                <div class="spinner"></div>
-            </div>
-
-            <div id="products" class="products-grid"></div>
-            <div id="emptyState" class="empty-state" style="display: none;">
-                <div class="empty-state-icon">📦</div>
-                <p>Товари не знайдено</p>
-                <button class="btn btn-primary" onclick="openAddModal()">➕ Додати перший товар</button>
-            </div>
+            <section id="filamentsPage" class="page-section">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <h2 style="font-size:20px;">🎨 Керування філаментами</h2>
+                </div>
+                <div id="filamentsList" style="margin-top:16px; display:grid; gap:12px;"></div>
+            </section>
         </div>
     </div>
 
@@ -902,16 +1074,8 @@
 
                 <div class="form-group required">
                     <label>Категорія</label>
-                    <select name="cat" required onchange="updateCategoryFields()">
+                    <select name="cat" id="productCategorySelect" required onchange="updateCategoryFields()">
                         <option value="">Вибрати категорію...</option>
-                        <option value="toy">🧸 Іграшки</option>
-                        <option value="key">🔑 Брелки</option>
-                        <option value="anti">🧠 Антистрес</option>
-                        <option value="gifts">🎁 Подарунки та декор</option>
-                        <option value="home">� Для дому</option>
-                        <option value="gadget">📲 Для гаджетів</option>
-                        <option value="tool">⚒️ Інструменти та приладдя</option>
-                        <option value="custom">✏️ Індивідуальне</option>
                     </select>
                     <div class="form-error">Категорія вимагається</div>
                 </div>
@@ -980,6 +1144,78 @@
         </div>
     </div>
 
+    <div id="categoryModal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header">
+                <span id="categoryModalTitle">➕ Додати категорію</span>
+                <button class="btn btn-secondary" onclick="closeCategoryModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+            </div>
+            <form id="categoryForm">
+                <div class="form-group required">
+                    <label>ID категорії</label>
+                    <input type="text" name="id" placeholder="Напр.: keychains" required>
+                    <div class="form-error">ID обов'язковий</div>
+                </div>
+                <div class="form-group required">
+                    <label>Назва категорії</label>
+                    <input type="text" name="name" placeholder="Напр.: Брелки" required>
+                    <div class="form-error">Назва обов'язкова</div>
+                </div>
+                <div class="form-group required">
+                    <label>Emoji</label>
+                    <input type="text" name="emoji" value="📦" required>
+                    <div class="form-error">Emoji обов'язковий</div>
+                </div>
+                <div class="form-group">
+                    <label>Порядок відображення</label>
+                    <input type="number" name="order" min="1" step="1">
+                </div>
+                <div class="form-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="closeCategoryModal()">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" id="categorySubmitBtn">✅ Зберегти категорію</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="filamentModal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header">
+                <span id="filamentModalTitle">✏️ Редагувати філамент</span>
+                <button class="btn btn-secondary" onclick="closeFilamentModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+            </div>
+            <form id="filamentForm" action="javascript:void(0);" onsubmit="return false;">
+                <div class="form-group">
+                    <label>ID</label>
+                    <input type="text" name="id" readonly>
+                </div>
+                <div class="form-group required">
+                    <label>Назва філаменту</label>
+                    <input type="text" name="name" required>
+                    <div class="form-error">Назва обов'язкова</div>
+                </div>
+                <div class="form-group required">
+                    <label>HEX колір</label>
+                    <input type="text" name="hex" placeholder="#ffffff" required>
+                    <div class="form-error">HEX у форматі #RGB або #RRGGBB</div>
+                </div>
+                <div class="form-group">
+                    <div class="toggle-row">
+                        <span class="toggle-row-label">Доступність у каталозі</span>
+                        <label class="switch" title="Увімкнути/вимкнути доступність філаменту">
+                            <input type="checkbox" name="available">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="closeFilamentModal()">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" id="filamentSubmitBtn">✅ Зберегти філамент</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         // API base: local frontend (5500) talks to local backend (8080).
         // In deployed mode, use current origin + /api.
@@ -992,8 +1228,16 @@
             return `${window.location.origin}/api`;
         })();
         let currentProductId = null;
+        let currentCategoryId = null;
+        let currentFilamentId = null;
+        let currentPage = 'products';
         let uploadedPhotos = [];
         let allProducts = [];
+        let allCategories = [];
+        let allFilaments = [];
+        let quickCategoryInitial = [];
+        let quickCategoryDraft = [];
+        let categoryDragState = { draggingId: null, overId: null };
         let tgInitData = "";
 
         // === ІНІЦІАЛІЗАЦІЯ TELEGRAM WEBAPP ===
@@ -1025,6 +1269,451 @@
         // Ініціалізуємо при завантаженні
         initTelegramWebApp();
 
+        function getCategoryMeta(catId) {
+            return allCategories.find(c => c.id === catId) || { id: catId, name: catId || 'Без категорії', emoji: '📦', badgeClass: `category-${catId || 'default'}` };
+        }
+
+        function updateHeaderPrimaryAction() {
+            const btn = document.getElementById('headerPrimaryAction');
+            if (!btn) return;
+
+            if (currentPage === 'products') {
+                btn.textContent = '➕ Додати товар';
+                btn.onclick = openAddModal;
+                btn.style.display = 'inline-flex';
+            } else if (currentPage === 'categories') {
+                btn.textContent = '➕ Додати категорію';
+                btn.onclick = () => openCategoryModal();
+                btn.style.display = 'inline-flex';
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+
+        function updateHeaderStat() {
+            const label = document.getElementById('headerStatLabel');
+            const value = document.getElementById('headerStatValue');
+            if (!label || !value) return;
+
+            if (currentPage === 'categories') {
+                label.textContent = 'Всього категорій';
+                value.textContent = String(allCategories.length);
+                return;
+            }
+
+            label.textContent = 'Всього товарів';
+            value.textContent = String(allProducts.length);
+        }
+
+        function switchPage(page) {
+            currentPage = page;
+            document.querySelectorAll('.page-section').forEach(section => {
+                section.classList.toggle('active', section.id === `${page}Page`);
+            });
+            document.querySelectorAll('.page-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.page === page);
+            });
+            try {
+                localStorage.setItem('adminActivePage', page);
+            } catch (_) {}
+            updateHeaderPrimaryAction();
+            updateHeaderStat();
+        }
+
+        function renderCategoryFilterMenu() {
+            const menu = document.getElementById('categoryFilterMenu');
+            const currentFilter = document.getElementById('categoryFilter').value;
+            menu.innerHTML = `
+                <button class="filter-option ${currentFilter === '' ? 'active' : ''}" data-value="" data-label="📦 Всі категорії" type="button" onclick="selectCategory('')"><span>📦 Всі категорії</span><span class="filter-check">✓</span></button>
+                ${allCategories.map(cat => `
+                    <button class="filter-option ${currentFilter === cat.id ? 'active' : ''}" data-value="${cat.id}" data-label="${cat.emoji} ${cat.name}" type="button" onclick="selectCategory('${cat.id}')">
+                        <span>${cat.emoji} ${cat.name}</span><span class="filter-check">✓</span>
+                    </button>
+                `).join('')}
+            `;
+        }
+
+        function renderCategorySelectOptions() {
+            const select = document.getElementById('productCategorySelect');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">Вибрати категорію...</option>' + allCategories.map(cat => `<option value="${cat.id}">${cat.emoji} ${cat.name}</option>`).join('');
+            if (allCategories.some(cat => cat.id === currentValue)) {
+                select.value = currentValue;
+            }
+        }
+
+        function renderCategoriesManager() {
+            const list = document.getElementById('categoriesList');
+            const productCountByCategory = allProducts.reduce((acc, p) => {
+                acc[p.cat] = (acc[p.cat] || 0) + 1;
+                return acc;
+            }, {});
+            const sortedCategories = [...allCategories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+
+            if (!sortedCategories.length) {
+                list.innerHTML = '<div style="padding: 16px; background: #f8f9fa; border-radius: 10px;">Категорій ще немає.</div>';
+                return;
+            }
+
+            list.innerHTML = sortedCategories.map((cat, idx) => `
+                <div class="category-row" data-category-row="${cat.id}">
+                    <div class="category-drag-handle" title="Перетягни для зміни порядку" onpointerdown="startCategoryDrag(event, '${cat.id}')">⋮⋮</div>
+                    <div>
+                        <div style="font-weight:700;">${cat.emoji} ${cat.name}</div>
+                        <div style="font-size:12px; color:#6b7280;">ID: ${cat.id} · Товарів: ${productCountByCategory[cat.id] || 0} · Порядок: ${cat.order ?? '—'}</div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${cat.id}', -1)" style="padding:8px 10px;" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${cat.id}', 1)" style="padding:8px 10px;" ${idx === sortedCategories.length - 1 ? 'disabled' : ''}>↓</button>
+                        <button class="btn btn-secondary" type="button" onclick="openCategoryModal('${cat.id}')" style="padding:8px 12px;">✏️</button>
+                        <button class="btn btn-danger" type="button" onclick="deleteCategory('${cat.id}')" style="padding:8px 12px;">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function startCategoryDrag(event, categoryId) {
+            event.preventDefault();
+            categoryDragState = { draggingId: categoryId, overId: categoryId };
+            const row = document.querySelector(`[data-category-row="${categoryId}"]`);
+            row?.classList.add('dragging');
+            window.addEventListener('pointermove', onCategoryDragMove);
+            window.addEventListener('pointerup', onCategoryDragEnd, { once: true });
+        }
+
+        function onCategoryDragMove(event) {
+            if (!categoryDragState.draggingId) return;
+            const el = document.elementFromPoint(event.clientX, event.clientY);
+            const row = el?.closest?.('[data-category-row]');
+            document.querySelectorAll('.category-row.drag-over').forEach(r => r.classList.remove('drag-over'));
+            if (row) {
+                categoryDragState.overId = row.getAttribute('data-category-row');
+                row.classList.add('drag-over');
+            }
+        }
+
+        async function onCategoryDragEnd() {
+            window.removeEventListener('pointermove', onCategoryDragMove);
+            document.querySelectorAll('.category-row.drag-over').forEach(r => r.classList.remove('drag-over'));
+            document.querySelectorAll('.category-row.dragging').forEach(r => r.classList.remove('dragging'));
+
+            const { draggingId, overId } = categoryDragState;
+            categoryDragState = { draggingId: null, overId: null };
+            if (!draggingId || !overId || draggingId === overId) return;
+
+            const sorted = [...allCategories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+            const from = sorted.findIndex(c => c.id === draggingId);
+            const to = sorted.findIndex(c => c.id === overId);
+            if (from < 0 || to < 0 || from === to) return;
+
+            const reordered = [...sorted];
+            const [moved] = reordered.splice(from, 1);
+            reordered.splice(to, 0, moved);
+
+            try {
+                for (let i = 0; i < reordered.length; i++) {
+                    const cat = reordered[i];
+                    const nextOrder = i + 1;
+                    if (cat.order === nextOrder) continue;
+                    const res = await fetch(API_BASE + `/categories/${cat.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Telegram-Init-Data': tgInitData
+                        },
+                        body: JSON.stringify({ order: nextOrder })
+                    });
+                    const result = await res.json();
+                    if (!res.ok || !result.ok) {
+                        throw new Error(result.error || `Не вдалося змінити порядок: ${cat.id}`);
+                    }
+                }
+                await loadCategories();
+                showToast('Порядок категорій оновлено ✅', 'success');
+            } catch (e) {
+                showToast(e.message || 'Помилка перетягування категорії', 'error');
+            }
+        }
+
+        async function moveCategoryInAllList(categoryId, direction) {
+            const sortedCategories = [...allCategories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+            const index = sortedCategories.findIndex(cat => cat.id === categoryId);
+            const targetIndex = index + direction;
+            if (index < 0 || targetIndex < 0 || targetIndex >= sortedCategories.length) return;
+
+            const source = sortedCategories[index];
+            const target = sortedCategories[targetIndex];
+            try {
+                const reqOpts = (order) => ({
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData
+                    },
+                    body: JSON.stringify({ order })
+                });
+
+                const first = await fetch(API_BASE + `/categories/${source.id}`, reqOpts(target.order));
+                const firstResult = await first.json();
+                if (!first.ok || !firstResult.ok) throw new Error(firstResult.error || 'Не вдалося змінити порядок категорії');
+
+                const second = await fetch(API_BASE + `/categories/${target.id}`, reqOpts(source.order));
+                const secondResult = await second.json();
+                if (!second.ok || !secondResult.ok) throw new Error(secondResult.error || 'Не вдалося змінити порядок категорії');
+
+                await loadCategories();
+                showToast('Порядок категорій "Дивитися всі" оновлено ✅', 'success');
+            } catch (e) {
+                showToast(e.message || 'Помилка зміни порядку категорій', 'error');
+            }
+        }
+
+        function renderQuickCategoriesManager() {
+            const host = document.getElementById('quickCategoriesList');
+            const eligibleCategories = allCategories
+                .filter(cat => cat.id !== 'custom' && cat.active !== false);
+            const fallbackQuick = [...eligibleCategories]
+                .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+                .slice(0, 4)
+                .map(cat => cat.id);
+            const fromQuickSlot = [...eligibleCategories]
+                .filter(cat => Number.isInteger(cat.quickSlot))
+                .sort((a, b) => a.quickSlot - b.quickSlot)
+                .map(cat => cat.id)
+                .slice(0, 4);
+
+            if (!quickCategoryInitial.length) {
+                quickCategoryInitial = fromQuickSlot.length ? [...fromQuickSlot] : [...fallbackQuick];
+            }
+            if (!quickCategoryDraft.length) {
+                quickCategoryDraft = [...quickCategoryInitial];
+            }
+
+            const quickIds = quickCategoryDraft.length ? quickCategoryDraft : fallbackQuick;
+            const quickCategories = quickIds
+                .map(id => eligibleCategories.find(cat => cat.id === id))
+                .filter(Boolean)
+                .slice(0, 4);
+
+            if (!quickCategories.length) {
+                host.innerHTML = '<div style="padding: 12px; background: #f8f9fa; border-radius: 10px;">Немає категорій для швидкого блоку.</div>';
+                updateQuickCategoriesSaveButton();
+                return;
+            }
+
+            host.innerHTML = quickCategories.map((cat, idx) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#fff;">
+                    <div style="display:flex; flex-direction:column; gap:6px; min-width:0; flex:1;">
+                        <div style="font-weight:600;">${idx + 1}. ${cat.emoji} ${cat.name}</div>
+                        <select onchange="setQuickCategory(${idx}, this.value)" style="padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:13px;">
+                            ${eligibleCategories.map(option => `
+                                <option value="${option.id}" ${option.id === cat.id ? 'selected' : ''}>
+                                    ${option.emoji} ${option.name}
+                                </option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-secondary" type="button" onclick="moveQuickCategory('${cat.id}', -1)" style="padding:6px 10px;" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                        <button class="btn btn-secondary" type="button" onclick="moveQuickCategory('${cat.id}', 1)" style="padding:6px 10px;" ${idx === quickCategories.length - 1 ? 'disabled' : ''}>↓</button>
+                    </div>
+                </div>
+            `).join('');
+            updateQuickCategoriesSaveButton();
+        }
+
+        async function setQuickCategory(slotIndex, selectedCategoryId) {
+            if (!quickCategoryDraft[slotIndex] || !selectedCategoryId) return;
+            if (quickCategoryDraft[slotIndex] === selectedCategoryId) return;
+
+            const existingIndex = quickCategoryDraft.indexOf(selectedCategoryId);
+            if (existingIndex !== -1 && existingIndex !== slotIndex) {
+                showToast('Ця категорія вже вибрана в іншому швидкому слоті', 'info');
+                renderQuickCategoriesManager();
+                return;
+            }
+
+            quickCategoryDraft[slotIndex] = selectedCategoryId;
+            renderQuickCategoriesManager();
+        }
+
+        async function moveQuickCategory(categoryId, direction) {
+            const index = quickCategoryDraft.findIndex(id => id === categoryId);
+            const targetIndex = index + direction;
+            if (index < 0 || targetIndex < 0 || targetIndex >= quickCategoryDraft.length) return;
+            [quickCategoryDraft[index], quickCategoryDraft[targetIndex]] = [quickCategoryDraft[targetIndex], quickCategoryDraft[index]];
+            renderQuickCategoriesManager();
+        }
+
+        function hasQuickCategoriesChanges() {
+            if (quickCategoryDraft.length !== quickCategoryInitial.length) return true;
+            return quickCategoryDraft.some((id, idx) => id !== quickCategoryInitial[idx]);
+        }
+
+        function updateQuickCategoriesSaveButton() {
+            const btn = document.getElementById('saveQuickCategoriesBtn');
+            const status = document.getElementById('quickCategoriesStatus');
+            if (!btn) return;
+            const dirty = hasQuickCategoriesChanges();
+            btn.disabled = !dirty;
+
+            if (status) {
+                status.classList.remove('dirty', 'saved');
+                if (dirty) {
+                    status.classList.add('dirty');
+                    status.textContent = 'Є незбережені зміни';
+                } else {
+                    status.classList.add('saved');
+                    status.textContent = 'Усі зміни збережено';
+                }
+            }
+        }
+
+        async function saveQuickCategories() {
+            const btn = document.getElementById('saveQuickCategoriesBtn');
+            if (!hasQuickCategoriesChanges()) return;
+
+            const eligibleCategories = allCategories
+                .filter(cat => cat.id !== 'custom' && cat.active !== false);
+            const quickMap = new Map(quickCategoryDraft.map((id, idx) => [id, idx + 1]));
+
+            try {
+                btn.disabled = true;
+                btn.textContent = '⏳ Збереження...';
+
+                for (const cat of eligibleCategories) {
+                    const nextSlot = quickMap.get(cat.id) ?? null;
+                    if ((cat.quickSlot ?? null) === nextSlot) continue;
+                    const res = await fetch(API_BASE + `/categories/${cat.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Telegram-Init-Data': tgInitData
+                        },
+                        body: JSON.stringify({ quickSlot: nextSlot })
+                    });
+                    const result = await res.json();
+                    if (!res.ok || !result.ok) {
+                        throw new Error(result.error || `Не вдалося оновити швидкий слот: ${cat.id}`);
+                    }
+                }
+
+                quickCategoryInitial = [...quickCategoryDraft];
+                await loadCategories();
+                showToast('Швидкі категорії збережено ✅', 'success');
+                const status = document.getElementById('quickCategoriesStatus');
+                if (status) {
+                    status.classList.remove('dirty');
+                    status.classList.add('saved');
+                    status.textContent = 'Збережено щойно';
+                }
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження швидких категорій', 'error');
+            } finally {
+                btn.textContent = '💾 Зберегти швидкі категорії';
+                updateQuickCategoriesSaveButton();
+            }
+        }
+
+        async function loadCategories() {
+            try {
+                const res = await fetch(API_BASE + '/categories');
+                if (!res.ok) {
+                    throw new Error(`Помилка категорій (${res.status})`);
+                }
+                allCategories = await res.json();
+                const eligible = allCategories
+                    .filter(cat => cat.id !== 'custom' && cat.active !== false)
+                    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+                const bySlot = eligible
+                    .filter(cat => Number.isInteger(cat.quickSlot))
+                    .sort((a, b) => a.quickSlot - b.quickSlot)
+                    .map(cat => cat.id)
+                    .slice(0, 4);
+                const fallback = eligible.slice(0, 4).map(cat => cat.id);
+                const freshQuick = bySlot.length ? bySlot : fallback;
+
+                const hasUnsavedQuickChanges = hasQuickCategoriesChanges();
+                if (!hasUnsavedQuickChanges) {
+                    quickCategoryInitial = [...freshQuick];
+                    quickCategoryDraft = [...freshQuick];
+                } else if (!quickCategoryInitial.length) {
+                    quickCategoryInitial = [...freshQuick];
+                    if (!quickCategoryDraft.length) {
+                        quickCategoryDraft = [...freshQuick];
+                    }
+                }
+                renderCategoryFilterMenu();
+                renderCategorySelectOptions();
+                renderCategoriesManager();
+                renderQuickCategoriesManager();
+                updateHeaderStat();
+            } catch (e) {
+                console.error('loadCategories error:', e);
+                showToast('Помилка завантаження категорій', 'error');
+            }
+        }
+
+        function renderFilamentsManager() {
+            const list = document.getElementById('filamentsList');
+            if (!allFilaments.length) {
+                list.innerHTML = '<div style="padding: 16px; background: #f8f9fa; border-radius: 10px;">Філаменти не знайдені.</div>';
+                return;
+            }
+
+            const sortedFilaments = [...allFilaments].sort((a, b) => {
+                const aRank = a.available ? 0 : 1;
+                const bRank = b.available ? 0 : 1;
+                if (aRank !== bRank) return aRank - bRank;
+                return String(a.name || '').localeCompare(String(b.name || ''), 'uk');
+            });
+
+            list.innerHTML = sortedFilaments.map(f => `
+                <div data-filament-id="${f.id}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${f.available ? '#d1fae5' : '#e5e7eb'}; border-radius:12px; padding:14px 16px; background:${f.available ? '#ffffff' : '#f9fafb'}; opacity:${f.available ? '1' : '0.7'};">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="display:inline-block; width:20px; height:20px; border-radius:50%; border:1px solid #ddd; background:${f.hex || '#ccc'}; box-shadow:${f.available ? '0 0 0 2px rgba(16,185,129,0.18)' : 'none'};"></span>
+                        <div>
+                            <div style="font-weight:700;">${f.name}</div>
+                            <div style="font-size:12px; color:#6b7280;">
+                                ID: ${f.id} · ${f.hex}
+                                ${String(f.id || '').startsWith('luminous') ? ' · 🌙 Світиться вночі' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:12px; font-weight:700; padding:6px 10px; border-radius:999px; background:${f.available ? '#d1fae5' : '#e5e7eb'}; color:${f.available ? '#065f46' : '#374151'};">
+                            ${f.available ? 'В наявності' : 'Відсутній'}
+                        </span>
+                    <button class="btn btn-secondary" type="button" onclick="openFilamentModal('${f.id}')" style="padding:8px 12px;">✏️ Редагувати</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadFilaments() {
+            try {
+                const res = await fetch(API_BASE + '/filaments');
+                if (!res.ok) throw new Error(`Помилка філаментів (${res.status})`);
+                allFilaments = await res.json();
+                renderFilamentsManager();
+            } catch (e) {
+                console.error('loadFilaments error:', e);
+                showToast('Помилка завантаження філаментів', 'error');
+            }
+        }
+
+        function keepFilamentInView(filamentId, fallbackScrollY = null) {
+            const selector = `[data-filament-id="${filamentId}"]`;
+            const row = document.querySelector(selector);
+            if (row) {
+                row.scrollIntoView({ block: 'center' });
+                return;
+            }
+            if (typeof fallbackScrollY === 'number') {
+                window.scrollTo({ top: fallbackScrollY, behavior: 'auto' });
+            }
+        }
+
         // ═══════════════════════════════════════════════════════════
         // ЗАВАНТАЖЕННЯ ТОВАРІВ
         // ═══════════════════════════════════════════════════════════
@@ -1047,7 +1736,8 @@
                 allProducts = products;
 
                 // Оновлюємо лічильник
-                document.getElementById('totalProducts').textContent = products.length;
+                updateHeaderStat();
+                renderCategoriesManager();
 
                 // Застосовуємо фільтрацію
                 filterProducts();
@@ -1127,16 +1817,8 @@
 
             empty.style.display = 'none';
             container.innerHTML = products.map(p => {
-                const categoryMap = {
-                    toy: '🧸 Іграшки',
-                    key: '🔑 Брелки',
-                    anti: '🧠 Антистрес',
-                    gifts: '🎁 Подарунки та декор',
-                    home: '� Для дому',
-                    gadget: '📲 Для гаджетів',
-                    tool: '⚒️ Інструменти та приладдя',
-                    custom: '✏️ Індивідуальне'
-                };
+                const categoryMeta = getCategoryMeta(p.cat);
+                const categoryLabel = `${categoryMeta.emoji} ${categoryMeta.name}`;
 
                 const discount = p.oldPrice && p.oldPrice > 0 ? Math.round((p.oldPrice - p.price) / p.oldPrice * 100) : 0;
 
@@ -1147,7 +1829,7 @@
                             <div class="product-info">
                                 <div class="product-name">${p.name}</div>
                                 <div class="product-meta">
-                                    <span class="category-badge category-${p.cat}">${categoryMap[p.cat]}</span>
+                                    <span class="category-badge ${categoryMeta.badgeClass || `category-${p.cat}`}">${categoryLabel}</span>
                                     <span>ID: ${p.id}</span>
                                 </div>
                             </div>
@@ -1195,6 +1877,7 @@
             document.getElementById('modalTitle').textContent = '➕ Додати новий товар';
             const form = document.getElementById('productForm');
             form.reset();
+            renderCategorySelectOptions();
             
             // Очищаємо помилки валідації
             document.querySelectorAll('.form-group').forEach(group => {
@@ -1212,6 +1895,72 @@
             document.getElementById('modal').classList.remove('active');
             currentProductId = null;
             uploadedPhotos = [];
+        }
+
+        function openCategoryModal(categoryId = null) {
+            const form = document.getElementById('categoryForm');
+            currentCategoryId = categoryId;
+            form.reset();
+
+            if (categoryId) {
+                const category = getCategoryMeta(categoryId);
+                document.getElementById('categoryModalTitle').textContent = '✏️ Редагувати категорію';
+                form.id.value = category.id || '';
+                form.id.readOnly = true;
+                form.name.value = category.name || '';
+                form.emoji.value = category.emoji || '📦';
+                form.order.value = category.order || '';
+            } else {
+                document.getElementById('categoryModalTitle').textContent = '➕ Додати категорію';
+                form.id.readOnly = false;
+            }
+
+            document.getElementById('categoryModal').classList.add('active');
+        }
+
+        function closeCategoryModal() {
+            currentCategoryId = null;
+            document.getElementById('categoryModal').classList.remove('active');
+        }
+
+        function openFilamentModal(filamentId) {
+            const filament = allFilaments.find(f => f.id === filamentId);
+            if (!filament) {
+                showToast('Філамент не знайдено', 'error');
+                return;
+            }
+
+            currentFilamentId = filamentId;
+            const form = document.getElementById('filamentForm');
+            form.id.value = filament.id || '';
+            form.name.value = filament.name || '';
+            form.hex.value = filament.hex || '#cccccc';
+            form.available.checked = Boolean(filament.available);
+            document.getElementById('filamentModal').classList.add('active');
+        }
+
+        function closeFilamentModal() {
+            currentFilamentId = null;
+            document.getElementById('filamentModal').classList.remove('active');
+        }
+
+        async function deleteCategory(categoryId) {
+            if (!confirm('Ви дійсно хочете видалити цю категорію?')) return;
+            try {
+                const res = await fetch(API_BASE + `/categories/${categoryId}`, {
+                    method: 'DELETE',
+                    headers: { 'X-Telegram-Init-Data': tgInitData }
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) {
+                    throw new Error(result.error || 'Не вдалося видалити категорію');
+                }
+                showToast('Категорію видалено ✅', 'success');
+                await loadCategories();
+                filterProducts();
+            } catch (e) {
+                showToast(e.message || 'Помилка видалення категорії', 'error');
+            }
         }
 
         function updateCategoryFields() {
@@ -1238,6 +1987,7 @@
                 document.getElementById('modalTitle').textContent = '✏️ Редагувати товар';
 
                 const form = document.getElementById('productForm');
+                renderCategorySelectOptions();
                 form.name.value = product.name;
                 form.cat.value = product.cat;
                 form.emoji.value = product.emoji;
@@ -1599,6 +2349,107 @@
             }
         });
 
+        document.getElementById('categoryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const submitBtn = document.getElementById('categorySubmitBtn');
+
+            const payload = {
+                id: form.id.value.trim().toLowerCase(),
+                name: form.name.value.trim(),
+                emoji: form.emoji.value.trim(),
+                order: form.order.value ? parseInt(form.order.value, 10) : allCategories.length + 1
+            };
+
+            if (!payload.id || !payload.name || !payload.emoji) {
+                showToast('Заповніть ID, назву та emoji', 'error');
+                return;
+            }
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '⏳ Збереження...';
+
+                const method = currentCategoryId ? 'PUT' : 'POST';
+                const url = currentCategoryId ? API_BASE + `/categories/${currentCategoryId}` : API_BASE + '/categories';
+                const res = await fetch(url, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) {
+                    throw new Error(result.error || 'Не вдалося зберегти категорію');
+                }
+
+                showToast('Категорію збережено ✅', 'success');
+                closeCategoryModal();
+                await loadCategories();
+                filterProducts();
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження категорії', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Зберегти категорію';
+            }
+        });
+
+        document.getElementById('filamentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!currentFilamentId) return;
+
+            const form = e.target;
+            const submitBtn = document.getElementById('filamentSubmitBtn');
+            const editedFilamentId = currentFilamentId;
+            const previousScrollY = window.scrollY;
+            const payload = {
+                name: form.name.value.trim(),
+                hex: form.hex.value.trim(),
+                available: form.available.checked
+            };
+
+            if (!payload.name) {
+                showToast('Назва філаменту обовʼязкова', 'error');
+                return;
+            }
+            if (!/^#([a-fA-F0-9]{3}|[a-fA-F0-9]{6})$/.test(payload.hex)) {
+                showToast('HEX має бути у форматі #RGB або #RRGGBB', 'error');
+                return;
+            }
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '⏳ Збереження...';
+                const res = await fetch(API_BASE + `/filaments/${currentFilamentId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) {
+                    throw new Error(result.error || 'Не вдалося зберегти філамент');
+                }
+
+                showToast('Філамент оновлено ✅', 'success');
+                closeFilamentModal();
+                await loadFilaments();
+                switchPage('filaments');
+                keepFilamentInView(editedFilamentId, previousScrollY);
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження філаменту', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Зберегти філамент';
+            }
+        });
+
         // ═══════════════════════════════════════════════════════════
         // TOAST ПОВІДОМЛЕННЯ
         // ═══════════════════════════════════════════════════════════
@@ -1615,7 +2466,16 @@
         // ІНІЦІАЛІЗАЦІЯ
         // ═══════════════════════════════════════════════════════════
 
-        loadProducts();
+        const savedPage = (() => {
+            try {
+                return localStorage.getItem('adminActivePage') || 'products';
+            } catch (_) {
+                return 'products';
+            }
+        })();
+        switchPage(['products', 'categories', 'filaments'].includes(savedPage) ? savedPage : 'products');
+        loadCategories().then(loadProducts);
+        loadFilaments();
         setInterval(loadProducts, 30000); // Оновлення кожні 30 секунд
 
         // Keyboard shortcuts
@@ -1629,6 +2489,18 @@
         document.getElementById('modal').addEventListener('click', (e) => {
             if (e.target.id === 'modal') {
                 closeModal();
+            }
+        });
+
+        document.getElementById('categoryModal').addEventListener('click', (e) => {
+            if (e.target.id === 'categoryModal') {
+                closeCategoryModal();
+            }
+        });
+
+        document.getElementById('filamentModal').addEventListener('click', (e) => {
+            if (e.target.id === 'filamentModal') {
+                closeFilamentModal();
             }
         });
     </script>

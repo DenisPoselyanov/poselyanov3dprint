@@ -44,6 +44,7 @@ DB_FILE    = os.environ.get("DB_FILE", "users.db")
 PRODUCTS_FILE = "products.json"
 CUSTOM_PRODUCTS_FILE = "custom_products.json"
 FILAMENTS_FILE = "filaments.json"
+CATEGORIES_FILE = "categories.json"
 # Локально: false (працює без initData). На проді: true
 VALIDATE_INIT_DATA = os.environ.get("VALIDATE_INIT_DATA", "false").lower() in ("1", "true", "yes")
 # Акція -10% на замовлення від 500 грн: true - увімкнено, false - вимкнено
@@ -91,6 +92,8 @@ _products_mtime = 0.0
 _custom_mtime = 0.0
 PRODUCTS_CACHE = load_products_file(PRODUCTS_FILE)
 CUSTOM_PRODUCTS_CACHE = load_products_file(CUSTOM_PRODUCTS_FILE)
+_categories_mtime = 0.0
+CATEGORIES_CACHE: list[dict] = []
 
 _filaments_mtime = 0.0
 FILAMENTS_CACHE: list = []
@@ -117,7 +120,73 @@ def reload_filaments_cache(force: bool = False):
     return False
 
 
+def save_filaments_to_file():
+    """Зберегти філаменти у JSON файл."""
+    Path(FILAMENTS_FILE).write_text(json.dumps(FILAMENTS_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
+    reload_filaments_cache(force=True)
+
+
+def get_filament_by_id(filament_id: str):
+    reload_filaments_cache()
+    needle = str(filament_id or "").strip()
+    if not needle:
+        return None
+    return next((f for f in FILAMENTS_CACHE if str(f.get("id")) == needle), None)
+
+
+def update_filament(filament_id: str, data: dict):
+    """Оновити існуючий філамент."""
+    try:
+        filament = get_filament_by_id(filament_id)
+        if not filament:
+            return {"ok": False, "error": "Філамент не знайдено"}
+
+        if "name" in data:
+            name = str(data.get("name", "")).strip()
+            if not name:
+                return {"ok": False, "error": "Назва філаменту не може бути порожньою"}
+            filament["name"] = name
+        if "hex" in data:
+            hex_value = str(data.get("hex", "")).strip()
+            if not hex_value.startswith("#") or len(hex_value) not in (4, 7):
+                return {"ok": False, "error": "Колір має бути у HEX-форматі (#RGB або #RRGGBB)"}
+            filament["hex"] = hex_value
+        if "available" in data:
+            filament["available"] = bool(data.get("available"))
+
+        save_filaments_to_file()
+        logger.info("🎨 Філамент оновлено: %s", filament.get("id"))
+        return {"ok": True, "filament": filament}
+    except Exception as e:
+        logger.error(f"❌ Помилка оновлення філаменту: {e}")
+        return {"ok": False, "error": str(e)}
+
+
 reload_filaments_cache(force=True)
+
+
+def load_categories_file(path: str = CATEGORIES_FILE):
+    p = Path(path)
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    return []
+
+
+def reload_categories_cache(force: bool = False):
+    """Перезавантажує categories.json при зміні файлу."""
+    global CATEGORIES_CACHE, _categories_mtime
+    fp = Path(CATEGORIES_FILE)
+    if not fp.exists():
+        return False
+    mtime = fp.stat().st_mtime
+    if force or mtime != _categories_mtime:
+        CATEGORIES_CACHE = load_categories_file()
+        _categories_mtime = mtime
+        return True
+    return False
+
+
+reload_categories_cache(force=True)
 
 
 def reload_products_cache(force: bool = False):
@@ -164,6 +233,29 @@ def get_all_products():
     return PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE
 
 
+def get_all_categories(active_only: bool = True):
+    reload_categories_cache()
+    categories = sorted(CATEGORIES_CACHE, key=lambda c: c.get("order", 999))
+    if active_only:
+        return [c for c in categories if c.get("active", True)]
+    return categories
+
+
+def get_category_by_id(category_id: str):
+    if not category_id:
+        return None
+    category_id = str(category_id).strip()
+    for category in get_all_categories(active_only=False):
+        if category.get("id") == category_id:
+            return category
+    return None
+
+
+def is_valid_category_id(category_id: str):
+    category = get_category_by_id(category_id)
+    return bool(category and category.get("active", True))
+
+
 def save_products_to_file():
     """Зберегти товари в JSON файли"""
     Path(PRODUCTS_FILE).write_text(json.dumps(PRODUCTS_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -171,10 +263,20 @@ def save_products_to_file():
     reload_products_cache(force=True)
 
 
+def save_categories_to_file():
+    """Зберегти категорії в JSON файл"""
+    Path(CATEGORIES_FILE).write_text(json.dumps(CATEGORIES_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
+    reload_categories_cache(force=True)
+
+
 def add_product(data: dict):
     """Додати новий товар"""
     try:
-        is_custom = data.get("cat") == "custom"
+        category_id = data.get("cat", "toy")
+        if not is_valid_category_id(category_id):
+            return {"ok": False, "error": "Невірна або неактивна категорія"}
+
+        is_custom = category_id == "custom"
         target_list = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
 
         if not target_list:
@@ -184,7 +286,7 @@ def add_product(data: dict):
 
         product = {
             "id": new_id,
-            "cat": data.get("cat", "toy"),
+            "cat": category_id,
             "emoji": data.get("emoji", "📦"),
             "photos": data.get("photos", []),
             "name": data.get("name", ""),
@@ -223,8 +325,21 @@ def update_product(product_id: int, data: dict):
         if not product:
             return {"ok": False, "error": "Товар не знайдено"}
 
-        is_custom = product.get("cat") == "custom"
-        target_list = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
+        if "cat" in data and not is_valid_category_id(data.get("cat")):
+            return {"ok": False, "error": "Невірна або неактивна категорія"}
+
+        current_category = product.get("cat")
+        next_category = data.get("cat", current_category)
+        is_current_custom = current_category == "custom"
+        is_next_custom = next_category == "custom"
+
+        if is_current_custom != is_next_custom:
+            source_list = CUSTOM_PRODUCTS_CACHE if is_current_custom else PRODUCTS_CACHE
+            destination_list = CUSTOM_PRODUCTS_CACHE if is_next_custom else PRODUCTS_CACHE
+            source_list[:] = [p for p in source_list if p.get("id") != product_id]
+            destination_list.append(product)
+
+        product["cat"] = next_category
 
         product.update({
             "emoji": data.get("emoji", product.get("emoji")),
@@ -244,12 +359,15 @@ def update_product(product_id: int, data: dict):
         elif "oldPrice" in product and not data.get("oldPrice"):
             del product["oldPrice"]
 
-        if not is_custom:
+        if not is_next_custom:
             product["gift"] = data.get("gift", product.get("gift", False))
             if "filamentChoice" in data:
                 product["filamentChoice"] = data.get("filamentChoice")
+            product.pop("custom_fields", None)
         else:
             product["custom_fields"] = data.get("custom_fields", product.get("custom_fields", ""))
+            product.pop("gift", None)
+            product.pop("filamentChoice", None)
 
         save_products_to_file()
         logger.info(f"✏️ Товар оновлено: {product['name']} (ID: {product_id})")
@@ -257,6 +375,104 @@ def update_product(product_id: int, data: dict):
 
     except Exception as e:
         logger.error(f"❌ Помилка редагування товару: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+def add_category(data: dict):
+    """Додати нову категорію"""
+    try:
+        category_id = str(data.get("id", "")).strip().lower()
+        name = str(data.get("name", "")).strip()
+        emoji = str(data.get("emoji", "")).strip() or "📦"
+        badge_class = str(data.get("badgeClass", "")).strip() or f"category-{category_id}"
+
+        if not category_id or not name:
+            return {"ok": False, "error": "ID та назва категорії обов'язкові"}
+        if get_category_by_id(category_id):
+            return {"ok": False, "error": "Категорія з таким ID вже існує"}
+
+        max_order = max((c.get("order", 0) for c in CATEGORIES_CACHE), default=0)
+        category = {
+            "id": category_id,
+            "name": name,
+            "emoji": emoji,
+            "badgeClass": badge_class,
+            "order": int(data.get("order", max_order + 1)),
+            "active": bool(data.get("active", True)),
+            "quickSlot": data.get("quickSlot"),
+        }
+        CATEGORIES_CACHE.append(category)
+        save_categories_to_file()
+        return {"ok": True, "category": category}
+    except Exception as e:
+        logger.error(f"❌ Помилка додавання категорії: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+def update_category(category_id: str, data: dict):
+    """Оновити категорію"""
+    try:
+        category = get_category_by_id(category_id)
+        if not category:
+            return {"ok": False, "error": "Категорія не знайдена"}
+
+        if "id" in data:
+            new_id = str(data.get("id", "")).strip().lower()
+            if not new_id:
+                return {"ok": False, "error": "ID категорії не може бути порожнім"}
+            if new_id != category_id and get_category_by_id(new_id):
+                return {"ok": False, "error": "Категорія з таким ID вже існує"}
+            if new_id != category_id:
+                for product in get_all_products():
+                    if product.get("cat") == category_id:
+                        product["cat"] = new_id
+                category["id"] = new_id
+
+        if "name" in data:
+            name = str(data.get("name", "")).strip()
+            if not name:
+                return {"ok": False, "error": "Назва категорії не може бути порожньою"}
+            category["name"] = name
+
+        if "emoji" in data:
+            category["emoji"] = str(data.get("emoji", "")).strip() or "📦"
+        if "badgeClass" in data:
+            category["badgeClass"] = str(data.get("badgeClass", "")).strip()
+        if "order" in data:
+            category["order"] = int(data.get("order", category.get("order", 0)))
+        if "active" in data:
+            category["active"] = bool(data.get("active"))
+        if "quickSlot" in data:
+            slot = data.get("quickSlot")
+            category["quickSlot"] = int(slot) if slot is not None else None
+
+        save_categories_to_file()
+        save_products_to_file()
+        return {"ok": True, "category": category}
+    except Exception as e:
+        logger.error(f"❌ Помилка оновлення категорії: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+def delete_category(category_id: str):
+    """Видалити категорію, якщо вона не використовується товарами"""
+    try:
+        category = get_category_by_id(category_id)
+        if not category:
+            return {"ok": False, "error": "Категорія не знайдена"}
+
+        products_in_category = [p for p in get_all_products() if p.get("cat") == category_id]
+        if products_in_category:
+            return {
+                "ok": False,
+                "error": f"Не можна видалити категорію: у ній є товари ({len(products_in_category)})",
+            }
+
+        CATEGORIES_CACHE[:] = [c for c in CATEGORIES_CACHE if c.get("id") != category_id]
+        save_categories_to_file()
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"❌ Помилка видалення категорії: {e}")
         return {"ok": False, "error": str(e)}
 
 
@@ -1614,6 +1830,19 @@ async def handle_get_products(request: web.Request):
     return web.json_response(products, headers=cors_headers(request))
 
 
+async def handle_get_categories(request: web.Request):
+    """Отримати список категорій"""
+    include_inactive = request.query.get("includeInactive", "false").lower() in ("1", "true", "yes")
+    categories = get_all_categories(active_only=not include_inactive)
+    return web.json_response(categories, headers=cors_headers(request))
+
+
+async def handle_get_filaments(request: web.Request):
+    """Отримати список філаментів."""
+    reload_filaments_cache()
+    return web.json_response(FILAMENTS_CACHE, headers=cors_headers(request))
+
+
 async def handle_get_product(request: web.Request):
     """Отримати товар за ID"""
     product_id = int(request.match_info.get('id', 0))
@@ -1621,6 +1850,75 @@ async def handle_get_product(request: web.Request):
     if not product:
         return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
     return web.json_response(product, headers=cors_headers(request))
+
+
+async def handle_update_filament(request: web.Request):
+    """Оновити існуючий філамент."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
+        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    try:
+        filament_id = request.match_info.get('id', '')
+        data = await request.json()
+        result = update_filament(filament_id, data)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_create_category(request: web.Request):
+    """Створити нову категорію"""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
+        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+
+    try:
+        data = await request.json()
+        result = add_category(data)
+        status = 201 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_update_category(request: web.Request):
+    """Оновити категорію"""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
+        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+
+    try:
+        category_id = request.match_info.get('id', '')
+        data = await request.json()
+        result = update_category(category_id, data)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_delete_category(request: web.Request):
+    """Видалити категорію"""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
+        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+
+    try:
+        category_id = request.match_info.get('id', '')
+        result = delete_category(category_id)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
 
 
 async def handle_create_product(request: web.Request):
@@ -1867,9 +2165,10 @@ def main():
     init_db()
     reload_products_cache(force=True)
     reload_filaments_cache(force=True)
+    reload_categories_cache(force=True)
     logger.info(
-        "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom | філаментів: %s",
-        VALIDATE_INIT_DATA, len(PRODUCTS_CACHE), len(CUSTOM_PRODUCTS_CACHE), len(FILAMENTS_CACHE),
+        "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom | філаментів: %s | категорій: %s",
+        VALIDATE_INIT_DATA, len(PRODUCTS_CACHE), len(CUSTOM_PRODUCTS_CACHE), len(FILAMENTS_CACHE), len(CATEGORIES_CACHE),
     )
 
     bot_app = Application.builder().token(BOT_TOKEN).build()
@@ -1908,7 +2207,13 @@ def main():
         # Адмін API
         http_app.router.add_get('/admin/panel', handle_admin_panel)
         http_app.router.add_get('/api/products', handle_get_products)
+        http_app.router.add_get('/api/categories', handle_get_categories)
+        http_app.router.add_get('/api/filaments', handle_get_filaments)
         http_app.router.add_get('/api/products/{id}', handle_get_product)
+        http_app.router.add_post('/api/categories', handle_create_category)
+        http_app.router.add_put('/api/categories/{id}', handle_update_category)
+        http_app.router.add_delete('/api/categories/{id}', handle_delete_category)
+        http_app.router.add_put('/api/filaments/{id}', handle_update_filament)
         http_app.router.add_post('/api/products', handle_create_product)
         http_app.router.add_put('/api/products/{id}', handle_update_product)
         http_app.router.add_delete('/api/products/{id}', handle_delete_product)

@@ -333,7 +333,7 @@
     margin: 2px auto 12px;
   }
   .categories-overlay-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-  .categories-overlay-title { font-size: 34px; font-weight: 900; line-height: 1; }
+  .categories-overlay-title { font-size: 20px; font-weight: 900; line-height: 1; }
   .categories-overlay-close {
     border: none;
     background: #ececf2;
@@ -2223,9 +2223,9 @@ function applyTheme(scheme) {
 }
 
 // Категорійні ярлики (для табів та заголовку)
-const CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', anti: '🧠 Антистрес', key: '🔑 Брелки', gifts: '🎁 Подарунки та декор', home: '🏠 Дім та побут', gadget: '📲 Для гаджетів', tool: '⚒️ Інструменти та приладдя', custom: '✏️ Індивідуальне', individual: '✏️ Індивідуальне' };
-const CAT_ICONS = { toy: '🧸', anti: '🧠', key: '🔑', gifts: '🎁', home: '🏠', gadget: '📲', tool: '⚒️', custom: '✏️' };
-const CAT_COLORS = {
+let CAT_LABELS = { all: 'Всі товари', toy: '🧸 Іграшки', anti: '🧠 Антистрес', key: '🔑 Брелки', gifts: '🎁 Подарунки та декор', home: '🏠 Дім та побут', gadget: '📲 Для гаджетів', tool: '⚒️ Інструменти та приладдя', custom: '✏️ Індивідуальне', individual: '✏️ Індивідуальне' };
+let CAT_ICONS = { toy: '🧸', anti: '🧠', key: '🔑', gifts: '🎁', home: '🏠', gadget: '📲', tool: '⚒️', custom: '✏️' };
+let CAT_COLORS = {
   toy: { iconBg: '#c6e5ff', badgeBg: '#0b7cc8' },
   anti: { iconBg: '#f8d4c8', badgeBg: '#c15b14' },
   key: { iconBg: '#cfe3d6', badgeBg: '#1f8d4a' },
@@ -2235,8 +2235,9 @@ const CAT_COLORS = {
   tool: { iconBg: '#d5d8ea', badgeBg: '#5e6a9b' },
   custom: { iconBg: '#ead7f5', badgeBg: '#8649b5' }
 };
-const MAIN_CATEGORIES = ['toy', 'gifts', 'home', 'tool'];
-const PRODUCT_CATEGORIES = ['toy', 'anti', 'key', 'gifts', 'home', 'gadget', 'tool'];
+let MAIN_CATEGORIES = ['toy', 'gifts', 'home', 'tool'];
+let PRODUCT_CATEGORIES = ['toy', 'anti', 'key', 'gifts', 'home', 'gadget', 'tool'];
+let CATEGORIES = [];
 
 // Глобальний масив товарів (заповнюється при завантаженні)
 let PRODUCTS = [];
@@ -3105,6 +3106,37 @@ async function loadProducts() {
     console.error('Помилка завантаження товарів:', e);
     document.getElementById('grid').innerHTML =
       '<div class="empty"><div class="empty-ico">😕</div>Не вдалось завантажити товари. Спробуй пізніше.</div>';
+  }
+}
+
+async function loadCategories() {
+  try {
+    const response = await fetch('categories.json');
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    CATEGORIES = await response.json();
+    CATEGORIES = CATEGORIES
+      .filter(cat => cat && cat.id)
+      .sort((a, b) => Number(a.order ?? 999) - Number(b.order ?? 999));
+
+    const labels = { all: 'Всі товари', individual: '✏️ Індивідуальне' };
+    const icons = {};
+    CATEGORIES.forEach(cat => {
+      labels[cat.id] = `${cat.emoji || '📦'} ${cat.name || cat.id}`;
+      icons[cat.id] = cat.emoji || '📦';
+    });
+    CAT_LABELS = { ...CAT_LABELS, ...labels };
+    CAT_ICONS = { ...CAT_ICONS, ...icons };
+    PRODUCT_CATEGORIES = CATEGORIES.filter(c => c.id !== 'custom' && c.active !== false).map(c => c.id);
+    const quickCategories = CATEGORIES
+      .filter(c => c.id !== 'custom' && c.active !== false)
+      .filter(c => Number.isInteger(c.quickSlot))
+      .sort((a, b) => a.quickSlot - b.quickSlot)
+      .map(c => c.id)
+      .slice(0, 4);
+    MAIN_CATEGORIES = quickCategories.length ? quickCategories : PRODUCT_CATEGORIES.slice(0, 4);
+  } catch (e) {
+    console.error('Помилка завантаження categories.json:', e);
+    CATEGORIES = [];
   }
 }
 
@@ -4602,7 +4634,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   `).join('');
   
   // Завантажуємо товари та рендеримо першу категорію
-  await Promise.all([loadProducts(), loadFilaments()]);
+  await Promise.all([loadProducts(), loadFilaments(), loadCategories()]);
 
   resetHeaderScrollState('products');
   const mainScrollEl = getMainScrollEl();
