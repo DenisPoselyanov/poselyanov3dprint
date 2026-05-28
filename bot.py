@@ -15,6 +15,12 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import parse_qsl
 from urllib.parse import urlparse
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except Exception:
+    psycopg = None
+    dict_row = None
 import cloudinary
 import cloudinary.uploader
 import base64
@@ -32,15 +38,18 @@ from telegram.ext import (
 
 # Завантажуємо змінні середовища з .env файлу, щоб не зберігати конфіденційні дані (як-от токен бота) прямо в коді.
 from dotenv import load_dotenv
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 # =============================================
 BOT_TOKEN  = os.environ.get("BOT_TOKEN")
 OWNER_ID   = int(os.environ.get("OWNER_ID", "718746623"))
 ORDERS_CHAT_ID = int(os.environ.get("ORDERS_CHAT_ID", str(OWNER_ID)))
-WEBAPP_URL = "https://denisposelyanov.github.io/poselyanov3dprint/"
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://denisposelyanov.github.io/poselyanov3dprint/").strip()
 # Для Render краще використовувати шлях на Persistent Disk, напр. /var/data/users.db
 DB_FILE    = os.environ.get("DB_FILE", "users.db")
+DB_BACKEND = os.environ.get("DB_BACKEND", "sqlite").strip().lower()
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
 PRODUCTS_FILE = "products.json"
 CUSTOM_PRODUCTS_FILE = "custom_products.json"
 FILAMENTS_FILE = "filaments.json"
@@ -78,6 +87,31 @@ logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
+
+
+def _is_postgres() -> bool:
+    return DB_BACKEND == "postgres"
+
+
+def _sql(query: str) -> str:
+    # sqlite3 використовує ?, psycopg використовує %s
+    return query if not _is_postgres() else query.replace("?", "%s")
+
+
+def db_connect(dict_rows: bool = False):
+    if _is_postgres():
+        if not DATABASE_URL:
+            raise RuntimeError("DATABASE_URL/SUPABASE_DB_URL is required for DB_BACKEND=postgres")
+        if psycopg is None:
+            raise RuntimeError("psycopg is not installed. Add `psycopg[binary]` to requirements.")
+        if dict_rows:
+            return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        return psycopg.connect(DATABASE_URL)
+
+    conn = sqlite3.connect(DB_FILE)
+    if dict_rows:
+        conn.row_factory = sqlite3.Row
+    return conn
 
 
 # ─── ТОВАРИ ─────────────────────────────────────────────────
@@ -712,122 +746,222 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
 
 # ─── БАЗА ДАНИХ ─────────────────────────────────────────────
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id        INTEGER PRIMARY KEY,
-            name      TEXT,
-            username  TEXT,
-            blocked   INTEGER DEFAULT 0,
-            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS orders (
-            id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id           INTEGER,
-            username          TEXT,
-            first_name        TEXT,
-            total_price       INTEGER,
-            comment           TEXT,
-            gift_product_name TEXT,
-            status            TEXT DEFAULT 'new',
-            coupon_code       TEXT,
-            discount_amount   INTEGER DEFAULT 0,
-            ordered_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS order_items (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            order_id     INTEGER,
-            product_id   INTEGER,
-            product_name TEXT,
-            price        INTEGER,
-            quantity     INTEGER DEFAULT 1
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS coupons (
-            code         TEXT PRIMARY KEY,
-            type         TEXT NOT NULL,      -- 'percent' або 'fixed'
-            value        INTEGER NOT NULL,   -- 20 або 50 (грн)
-            min_order    INTEGER DEFAULT 0,
-            uses_max     INTEGER DEFAULT 0,  -- 0 = необмежено
-            uses_count   INTEGER DEFAULT 0,
-            one_per_user INTEGER DEFAULT 0,  -- 1 = один раз на юзера
-            active       INTEGER DEFAULT 1,
-            expires_at   TIMESTAMP           -- NULL = без терміну
-            personal_user_id INTEGER          -- NULL = публічний, інакше прив'язаний до юзера
-        )
-    """)
-
-    # Додаємо колонку personal_user_id, якщо її немає (для старих баз)
-    c_cols = [row[1] for row in conn.execute("PRAGMA table_info(coupons)").fetchall()]
-    if "personal_user_id" not in c_cols:
-        conn.execute("ALTER TABLE coupons ADD COLUMN personal_user_id INTEGER")
-
-    # Таблиця для зберігання інформації про використання купонів, щоб можна було відстежувати, хто і коли їх використовував, а також для реалізації обмежень на кількість використань і використання одним користувачем.
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS coupon_uses (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            code      TEXT NOT NULL,
-            user_id   INTEGER NOT NULL,
-            order_id  INTEGER,
-            used_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS filament_colors (
-            id         TEXT PRIMARY KEY,
-            name       TEXT NOT NULL,
-            hex        TEXT,
-            available  INTEGER NOT NULL DEFAULT 0
-        )
-    """)
-
-    oi_cols = [row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()]
-    if "filament" not in oi_cols:
-        conn.execute("ALTER TABLE order_items ADD COLUMN filament TEXT DEFAULT ''")
+    conn = db_connect()
+    if _is_postgres():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id BIGINT PRIMARY KEY,
+                name TEXT,
+                username TEXT,
+                blocked INTEGER DEFAULT 0,
+                joined_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT,
+                username TEXT,
+                first_name TEXT,
+                total_price INTEGER,
+                comment TEXT,
+                gift_product_name TEXT,
+                status TEXT DEFAULT 'new',
+                coupon_code TEXT,
+                discount_amount INTEGER DEFAULT 0,
+                ordered_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS order_items (
+                id BIGSERIAL PRIMARY KEY,
+                order_id BIGINT,
+                product_id BIGINT,
+                product_name TEXT,
+                price INTEGER,
+                quantity INTEGER DEFAULT 1,
+                filament TEXT DEFAULT ''
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS coupons (
+                code TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                value INTEGER NOT NULL,
+                min_order INTEGER DEFAULT 0,
+                uses_max INTEGER DEFAULT 0,
+                uses_count INTEGER DEFAULT 0,
+                one_per_user INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                expires_at TIMESTAMPTZ,
+                personal_user_id BIGINT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS coupon_uses (
+                id BIGSERIAL PRIMARY KEY,
+                code TEXT NOT NULL,
+                user_id BIGINT NOT NULL,
+                order_id BIGINT,
+                used_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS filament_colors (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                hex TEXT,
+                available INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS personal_user_id BIGINT")
+        conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked)")
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id        INTEGER PRIMARY KEY,
+                name      TEXT,
+                username  TEXT,
+                blocked   INTEGER DEFAULT 0,
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id           INTEGER,
+                username          TEXT,
+                first_name        TEXT,
+                total_price       INTEGER,
+                comment           TEXT,
+                gift_product_name TEXT,
+                status            TEXT DEFAULT 'new',
+                coupon_code       TEXT,
+                discount_amount   INTEGER DEFAULT 0,
+                ordered_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS order_items (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id     INTEGER,
+                product_id   INTEGER,
+                product_name TEXT,
+                price        INTEGER,
+                quantity     INTEGER DEFAULT 1
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS coupons (
+                code         TEXT PRIMARY KEY,
+                type         TEXT NOT NULL,      -- 'percent' або 'fixed'
+                value        INTEGER NOT NULL,   -- 20 або 50 (грн)
+                min_order    INTEGER DEFAULT 0,
+                uses_max     INTEGER DEFAULT 0,  -- 0 = необмежено
+                uses_count   INTEGER DEFAULT 0,
+                one_per_user INTEGER DEFAULT 0,  -- 1 = один раз на юзера
+                active       INTEGER DEFAULT 1,
+                expires_at   TIMESTAMP,
+                personal_user_id INTEGER
+            )
+        """)
+        c_cols = [row[1] for row in conn.execute("PRAGMA table_info(coupons)").fetchall()]
+        if "personal_user_id" not in c_cols:
+            conn.execute("ALTER TABLE coupons ADD COLUMN personal_user_id INTEGER")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS coupon_uses (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                code      TEXT NOT NULL,
+                user_id   INTEGER NOT NULL,
+                order_id  INTEGER,
+                used_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS filament_colors (
+                id         TEXT PRIMARY KEY,
+                name       TEXT NOT NULL,
+                hex        TEXT,
+                available  INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        oi_cols = [row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()]
+        if "filament" not in oi_cols:
+            conn.execute("ALTER TABLE order_items ADD COLUMN filament TEXT DEFAULT ''")
 
     for r in load_filaments_file():
-        conn.execute(
-            "INSERT OR REPLACE INTO filament_colors (id, name, hex, available) VALUES (?, ?, ?, ?)",
-            (
-                r.get("id"),
-                r.get("name"),
-                r.get("hex") or "",
-                1 if r.get("available") else 0,
-            ),
-        )
+        if _is_postgres():
+            conn.execute(
+                """
+                INSERT INTO filament_colors (id, name, hex, available)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE
+                SET name = EXCLUDED.name,
+                    hex = EXCLUDED.hex,
+                    available = EXCLUDED.available
+                """,
+                (
+                    r.get("id"),
+                    r.get("name"),
+                    r.get("hex") or "",
+                    1 if r.get("available") else 0,
+                ),
+            )
+        else:
+            conn.execute(
+                "INSERT OR REPLACE INTO filament_colors (id, name, hex, available) VALUES (?, ?, ?, ?)",
+                (
+                    r.get("id"),
+                    r.get("name"),
+                    r.get("hex") or "",
+                    1 if r.get("available") else 0,
+                ),
+            )
 
     conn.commit()
     conn.close()
 
 # Зберігаємо користувача при першому контакті з ботом (або ігноруємо, якщо вже є)
 def save_user(user):
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("""
-        INSERT OR IGNORE INTO users (id, name, username)
-        VALUES (?, ?, ?)
-    """, (user.id, user.first_name, f"@{user.username}" if user.username else "—"))
+    conn = db_connect()
+    if _is_postgres():
+        conn.execute(
+            "INSERT INTO users (id, name, username) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
+            (user.id, user.first_name, f"@{user.username}" if user.username else "—"),
+        )
+    else:
+        conn.execute("""
+            INSERT OR IGNORE INTO users (id, name, username)
+            VALUES (?, ?, ?)
+        """, (user.id, user.first_name, f"@{user.username}" if user.username else "—"))
     conn.commit()
     conn.close()
 
 # Функція для збереження замовлення в базі даних, яка приймає всі необхідні дані про замовлення (користувача, товари, загальну суму, коментар, подарунок і купон), зберігає їх у відповідних таблицях (orders і order_items) і повертає ID створеного замовлення для подальшого використання в логах і кнопках.
 def save_order(user_id, username, first_name, items, total_price, comment, gift_product_name=None, coupon_code=None, discount_amount=0):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.execute("""
-        INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')
-    """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount))
-    order_id = cursor.lastrowid
+    conn = db_connect()
+    if _is_postgres():
+        cursor = conn.execute("""
+            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'new')
+            RETURNING id
+        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount))
+        order_id = cursor.fetchone()[0]
+    else:
+        cursor = conn.execute("""
+            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')
+        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount))
+        order_id = cursor.lastrowid
     for item in items:
         fl = (item.get("filament_name") or item.get("filament_id") or "").strip()
-        conn.execute("""
+        conn.execute(_sql("""
             INSERT INTO order_items (order_id, product_id, product_name, price, quantity, filament)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (
+        """), (
             order_id,
             int(item.get("product_id") or item.get("id") or 0),
             item.get("product_name", "—"),
@@ -838,19 +972,19 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
 
     # Якщо є подарунок, додаємо його як окремий рядок в order_items з ціною 0 і спеціальною назвою для зручності відображення в звітах і повідомленнях
     if gift_product_name:
-        conn.execute("""
+        conn.execute(_sql("""
             INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
             VALUES (?, 0, ?, 0, 1)
-        """, (order_id, f"🎁 {gift_product_name} (безкоштовно)"))
+        """), (order_id, f"🎁 {gift_product_name} (безкоштовно)"))
 
     # Якщо замовлення було оформлено з купоном, оновлюємо лічильник використань цього купона і додаємо запис в таблицю coupon_uses для відстеження, хто і коли його використовував. Це дозволяє реалізувати обмеження на кількість використань купона і використання одним користувачем, а також отримувати статистику по купонам.
     if coupon_code:
-        conn.execute(
-            "UPDATE coupons SET uses_count = uses_count + 1 WHERE code = ?",
+        conn.execute(_sql(
+            "UPDATE coupons SET uses_count = uses_count + 1 WHERE code = ?"),
             (coupon_code.upper(),)
         )
-        conn.execute(
-            "INSERT INTO coupon_uses (code, user_id, order_id) VALUES (?, ?, ?)",
+        conn.execute(_sql(
+            "INSERT INTO coupon_uses (code, user_id, order_id) VALUES (?, ?, ?)"),
             (coupon_code.upper(), user_id, order_id)
         )
     conn.commit()
@@ -859,7 +993,7 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
 
 # Функція для отримання статистики по користувачах і замовленнях, яка використовується в адмінській команді /stats для відображення актуальної інформації про діяльність бота.
 def get_stats():
-    conn = sqlite3.connect(DB_FILE)
+    conn = db_connect()
     user_count       = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     order_count      = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
     order_confirmed  = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'confirmed'").fetchone()[0]
@@ -899,18 +1033,16 @@ def get_stats():
 
 # Функція для перевірки купона при оформленні замовлення, яка враховує всі умови використання купона (активність, термін дії, мінімальна сума замовлення, обмеження на кількість використань і використання одним користувачем) і повертає результат у вигляді словника з інформацією про валідність купона, тип і значення знижки, а також повідомлення для клієнта.
 def check_coupon(code: str, user_id: int, cart_total: int):
-    conn = sqlite3.connect(DB_FILE)
-    row = conn.execute(
-        "SELECT * FROM coupons WHERE code = ?", (code.upper(),)
+    conn = db_connect(dict_rows=True)
+    row = conn.execute(_sql(
+        "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id FROM coupons WHERE code = ?"), (code.upper(),)
     ).fetchone()
 
     if not row:
         conn.close()
         return {"valid": False, "message": "Купон не знайдено ❌"}
 
-    # Створюємо словник з даними купона для зручності доступу до полів за іменами. Це дозволяє легко перевіряти умови використання купона і формувати повідомлення для клієнта.
-    cols = [d[0] for d in conn.execute("SELECT * FROM coupons LIMIT 0").description]
-    c = dict(zip(cols, row))
+    c = dict(row)
 
     if not c['active']:
         conn.close()
@@ -929,8 +1061,8 @@ def check_coupon(code: str, user_id: int, cart_total: int):
         return {"valid": False, "message": "Купон вичерпано ❌"}
 
     if c['one_per_user'] and user_id:
-        used = conn.execute(
-            "SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ?",
+        used = conn.execute(_sql(
+            "SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ?"),
             (c['code'], user_id)
         ).fetchone()
         if used:
@@ -969,19 +1101,19 @@ def check_promotion(cart_total: int):
 
 
 def update_order_status(order_id: int, status: str):
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
+    conn = db_connect()
+    conn.execute(_sql("UPDATE orders SET status = ? WHERE id = ?"), (status, order_id))
     conn.commit()
     conn.close()
 
 def set_blocked(user_id, blocked: bool):
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("UPDATE users SET blocked = ? WHERE id = ?", (int(blocked), user_id))
+    conn = db_connect()
+    conn.execute(_sql("UPDATE users SET blocked = ? WHERE id = ?"), (int(blocked), user_id))
     conn.commit()
     conn.close()
 
 def get_all_users():
-    conn = sqlite3.connect(DB_FILE)
+    conn = db_connect()
     users = conn.execute("SELECT id FROM users WHERE blocked = 0").fetchall()
     conn.close()
     return users
@@ -1172,8 +1304,9 @@ def get_my_coupons(user_id: int):
     - публічні (personal_user_id IS NULL)
     з урахуванням строку дії, ліміту використань та one_per_user.
     """
-    conn = sqlite3.connect(DB_FILE)
-    rows = conn.execute("""
+    conn = db_connect()
+    date_expr = "NOW()" if _is_postgres() else "datetime('now')"
+    rows = conn.execute(_sql(f"""
         SELECT
             c.code,
             c.type,
@@ -1191,10 +1324,10 @@ def get_my_coupons(user_id: int):
         FROM coupons c
         WHERE c.active = 1
           AND (c.personal_user_id IS NULL OR c.personal_user_id = ?)
-          AND (c.expires_at IS NULL OR c.expires_at > datetime('now'))
+          AND (c.expires_at IS NULL OR c.expires_at > {date_expr})
           AND (c.uses_max = 0 OR c.uses_count < c.uses_max)
         ORDER BY c.personal_user_id DESC, c.code ASC
-    """, (user_id, user_id)).fetchall()
+    """), (user_id, user_id)).fetchall()
     conn.close()
     return rows
 
@@ -1281,15 +1414,14 @@ async def sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /status — статус останнього замовлення
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    order = conn.execute("""
+    conn = db_connect(dict_rows=True)
+    order = conn.execute(_sql("""
         SELECT id, total_price, status, ordered_at
         FROM orders
         WHERE user_id = ?
         ORDER BY ordered_at DESC
         LIMIT 1
-    """, (user_id,)).fetchone()
+    """), (user_id,)).fetchone()
     conn.close()
 
     if not order:
@@ -1342,17 +1474,16 @@ async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Команда для перегляду історії замовлень користувача, яка витягує останні 10 замовлень з бази даних і формує зручне текстове повідомлення з деталями кожного замовлення (статус, дата, товари, сума, коментарі) для відправки користувачу. Якщо замовлень немає, вона надсилає відповідне повідомлення з підказкою зробити перше замовлення.
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = db_connect(dict_rows=True)
 
-    orders = conn.execute("""
+    orders = conn.execute(_sql("""
         SELECT id, total_price, status, ordered_at, comment, gift_product_name,
                coupon_code, discount_amount
         FROM orders
         WHERE user_id = ?
         ORDER BY ordered_at DESC
         LIMIT 10
-    """, (user_id,)).fetchall()
+    """), (user_id,)).fetchall()
 
     if not orders:
         await update.message.reply_text(
@@ -1389,11 +1520,11 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"{icon} <b>Замовлення #{o['id']}</b>  ·  {date_fmt}\n"
 
         # Товари
-        items = conn.execute("""
+        items = conn.execute(_sql("""
             SELECT product_name, price, quantity, filament
             FROM order_items
             WHERE order_id = ?
-        """, (o['id'],)).fetchall()
+        """), (o['id'],)).fetchall()
 
         for item in items:
             name = item['product_name']
@@ -1490,13 +1621,29 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif opt.startswith('user='):
                 personal_user_id = int(opt[5:])
 
-        conn = sqlite3.connect(DB_FILE)
+        conn = db_connect()
         try:
-            conn.execute("""
-                INSERT OR REPLACE INTO coupons
-                (code, type, value, min_order, uses_max, one_per_user, active, expires_at, personal_user_id)
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-            """, (code, ctype, value, min_order, uses_max, one_per_user, expires_at, personal_user_id))
+            if _is_postgres():
+                conn.execute("""
+                    INSERT INTO coupons
+                    (code, type, value, min_order, uses_max, one_per_user, active, expires_at, personal_user_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, 1, %s, %s)
+                    ON CONFLICT (code) DO UPDATE SET
+                        type = EXCLUDED.type,
+                        value = EXCLUDED.value,
+                        min_order = EXCLUDED.min_order,
+                        uses_max = EXCLUDED.uses_max,
+                        one_per_user = EXCLUDED.one_per_user,
+                        active = EXCLUDED.active,
+                        expires_at = EXCLUDED.expires_at,
+                        personal_user_id = EXCLUDED.personal_user_id
+                """, (code, ctype, value, min_order, uses_max, one_per_user, expires_at, personal_user_id))
+            else:
+                conn.execute("""
+                    INSERT OR REPLACE INTO coupons
+                    (code, type, value, min_order, uses_max, one_per_user, active, expires_at, personal_user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+                """, (code, ctype, value, min_order, uses_max, one_per_user, expires_at, personal_user_id))
             conn.commit()
             label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
             user_str = f" для юзера `{personal_user_id}`" if personal_user_id else ""
@@ -1508,7 +1655,7 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.close()
 
     elif sub == 'list':
-        conn = sqlite3.connect(DB_FILE)
+        conn = db_connect()
         rows = conn.execute("SELECT code, type, value, uses_count, uses_max, active, expires_at FROM coupons").fetchall()
         conn.close()
         if not rows:
@@ -1526,8 +1673,8 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif sub in ('disable', 'enable') and len(args) >= 2:
         code = args[1].upper()
         active = 1 if sub == 'enable' else 0
-        conn = sqlite3.connect(DB_FILE)
-        conn.execute("UPDATE coupons SET active = ? WHERE code = ?", (active, code))
+        conn = db_connect()
+        conn.execute(_sql("UPDATE coupons SET active = ? WHERE code = ?"), (active, code))
         conn.commit()
         conn.close()
         icon = "✅" if active else "🚫"
@@ -2131,11 +2278,31 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ У вас немає доступу до адмін панелі")
         return
 
-    admin_url = os.environ.get("ADMIN_WEBAPP_URL", "http://localhost:8080/admin/panel")
-    
-    # Додаємо bypass для надійності
-    if admin_url.startswith("http://localhost") or "ngrok" in admin_url:
-        admin_url += "?bypass=admin"
+    admin_url = (os.environ.get("ADMIN_WEBAPP_URL") or "").strip()
+    if not admin_url:
+        await update.message.reply_text(
+            "❌ Не задано ADMIN_WEBAPP_URL у `.env`.\n"
+            "Вкажи HTTPS-адресу адмінки, наприклад через ngrok."
+        )
+        return
+
+    # Telegram Web App у кнопці підтримує тільки HTTPS URL.
+    if not admin_url.lower().startswith("https://"):
+        await update.message.reply_text(
+            "❌ `ADMIN_WEBAPP_URL` невалідний для Telegram Web App.\n"
+            "Telegram приймає тільки HTTPS-посилання.\n\n"
+            "Зараз у тебе: "
+            f"`{admin_url}`\n\n"
+            "Локально: підніми `ngrok http 8080` і встав HTTPS URL у `.env`,\n"
+            "наприклад: `ADMIN_WEBAPP_URL=https://<id>.ngrok-free.app/admin/panel`",
+            parse_mode='Markdown'
+        )
+        return
+
+    # Для dev-режиму на ngrok додаємо bypass.
+    if "ngrok" in admin_url and "bypass=admin" not in admin_url:
+        sep = "&" if "?" in admin_url else "?"
+        admin_url = f"{admin_url}{sep}bypass=admin"
 
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton(

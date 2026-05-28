@@ -4,3 +4,4 @@ users.sqbpro
 .env
 start-bot.bat
 start-ngrok.bat
+.env.example

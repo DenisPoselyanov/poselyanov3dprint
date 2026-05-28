@@ -2250,6 +2250,8 @@
 const API_BASE = (() => {
   const h = location.hostname;
   if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8080';
+  // Локальний dev через ngrok: фронтенд і API йдуть через один origin.
+  if (h.includes('ngrok-free.dev') || h.includes('ngrok-free.app')) return location.origin;
   return window.__API_BASE__ || 'https://poselyanov3dprint-1.onrender.com';
 })();
 

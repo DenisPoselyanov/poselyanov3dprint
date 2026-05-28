@@ -17,3 +17,9 @@ services:
         sync: false
       - key: PORT
         value: 8443
+      - key: DB_BACKEND
+        value: sqlite
+      - key: DB_FILE
+        value: /var/data/users.db
+      - key: DATABASE_URL
+        sync: false
