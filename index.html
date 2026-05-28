@@ -258,8 +258,50 @@
 
   .categories-section { padding: 2px 12px 10px; }
   .categories-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .categories-title { font-size: 12px; color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
-  .categories-view-all { border: none; background: transparent; color: var(--tg-blue); font-size: 12px; font-weight: 800; cursor: pointer; }
+  .categories-title { font-size: 13px; color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+  .categories-view-all {
+    border: 1px solid #d8e8ff;
+    background: #eef5ff;
+    color: var(--tg-blue);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 32px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: transform .14s ease, box-shadow .14s ease, background .14s ease, border-color .14s ease;
+  }
+  .categories-view-all:active { transform: scale(.98); }
+  .categories-view-all-label { line-height: 1; }
+  .categories-view-all-count {
+    min-width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: var(--tg-blue);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    line-height: 1;
+  }
+  .categories-view-all-chevron {
+    width: 12px;
+    height: 12px;
+    transition: transform .16s ease;
+  }
+  .categories-view-all[aria-expanded="true"] .categories-view-all-chevron { transform: rotate(180deg); }
+  body.dark .categories-view-all {
+    background: #263248;
+    border-color: #334564;
+    color: #7eb0ff;
+  }
+  body.dark .categories-view-all-count { background: #7eb0ff; color: #162036; }
   .categories-circles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
   .category-circle-btn { border: none; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
   .category-circle-btn:active { transform: scale(.96); }
@@ -272,6 +314,29 @@
 
   .state-view.hidden { display: none; }
   .state-title-row { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; margin: 10px 0 6px; gap: 10px; }
+  .all-products-cta-wrap { display: flex; justify-content: center; padding: 10px 0 2px; }
+  .section-action-btn {
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--tg-blue);
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    padding: 7px 12px;
+    border-radius: 999px;
+    line-height: 1;
+    white-space: nowrap;
+    transition: transform .14s ease, background .14s ease, border-color .14s ease;
+  }
+  .section-action-btn:active {
+    transform: scale(.98);
+    background: #f2f6ff;
+    border-color: #cfd9ef;
+  }
+  body.dark .section-action-btn:active {
+    background: #313848;
+    border-color: #455069;
+  }
   .state-back-btn {
     border: 1px solid var(--border);
     background: var(--card-bg);
@@ -1832,12 +1897,28 @@
     <div class="categories-section">
       <div class="categories-header">
         <div class="categories-title">Категорії</div>
-        <button class="categories-view-all" type="button" onclick="openCategoriesOverlay()">дивитись всі</button>
+        <button
+          id="categories-view-all-btn"
+          class="categories-view-all"
+          type="button"
+          onclick="openCategoriesOverlay()"
+          aria-label="Відкрити всі категорії"
+          aria-expanded="false"
+        >
+          <span id="categories-view-all-label" class="categories-view-all-label">Усі категорії</span>
+          <span id="categories-view-all-count" class="categories-view-all-count">0</span>
+          <svg class="categories-view-all-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
       </div>
       <div class="categories-circles" id="categories-circles"></div>
     </div>
 
-    <div class="section-label">Популярні товари</div>
+    <div class="all-products-cta-wrap">
+      <button class="section-action-btn" type="button" onclick="openAllProductsView()">Всі товари</button>
+    </div>
+    <div id="popular-section-title" class="section-label">Популярні товари</div>
     <div class="grid" id="grid"></div>
 
     <div id="pinned-section" class="pinned-wrap" style="display:none;">
@@ -1896,6 +1977,15 @@
     </div>
     <div class="section-label">Результати пошуку</div>
     <div class="grid" id="grid-search"></div>
+  </div>
+
+  <div id="products-all-view" class="state-view hidden">
+    <div class="state-title-row">
+      <button class="state-back-btn" type="button" onclick="backFromAllProducts()">← До головної</button>
+      <div id="all-view-count" class="results-count"></div>
+    </div>
+    <div class="section-label">Всі товари</div>
+    <div class="grid" id="grid-all"></div>
   </div>
 </div>
 
@@ -2583,6 +2673,7 @@ function updateCardBadge(id) {
 
 let currentCat = 'all';
 let activeProductsView = 'default';
+let allProductsMode = false;
 let currentSearchQuery = '';
 let currentCategoryKey = '';
 let _lastCartTotal = 0;
@@ -3226,21 +3317,25 @@ function showProductsState(state) {
   const defaultView = document.getElementById('products-default-view');
   const categoryView = document.getElementById('products-category-view');
   const searchView = document.getElementById('products-search-view');
+  const allView = document.getElementById('products-all-view');
   // У режимі пошуку лишаємо дефолтний блок видимим, щоб інпут не зникав під час друку.
   defaultView.classList.toggle('hidden', state === 'category');
   categoryView.classList.toggle('hidden', state !== 'category');
   searchView.classList.toggle('hidden', state !== 'search');
+  allView.classList.toggle('hidden', state !== 'all');
 }
 
 function setDefaultViewSearchMode(enabled) {
   const categoriesSection = document.querySelector('#products-default-view .categories-section');
-  const popularLabel = document.querySelector('#products-default-view .section-label');
+  const allProductsCta = document.querySelector('#products-default-view .all-products-cta-wrap');
+  const popularLabel = document.getElementById('popular-section-title');
   const popularGrid = document.getElementById('grid');
   const pinnedSection = document.getElementById('pinned-section');
   const specialOffer = document.getElementById('special-offer-btn');
 
   const value = enabled ? 'none' : '';
   if (categoriesSection) categoriesSection.style.display = value;
+  if (allProductsCta) allProductsCta.style.display = value;
   if (popularLabel) popularLabel.style.display = value;
   if (popularGrid) popularGrid.style.display = value;
   if (pinnedSection) pinnedSection.style.display = value;
@@ -3257,6 +3352,7 @@ function renderGridItems(grid, items, source) {
 }
 
 function renderDefaultProductsView() {
+  allProductsMode = false;
   setDefaultViewSearchMode(false);
   const hotItems = PRODUCTS.filter(p => p.hot === true && !p._isCustom);
   const grid = document.getElementById('grid');
@@ -3267,6 +3363,7 @@ function renderDefaultProductsView() {
 }
 
 function renderCategoryView(cat) {
+  allProductsMode = false;
   setDefaultViewSearchMode(false);
   currentCategoryKey = cat;
   const q = currentCategorySearchQuery.trim().toLowerCase();
@@ -3299,6 +3396,17 @@ function renderSearchView(query) {
   showProductsState('search');
 }
 
+function renderAllProductsView() {
+  allProductsMode = true;
+  setDefaultViewSearchMode(true);
+  const items = PRODUCTS.filter(p => !p._isCustom);
+  const grid = document.getElementById('grid-all');
+  document.getElementById('all-view-count').textContent = `${items.length} товар(ів)`;
+  renderGridItems(grid, items, 'all');
+  animateGrid(grid);
+  showProductsState('all');
+}
+
 function hasActiveSearchFilters() {
   return Boolean(
     searchFilterSelectedCats.length ||
@@ -3324,6 +3432,10 @@ function onProductSearchInput() {
   }
   if (currentCategoryKey) {
     renderCategoryView(currentCategoryKey);
+    return;
+  }
+  if (allProductsMode) {
+    renderAllProductsView();
     return;
   }
   renderDefaultProductsView();
@@ -3369,12 +3481,30 @@ function clearProductSearch() {
   currentCategoryKey = '';
   closeCategoriesOverlay();
   updateSearchControlsVisibility();
+  if (allProductsMode) {
+    renderAllProductsView();
+    return;
+  }
   renderDefaultProductsView();
 }
 
 function backToPopular() {
   currentCategoryKey = '';
   clearProductSearch();
+}
+
+function openAllProductsView() {
+  currentSearchQuery = '';
+  currentCategorySearchQuery = '';
+  currentCategoryKey = '';
+  closeCategoriesOverlay();
+  updateSearchControlsVisibility();
+  renderAllProductsView();
+}
+
+function backFromAllProducts() {
+  allProductsMode = false;
+  renderDefaultProductsView();
 }
 
 function goToSalesFromOffer() {
@@ -3400,6 +3530,18 @@ function buildCategoryRoundButtons() {
   `).join(''));
 }
 
+function updateCategoriesViewAllButton() {
+  const btn = document.getElementById('categories-view-all-btn');
+  const label = document.getElementById('categories-view-all-label');
+  const count = document.getElementById('categories-view-all-count');
+  if (!btn || !label || !count) return;
+  const total = PRODUCT_CATEGORIES.length;
+  const hidden = Math.max(total - MAIN_CATEGORIES.length, 0);
+  label.textContent = hidden > 0 ? 'Ще категорії' : 'Усі категорії';
+  count.textContent = String(total);
+  btn.setAttribute('aria-label', `Відкрити всі категорії (${total})`);
+}
+
 function buildCategoriesOverlay() {
   const host = document.getElementById('categories-overlay-grid');
   if (!host) return;
@@ -3422,10 +3564,12 @@ function buildCategoriesOverlay() {
 function openCategoriesOverlay() {
   const overlay = document.getElementById('categories-overlay');
   const sheet = document.getElementById('categories-overlay-sheet');
+  const btn = document.getElementById('categories-view-all-btn');
   if (!overlay || !sheet) return;
   sheet.style.transition = '';
   sheet.style.transform = '';
   overlay.classList.add('open');
+  if (btn) btn.setAttribute('aria-expanded', 'true');
 }
 
 function openSearchCategoryFilter() {
@@ -3449,10 +3593,12 @@ function closeCategoriesOverlay(e) {
   if (e && e.target && e.target.id !== 'categories-overlay') return;
   const overlay = document.getElementById('categories-overlay');
   const sheet = document.getElementById('categories-overlay-sheet');
+  const btn = document.getElementById('categories-view-all-btn');
   if (!overlay || !sheet) return;
   sheet.style.transition = '';
   sheet.style.transform = '';
   overlay.classList.remove('open');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
 function renderSearchFiltersOverlay() {
@@ -4651,6 +4797,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   buildCategoryRoundButtons();
+  updateCategoriesViewAllButton();
   buildCategoriesOverlay();
   initCategoriesOverlaySwipe();
   initSearchFiltersOverlaySwipe();

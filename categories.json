@@ -70,5 +70,14 @@
     "order": 8,
     "active": true,
     "quickSlot": null
+  },
+  {
+    "id": "fishing",
+    "name": "Рибальство",
+    "emoji": "🐟",
+    "badgeClass": "category-fishing",
+    "order": 6,
+    "active": true,
+    "quickSlot": null
   }
 ]
