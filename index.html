@@ -1414,35 +1414,178 @@
   /* Картка товару в кошику */
   .cart-item {
     background: var(--card-bg);
-    border-radius: var(--radius);
+    border-radius: 18px;
     border: 1px solid var(--border);
-    padding: 12px 14px;
+    padding: 12px;
     margin-bottom: 10px;
-    display: flex; align-items: center; gap: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    box-shadow: 0 3px 10px rgba(20, 27, 45, 0.04);
   }
-  .cart-item-emoji { font-size: 32px; flex-shrink: 0; }
-  .cart-item-info { flex: 1; min-width: 0; }
+  .cart-item-emoji {
+    position: relative;
+    inline-size: 76px;
+    block-size: 76px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    color: var(--muted);
+    font-size: 28px;
+    cursor: pointer;
+  }
+  .cart-item-emoji img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    object-position: center;
+    pointer-events: none;
+  }
+  .cart-item-info {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-block-size: 76px;
+    gap: 6px;
+  }
+  .cart-item-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
   .cart-item-name {
-    font-size: 13px; font-weight: 700; color: var(--text);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    margin-bottom: 3px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.25;
   }
-  .cart-item-price { font-size: 12px; color: var(--muted); }
+  .cart-item-remove {
+    border: none;
+    background: transparent;
+    color: #8d8d9f;
+    cursor: pointer;
+    line-height: 1;
+    min-inline-size: 26px;
+    min-block-size: 26px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: color .2s ease, background .2s ease, transform .12s ease;
+  }
+  .cart-item-remove svg {
+    inline-size: 18px;
+    block-size: 18px;
+    display: block;
+    fill: currentColor;
+  }
+  .cart-item-remove:active {
+    background: rgba(42,171,238,.18);
+    color: var(--tg-blue);
+    transform: scale(0.95);
+  }
+  .cart-item-sub {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.3;
+    min-block-size: 16px;
+    display: flex;
+    align-items: center;
+  }
+  .cart-item-sub.is-accent {
+    color: var(--tg-blue);
+  }
+  .cart-item-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: auto;
+  }
   .cart-item-controls {
-    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 5px 8px;
+    border-radius: 10px;
+    background: rgba(42,171,238,.12);
   }
   .cart-qty-btn {
-    width: 30px; height: 30px; border-radius: 50%;
-    border: 1.5px solid var(--border);
-    background: var(--bg); color: var(--text);
-    font-size: 17px; font-weight: 700;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: border-color .15s, transform .1s;
+    inline-size: 22px;
+    block-size: 22px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--tg-blue);
+    font-size: 19px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .1s, color .2s;
   }
-  .cart-qty-btn:active { border-color: var(--tg-blue); transform: scale(0.9); }
+  .cart-qty-btn:active { transform: scale(0.9); color: #1586c4; }
   .cart-qty-val {
-    font-size: 15px; font-weight: 800; color: var(--text);
-    min-width: 22px; text-align: center;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text);
+    min-inline-size: 18px;
+    text-align: center;
+  }
+  .cart-item-total {
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--tg-blue);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .cart-item-total .amount {
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .cart-item-total .currency {
+    font-size: 17px;
+    font-weight: 500;
+  }
+  .cart-item-total.discount {
+    color: var(--sale);
+  }
+  .cart-item-promo {
+    border-color: var(--border);
+    background: var(--card-bg);
+    box-shadow: 0 0 0 1px rgba(42,171,238,.08), 0 0 24px rgba(42,171,238,.16);
+  }
+  .cart-item-promo .cart-item-emoji {
+    background: var(--bg);
+    color: var(--muted);
+    cursor: default;
+  }
+  .cart-item-promo .cart-item-name {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text);
+  }
+  .cart-item-promo .cart-item-sub {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .cart-item-promo .cart-item-bottom {
+    justify-content: flex-end;
+  }
+  .cart-promo-divider {
+    margin: 8px 6px 12px;
+    border: none;
+    border-top: 1px solid var(--border);
+    opacity: .8;
   }
 
   /* Підвал кошика */
@@ -2406,9 +2549,9 @@ function modalQtyChange(delta) {
 
     // Оновлюємо кількість та ціну в кошику для цього товару
     const qtyEl = document.getElementById(`cart-qty-${currentProduct.id}`);
-    const priceEl = document.querySelector(`#cart-item-${currentProduct.id} .cart-item-price`);
+    const totalEl = document.querySelector(`#cart-total-${currentProduct.id} .amount`);
     if (qtyEl) qtyEl.textContent = existing.quantity;
-    if (priceEl) priceEl.textContent = `${existing.price} ₴ × ${existing.quantity} = ${existing.price * existing.quantity} ₴`;
+    if (totalEl) totalEl.textContent = existing.price * existing.quantity;
     updateCartTotal();
 
     // Якщо зараз відкрита сторінка кошика — оновлюємо її
@@ -2527,6 +2670,7 @@ function addToCartFromModal() {
 
   // Якщо товар вже в кошику — оновлюємо кількість та кастомізацію (якщо індивідуальний)
   const existing = getCartItem(currentProduct.id);
+  const prevGiftLineCount = getGiftEligibleToyLineCount();
 
   // Якщо кількість стала 0 або менше — видаляємо товар з кошика
   if (existing) {
@@ -2558,6 +2702,7 @@ function addToCartFromModal() {
         quantity: modalQty,
         fromCustom: currentProduct._isCustom || false,
         addedFrom: currentProduct._isCustom ? 'custom' : modalCartSource,
+        cat: currentProduct.cat,
         emoji: currentProduct.emoji,
         photos: currentProduct.photos || [],
         customValue: customVal
@@ -2572,14 +2717,8 @@ function addToCartFromModal() {
   saveCart();
   updateCartBadge();
   updateModalAddBtn();
-  // Якщо зараз відкрита сторінка кошика — оновлюємо її
-  const giftEligibleCount = cart.filter(isGiftEligibleToyItem).length;
-  if (giftEligibleCount === 3 && !existing && isGiftEligibleToyItem({
-    id: currentProduct.id,
-    fromCustom: currentProduct._isCustom || false,
-    addedFrom: currentProduct._isCustom ? 'custom' : modalCartSource,
-    cat: currentProduct.cat
-  })) showGiftToast();
+  if (getGiftEligibleToyLineCount() >= 3 && prevGiftLineCount < 3) showGiftToast();
+  if (document.getElementById('page-cart')?.classList.contains('active')) renderCart();
   setTimeout(closeModal, 300);
 }
 // Показуємо тост про подарунок при досягненні 3 іграшок в кошику
@@ -2708,16 +2847,20 @@ function getGiftCandidates() {
   return PRODUCTS.filter(p => p.gift === true && p.price <= 100);
 }
 
-// Перевіряє, чи позиція кошика підходить під акцію подарунку: лише іграшки з каталогу товарів
+// Перевіряє, чи позиція кошика підходить під акцію подарунку: іграшки з основного каталогу (не «Індивідуальне»)
 function isGiftEligibleToyItem(item) {
-  if (!item || item.fromCustom || (item.addedFrom || 'products') !== 'products') return false;
+  if (!item || item.fromCustom || item.addedFrom === 'custom') return false;
   const itemCat = item.cat || PRODUCTS.find(p => p.id === item.id)?.cat;
   return itemCat === 'toy';
 }
 
-// Перевіряє право на подарунок: 3+ іграшки з каталогу «Товари»
+function getGiftEligibleToyLineCount() {
+  return cart.filter(isGiftEligibleToyItem).length;
+}
+
+// Перевіряє право на подарунок: 3+ різні іграшки (окремі позиції в кошику)
 function shouldShowGift() {
-  return cart.filter(isGiftEligibleToyItem).length >= 3;
+  return getGiftEligibleToyLineCount() >= 3;
 }
 
 // Поточний обраний подарунок (об'єкт товару або null)
@@ -2899,11 +3042,16 @@ function renderCart() {
   }
 
   const promoBlock = promotionDiscount > 0 ? `
-    <div class="cart-item" style="border: 1px solid var(--tg-blue); background: rgba(0, 122, 255, 0.05); margin-top: 10px;">
-      <div class="cart-item-emoji" style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);">🎁</div>
+    <div class="cart-item cart-item-promo" id="cart-promo-item">
+      <div class="cart-item-emoji">🎁</div>
       <div class="cart-item-info">
-        <div class="cart-item-name">Акція -10%</div>
-        <div class="cart-item-price" style="color:var(--tg-blue)">−${promotionDiscount} ₴</div>
+        <div class="cart-item-top">
+          <div class="cart-item-name">Акція -10%</div>
+        </div>
+        <div class="cart-item-sub">Автоматична знижка на замовлення від 500 ₴</div>
+        <div class="cart-item-bottom">
+          <div class="cart-item-total discount"><span class="amount">−${promotionDiscount}</span> <span class="currency">₴</span></div>
+        </div>
       </div>
     </div>
   ` : '';
@@ -2911,30 +3059,47 @@ function renderCart() {
   // Спочатку рендеримо товарні позиції, потім — якщо потрібно — блок з подарунком, а потім — плашки "Повернути" для товарів що очікують видалення
   list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => `
     <div class="cart-item" id="cart-item-${item.id}">
-      <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}')" style="position:relative;width:42px;height:42px;flex-shrink:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);cursor:pointer;">
+      <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}')">
         ${item.photos && item.photos.length > 0
-          ? `<img src="${item.photos[0]}" style="width:42px;height:42px;object-fit:cover;pointer-events:none;" alt="${item.name}" decoding="async" loading="lazy">`
+          ? `<img src="${item.photos[0]}" alt="${item.name}" decoding="async" loading="lazy">`
           : item.emoji}
       </div>
       <div class="cart-item-info">
-        <div class="cart-item-name">${item.name}</div>
-        <div class="cart-item-price">${item.price} ₴ × ${item.quantity} = ${item.price * item.quantity} ₴</div>
-        ${!item.fromCustom && item.filamentName ? `<div class="cart-item-price" style="color:var(--muted);font-size:12px;margin-top:2px;">🎨 ${escapeHtml(item.filamentName)}</div>` : ''}
-        ${item.customValue ? `<div class="cart-item-price" style="color:var(--tg-blue)">${item.customValue}</div>` : ''}
-      </div>
-      <div class="cart-item-controls">
-        <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, -1)">−</button>
-        <span class="cart-qty-val" id="cart-qty-${item.id}">${item.quantity}</span>
-        <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, 1)">+</button>
+        <div class="cart-item-top">
+          <div class="cart-item-name">${item.name}</div>
+          <button class="cart-item-remove" onclick="cartRemoveItem(${item.id})" aria-label="Видалити ${escapeHtml(item.name)}">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M9 3.75A1.75 1.75 0 0 0 7.25 5.5V6H5.5a.75.75 0 0 0 0 1.5h.7l.72 10.16A2.25 2.25 0 0 0 9.16 19.75h5.68a2.25 2.25 0 0 0 2.24-2.09l.72-10.16h.7a.75.75 0 0 0 0-1.5h-1.75v-.5A1.75 1.75 0 0 0 15 3.75H9Zm6.25 2.25V5.5a.25.25 0 0 0-.25-.25H9a.25.25 0 0 0-.25.25V6h6.5ZM9.42 8.75a.75.75 0 0 1 .75.7l.3 6a.75.75 0 1 1-1.5.08l-.3-6a.75.75 0 0 1 .7-.78h.05Zm5.16 0a.75.75 0 0 1 .7.78l-.3 6a.75.75 0 1 1-1.5-.08l.3-6a.75.75 0 0 1 .75-.7h.05ZM12 8.75a.75.75 0 0 1 .75.75v6a.75.75 0 0 1-1.5 0v-6A.75.75 0 0 1 12 8.75Z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="cart-item-sub ${item.customValue ? 'is-accent' : ''}">
+          ${item.customValue
+            ? escapeHtml(item.customValue)
+            : (!item.fromCustom && item.filamentName ? `PLA · ${escapeHtml(item.filamentName).toUpperCase()}` : '&nbsp;')}
+        </div>
+        <div class="cart-item-bottom">
+          <div class="cart-item-controls">
+            <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, -1)" aria-label="Зменшити кількість">−</button>
+            <span class="cart-qty-val" id="cart-qty-${item.id}">${item.quantity}</span>
+            <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, 1)" aria-label="Збільшити кількість">+</button>
+          </div>
+          <div class="cart-item-total" id="cart-total-${item.id}"><span class="amount">${item.price * item.quantity}</span> <span class="currency">₴</span></div>
+        </div>
       </div>
     </div>
-  `).join('') + promoBlock;
+  `).join('');
 
   // Відновлюємо плашки "Повернути" для товарів що ще не видалились
   Object.values(pendingRemovals).forEach(({ item, endsAt }) => {
     const bar = buildUndoBar(item, endsAt);
     list.appendChild(bar);
   });
+
+  if (promoBlock) {
+    list.insertAdjacentHTML('beforeend', '<hr class="cart-promo-divider" aria-hidden="true">');
+    list.insertAdjacentHTML('beforeend', promoBlock);
+  }
 }
 
 // Створює плашку "Повернути" для видаленого товару з прогрес-баром, що показує час до остаточного видалення
@@ -3055,10 +3220,17 @@ function cartQtyChange(id, delta) {
 
   // Точкове оновлення — без повного перерендеру
   const qtyEl = document.getElementById(`cart-qty-${id}`);
-  const priceEl = document.querySelector(`#cart-item-${id} .cart-item-price`);
+  const totalEl = document.querySelector(`#cart-total-${id} .amount`);
   if (qtyEl) qtyEl.textContent = item.quantity;
-  if (priceEl) priceEl.textContent = `${item.price} ₴ × ${item.quantity} = ${item.price * item.quantity} ₴`;
+  if (totalEl) totalEl.textContent = item.price * item.quantity;
   updateCartTotal();
+}
+
+function cartRemoveItem(id) {
+  const item = getCartItem(id);
+  if (!item) return;
+  item.quantity = 1;
+  cartQtyChange(id, -1);
 }
 
 function updateCartTotal() {
