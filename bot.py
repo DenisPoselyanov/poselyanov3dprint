@@ -38,6 +38,16 @@ from telegram.ext import (
 
 # Завантажуємо змінні середовища з .env файлу, щоб не зберігати конфіденційні дані (як-от токен бота) прямо в коді.
 from dotenv import load_dotenv
+from rich_messages import (
+    build_admin_order_notification,
+    build_admin_order_with_status,
+    build_broadcast_report,
+    build_client_order_confirmation,
+    build_order_history,
+    build_order_status,
+    edit_rich_message,
+    send_rich_message,
+)
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -1106,6 +1116,34 @@ def update_order_status(order_id: int, status: str):
     conn.commit()
     conn.close()
 
+
+def get_order_with_items(order_id: int):
+    conn = db_connect(dict_rows=True)
+    order = conn.execute(_sql("""
+        SELECT id, user_id, username, first_name, total_price, comment,
+               gift_product_name, coupon_code, discount_amount, status, ordered_at
+        FROM orders WHERE id = ?
+    """), (order_id,)).fetchone()
+    if not order:
+        conn.close()
+        return None, []
+    items = conn.execute(_sql("""
+        SELECT product_id, product_name, price, quantity, filament
+        FROM order_items WHERE order_id = ?
+    """), (order_id,)).fetchall()
+    conn.close()
+    return order, items
+
+
+def find_gift_product_id(gift_name: str | None) -> int | None:
+    if not gift_name:
+        return None
+    name = str(gift_name).strip().lower()
+    for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE:
+        if str(p.get("name", "")).strip().lower() == name and p.get("id"):
+            return int(p["id"])
+    return None
+
 def set_blocked(user_id, blocked: bool):
     conn = db_connect()
     conn.execute(_sql("UPDATE users SET blocked = ? WHERE id = ?"), (int(blocked), user_id))
@@ -1200,7 +1238,9 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "`/broadcast` — усім\n"
             "`/broadcast <product_id>` — усім + кнопка товару\n"
             "`/broadcast u:<user_id>` — конкретному юзеру\n"
-            "`/broadcast u:<user_id> <product_id>` — конкретному юзеру + кнопка товару",
+            "`/broadcast u:<user_id> <product_id>` — конкретному юзеру + кнопка товару\n\n"
+            "💡 Оформлюй повідомлення в Telegram з новим rich-форматуванням "
+            "(заголовки, списки, цитати) — воно збережеться при розсилці.",
             parse_mode='Markdown'
         )
         return
@@ -1284,11 +1324,9 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 set_blocked(user_id, True)
             failed += 1
 
-    audience = f"user `{target_user_id}`" if target_user_id else "всіх"
-    await update.message.reply_text(
-        f"📨 Розсилка завершена ({audience})\n✅ Надіслано: *{sent}*\n❌ Помилок/блокувань: *{failed}*",
-        parse_mode='Markdown'
-    )
+    audience = f"user {target_user_id}" if target_user_id else "всіх"
+    report_html = build_broadcast_report(sent, failed, audience)
+    await send_rich_message(context.bot, update.message.chat_id, report_html)
 
 # Команда для отримання Telegram ID користувача, яка може бути корисною для адміністраторів при налаштуванні замовлень або вирішенні проблем з користувачами. Вона відповідає повідомленням з ID користувача у форматі Markdown.
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1431,29 +1469,8 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    status_labels = {
-        'new':       ('🕐', 'Очікує підтвердження', 'Денис скоро зв\'яжеться з тобою'),
-        'confirmed': ('✅', 'Підтверджено', 'Замовлення прийнято у роботу!'),
-        'cancelled': ('❌', 'Скасовано', 'Якщо є питання — напиши Денису'),
-        'draft':     ('📝', 'Під питанням', 'Денис уточнює деталі замовлення'),
-    }
-
-    months = ['січ','лют','бер','кві','тра','чер','лип','сер','вер','жов','лис','гру']
-    icon, label, hint = status_labels.get(order['status'], ('❔', order['status'], ''))
-
-    try:
-        dt = datetime.strptime(order['ordered_at'][:10], "%Y-%m-%d")
-        date_fmt = f"{dt.day} {months[dt.month-1]} {dt.year}"
-    except Exception:
-        date_fmt = order['ordered_at'][:10] if order['ordered_at'] else '—'
-
-    text = (
-        f"📦 <b>Останнє замовлення #{order['id']}</b>\n"
-        f"📅 {date_fmt}  ·  💰 {order['total_price']} ₴\n\n"
-        f"{icon} <b>{label}</b>\n"
-        f"<i>{hint}</i>"
-    )
-    await update.message.reply_text(text, parse_mode='HTML')
+    status_html = build_order_status(order)
+    await send_rich_message(context.bot, update.message.chat_id, status_html)
 
 
 # /contact — контакти
@@ -1493,78 +1510,20 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    status_labels = {
-        'new':       ('🕐', 'Очікує'),
-        'confirmed': ('✅', 'Підтверджено'),
-        'cancelled': ('❌', 'Скасовано'),
-        'draft':     ('📝', 'Під питанням'),
-    }
-
-    first_name = update.message.from_user.first_name
-    text = f"📦 <b>Замовлення {first_name}:</b>\n"
-    text += "─" * 22 + "\n\n"
-
+    items_by_order = {}
     for o in orders:
-        icon, label = status_labels.get(o['status'], ('❔', o['status']))
-        date_raw = o['ordered_at'] or ''
-        date = date_raw[:10] if date_raw else '—'
-
-        # Дата у форматі "16 трав 2026"
-        try:
-            dt = datetime.strptime(date, "%Y-%m-%d")
-            months = ['січ','лют','бер','кві','тра','чер','лип','сер','вер','жов','лис','гру']
-            date_fmt = f"{dt.day} {months[dt.month-1]} {dt.year}"
-        except Exception:
-            date_fmt = date
-
-        text += f"{icon} <b>Замовлення #{o['id']}</b>  ·  {date_fmt}\n"
-
-        # Товари
-        items = conn.execute(_sql("""
+        items_by_order[o["id"]] = conn.execute(_sql("""
             SELECT product_name, price, quantity, filament
             FROM order_items
             WHERE order_id = ?
-        """), (o['id'],)).fetchall()
-
-        for item in items:
-            name = item['product_name']
-            qty = item['quantity']
-            price = item['price']
-            fl = (item['filament'] or '').strip()
-            if price == 0:
-                # подарунок (вже містить emoji 🎁)
-                text += f"   {name}\n"
-            else:
-                subtotal = price * qty
-                qty_str = f" × {qty}" if qty > 1 else ""
-                fl_str = f" · 🎨 {fl}" if fl else ""
-                text += f"   • {name}{qty_str} — {subtotal} ₴{fl_str}\n"
-
-        # Купон
-        if o['coupon_code'] and o['discount_amount']:
-            original = (o['total_price'] or 0) + (o['discount_amount'] or 0)
-            text += f"   🏷️ Купон <code>{o['coupon_code']}</code>: −{o['discount_amount']} ₴\n"
-            text += f"   💰 <b>Разом: {original} → {o['total_price']} ₴</b>\n"
-        else:
-            text += f"   💰 <b>Разом: {o['total_price']} ₴</b>\n"
-
-        # Статус рядком
-        text += f"   {icon} {label}\n"
-
-        # Коментар
-        if o['comment']:
-            text += f"   📝 <i>{o['comment']}</i>\n"
-
-        text += "\n"
+        """), (o["id"],)).fetchall()
 
     conn.close()
 
-    # Підказка
-    total_orders = len(orders)
-    text += "─" * 22 + "\n"
-    text += f"Показано останніх замовлень: <b>{total_orders}</b>"
-
-    await update.message.reply_text(text, parse_mode='HTML')
+    history_html = build_order_history(
+        orders, items_by_order, update.message.from_user.first_name
+    )
+    await send_rich_message(context.bot, update.message.chat_id, history_html)
 
 # Команда для управління купонами, яка дозволяє адміністраторам створювати, переглядати, активувати і деактивувати купони зі знижками. Вона підтримує різні формати знижок (відсоткові і фіксовані), а також додаткові параметри для обмеження використання купонів (мінімальна сума замовлення, максимальна кількість використань, використання одним користувачем і термін дії). Команда має підкоманди для кожної операції (add, list, disable, enable) і відповідає повідомленнями з результатами операцій у форматі Markdown.
 async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1728,146 +1687,91 @@ async def handle_order(request):
     logger.info(f"📦 ЗАМОВЛЕННЯ #{order_id}  {product_name}  {total_price}₴{coupon_info}{promotion_info}  від {username}")
 
     # Підтвердження клієнту
-    
     if user_id:
         try:
             now = datetime.now()
             existing = confirmation_messages.get(user_id)
-            footer = "\n[Денис](https://t.me/denisposelyanov) зв'яжеться з тобою найближчим часом 🙌"
-
-            # Формуємо текст для підтвердження клієнту
-            items_lines = '\n'.join(
-                f"  • {i.get('product_name','—')} × {i.get('quantity',1)}"
-                + (f" · 🎨 {i['filament_name']}" if i.get('filament_name') else "")
-                for i in items
-            )
-            line = f"📦 *Товари:*\n{items_lines}\n"
             gift = data.get('gift')
-
-            # Якщо замовлення було оформлено з купоном або акцією, додаємо інформацію про знижки в текст підтвердження для клієнта
-            if total_discount > 0:
-                original_price = total_price + total_discount
-                discount_lines = []
-                if coupon_discount > 0 and coupon_code:
-                    discount_lines.append(f"🏷️ *Купон {coupon_code}:* −{coupon_discount} ₴")
-                if promotion_discount > 0:
-                    discount_lines.append(f"🔥 *Акція -10%:* −{promotion_discount} ₴")
-                line += "\n" + "\n".join(discount_lines)
-                line += f"\n💰 *Разом: {original_price} → {total_price} ₴*"
-            else:
-                line += f"\n💰 *Разом: {total_price} ₴*"
-            
-            if gift:
-                line += f"\n🎁 Подарунок: {gift} — *безкоштовно*"
-            if comment:
-                line += f"\n📝 _{comment}_"
-            
-            # Формуємо текст для нового повідомлення
-            confirm_text = f"✅ *Замовлення прийнято!*\n\n{line}\n"
-            confirm_text += footer
+            order_block = {
+                "items": items,
+                "total_price": total_price,
+                "coupon_code": coupon_code,
+                "coupon_discount": coupon_discount,
+                "promotion_discount": promotion_discount,
+                "gift": gift,
+                "comment": comment,
+            }
 
             if existing and now - existing["time"] < timedelta(hours=4):
+                orders_batch = existing.get("orders", []) + [order_block]
+                confirm_html = build_client_order_confirmation(orders_batch)
                 try:
-                    new_text = existing["text"].replace(footer, "")
-                    new_text += f"{line}\n\n"
-                    new_text += footer
-
-                    await bot_app.bot.edit_message_text(
-                        chat_id=user_id,
-                        message_id=existing["message_id"],
-                        text=new_text,
-                        parse_mode='Markdown'
-                    )
-                    confirmation_messages[user_id]["text"] = new_text
-                    confirmation_messages[user_id]["time"] = now
-
-                except Exception:
-                    # Повідомлення видалено — надсилаємо нове
-                    sent = await bot_app.bot.send_message(
-                        chat_id=user_id,
-                        text=confirm_text,
-                        parse_mode='Markdown'
+                    await edit_rich_message(
+                        bot_app.bot,
+                        user_id,
+                        existing["message_id"],
+                        confirm_html,
                     )
                     confirmation_messages[user_id] = {
-                        "message_id": sent.message_id,
-                        "text": confirm_text,
-                        "time": now
+                        "message_id": existing["message_id"],
+                        "orders": orders_batch,
+                        "html": confirm_html,
+                        "time": now,
+                        "format": "rich",
                     }
-
+                except Exception:
+                    msg_id = await send_rich_message(
+                        bot_app.bot, user_id, confirm_html
+                    )
+                    confirmation_messages[user_id] = {
+                        "message_id": msg_id,
+                        "orders": orders_batch,
+                        "html": confirm_html,
+                        "time": now,
+                        "format": "rich",
+                    }
             else:
-                sent = await bot_app.bot.send_message(
-                    chat_id=user_id,
-                    text=confirm_text,
-                    parse_mode='Markdown'
+                orders_batch = [order_block]
+                confirm_html = build_client_order_confirmation(orders_batch)
+                msg_id = await send_rich_message(
+                    bot_app.bot, user_id, confirm_html
                 )
                 confirmation_messages[user_id] = {
-                    "message_id": sent.message_id,
-                    "text": confirm_text,
-                    "time": now
+                    "message_id": msg_id,
+                    "orders": orders_batch,
+                    "html": confirm_html,
+                    "time": now,
+                    "format": "rich",
                 }
         except Exception as e:
             logger.error(f"Помилка підтвердження клієнту: {e}")
 
-    # Формуємо клікабельні назви товарів для адмін-повідомлення
-    # (відкриває конкретний товар у боті через deep-link startapp=product_<id>)
-    items_text = ''
-    bot_link_base = "https://t.me/poselyanov3dprint_bot?startapp=product_"
-
-    def _product_link(name: str, product_id: int | None):
-        safe_name = html.escape(name or "—")
-        if product_id:
-            return f'<a href="{bot_link_base}{product_id}">{safe_name}</a>'
-        return safe_name
-
-    for i in items:
-        product_name = i.get('product_name', '—')
-        product_id = int(i.get('product_id') or 0)
-        linked_name = _product_link(product_name, product_id)
-        line = f"  • {linked_name} × {i.get('quantity',1)} — {i.get('price',0) * i.get('quantity',1)} ₴"
-        if i.get('filament_name'):
-            line += f" · 🎨 {html.escape(i['filament_name'])}"
-        if i.get('customValue'):
-            line += f" <i>{html.escape(i['customValue'])}</i>"
-        items_text += line + '\n'
-
-    # Формуємо текст замовлення для власника, включаючи інформацію про товари, загальну суму, коментар клієнта, подарунок і купон зі знижкою, якщо вони є. Це дозволяє власнику отримувати повну інформацію про замовлення і приймати рішення про його обробку.
-    owner_text = (
-        f"🔔 <b>НОВЕ ЗАМОВЛЕННЯ #{order_id}</b>\n\n"
-        f"👤 Від: {username}\n\n"
-        f"📦 <b>Товари:</b>\n{items_text}\n"
-    )
-    if total_discount > 0:
-        original_price = total_price + total_discount
-        discount_lines = []
-        if coupon_discount > 0 and coupon_code:
-            discount_lines.append(f"🏷️ Купон: <b>{coupon_code}</b> −{coupon_discount} ₴")
-        if promotion_discount > 0:
-            discount_lines.append(f"🔥 Акція -10%: −{promotion_discount} ₴")
-        owner_text += "\n".join(discount_lines) + "\n"
-        owner_text += f"💰 <b>Разом: {original_price} → {total_price} ₴</b>\n"
-    else:
-        owner_text += f"💰 <b>Разом: {total_price} ₴</b>\n"
-
-    # Якщо замовлення було оформлено з купоном, додаємо інформацію про купон і знижку в текст замовлення для власника, щоб він бачив, який купон був використаний і яку знижку він надав. Це допомагає власнику краще розуміти замовлення і приймати рішення про його обробку.
     gift = data.get('gift')
-
-    # Якщо є подарунок, додаємо клікабельне посилання (якщо знайдено відповідний товар)
-    if gift:
-        gift_name = str(gift).strip()
-        gift_product = next(
-            (p for p in (PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE)
-             if str(p.get("name", "")).strip().lower() == gift_name.lower()),
-            None,
-        )
-        if gift_product and gift_product.get("id"):
-            gift_link = f'<a href="{bot_link_base}{int(gift_product.get("id"))}">{html.escape(gift_name)}</a>'
-            owner_text += f"🎁 Подарунок: {gift_link} — безкоштовно\n"
-        else:
-            owner_text += f"🎁 Подарунок: {html.escape(gift_name)} — безкоштовно\n"
-
-    # Якщо клієнт залишив коментар, додаємо його в текст замовлення для власника
-    if comment:
-        owner_text += f"📝 Коментар: <i>{html.escape(comment)}</i>\n"
+    gift_product_id = find_gift_product_id(gift)
+    admin_items = [
+        {
+            "product_id": int(i.get("product_id") or 0),
+            "product_name": i.get("product_name", "—"),
+            "price": int(i.get("price", 0)),
+            "quantity": int(i.get("quantity", 1)),
+            "filament_name": i.get("filament_name"),
+            "customValue": i.get("customValue"),
+        }
+        for i in items
+    ]
+    owner_html = build_admin_order_notification(
+        order_id=order_id,
+        username=username,
+        items=admin_items,
+        total_price=total_price,
+        coupon_code=coupon_code,
+        discount_amount=total_discount,
+        coupon_discount=coupon_discount if coupon_discount else None,
+        promotion_discount=promotion_discount if promotion_discount else None,
+        gift=gift,
+        gift_product_id=gift_product_id,
+        comment=comment or None,
+    )
 
     status_buttons = [
         InlineKeyboardButton("✅ Підтвердити",     callback_data=f"confirm_{order_id}"),
@@ -1884,11 +1788,11 @@ async def handle_order(request):
         markup = InlineKeyboardMarkup([status_buttons])
 
     try:
-        await bot_app.bot.send_message(
-            chat_id=ORDERS_CHAT_ID,
-            text=owner_text,
-            parse_mode='HTML',
-            reply_markup=markup
+        await send_rich_message(
+            bot_app.bot,
+            ORDERS_CHAT_ID,
+            owner_html,
+            reply_markup=markup,
         )
         logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
     except Exception as e:
@@ -2216,7 +2120,6 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action, order_id = query.data.split("_", 1)
     order_id = int(order_id)
 
-    # Шукаємо кнопку "Написати ..." з оригінального повідомлення
     write_button = None
     if query.message.reply_markup:
         for row in query.message.reply_markup.inline_keyboard:
@@ -2227,7 +2130,6 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "confirm":
         update_order_status(order_id, "confirmed")
         label = "✅ Підтверджено"
-        # Залишаємо кнопку "Написати" якщо є
         markup = InlineKeyboardMarkup([[write_button]]) if write_button else None
     elif action == "draft":
         update_order_status(order_id, "draft")
@@ -2236,38 +2138,38 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("✅ Підтвердити", callback_data=f"confirm_{order_id}"),
             InlineKeyboardButton("❌ Відмінити",   callback_data=f"cancel_{order_id}"),
         ]
-        # Додаємо кнопку "Написати" якщо є
         markup = InlineKeyboardMarkup(
             [buttons, [write_button]] if write_button else [buttons]
         )
     elif action == "cancel":
         update_order_status(order_id, "cancelled")
         label = "❌ Відмінено"
-        markup = None  # всі кнопки зникають
+        markup = None
     else:
         return
 
-    # Оновлюємо текст повідомлення зі статусом.
-    # Важливо: для confirm/draft зберігаємо HTML (і всі посилання на товари),
-    # а для cancel спеціально прибираємо HTML-посилання з тексту.
+    order, items = get_order_with_items(order_id)
+    if not order:
+        return
+
+    gift_product_id = find_gift_product_id(order.get("gift_product_name"))
+    linked = action != "cancel"
+    admin_html = build_admin_order_with_status(
+        order,
+        items,
+        label,
+        linked=linked,
+        gift_product_id=gift_product_id,
+    )
+
     try:
-        if action == "cancel":
-            # plain text без HTML-лінків
-            base_text = query.message.text or ""
-            new_text = base_text + f"\n\nСтатус: {label}"
-            await query.edit_message_text(
-                text=new_text,
-                reply_markup=markup
-            )
-        else:
-            # зберігаємо HTML-розмітку оригінального повідомлення
-            base_html = getattr(query.message, "text_html", None) or html.escape(query.message.text or "")
-            new_html = base_html + f"\n\n<b>Статус: {html.escape(label)}</b>"
-            await query.edit_message_text(
-                text=new_html,
-                parse_mode='HTML',
-                reply_markup=markup
-            )
+        await edit_rich_message(
+            context.bot,
+            query.message.chat_id,
+            query.message.message_id,
+            admin_html,
+            reply_markup=markup,
+        )
     except Exception:
         pass
 
@@ -2325,7 +2227,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 bot_app = None
 
-confirmation_messages = {}  # {user_id: {"message_id": int, "text": str, "time": datetime}}
+confirmation_messages = {}  # {user_id: {"message_id", "orders", "html", "time", "format"}}
 
 def main():
     global bot_app
