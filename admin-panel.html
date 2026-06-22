@@ -3121,6 +3121,7 @@
                     </div>
                     <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="btn btn-primary" type="button" onclick="toggleOrderDetails(${o.id})">${expandedOrderId === o.id ? '▲ Сховати' : '💰 Встановити ціну'}</button>
+                        <button class="btn btn-danger" type="button" onclick="deleteOrder(${o.id}, '${escapeAttr(o.status || 'new')}')">🗑️ Видалити</button>
                     </div>
                     <div id="order-details-${o.id}" style="display:${expandedOrderId === o.id ? 'block' : 'none'}; margin-top:12px;"></div>
                 </div>
@@ -3200,6 +3201,28 @@
                 renderOrderDetails(orderId);
             } catch (e) {
                 showToast(e.message || 'Помилка збереження ціни', 'error');
+            }
+        }
+
+        async function deleteOrder(orderId, status) {
+            if (status !== 'cancelled') {
+                const statusLabels = { confirmed: 'прийняте', draft: 'під питанням', new: 'нове' };
+                const label = statusLabels[status] || status;
+                const ok = confirm(`⚠️ Замовлення #${orderId} має статус "${label}".\n\nВи впевнені, що хочете видалити його назавжди? Цю дію неможливо скасувати.`);
+                if (!ok) return;
+            }
+            try {
+                const res = await fetch(API_BASE + `/orders/${orderId}`, {
+                    method: 'DELETE',
+                    headers: { 'X-Telegram-Init-Data': tgInitData },
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Помилка видалення');
+                showToast(`Замовлення #${orderId} видалено`, 'success');
+                if (expandedOrderId === orderId) expandedOrderId = null;
+                await loadOrders();
+            } catch (e) {
+                showToast(e.message || 'Помилка видалення замовлення', 'error');
             }
         }
 
