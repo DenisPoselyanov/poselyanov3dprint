@@ -90,6 +90,8 @@ def _row_to_product(row: dict) -> dict:
         p["gift"] = bool(row.get("gift"))
     if row.get("filament_choice") is not None or row.get("filamentChoice") is not None:
         p["filamentChoice"] = bool(row.get("filament_choice", row.get("filamentChoice", True)))
+    if row.get("luminous_filament_choice") or row.get("luminousFilamentChoice"):
+        p["luminousFilamentChoice"] = bool(row.get("luminous_filament_choice", row.get("luminousFilamentChoice")))
     if custom_fields:
         p["custom_fields"] = custom_fields
     return p
@@ -144,6 +146,7 @@ def init_catalog_tables(conn) -> None:
             hot BOOLEAN DEFAULT false,
             gift BOOLEAN DEFAULT false,
             filament_choice BOOLEAN DEFAULT true,
+            luminous_filament_choice BOOLEAN DEFAULT false,
             pinned BOOLEAN DEFAULT false,
             stl_link TEXT DEFAULT '',
             contract_price BOOLEAN DEFAULT false,
@@ -163,6 +166,20 @@ def init_catalog_tables(conn) -> None:
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_products_active ON products(active)")
+    conn.execute(
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false"
+    )
+    sync_products_id_sequence(conn)
+
+
+def sync_products_id_sequence(conn) -> None:
+    """Align products_id_seq after imports that insert explicit id values."""
+    if not is_postgres():
+        return
+    conn.execute(
+        "SELECT setval(pg_get_serial_sequence('products', 'id'), "
+        "COALESCE((SELECT MAX(id) FROM products), 1), true)"
+    )
 
 
 def sync_filament_colors_table(conn, filament: dict) -> None:
@@ -378,8 +395,8 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
         """
         INSERT INTO products (
             category_id, name, emoji, mat, price, old_price, photos, custom_fields,
-            hot, gift, filament_choice, pinned, stl_link, contract_price, is_custom, active
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, true)
+            hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, active
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
         RETURNING id
         """,
         (
@@ -394,6 +411,7 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
             bool(product.get("hot")),
             bool(product.get("gift")),
             bool(product.get("filamentChoice", True)),
+            bool(product.get("luminousFilamentChoice")),
             bool(product.get("pinned")),
             product.get("stlLink", ""),
             bool(product.get("contractPrice")),
@@ -440,6 +458,8 @@ def add_product(data: dict):
         else:
             product["gift"] = False if contract_price else data.get("gift", False)
             product["filamentChoice"] = data.get("filamentChoice", True)
+            if product["filamentChoice"] and data.get("luminousFilamentChoice"):
+                product["luminousFilamentChoice"] = True
 
         if use_catalog_db():
             new_id = _insert_product_db(product, is_custom)
@@ -514,11 +534,19 @@ def update_product(product_id: int, data: dict):
             product["gift"] = False if contract_price else data.get("gift", product.get("gift", False))
             if "filamentChoice" in data:
                 product["filamentChoice"] = data.get("filamentChoice")
+                if not product.get("filamentChoice"):
+                    product.pop("luminousFilamentChoice", None)
+            if "luminousFilamentChoice" in data:
+                if product.get("filamentChoice", True) and data.get("luminousFilamentChoice"):
+                    product["luminousFilamentChoice"] = True
+                else:
+                    product.pop("luminousFilamentChoice", None)
             product.pop("custom_fields", None)
         else:
             product["custom_fields"] = data.get("custom_fields", product.get("custom_fields", ""))
             product.pop("gift", None)
             product.pop("filamentChoice", None)
+            product.pop("luminousFilamentChoice", None)
 
         if use_catalog_db():
             conn = db_connect()
@@ -527,7 +555,7 @@ def update_product(product_id: int, data: dict):
                 UPDATE products SET
                     category_id = %s, name = %s, emoji = %s, mat = %s, price = %s, old_price = %s,
                     photos = %s::jsonb, custom_fields = %s, hot = %s, gift = %s, filament_choice = %s,
-                    pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s
+                    luminous_filament_choice = %s, pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s
                 WHERE id = %s
                 """,
                 (
@@ -536,7 +564,9 @@ def update_product(product_id: int, data: dict):
                     json.dumps(product.get("photos") or []),
                     product.get("custom_fields") if isinstance(product.get("custom_fields"), str) else json.dumps(product.get("custom_fields") or ""),
                     bool(product.get("hot")), bool(product.get("gift")),
-                    bool(product.get("filamentChoice", True)), bool(product.get("pinned")),
+                    bool(product.get("filamentChoice", True)),
+                    bool(product.get("luminousFilamentChoice")),
+                    bool(product.get("pinned")),
                     product.get("stlLink", ""), bool(product.get("contractPrice")),
                     is_next_custom, product_id,
                 ),

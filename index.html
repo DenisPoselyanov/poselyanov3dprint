@@ -2589,8 +2589,13 @@ let modalFilamentId = null;
 let modalGiftPreview = false;
 let modalCartSource = 'products';
 
-function availableFilaments() {
-  return FILAMENTS.filter(f => f.available);
+function isLuminousFilament(f) {
+  return String(f?.id || '').startsWith('luminous');
+}
+
+function availableFilaments(product) {
+  const allowLuminous = !!(product && product.luminousFilamentChoice);
+  return FILAMENTS.filter(f => f.available || (allowLuminous && isLuminousFilament(f)));
 }
 
 /** false у products.json → без вибору кольору для цього товару */
@@ -2726,7 +2731,7 @@ function formatGiftForOrder() {
 function confirmGiftFromModal() {
   if (!currentProduct || !modalGiftPreview) return;
   const wantFil = productWantsFilamentChoice(currentProduct);
-  const av = availableFilaments();
+  const av = availableFilaments(currentProduct);
   let filamentId = '';
   let filamentName = '';
   if (wantFil && av.length) {
@@ -2763,7 +2768,7 @@ function addToCartFromModal() {
     : '';
 
   const wantFil = productWantsFilamentChoice(currentProduct);
-  const av = availableFilaments();
+  const av = availableFilaments(currentProduct);
   let filamentId = '';
   let filamentName = '';
   if (wantFil && av.length) {
@@ -3574,13 +3579,13 @@ async function loadFilaments() {
   }
 }
 
-function defaultFilamentId() {
-  const av = availableFilaments();
+function defaultFilamentId(product) {
+  const av = availableFilaments(product);
   return av[0]?.id || '';
 }
 
 function onFilamentPick(fid) {
-  const f = availableFilaments().find(x => x.id === fid);
+  const f = availableFilaments(currentProduct).find(x => x.id === fid);
   if (!f) return;
   modalFilamentId = fid;
   renderFilamentSwatches();
@@ -3595,7 +3600,7 @@ function onFilamentPick(fid) {
 function renderFilamentSwatches() {
   const sw = document.getElementById('m-filament-swatches');
   if (!sw) return;
-  const list = availableFilaments();
+  const list = availableFilaments(currentProduct);
   sw.innerHTML = list.map(f => {
     const sel = f.id === modalFilamentId ? ' selected' : '';
     const hx = String(f.hex || '#ccc').replace(/[<>"']/g, '');
@@ -3609,7 +3614,7 @@ function renderFilamentSwatches() {
 
 function setupModalFilamentPicker() {
   const block = document.getElementById('m-filament-block');
-  const av = availableFilaments();
+  const av = availableFilaments(currentProduct);
   if (!currentProduct || !productWantsFilamentChoice(currentProduct) || !av.length) {
     if (block) block.style.display = 'none';
     modalFilamentId = null;
@@ -3619,12 +3624,12 @@ function setupModalFilamentPicker() {
   if (modalGiftPreview) {
     fid = (selectedGift?.id === currentProduct.id && selectedGift.filamentId)
       ? selectedGift.filamentId
-      : defaultFilamentId();
+      : defaultFilamentId(currentProduct);
   } else {
     const existing = getCartItem(currentProduct.id);
-    fid = existing?.filamentId || defaultFilamentId();
+    fid = existing?.filamentId || defaultFilamentId(currentProduct);
   }
-    if (!av.find(f => f.id === fid)) fid = defaultFilamentId();
+    if (!av.find(f => f.id === fid)) fid = defaultFilamentId(currentProduct);
   modalFilamentId = fid;
   block.style.display = '';
   renderFilamentSwatches();

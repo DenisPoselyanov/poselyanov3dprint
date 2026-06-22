@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
 import config  # noqa: E402
-from catalog_store import init_catalog_tables  # noqa: E402
+from catalog_store import init_catalog_tables, sync_products_id_sequence  # noqa: E402
 from db_core import db_connect  # noqa: E402
 
 
@@ -66,15 +66,16 @@ def migrate(database_url: str, truncate: bool = False) -> None:
             """
             INSERT INTO products (
                 id, category_id, name, emoji, mat, price, old_price, photos, custom_fields,
-                hot, gift, filament_choice, pinned, stl_link, contract_price, is_custom, active
+                hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, active
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, true
+                %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, true
             )
             ON CONFLICT (id) DO UPDATE SET
                 category_id = EXCLUDED.category_id, name = EXCLUDED.name, emoji = EXCLUDED.emoji,
                 mat = EXCLUDED.mat, price = EXCLUDED.price, old_price = EXCLUDED.old_price,
                 photos = EXCLUDED.photos, custom_fields = EXCLUDED.custom_fields,
                 hot = EXCLUDED.hot, gift = EXCLUDED.gift, filament_choice = EXCLUDED.filament_choice,
+                luminous_filament_choice = EXCLUDED.luminous_filament_choice,
                 pinned = EXCLUDED.pinned, stl_link = EXCLUDED.stl_link,
                 contract_price = EXCLUDED.contract_price, is_custom = EXCLUDED.is_custom, active = true
             """,
@@ -91,6 +92,7 @@ def migrate(database_url: str, truncate: bool = False) -> None:
                 bool(p.get("hot")),
                 bool(p.get("gift")),
                 bool(p.get("filamentChoice", True)),
+                bool(p.get("luminousFilamentChoice")),
                 bool(p.get("pinned")),
                 p.get("stlLink", ""),
                 bool(p.get("contractPrice")),
@@ -115,6 +117,7 @@ def migrate(database_url: str, truncate: bool = False) -> None:
             (f.get("id"), f.get("name"), f.get("hex"), bool(f.get("available")), i),
         )
 
+    sync_products_id_sequence(conn)
     conn.commit()
     conn.close()
     print("Catalog migration complete.")

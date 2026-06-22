@@ -53,6 +53,7 @@ def sync_sequences(pg_conn):
         cur.execute("SELECT setval(pg_get_serial_sequence('orders', 'id'), COALESCE(MAX(id), 1), TRUE) FROM orders")
         cur.execute("SELECT setval(pg_get_serial_sequence('order_items', 'id'), COALESCE(MAX(id), 1), TRUE) FROM order_items")
         cur.execute("SELECT setval(pg_get_serial_sequence('coupon_uses', 'id'), COALESCE(MAX(id), 1), TRUE) FROM coupon_uses")
+        cur.execute("SELECT setval(pg_get_serial_sequence('products', 'id'), COALESCE(MAX(id), 1), TRUE) FROM products")
 
 
 def main():

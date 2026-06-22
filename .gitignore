@@ -27,3 +27,7 @@ __pycache__/
 # Генеровані артефакти
 extracted_chunks.md
 package-lock.json
+
+# Docker
+data/
+docker-compose.override.yml

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS products (
     hot BOOLEAN DEFAULT false,
     gift BOOLEAN DEFAULT false,
     filament_choice BOOLEAN DEFAULT true,
+    luminous_filament_choice BOOLEAN DEFAULT false,
     pinned BOOLEAN DEFAULT false,
     stl_link TEXT DEFAULT '',
     contract_price BOOLEAN DEFAULT false,
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS filaments (
 
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false;
 
 -- Transaction tables
 CREATE TABLE IF NOT EXISTS users (

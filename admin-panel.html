@@ -7,6 +7,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script type="module">
+        import 'https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js';
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -678,6 +681,66 @@
             display: block;
         }
 
+        .form-hint {
+            color: #6b7280;
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .emoji-field {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        .emoji-field .emoji-input {
+            flex: 1;
+            font-size: 26px;
+            text-align: center;
+            cursor: pointer;
+            padding: 10px 12px;
+            min-width: 0;
+        }
+
+        .emoji-trigger {
+            flex-shrink: 0;
+            width: 48px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: #f9fafb;
+            font-size: 22px;
+            cursor: pointer;
+            transition: border-color 0.3s ease, background 0.3s ease;
+        }
+
+        .emoji-trigger:hover {
+            border-color: #667eea;
+            background: #eef2ff;
+        }
+
+        .emoji-picker-popover {
+            display: none;
+            position: fixed;
+            z-index: 1100;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+            overflow: hidden;
+            width: min(352px, calc(100vw - 24px));
+        }
+
+        .emoji-picker-popover.open {
+            display: block;
+        }
+
+        .emoji-picker-popover emoji-picker {
+            --num-columns: 8;
+            --emoji-size: 1.375rem;
+            --border-radius: 12px;
+            width: 100%;
+            height: min(360px, 50vh);
+        }
+
         .drag-drop {
             border: 2px dashed #667eea;
             border-radius: 8px;
@@ -876,6 +939,34 @@
         .checkbox-group input {
             width: auto;
             margin: 0;
+        }
+
+        .checkbox-nested {
+            display: none;
+            margin: 2px 0 0 28px;
+            padding: 0 0 0 12px;
+            border-left: 2px solid #d8dee9;
+        }
+
+        .checkbox-nested.is-visible {
+            display: block;
+        }
+
+        .checkbox-nested label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+            font-weight: 400;
+            font-size: 14px;
+            color: #5b6472;
+            cursor: pointer;
+        }
+
+        .checkbox-nested input {
+            width: auto;
+            margin: 0;
+            flex-shrink: 0;
         }
 
         .photo-preview {
@@ -1224,10 +1315,14 @@
                     <div class="form-error">Категорія вимагається</div>
                 </div>
 
-                <div class="form-group required">
+                <div class="form-group required emoji-field-group">
                     <label>Emoji</label>
-                    <input type="text" name="emoji" value="📦" maxlength="2" required>
-                    <div class="form-error">Emoji вимагається (максимум 2 символи)</div>
+                    <div class="emoji-field">
+                        <input type="text" name="emoji" value="📦" required readonly class="emoji-input" autocomplete="off">
+                        <button type="button" class="emoji-trigger" aria-label="Обрати emoji">😀</button>
+                    </div>
+                    <div class="form-hint">Натисніть поле, щоб обрати emoji</div>
+                    <div class="form-error">Оберіть один emoji</div>
                 </div>
 
                 <div class="form-group">
@@ -1269,7 +1364,10 @@
                             <label><input type="checkbox" name="hot"> 🔥 Гарячий товар (популярний)</label>
                             <label><input type="checkbox" name="pinned"> 📌 Закріплений товар (слайдер на головній)</label>
                             <label><input type="checkbox" name="gift"> 🎁 Може бути подарунком (до 100₴)</label>
-                            <label><input type="checkbox" name="filamentChoice" checked> 🎨 Дозволити вибір кольору філаменту</label>
+                            <label><input type="checkbox" name="filamentChoice" checked onchange="toggleFilamentChoiceFields()"> 🎨 Дозволити вибір кольору філаменту</label>
+                            <div id="filamentChoiceSubmenu" class="checkbox-nested is-visible">
+                                <label><input type="checkbox" name="luminousFilamentChoice"> 🌙 Додати кольори, що світяться вночі</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1329,10 +1427,14 @@
                     <input type="text" name="name" placeholder="Напр.: Брелки" required>
                     <div class="form-error">Назва обов'язкова</div>
                 </div>
-                <div class="form-group required">
+                <div class="form-group required emoji-field-group">
                     <label>Emoji</label>
-                    <input type="text" name="emoji" value="📦" required>
-                    <div class="form-error">Emoji обов'язковий</div>
+                    <div class="emoji-field">
+                        <input type="text" name="emoji" value="📦" required readonly class="emoji-input" autocomplete="off">
+                        <button type="button" class="emoji-trigger" aria-label="Обрати emoji">😀</button>
+                    </div>
+                    <div class="form-hint">Натисніть поле, щоб обрати emoji</div>
+                    <div class="form-error">Оберіть один emoji</div>
                 </div>
                 <div class="form-group">
                     <label>Порядок відображення</label>
@@ -1384,7 +1486,11 @@
         </div>
     </div>
 
-    <script src="shared.js"></script>
+    <div id="emojiPickerPopover" class="emoji-picker-popover" role="dialog" aria-label="Обрати emoji">
+        <emoji-picker locale="uk"></emoji-picker>
+    </div>
+
+    <script src="/shared.js"></script>
     <script>
         const escapeHtml = (text) => (window.SharedApp ? window.SharedApp.escapeHtml(text) : String(text || ''));
         const escapeAttr = (text) => (window.SharedApp ? window.SharedApp.escapeAttr(text) : escapeHtml(text));
@@ -1406,6 +1512,116 @@
         let productFormSnapshot = null;
         let allProducts = [];
         let allOrders = [];
+
+        // ═══════════════════════════════════════════════════════════
+        // Emoji picker
+        // ═══════════════════════════════════════════════════════════
+
+        let activeEmojiInput = null;
+        const emojiPickerPopover = document.getElementById('emojiPickerPopover');
+        const emojiPickerElement = emojiPickerPopover.querySelector('emoji-picker');
+
+        function isSingleEmoji(value) {
+            const trimmed = String(value || '').trim();
+            if (!trimmed) return false;
+            if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+                const segments = [...new Intl.Segmenter('uk', { granularity: 'grapheme' }).segment(trimmed)];
+                if (segments.length !== 1) return false;
+                return /\p{Extended_Pictographic}/u.test(trimmed);
+            }
+            return trimmed.length > 0 && trimmed.length <= 32;
+        }
+
+        function syncEmojiTrigger(input) {
+            const trigger = input.closest('.emoji-field')?.querySelector('.emoji-trigger');
+            if (trigger) {
+                trigger.textContent = input.value.trim() || '😀';
+            }
+        }
+
+        function positionEmojiPicker(input) {
+            const rect = input.getBoundingClientRect();
+            const popoverWidth = Math.min(352, window.innerWidth - 24);
+            const popoverHeight = Math.min(360, window.innerHeight * 0.5);
+            let top = rect.bottom + 8;
+            let left = rect.left;
+
+            if (top + popoverHeight > window.innerHeight - 12) {
+                top = Math.max(12, rect.top - popoverHeight - 8);
+            }
+            if (left + popoverWidth > window.innerWidth - 12) {
+                left = window.innerWidth - popoverWidth - 12;
+            }
+            if (left < 12) left = 12;
+
+            emojiPickerPopover.style.width = popoverWidth + 'px';
+            emojiPickerPopover.style.top = top + 'px';
+            emojiPickerPopover.style.left = left + 'px';
+        }
+
+        function closeEmojiPicker() {
+            emojiPickerPopover.classList.remove('open');
+            activeEmojiInput = null;
+        }
+
+        function openEmojiPicker(input) {
+            activeEmojiInput = input;
+            positionEmojiPicker(input);
+            emojiPickerPopover.classList.add('open');
+        }
+
+        function initEmojiPickers() {
+            document.querySelectorAll('.emoji-input').forEach((input) => {
+                syncEmojiTrigger(input);
+
+                const open = (e) => {
+                    e.preventDefault();
+                    openEmojiPicker(input);
+                };
+
+                input.addEventListener('click', open);
+
+                const trigger = input.closest('.emoji-field')?.querySelector('.emoji-trigger');
+                if (trigger) {
+                    trigger.addEventListener('click', open);
+                }
+            });
+
+            emojiPickerElement.addEventListener('emoji-click', (event) => {
+                if (!activeEmojiInput) return;
+                activeEmojiInput.value = event.detail.unicode;
+                syncEmojiTrigger(activeEmojiInput);
+                activeEmojiInput.dispatchEvent(new Event('input', { bubbles: true }));
+                activeEmojiInput.classList.remove('error');
+                activeEmojiInput.closest('.form-group')?.classList.remove('has-error');
+                closeEmojiPicker();
+            });
+
+            emojiPickerPopover.addEventListener('click', (e) => e.stopPropagation());
+
+            document.addEventListener('click', (e) => {
+                if (!emojiPickerPopover.classList.contains('open')) return;
+                if (e.target.closest('.emoji-field') || e.target.closest('#emojiPickerPopover')) return;
+                closeEmojiPicker();
+            });
+        }
+
+        function validateEmojiField(form) {
+            const field = form.emoji;
+            const group = field.closest('.form-group');
+            const value = field.value.trim();
+
+            if (!value || !isSingleEmoji(value)) {
+                field.classList.add('error');
+                group.classList.add('has-error');
+                return false;
+            }
+
+            field.classList.remove('error');
+            group.classList.remove('has-error');
+            return true;
+        }
+
         let allCategories = [];
         let allFilaments = [];
         let quickCategoryInitial = [];
@@ -2037,6 +2253,7 @@
                             ${p.pinned ? '<div class="tag tag-pinned">📌 Закріплений</div>' : ''}
                             ${p.gift ? '<div class="tag">🎁 Подарунок</div>' : ''}
                             ${p.cat !== 'custom' && p.filamentChoice !== false ? '<div class="tag">🎨 Вибір кольору</div>' : ''}
+                            ${p.cat !== 'custom' && p.filamentChoice !== false && p.luminousFilamentChoice ? '<div class="tag">🌙 Світиться вночі</div>' : ''}
                             ${p.custom_fields ? `<div class="tag">✍️ ${escapeHtml(p.custom_fields)}</div>` : ''}
                             ${p.contractPrice ? '<div class="tag">🤝 Договірна ціна</div>' : ''}
                         </div>
@@ -2068,6 +2285,16 @@
             }
         }
 
+        function toggleFilamentChoiceFields() {
+            const form = document.getElementById('productForm');
+            const submenu = document.getElementById('filamentChoiceSubmenu');
+            const checked = form.filamentChoice.checked;
+            submenu.classList.toggle('is-visible', checked);
+            if (!checked) {
+                form.luminousFilamentChoice.checked = false;
+            }
+        }
+
         function getProductFormState() {
             const form = document.getElementById('productForm');
             const contractPrice = form.contractPrice.checked;
@@ -2091,6 +2318,7 @@
                 state.pinned = form.pinned.checked;
                 state.gift = form.gift.checked;
                 state.filamentChoice = form.filamentChoice.checked;
+                state.luminousFilamentChoice = form.filamentChoice.checked && form.luminousFilamentChoice.checked;
             }
 
             return state;
@@ -2132,7 +2360,9 @@
             updateCategoryFields();
             form.contractPrice.checked = false;
             toggleContractPriceFields();
+            toggleFilamentChoiceFields();
             hideProductUnsavedConfirm();
+            syncEmojiTrigger(form.emoji);
             captureProductFormSnapshot();
             document.getElementById('modal').classList.add('active');
         }
@@ -2145,6 +2375,7 @@
             }
 
             hideProductUnsavedConfirm();
+            closeEmojiPicker();
             modal.classList.remove('active');
             currentProductId = null;
             uploadedPhotos = [];
@@ -2163,6 +2394,7 @@
                 form.id.readOnly = true;
                 form.name.value = category.name || '';
                 form.emoji.value = category.emoji || '📦';
+                syncEmojiTrigger(form.emoji);
                 form.order.value = category.order || '';
             } else {
                 document.getElementById('categoryModalTitle').textContent = '➕ Додати категорію';
@@ -2174,6 +2406,7 @@
 
         function closeCategoryModal() {
             currentCategoryId = null;
+            closeEmojiPicker();
             document.getElementById('categoryModal').classList.remove('active');
         }
 
@@ -2221,6 +2454,7 @@
             const cat = document.querySelector('select[name="cat"]').value;
             document.getElementById('standardFields').style.display = cat === 'custom' ? 'none' : 'block';
             document.getElementById('customFields').style.display = cat === 'custom' ? 'block' : 'none';
+            toggleFilamentChoiceFields();
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -2245,6 +2479,7 @@
                 form.name.value = product.name;
                 form.cat.value = product.cat;
                 form.emoji.value = product.emoji;
+                syncEmojiTrigger(form.emoji);
                 form.price.value = product.price;
                 form.oldPrice.value = product.oldPrice || '';
                 form.mat.value = product.mat;
@@ -2258,11 +2493,13 @@
                     form.pinned.checked = product.pinned || false;
                     form.gift.checked = product.gift || false;
                     form.filamentChoice.checked = product.filamentChoice !== false;
+                    form.luminousFilamentChoice.checked = !!product.luminousFilamentChoice;
                 }
 
                 updatePhotoPreview();
                 updateCategoryFields();
                 toggleContractPriceFields();
+                toggleFilamentChoiceFields();
                 hideProductUnsavedConfirm();
                 captureProductFormSnapshot();
                 document.getElementById('modal').classList.add('active');
@@ -2642,6 +2879,11 @@
                 return;
             }
 
+            if (!validateEmojiField(form)) {
+                showToast('Оберіть один emoji', 'error');
+                return;
+            }
+
             const price = contractPrice ? 0 : parseInt(form.price.value, 10);
             const oldPrice = !contractPrice && form.oldPrice.value ? parseInt(form.oldPrice.value, 10) : null;
             const oldPriceGroup = form.oldPrice.closest('.form-group');
@@ -2679,6 +2921,7 @@
                 data.pinned = form.pinned.checked;
                 data.gift = form.gift.checked;
                 data.filamentChoice = form.filamentChoice.checked;
+                data.luminousFilamentChoice = form.filamentChoice.checked && form.luminousFilamentChoice.checked;
             }
 
             try {
@@ -2729,6 +2972,11 @@
 
             if (!payload.id || !payload.name || !payload.emoji) {
                 showToast('Заповніть ID, назву та emoji', 'error');
+                return;
+            }
+
+            if (!validateEmojiField(form)) {
+                showToast('Оберіть один emoji', 'error');
                 return;
             }
 
@@ -2993,6 +3241,11 @@
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape') return;
 
+            if (emojiPickerPopover.classList.contains('open')) {
+                closeEmojiPicker();
+                return;
+            }
+
             const confirm = document.getElementById('productUnsavedConfirm');
             if (confirm.classList.contains('visible')) {
                 hideProductUnsavedConfirm();
@@ -3029,6 +3282,13 @@
                 closeFilamentModal();
             }
         });
+
+        if (customElements.get('emoji-picker')) {
+            initEmojiPickers();
+        } else {
+            customElements.whenDefined('emoji-picker').then(initEmojiPickers);
+        }
+        toggleFilamentChoiceFields();
     </script>
 </body>
 </html>

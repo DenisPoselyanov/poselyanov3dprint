@@ -453,7 +453,14 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                 if not meta:
                     return False, f"Невідомий колір філаменту ({filament_id})"
                 if not meta.get("available"):
-                    return False, f"Колір «{meta.get('name', '')}» зараз недоступний для замовлення"
+                    allow_luminous = bool(
+                        product
+                        and product.get("filamentChoice", True) is not False
+                        and product.get("luminousFilamentChoice")
+                        and str(filament_id or "").startswith("luminous")
+                    )
+                    if not allow_luminous:
+                        return False, f"Колір «{meta.get('name', '')}» зараз недоступний для замовлення"
                 filament_name = str(meta.get("name") or "").strip()
 
         if not is_contract:
@@ -1681,7 +1688,9 @@ async def handle_admin_panel(request: web.Request):
 
     try:
         html_content = Path("admin-panel.html").read_text(encoding="utf-8")
-        return web.Response(text=html_content, content_type='text/html', headers=cors_headers(request))
+        headers = cors_headers(request)
+        headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return web.Response(text=html_content, content_type='text/html', headers=headers)
     except FileNotFoundError:
         return web.Response(status=404, text="Admin panel file not found", headers=cors_headers(request))
 
