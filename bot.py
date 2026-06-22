@@ -41,6 +41,7 @@ from dotenv import load_dotenv
 from rich_messages import (
     build_admin_order_notification,
     build_admin_order_with_status,
+    build_admin_orders_batch,
     build_broadcast_report,
     build_client_order_confirmation,
     build_client_price_quote,
@@ -1480,6 +1481,83 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Невірний формат команди")
 
+def _build_admin_batch_section_data(order_id: int) -> dict | None:
+    """Дані одного замовлення для build_admin_orders_batch (читає з БД)."""
+    order, items = get_order_with_items(order_id)
+    if not order:
+        return None
+    status = order.get("status", "new")
+    if status == "confirmed":
+        sl = "✅ Підтверджено"
+    elif status == "cancelled":
+        sl = "❌ Відмінено"
+    elif status == "draft":
+        sl = "❓ Під питанням"
+    else:
+        sl = None
+    admin_items = [
+        {
+            "product_id": int(i.get("product_id") or 0),
+            "product_name": i.get("product_name", "—"),
+            "price": int(i.get("price") or 0),
+            "quantity": int(i.get("quantity") or 1),
+            "filament_name": i.get("filament"),
+            "is_contract_price": bool(i.get("is_contract_price")),
+        }
+        for i in items
+        if not str(i.get("product_name", "")).startswith("🎁")
+    ]
+    gift_name = order.get("gift_product_name")
+    return {
+        "order_id": order_id,
+        "items": admin_items,
+        "total_price": int(order.get("total_price") or 0),
+        "discount_amount": int(order.get("discount_amount") or 0),
+        "coupon_code": order.get("coupon_code"),
+        "gift": gift_name,
+        "gift_product_id": find_gift_product_id(gift_name),
+        "comment": order.get("comment"),
+        "price_pending": bool(order.get("price_pending")),
+        "status": status,
+        "status_label": sl,
+    }
+
+
+def _build_admin_batch(
+    order_ids: list[int],
+    username: str,
+    tg_username: str | None,
+    first_name: str,
+) -> tuple:
+    """Повертає (html, markup) для батч-повідомлення адмін-каналу."""
+    sections = []
+    for oid in order_ids:
+        sec = _build_admin_batch_section_data(oid)
+        if sec is not None:
+            sections.append(sec)
+
+    batch_html = build_admin_orders_batch(username, sections)
+
+    rows = []
+    for s in sections:
+        if s.get("status") in ("confirmed", "cancelled"):
+            continue
+        oid = s["order_id"]
+        if s.get("price_pending"):
+            admin_url_o = get_admin_webapp_url(oid)
+            if admin_url_o:
+                rows.append([InlineKeyboardButton(f"💰 Ціна #{oid}", url=admin_url_o)])
+        rows.append([
+            InlineKeyboardButton(f"✅ #{oid}", callback_data=f"confirm_{oid}"),
+            InlineKeyboardButton(f"❓ #{oid}", callback_data=f"draft_{oid}"),
+            InlineKeyboardButton(f"❌ #{oid}", callback_data=f"cancel_{oid}"),
+        ])
+    if tg_username:
+        rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+    markup = InlineKeyboardMarkup(rows) if rows else None
+    return batch_html, markup
+
+
 #Новий HTTP хендлер для прийому замовлень з веб-додатку
 async def handle_order(request):
     try:
@@ -1644,22 +1722,69 @@ async def handle_order(request):
         owner_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
     owner_markup = InlineKeyboardMarkup(owner_rows)
 
-    try:
-        await send_rich_message(
-            bot_app.bot,
-            ORDERS_CHAT_ID,
-            owner_html,
-            reply_markup=channel_markup,
+    # ── Надсилання в адмін-канал (з батчингом для одного клієнта) ──
+    now_admin = datetime.now()
+    uid_for_batch = user_id if (user_id and int(user_id) > 0) else None
+    admin_batch = admin_channel_messages.get(uid_for_batch) if uid_for_batch else None
+    use_batch = False
+
+    if admin_batch and (now_admin - admin_batch["time"]) < timedelta(hours=4):
+        for _oid in admin_batch.get("order_ids", []):
+            _o, _ = get_order_with_items(_oid)
+            if _o and _o.get("status") in ("new", "draft"):
+                use_batch = True
+                break
+
+    if use_batch:
+        batch_order_ids = admin_batch["order_ids"] + [order_id]
+        batch_html, batch_markup = _build_admin_batch(
+            batch_order_ids,
+            admin_batch.get("username") or username,
+            admin_batch.get("tg_username") or tg_username,
+            admin_batch.get("first_name") or first_name,
         )
-        logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
-    except Exception as e:
-        logger.error(f"❌ Помилка надсилання в канал: {e}")
-        if OWNER_ID and OWNER_ID != ORDERS_CHAT_ID:
+        try:
+            await edit_rich_message(
+                bot_app.bot, admin_batch["chat_id"], admin_batch["message_id"],
+                batch_html, reply_markup=batch_markup,
+            )
+            admin_channel_messages[uid_for_batch] = {
+                **admin_batch, "time": now_admin, "order_ids": batch_order_ids,
+            }
+            logger.info(f"✅ Оновлено батч адмін-каналу: {batch_order_ids}")
+        except Exception as e:
+            logger.error(f"❌ Батч-редагування не вдалось, надсилаємо нове: {e}")
             try:
-                await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=owner_markup)
-                logger.info("✅ Надіслано резервно до власника (канал недоступний)")
+                msg_id = await send_rich_message(bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup)
+                if uid_for_batch:
+                    admin_channel_messages[uid_for_batch] = {
+                        "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
+                        "order_ids": [order_id],
+                        "username": username, "tg_username": tg_username, "first_name": first_name,
+                    }
+                logger.info(f"✅ Надіслано нове в канал (fallback): {ORDERS_CHAT_ID}")
             except Exception as e2:
-                logger.error(f"❌ Резервне надсилання власнику теж не вдалось: {e2}")
+                logger.error(f"❌ Помилка надсилання в канал: {e2}")
+    else:
+        if admin_batch:
+            admin_channel_messages.pop(uid_for_batch, None)
+        try:
+            msg_id = await send_rich_message(bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup)
+            if uid_for_batch:
+                admin_channel_messages[uid_for_batch] = {
+                    "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
+                    "order_ids": [order_id],
+                    "username": username, "tg_username": tg_username, "first_name": first_name,
+                }
+            logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
+        except Exception as e:
+            logger.error(f"❌ Помилка надсилання в канал: {e}")
+            if OWNER_ID and OWNER_ID != ORDERS_CHAT_ID:
+                try:
+                    await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=owner_markup)
+                    logger.info("✅ Надіслано резервно до власника (канал недоступний)")
+                except Exception as e2:
+                    logger.error(f"❌ Резервне надсилання власнику теж не вдалось: {e2}")
 
     return web.Response(text="ok", headers=cors_headers(request))
 
@@ -2155,6 +2280,32 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if affected_user_id:
             confirmation_messages.pop(int(affected_user_id), None)
 
+    # ── Батч-повідомлення адмін-каналу ───────────────────────
+    uid_for_admin_batch = int(order.get("user_id") or 0) or None
+    admin_batch = admin_channel_messages.get(uid_for_admin_batch) if uid_for_admin_batch else None
+    if admin_batch and order_id in admin_batch.get("order_ids", []):
+        full_ids = list(admin_batch["order_ids"])
+        batch_html, batch_markup = _build_admin_batch(
+            full_ids,
+            admin_batch.get("username") or order.get("username") or "невідомо",
+            admin_batch.get("tg_username"),
+            admin_batch.get("first_name") or "",
+        )
+        if action in ("confirm", "cancel"):
+            new_ids = [oid for oid in full_ids if oid != order_id]
+            if new_ids:
+                admin_channel_messages[uid_for_admin_batch] = {**admin_batch, "order_ids": new_ids}
+            else:
+                admin_channel_messages.pop(uid_for_admin_batch, None)
+        try:
+            await edit_rich_message(
+                context.bot, query.message.chat_id, query.message.message_id,
+                batch_html, reply_markup=batch_markup,
+            )
+        except Exception:
+            pass
+        return
+
     gift_product_id = find_gift_product_id(order.get("gift_product_name"))
     linked = action != "cancel"
     admin_items = [
@@ -2270,6 +2421,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 bot_app = None
 
 confirmation_messages = {}  # {user_id: {"message_id", "orders", "html", "time", "format"}}
+admin_channel_messages = {}  # {user_id: {"message_id", "chat_id", "time", "order_ids", "username", "tg_username", "first_name"}}
 
 def main():
     global bot_app
