@@ -422,6 +422,58 @@
             font-weight: 600;
         }
 
+        .contract-badge {
+            display: inline-block;
+            background: #eef2ff;
+            color: #4338ca;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-left: 6px;
+        }
+
+        .order-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .order-card.pending-price {
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 1px rgba(245, 158, 11, .15);
+        }
+
+        .order-item-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px dashed #eee;
+        }
+
+        .order-item-row:last-child { border-bottom: none; }
+
+        .order-price-input {
+            width: 100px;
+            padding: 8px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .price-fields-group.hidden { display: none; }
+
+        .contract-hint {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 6px;
+            line-height: 1.4;
+        }
+
         .product-photos {
             display: flex;
             gap: 8px;
@@ -504,6 +556,42 @@
 
         .modal.active {
             display: flex;
+        }
+
+        .product-unsaved-confirm {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.45);
+        }
+
+        .product-unsaved-confirm.visible {
+            display: flex;
+        }
+
+        .product-unsaved-confirm-box {
+            background: white;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 420px;
+            padding: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .product-unsaved-confirm-box p {
+            margin: 0 0 20px;
+            font-size: 15px;
+            line-height: 1.5;
+            color: #333;
+        }
+
+        .product-unsaved-confirm-box .form-buttons {
+            justify-content: center;
         }
 
         .modal-content {
@@ -610,6 +698,43 @@
             font-size: 14px;
             color: #667eea;
             font-weight: 500;
+        }
+
+        .photo-url-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .photo-url-row input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .photo-url-row button {
+            padding: 10px 14px;
+            border: none;
+            border-radius: 8px;
+            background: #667eea;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .photo-url-row button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .photo-url-hint {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #888;
         }
 
         .form-buttons {
@@ -1001,6 +1126,7 @@
         <div class="content">
             <div class="page-nav">
                 <button class="page-tab active" type="button" data-page="products" onclick="switchPage('products')">📦 Товари</button>
+                <button class="page-tab" type="button" data-page="orders" onclick="switchPage('orders')">📦 Замовлення</button>
                 <button class="page-tab" type="button" data-page="categories" onclick="switchPage('categories')">🗂️ Категорії</button>
                 <button class="page-tab" type="button" data-page="filaments" onclick="switchPage('filaments')">🎨 Філаменти</button>
             </div>
@@ -1031,6 +1157,24 @@
                     <div class="empty-state-icon">📦</div>
                     <p>Товари не знайдено</p>
                     <button class="btn btn-primary" onclick="openAddModal()">➕ Додати перший товар</button>
+                </div>
+            </section>
+
+            <section id="ordersPage" class="page-section">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 16px;">
+                    <h2 style="font-size:20px; margin:0;">📦 Замовлення</h2>
+                    <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
+                        <input type="checkbox" id="ordersPendingFilter" onchange="loadOrders()">
+                        Лише потребують ціни
+                    </label>
+                </div>
+                <div id="ordersLoading" class="loading" style="display:none;">
+                    <div class="spinner"></div>
+                </div>
+                <div id="ordersList"></div>
+                <div id="ordersEmpty" class="empty-state" style="display:none;">
+                    <div class="empty-state-icon">📭</div>
+                    <p>Замовлень не знайдено</p>
                 </div>
             </section>
 
@@ -1086,6 +1230,14 @@
                     <div class="form-error">Emoji вимагається (максимум 2 символи)</div>
                 </div>
 
+                <div class="form-group">
+                    <label class="checkbox-group" style="display:block;">
+                        <label><input type="checkbox" name="contractPrice" id="contractPriceToggle" onchange="toggleContractPriceFields()"> 💬 Договірна ціна</label>
+                    </label>
+                    <div class="contract-hint" id="contractPriceHint" style="display:none;">Ціна не показується покупцю. Встановлюється в замовленні після узгодження.</div>
+                </div>
+
+                <div id="priceFieldsGroup" class="price-fields-group">
                 <div class="form-group required">
                     <label>Ціна (₴)</label>
                     <input type="number" name="price" required min="0" step="1">
@@ -1095,12 +1247,14 @@
                 <div class="form-group">
                     <label>Стара ціна (₴) - для акцій</label>
                     <input type="number" name="oldPrice" min="0" step="1">
+                    <div class="form-error">Акційна ціна має бути нижчою за стару (оригінальну) ціну</div>
+                </div>
                 </div>
 
                 <div class="form-group required">
-                    <label>Матеріал</label>
-                    <input type="text" name="mat" placeholder="PLA · один або два кольори" required>
-                    <div class="form-error">Матеріал вимагається</div>
+                    <label>Додатковий опис</label>
+                    <input type="text" name="mat" placeholder="Короткий опис: матеріал, комплектація, особливості..." required>
+                    <div class="form-error">Опис вимагається</div>
                 </div>
 
                 <div class="form-group">
@@ -1133,6 +1287,11 @@
                         <div class="drag-drop-text">📸 Перетягни фото сюди або натисни для вибору</div>
                         <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
                     </div>
+                    <div class="photo-url-row">
+                        <input type="url" id="photoUrlInput" placeholder="Посилання на GIF/WebP (для анімації)">
+                        <button type="button" id="photoUrlBtn" onclick="uploadPhotoFromUrl()">Завантажити URL</button>
+                    </div>
+                    <div class="photo-url-hint">Ctrl+V з браузера вставляє лише перший кадр. Для анімації — завантаж файл або встав посилання.</div>
                     <div class="photo-preview" id="photoPreview"></div>
                 </div>
 
@@ -1141,6 +1300,15 @@
                     <button type="submit" class="btn btn-primary">✅ Зберегти товар</button>
                 </div>
             </form>
+        </div>
+        <div id="productUnsavedConfirm" class="product-unsaved-confirm">
+            <div class="product-unsaved-confirm-box">
+                <p>Є незбережені зміни. Закрити без збереження?</p>
+                <div class="form-buttons">
+                    <button type="button" class="btn btn-primary" onclick="hideProductUnsavedConfirm()">Продовжити редагування</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal(true)">Закрити без збереження</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1216,7 +1384,10 @@
         </div>
     </div>
 
+    <script src="shared.js"></script>
     <script>
+        const escapeHtml = (text) => (window.SharedApp ? window.SharedApp.escapeHtml(text) : String(text || ''));
+        const escapeAttr = (text) => (window.SharedApp ? window.SharedApp.escapeAttr(text) : escapeHtml(text));
         // API base: local frontend (5500) talks to local backend (8080).
         // In deployed mode, use current origin + /api.
         const API_BASE = (() => {
@@ -1232,7 +1403,9 @@
         let currentFilamentId = null;
         let currentPage = 'products';
         let uploadedPhotos = [];
+        let productFormSnapshot = null;
         let allProducts = [];
+        let allOrders = [];
         let allCategories = [];
         let allFilaments = [];
         let quickCategoryInitial = [];
@@ -1285,6 +1458,8 @@
                 btn.textContent = '➕ Додати категорію';
                 btn.onclick = () => openCategoryModal();
                 btn.style.display = 'inline-flex';
+            } else if (currentPage === 'orders') {
+                btn.style.display = 'none';
             } else {
                 btn.style.display = 'none';
             }
@@ -1298,6 +1473,12 @@
             if (currentPage === 'categories') {
                 label.textContent = 'Всього категорій';
                 value.textContent = String(allCategories.length);
+                return;
+            }
+
+            if (currentPage === 'orders') {
+                label.textContent = 'Замовлень';
+                value.textContent = String(allOrders.length);
                 return;
             }
 
@@ -1318,6 +1499,7 @@
             } catch (_) {}
             updateHeaderPrimaryAction();
             updateHeaderStat();
+            if (page === 'orders') loadOrders();
         }
 
         function renderCategoryFilterMenu() {
@@ -1356,17 +1538,17 @@
             }
 
             list.innerHTML = sortedCategories.map((cat, idx) => `
-                <div class="category-row" data-category-row="${cat.id}">
-                    <div class="category-drag-handle" title="Перетягни для зміни порядку" onpointerdown="startCategoryDrag(event, '${cat.id}')">⋮⋮</div>
+                <div class="category-row" data-category-row="${escapeAttr(cat.id)}">
+                    <div class="category-drag-handle" title="Перетягни для зміни порядку" onpointerdown="startCategoryDrag(event, '${escapeAttr(cat.id)}')">⋮⋮</div>
                     <div>
-                        <div style="font-weight:700;">${cat.emoji} ${cat.name}</div>
-                        <div style="font-size:12px; color:#6b7280;">ID: ${cat.id} · Товарів: ${productCountByCategory[cat.id] || 0} · Порядок: ${cat.order ?? '—'}</div>
+                        <div style="font-weight:700;">${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}</div>
+                        <div style="font-size:12px; color:#6b7280;">ID: ${escapeHtml(cat.id)} · Товарів: ${productCountByCategory[cat.id] || 0} · Порядок: ${cat.order ?? '—'}</div>
                     </div>
                     <div style="display:flex; gap:8px;">
-                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${cat.id}', -1)" style="padding:8px 10px;" ${idx === 0 ? 'disabled' : ''}>↑</button>
-                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${cat.id}', 1)" style="padding:8px 10px;" ${idx === sortedCategories.length - 1 ? 'disabled' : ''}>↓</button>
-                        <button class="btn btn-secondary" type="button" onclick="openCategoryModal('${cat.id}')" style="padding:8px 12px;">✏️</button>
-                        <button class="btn btn-danger" type="button" onclick="deleteCategory('${cat.id}')" style="padding:8px 12px;">🗑️</button>
+                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${escapeAttr(cat.id)}', -1)" style="padding:8px 10px;" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${escapeAttr(cat.id)}', 1)" style="padding:8px 10px;" ${idx === sortedCategories.length - 1 ? 'disabled' : ''}>↓</button>
+                        <button class="btn btn-secondary" type="button" onclick="openCategoryModal('${escapeAttr(cat.id)}')" style="padding:8px 12px;">✏️</button>
+                        <button class="btn btn-danger" type="button" onclick="deleteCategory('${escapeAttr(cat.id)}')" style="padding:8px 12px;">🗑️</button>
                     </div>
                 </div>
             `).join('');
@@ -1825,11 +2007,11 @@
                 return `
                     <div class="product-card">
                         <div class="product-header">
-                            <div class="product-emoji">${p.emoji}</div>
+                            <div class="product-emoji">${escapeHtml(p.emoji)}</div>
                             <div class="product-info">
-                                <div class="product-name">${p.name}</div>
+                                <div class="product-name">${escapeHtml(p.name)}</div>
                                 <div class="product-meta">
-                                    <span class="category-badge ${categoryMeta.badgeClass || `category-${p.cat}`}">${categoryLabel}</span>
+                                    <span class="category-badge ${escapeAttr(categoryMeta.badgeClass || `category-${p.cat}`)}">${escapeHtml(categoryLabel)}</span>
                                     <span>ID: ${p.id}</span>
                                 </div>
                             </div>
@@ -1837,15 +2019,15 @@
 
                         <div>
                             <div class="product-price">
-                                ${p.price} ₴
-                                ${p.oldPrice ? `<span class="price-old">${p.oldPrice} ₴</span>` : ''}
+                                ${p.contractPrice ? 'Договірна<span class="contract-badge">🤝</span>' : `${p.price} ₴`}
+                                ${!p.contractPrice && p.oldPrice ? `<span class="price-old">${p.oldPrice} ₴</span>` : ''}
                             </div>
-                            ${p.oldPrice ? `<div class="product-discount">-${discount}%</div>` : ''}
+                            ${!p.contractPrice && p.oldPrice ? `<div class="product-discount">-${discount}%</div>` : ''}
                         </div>
 
                         ${p.photos && p.photos.length ? `
                             <div class="product-photos">
-                                ${p.photos.slice(0, 4).map(url => `<img src="${url}" class="photo-thumb" alt="фото" title="Натисни для приміру">`).join('')}
+                                ${p.photos.slice(0, 4).map(url => `<img src="${escapeAttr(url)}" class="photo-thumb" alt="фото" title="Натисни для приміру">`).join('')}
                                 ${p.photos.length > 4 ? `<div style="width: 60px; height: 60px; background: #ddd; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999; font-weight: bold;">+${p.photos.length - 4}</div>` : ''}
                             </div>
                         ` : ''}
@@ -1855,7 +2037,8 @@
                             ${p.pinned ? '<div class="tag tag-pinned">📌 Закріплений</div>' : ''}
                             ${p.gift ? '<div class="tag">🎁 Подарунок</div>' : ''}
                             ${p.cat !== 'custom' && p.filamentChoice !== false ? '<div class="tag">🎨 Вибір кольору</div>' : ''}
-                            ${p.custom_fields ? `<div class="tag">✍️ ${p.custom_fields}</div>` : ''}
+                            ${p.custom_fields ? `<div class="tag">✍️ ${escapeHtml(p.custom_fields)}</div>` : ''}
+                            ${p.contractPrice ? '<div class="tag">🤝 Договірна ціна</div>' : ''}
                         </div>
 
                         <div class="product-actions">
@@ -1870,6 +2053,65 @@
         // ═══════════════════════════════════════════════════════════
         // МОДАЛЬНЕ ВІКНО
         // ═══════════════════════════════════════════════════════════
+
+        function toggleContractPriceFields() {
+            const checked = document.getElementById('contractPriceToggle').checked;
+            const group = document.getElementById('priceFieldsGroup');
+            const hint = document.getElementById('contractPriceHint');
+            const form = document.getElementById('productForm');
+            group.classList.toggle('hidden', checked);
+            hint.style.display = checked ? '' : 'none';
+            form.price.required = !checked;
+            if (checked) {
+                form.price.value = '0';
+                form.oldPrice.value = '';
+            }
+        }
+
+        function getProductFormState() {
+            const form = document.getElementById('productForm');
+            const contractPrice = form.contractPrice.checked;
+            const oldPrice = !contractPrice && form.oldPrice.value ? parseInt(form.oldPrice.value, 10) : null;
+            const state = {
+                name: form.name.value.trim(),
+                cat: form.cat.value,
+                emoji: form.emoji.value.trim(),
+                contractPrice,
+                price: contractPrice ? 0 : form.price.value,
+                oldPrice,
+                mat: form.mat.value.trim(),
+                stlLink: form.stlLink.value.trim(),
+                photos: [...uploadedPhotos],
+            };
+
+            if (state.cat === 'custom') {
+                state.custom_fields = form.custom_fields.value.trim();
+            } else {
+                state.hot = form.hot.checked;
+                state.pinned = form.pinned.checked;
+                state.gift = form.gift.checked;
+                state.filamentChoice = form.filamentChoice.checked;
+            }
+
+            return state;
+        }
+
+        function captureProductFormSnapshot() {
+            productFormSnapshot = JSON.stringify(getProductFormState());
+        }
+
+        function hasProductFormChanges() {
+            if (productFormSnapshot === null) return false;
+            return JSON.stringify(getProductFormState()) !== productFormSnapshot;
+        }
+
+        function showProductUnsavedConfirm() {
+            document.getElementById('productUnsavedConfirm').classList.add('visible');
+        }
+
+        function hideProductUnsavedConfirm() {
+            document.getElementById('productUnsavedConfirm').classList.remove('visible');
+        }
 
         function openAddModal() {
             currentProductId = null;
@@ -1888,13 +2130,25 @@
             
             document.getElementById('photoPreview').innerHTML = '';
             updateCategoryFields();
+            form.contractPrice.checked = false;
+            toggleContractPriceFields();
+            hideProductUnsavedConfirm();
+            captureProductFormSnapshot();
             document.getElementById('modal').classList.add('active');
         }
 
-        function closeModal() {
-            document.getElementById('modal').classList.remove('active');
+        function closeModal(force = false) {
+            const modal = document.getElementById('modal');
+            if (!force && modal.classList.contains('active') && hasProductFormChanges()) {
+                showProductUnsavedConfirm();
+                return;
+            }
+
+            hideProductUnsavedConfirm();
+            modal.classList.remove('active');
             currentProductId = null;
             uploadedPhotos = [];
+            productFormSnapshot = null;
         }
 
         function openCategoryModal(categoryId = null) {
@@ -1995,6 +2249,7 @@
                 form.oldPrice.value = product.oldPrice || '';
                 form.mat.value = product.mat;
                 form.stlLink.value = product.stlLink || '';
+                form.contractPrice.checked = !!product.contractPrice;
 
                 if (product.cat === 'custom') {
                     form.custom_fields.value = product.custom_fields || '';
@@ -2007,6 +2262,9 @@
 
                 updatePhotoPreview();
                 updateCategoryFields();
+                toggleContractPriceFields();
+                hideProductUnsavedConfirm();
+                captureProductFormSnapshot();
                 document.getElementById('modal').classList.add('active');
             } catch (e) {
                 showToast('Помилка завантаження товару', 'error');
@@ -2082,26 +2340,110 @@
             }
         });
 
+        async function normalizeImageFile(file) {
+            const header = await file.slice(0, 12).arrayBuffer();
+            const bytes = new Uint8Array(header);
+            const sig6 = String.fromCharCode(...bytes.slice(0, 6));
+            const isWebp = bytes.length >= 12
+                && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF'
+                && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
+            if ((sig6 === 'GIF87a' || sig6 === 'GIF89a') && file.type !== 'image/gif') {
+                const baseName = (file.name || 'image').replace(/\.[^.]+$/, '');
+                return new File([file], `${baseName}.gif`, { type: 'image/gif' });
+            }
+            if (isWebp && file.type !== 'image/webp') {
+                const baseName = (file.name || 'image').replace(/\.[^.]+$/, '');
+                return new File([file], `${baseName}.webp`, { type: 'image/webp' });
+            }
+            return file;
+        }
+
+        async function isLikelyAnimatedFile(file) {
+            const header = await file.slice(0, 12).arrayBuffer();
+            const bytes = new Uint8Array(header);
+            const sig6 = String.fromCharCode(...bytes.slice(0, 6));
+            const isWebp = bytes.length >= 12
+                && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF'
+                && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
+            return sig6 === 'GIF87a' || sig6 === 'GIF89a' || isWebp;
+        }
+
+        async function uploadPhotoFromUrl() {
+            const input = document.getElementById('photoUrlInput');
+            const btn = document.getElementById('photoUrlBtn');
+            const url = (input?.value || '').trim();
+            if (!url) {
+                showToast('Вставте посилання на зображення', 'error');
+                return;
+            }
+
+            const dragDropText = document.querySelector('.drag-drop-text');
+            const originalText = dragDropText.textContent;
+            dragDropText.textContent = '🎞️ Завантаження анімації за URL...';
+            btn.disabled = true;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+            try {
+                const res = await fetch(API_BASE + '/upload-photo-url', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData
+                    },
+                    body: JSON.stringify({ url }),
+                    signal: controller.signal
+                });
+                const data = await res.json();
+
+                if (data.ok) {
+                    uploadedPhotos.push(data.url);
+                    updatePhotoPreview();
+                    input.value = '';
+                    showToast('Фото завантажено ✅', 'success');
+                } else {
+                    showToast('Помилка: ' + (data.error || 'Невідома помилка'), 'error');
+                }
+            } catch (e) {
+                const msg = e.name === 'AbortError'
+                    ? 'Завантаження занадто довге. Спробуй менший GIF або посилання.'
+                    : 'Помилка завантаження';
+                showToast(msg, 'error');
+            } finally {
+                clearTimeout(timeoutId);
+                dragDropText.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
         async function handleFiles(files) {
             for (let file of files) {
+                file = await normalizeImageFile(file);
                 if (!file.type.startsWith('image/')) {
                     showToast('Тільки фото дозволені', 'error');
                     continue;
                 }
 
                 const formData = new FormData();
-                formData.append('file', file);
+                formData.append('file', file, file.name);
 
-                // Показуємо індикатор завантаження
                 const dragDropText = document.querySelector('.drag-drop-text');
                 const originalText = dragDropText.textContent;
-                dragDropText.textContent = '⏳ Завантаження...';
+                const animated = await isLikelyAnimatedFile(file);
+                dragDropText.textContent = animated
+                    ? '🎞️ Обробка анімації (може зайняти до хвилини)...'
+                    : '⏳ Завантаження...';
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), animated ? 180000 : 60000);
 
                 try {
                     const res = await fetch(API_BASE + '/upload-photo', {
                         method: 'POST',
                         headers: { 'X-Telegram-Init-Data': tgInitData },
-                        body: formData
+                        body: formData,
+                        signal: controller.signal
                     });
                     const data = await res.json();
 
@@ -2113,8 +2455,12 @@
                         showToast('Помилка завантаження фото: ' + (data.error || 'Невідома помилка'), 'error');
                     }
                 } catch (e) {
-                    showToast('Помилка завантаження', 'error');
+                    const msg = e.name === 'AbortError'
+                        ? 'Завантаження занадто довге. Спробуй менший GIF або завантаж за URL.'
+                        : 'Помилка завантаження';
+                    showToast(msg, 'error');
                 } finally {
+                    clearTimeout(timeoutId);
                     dragDropText.textContent = originalText;
                 }
             }
@@ -2267,7 +2613,8 @@
 
             // Валідація всіх обов'язкових полів
             let isValid = true;
-            const requiredFields = ['name', 'cat', 'emoji', 'price', 'mat'];
+            const contractPrice = form.contractPrice.checked;
+            const requiredFields = contractPrice ? ['name', 'cat', 'emoji', 'mat'] : ['name', 'cat', 'emoji', 'price', 'mat'];
             
             requiredFields.forEach(fieldName => {
                 const field = form.querySelector(`[name="${fieldName}"]`);
@@ -2295,12 +2642,31 @@
                 return;
             }
 
+            const price = contractPrice ? 0 : parseInt(form.price.value, 10);
+            const oldPrice = !contractPrice && form.oldPrice.value ? parseInt(form.oldPrice.value, 10) : null;
+            const oldPriceGroup = form.oldPrice.closest('.form-group');
+
+            if (!contractPrice && oldPrice !== null && price >= oldPrice) {
+                form.price.classList.add('error');
+                form.oldPrice.classList.add('error');
+                form.price.closest('.form-group').classList.add('has-error');
+                oldPriceGroup.classList.add('has-error');
+                showToast('Акційна ціна має бути нижчою за стару (оригінальну) ціну', 'error');
+                return;
+            }
+
+            form.price.classList.remove('error');
+            form.oldPrice.classList.remove('error');
+            form.price.closest('.form-group').classList.remove('has-error');
+            oldPriceGroup.classList.remove('has-error');
+
             const data = {
                 name: form.name.value.trim(),
                 cat: form.cat.value,
                 emoji: form.emoji.value.trim(),
-                price: parseInt(form.price.value),
-                oldPrice: form.oldPrice.value ? parseInt(form.oldPrice.value) : null,
+                contractPrice,
+                price,
+                oldPrice,
                 mat: form.mat.value.trim(),
                 stlLink: form.stlLink.value.trim(),
                 photos: uploadedPhotos,
@@ -2334,7 +2700,7 @@
 
                 if (res.ok) {
                     showToast('Товар збережено ✅', 'success');
-                    closeModal();
+                    closeModal(true);
                     loadProducts();
                 } else {
                     const err = await res.json();
@@ -2451,6 +2817,139 @@
         });
 
         // ═══════════════════════════════════════════════════════════
+        // ЗАМОВЛЕННЯ
+        // ═══════════════════════════════════════════════════════════
+
+        let expandedOrderId = null;
+
+        async function loadOrders() {
+            const loading = document.getElementById('ordersLoading');
+            const list = document.getElementById('ordersList');
+            const empty = document.getElementById('ordersEmpty');
+            const pendingOnly = document.getElementById('ordersPendingFilter')?.checked;
+            try {
+                loading.style.display = 'flex';
+                list.style.opacity = '0.5';
+                const qs = pendingOnly ? '?pending_price=true' : '';
+                const res = await fetch(API_BASE + '/orders' + qs);
+                if (!res.ok) throw new Error('Помилка завантаження замовлень');
+                allOrders = await res.json();
+                renderOrdersList();
+            } catch (e) {
+                showToast(e.message || 'Помилка завантаження замовлень', 'error');
+            } finally {
+                loading.style.display = 'none';
+                list.style.opacity = '1';
+                updateHeaderStat();
+            }
+        }
+
+        function renderOrdersList() {
+            const list = document.getElementById('ordersList');
+            const empty = document.getElementById('ordersEmpty');
+            if (!allOrders.length) {
+                list.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+            empty.style.display = 'none';
+            list.innerHTML = allOrders.map(o => `
+                <div class="order-card ${o.price_pending ? 'pending-price' : ''}" id="order-card-${o.id}">
+                    <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                        <div>
+                            <div style="font-weight:800; font-size:16px;">#${o.id} · ${escapeHtml(o.username || 'невідомо')}</div>
+                            <div style="font-size:12px; color:#6b7280; margin-top:4px;">${escapeHtml(o.first_name || '')} · ${formatOrderDate(o.ordered_at)} · ${escapeHtml(o.status || 'new')}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:800;">${o.price_pending ? '⚠️ Ціна не вказана' : `${o.total_price} ₴`}</div>
+                            ${o.comment ? `<div style="font-size:12px; color:#6b7280; margin-top:4px;">📝 ${escapeHtml(o.comment)}</div>` : ''}
+                        </div>
+                    </div>
+                    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn btn-primary" type="button" onclick="toggleOrderDetails(${o.id})">${expandedOrderId === o.id ? '▲ Сховати' : '💰 Встановити ціну'}</button>
+                    </div>
+                    <div id="order-details-${o.id}" style="display:${expandedOrderId === o.id ? 'block' : 'none'}; margin-top:12px;"></div>
+                </div>
+            `).join('');
+            if (expandedOrderId) renderOrderDetails(expandedOrderId);
+        }
+
+        function formatOrderDate(raw) {
+            if (!raw) return '—';
+            return String(raw).slice(0, 16).replace('T', ' ');
+        }
+
+        async function toggleOrderDetails(orderId) {
+            expandedOrderId = expandedOrderId === orderId ? null : orderId;
+            renderOrdersList();
+        }
+
+        async function openOrderPricing(orderId) {
+            expandedOrderId = orderId;
+            switchPage('orders');
+            await loadOrders();
+            const card = document.getElementById(`order-card-${orderId}`);
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function renderOrderDetails(orderId) {
+            const container = document.getElementById(`order-details-${orderId}`);
+            if (!container) return;
+            container.innerHTML = '<div class="loading" style="display:flex;"><div class="spinner"></div></div>';
+            try {
+                const res = await fetch(API_BASE + `/orders/${orderId}`);
+                if (!res.ok) throw new Error('Не вдалося завантажити замовлення');
+                const data = await res.json();
+                const items = (data.items || []).filter(i => !String(i.product_name || '').startsWith('🎁'));
+                container.innerHTML = `
+                    ${items.map(item => `
+                        <div class="order-item-row">
+                            <div style="flex:1;">
+                                <div style="font-weight:700;">${escapeHtml(item.product_name)} × ${item.quantity}</div>
+                                ${item.filament ? `<div style="font-size:12px; color:#6b7280;">🎨 ${escapeHtml(item.filament)}</div>` : ''}
+                            </div>
+                            ${item.is_contract_price
+                                ? `<input class="order-price-input" type="number" min="0" step="1" data-item-id="${item.id}" value="${item.price || ''}" placeholder="₴">`
+                                : `<div style="font-weight:700; min-width:80px; text-align:right;">${item.price * item.quantity} ₴</div>`}
+                        </div>
+                    `).join('')}
+                    <label style="display:flex; align-items:center; gap:8px; margin:12px 0; font-size:14px;">
+                        <input type="checkbox" id="notify-client-${orderId}">
+                        Надіслати клієнту повідомлення з сумою
+                    </label>
+                    <button class="btn btn-primary" type="button" onclick="saveOrderPricing(${orderId})">💾 Зберегти ціну</button>
+                `;
+            } catch (e) {
+                container.innerHTML = `<div style="color:#e53935;">${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        async function saveOrderPricing(orderId) {
+            const container = document.getElementById(`order-details-${orderId}`);
+            const inputs = container?.querySelectorAll('.order-price-input') || [];
+            const items = Array.from(inputs).map(input => ({
+                id: parseInt(input.dataset.itemId, 10),
+                price: parseInt(input.value, 10) || 0,
+            }));
+            const notifyClient = document.getElementById(`notify-client-${orderId}`)?.checked || false;
+            try {
+                const res = await fetch(API_BASE + `/orders/${orderId}/pricing`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                    body: JSON.stringify({ items, notify_client: notifyClient }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Помилка збереження');
+                showToast('Ціну збережено ✅', 'success');
+                await loadOrders();
+                expandedOrderId = orderId;
+                renderOrderDetails(orderId);
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження ціни', 'error');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════
         // TOAST ПОВІДОМЛЕННЯ
         // ═══════════════════════════════════════════════════════════
 
@@ -2473,23 +2972,50 @@
                 return 'products';
             }
         })();
-        switchPage(['products', 'categories', 'filaments'].includes(savedPage) ? savedPage : 'products');
+        switchPage(['products', 'categories', 'filaments', 'orders'].includes(savedPage) ? savedPage : 'products');
         loadCategories().then(loadProducts);
         loadFilaments();
-        setInterval(loadProducts, 30000); // Оновлення кожні 30 секунд
+        setInterval(loadProducts, 30000);
+
+        const urlOrderId = new URLSearchParams(window.location.search).get('order');
+        if (urlOrderId) {
+            openOrderPricing(parseInt(urlOrderId, 10));
+        }
+
+        document.addEventListener('wheel', (e) => {
+            const target = e.target;
+            if (target instanceof HTMLInputElement && target.type === 'number' && document.activeElement === target) {
+                e.preventDefault();
+            }
+        }, { passive: false });
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
+            if (e.key !== 'Escape') return;
+
+            const confirm = document.getElementById('productUnsavedConfirm');
+            if (confirm.classList.contains('visible')) {
+                hideProductUnsavedConfirm();
+                return;
+            }
+
+            const modal = document.getElementById('modal');
+            if (modal.classList.contains('active')) {
                 closeModal();
             }
         });
 
         // Закриття модального вікна при кліку на фон
         document.getElementById('modal').addEventListener('click', (e) => {
-            if (e.target.id === 'modal') {
-                closeModal();
+            if (e.target.id !== 'modal') return;
+
+            const confirm = document.getElementById('productUnsavedConfirm');
+            if (confirm.classList.contains('visible')) {
+                hideProductUnsavedConfirm();
+                return;
             }
+
+            closeModal();
         });
 
         document.getElementById('categoryModal').addEventListener('click', (e) => {

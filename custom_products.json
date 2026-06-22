@@ -2,58 +2,19 @@
   {
     "id": 101,
     "cat": "custom",
-    "emoji": "🔑",
-    "photos": [],
-    "name": "Брелок з номером авто",
+    "emoji": "📦",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975893/poselyanov3dprint/image_1781975892.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781976001/poselyanov3dprint/image_1781976000.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781976008/poselyanov3dprint/image_1781976007.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975978/poselyanov3dprint/image_1781975977.jpg"
+    ],
+    "name": "Автомобільний номер",
     "mat": "PLA · персоналізований",
-    "price": 70,
-    "oldPrice": 90,
+    "price": 100,
     "hot": false,
-    "custom_fields": "Номер автомобіля"
-  },
-  {
-    "id": 102,
-    "cat": "custom",
-    "emoji": "🏷️",
-    "photos": [],
-    "name": "Брелок з іменем",
-    "mat": "PLA · будь-який колір",
-    "price": 60,
-    "hot": false,
-    "custom_fields": "Ім'я або напис"
-  },
-  {
-    "id": 103,
-    "cat": "custom",
-    "emoji": "🏠",
-    "photos": [],
-    "name": "Підставка з підписом",
-    "mat": "PLA · колір на вибір",
-    "price": 120,
-    "hot": true,
-    "custom_fields": "Текст для підпису (до 20 символів)"
-  },
-  {
-    "id": 104,
-    "cat": "custom",
-    "emoji": "💍",
-    "photos": [],
-    "name": "Каблучка з ініціалами",
-    "mat": "PLA · розмір на вибір",
-    "price": 80,
-    "oldPrice": 100,
-    "hot": false,
-    "custom_fields": "Ініціали (до 3 літер) та розмір каблучки"
-  },
-  {
-    "id": 105,
-    "cat": "custom",
-    "emoji": "🖼️",
-    "photos": [],
-    "name": "Рамка для фото",
-    "mat": "PLA · різні кольори",
-    "price": 150,
-    "hot": true,
-    "custom_fields": "Розмір фото (наприклад 10×15) та колір рамки"
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/477243-car-plate-keychain-creator-openscad#profileId-388283",
+    "custom_fields": "Номер автомобілю"
   }
 ]

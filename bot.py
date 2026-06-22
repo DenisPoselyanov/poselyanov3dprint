@@ -43,6 +43,7 @@ from rich_messages import (
     build_admin_order_with_status,
     build_broadcast_report,
     build_client_order_confirmation,
+    build_client_price_quote,
     build_order_history,
     build_order_status,
     edit_rich_message,
@@ -51,45 +52,69 @@ from rich_messages import (
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
-# =============================================
-BOT_TOKEN  = os.environ.get("BOT_TOKEN")
-OWNER_ID   = int(os.environ.get("OWNER_ID", "718746623"))
-ORDERS_CHAT_ID = int(os.environ.get("ORDERS_CHAT_ID", str(OWNER_ID)))
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://denisposelyanov.github.io/poselyanov3dprint/").strip()
-# Для Render краще використовувати шлях на Persistent Disk, напр. /var/data/users.db
-DB_FILE    = os.environ.get("DB_FILE", "users.db")
-DB_BACKEND = os.environ.get("DB_BACKEND", "sqlite").strip().lower()
-DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
-PRODUCTS_FILE = "products.json"
-CUSTOM_PRODUCTS_FILE = "custom_products.json"
-FILAMENTS_FILE = "filaments.json"
-CATEGORIES_FILE = "categories.json"
-# Локально: false (працює без initData). На проді: true
-VALIDATE_INIT_DATA = os.environ.get("VALIDATE_INIT_DATA", "false").lower() in ("1", "true", "yes")
-# Акція -10% на замовлення від 500 грн: true - увімкнено, false - вимкнено
-PROMOTION_ENABLED = os.environ.get("PROMOTION_ENABLED", "true").lower() in ("1", "true", "yes")
-CORS_ORIGINS = [
-    o.strip() for o in os.environ.get(
-        "CORS_ORIGINS",
-        "https://denisposelyanov.github.io,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5500,http://127.0.0.1:5500",
-    ).split(",") if o.strip()
-]
-
-
-def normalize_origin(value: str) -> str:
-    return (value or "").strip().rstrip("/").lower()
-# Cloudinary налаштування
-cloudinary.config(
-    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", "df5stvc1c"),
-    api_key=os.environ.get("CLOUDINARY_API_KEY", "452626753771953"),
-    api_secret=os.environ.get("CLOUDINARY_API_SECRET", "Tyfsv4pkkdu3bxQyuEeKMVd_dJE")
+import config
+from auth import (
+    cors_headers,
+    extract_init_data,
+    is_admin_authorized,
+    require_admin,
+    resolve_request_user,
+    validate_telegram_init_data,
 )
-# =============================================
+from catalog_store import (
+    CUSTOM_PRODUCTS_CACHE,
+    CATEGORIES_CACHE,
+    FILAMENTS_CACHE,
+    PRODUCTS_CACHE,
+    add_category,
+    add_product,
+    bootstrap_json_catalog,
+    delete_category,
+    delete_product,
+    get_all_categories,
+    get_all_products,
+    get_category_by_id,
+    get_filament_by_id,
+    get_product_by_id,
+    init_catalog_tables,
+    is_contract_product,
+    is_valid_category_id,
+    load_filaments_file,
+    reload_categories_cache,
+    reload_filaments_cache,
+    reload_products_cache,
+    sync_filament_colors_table,
+    update_category,
+    update_filament,
+    update_product,
+    validate_product_prices,
+)
+from db_core import db_connect, is_postgres as _is_postgres, run_db, sql as _sql
+from security_utils import is_safe_http_url, is_static_file_allowed, validate_stl_link
+
+BOT_TOKEN = config.BOT_TOKEN
+OWNER_ID = config.OWNER_ID
+ORDERS_CHAT_ID = config.ORDERS_CHAT_ID
+WEBAPP_URL = config.WEBAPP_URL
+DB_FILE = config.DB_FILE
+VALIDATE_INIT_DATA = config.VALIDATE_INIT_DATA
+PROMOTION_ENABLED = config.PROMOTION_ENABLED
+MAX_UPLOAD_BYTES = config.MAX_UPLOAD_BYTES
+
+if not all([config.CLOUDINARY_CLOUD_NAME, config.CLOUDINARY_API_KEY, config.CLOUDINARY_API_SECRET]):
+    logger_pre = logging.getLogger(__name__)
+    logger_pre.warning("Cloudinary credentials missing — photo upload disabled until .env is configured")
+else:
+    cloudinary.config(
+        cloud_name=config.CLOUDINARY_CLOUD_NAME,
+        api_key=config.CLOUDINARY_API_KEY,
+        api_secret=config.CLOUDINARY_API_SECRET,
+    )
 
 logging.basicConfig(
-    format='%(asctime)s  %(message)s',
-    datefmt='%H:%M:%S',
-    level=logging.INFO
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%H:%M:%S",
+    level=logging.INFO,
 )
 # Глушимо зайві логи
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -99,467 +124,256 @@ logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-def _is_postgres() -> bool:
-    return DB_BACKEND == "postgres"
-
-
-def _sql(query: str) -> str:
-    # sqlite3 використовує ?, psycopg використовує %s
-    return query if not _is_postgres() else query.replace("?", "%s")
-
-
-def db_connect(dict_rows: bool = False):
-    if _is_postgres():
-        if not DATABASE_URL:
-            raise RuntimeError("DATABASE_URL/SUPABASE_DB_URL is required for DB_BACKEND=postgres")
-        if psycopg is None:
-            raise RuntimeError("psycopg is not installed. Add `psycopg[binary]` to requirements.")
-        if dict_rows:
-            return psycopg.connect(DATABASE_URL, row_factory=dict_row)
-        return psycopg.connect(DATABASE_URL)
-
-    conn = sqlite3.connect(DB_FILE)
-    if dict_rows:
-        conn.row_factory = sqlite3.Row
-    return conn
-
-
-# ─── ТОВАРИ ─────────────────────────────────────────────────
-
-def load_products_file(path: str):
-    p = Path(path)
-    if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
-    return []
-
-_products_mtime = 0.0
-_custom_mtime = 0.0
-PRODUCTS_CACHE = load_products_file(PRODUCTS_FILE)
-CUSTOM_PRODUCTS_CACHE = load_products_file(CUSTOM_PRODUCTS_FILE)
-_categories_mtime = 0.0
-CATEGORIES_CACHE: list[dict] = []
-
-_filaments_mtime = 0.0
-FILAMENTS_CACHE: list = []
-
-
-def load_filaments_file(path: str = FILAMENTS_FILE):
-    p = Path(path)
-    if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
-    return []
-
-
-def reload_filaments_cache(force: bool = False):
-    """Перезавантажує filaments.json при зміні файлу."""
-    global FILAMENTS_CACHE, _filaments_mtime
-    fp = Path(FILAMENTS_FILE)
-    if not fp.exists():
+def is_user_blocked(user_id: int) -> bool:
+    if not user_id:
         return False
-    mtime = fp.stat().st_mtime
-    if force or mtime != _filaments_mtime:
-        FILAMENTS_CACHE = load_filaments_file()
-        _filaments_mtime = mtime
+    conn = db_connect()
+    row = conn.execute(_sql("SELECT blocked FROM users WHERE id = ?"), (user_id,)).fetchone()
+    conn.close()
+    return bool(row and row[0])
+
+
+def is_gif_image(file_data: bytes, content_type: str = "") -> bool:
+    if len(file_data) >= 6 and file_data[:6] in (b"GIF87a", b"GIF89a"):
         return True
-    return False
+    return content_type.lower().startswith("image/gif")
 
 
-def save_filaments_to_file():
-    """Зберегти філаменти у JSON файл."""
-    Path(FILAMENTS_FILE).write_text(json.dumps(FILAMENTS_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
-    reload_filaments_cache(force=True)
+def is_webp_image(file_data: bytes, content_type: str = "") -> bool:
+    if len(file_data) >= 12 and file_data[:4] == b"RIFF" and file_data[8:12] == b"WEBP":
+        return True
+    return content_type.lower() == "image/webp"
 
 
-def get_filament_by_id(filament_id: str):
-    reload_filaments_cache()
-    needle = str(filament_id or "").strip()
-    if not needle:
-        return None
-    return next((f for f in FILAMENTS_CACHE if str(f.get("id")) == needle), None)
-
-
-def update_filament(filament_id: str, data: dict):
-    """Оновити існуючий філамент."""
+def is_animated_image(file_data: bytes, content_type: str = "") -> bool:
+    if not (is_gif_image(file_data, content_type) or is_webp_image(file_data, content_type)):
+        return False
     try:
-        filament = get_filament_by_id(filament_id)
-        if not filament:
-            return {"ok": False, "error": "Філамент не знайдено"}
-
-        if "name" in data:
-            name = str(data.get("name", "")).strip()
-            if not name:
-                return {"ok": False, "error": "Назва філаменту не може бути порожньою"}
-            filament["name"] = name
-        if "hex" in data:
-            hex_value = str(data.get("hex", "")).strip()
-            if not hex_value.startswith("#") or len(hex_value) not in (4, 7):
-                return {"ok": False, "error": "Колір має бути у HEX-форматі (#RGB або #RRGGBB)"}
-            filament["hex"] = hex_value
-        if "available" in data:
-            filament["available"] = bool(data.get("available"))
-
-        save_filaments_to_file()
-        logger.info("🎨 Філамент оновлено: %s", filament.get("id"))
-        return {"ok": True, "filament": filament}
-    except Exception as e:
-        logger.error(f"❌ Помилка оновлення філаменту: {e}")
-        return {"ok": False, "error": str(e)}
+        with Image.open(io.BytesIO(file_data)) as img:
+            return getattr(img, "n_frames", 1) > 1
+    except Exception:
+        return is_gif_image(file_data, content_type)
 
 
-reload_filaments_cache(force=True)
+ANIMATED_MAX_MEGAPIXELS = 45.0
+ANIMATED_MIN_WIDTH = 320
+ANIMATED_MAX_FRAMES = 80
+ANIMATED_RESAMPLE = Image.Resampling.BILINEAR
+
+STATIC_MAX_WIDTH = 1200
+STATIC_JPEG_QUALITY = 85
+STATIC_WEBP_QUALITY = 85
+STATIC_REENCODE_MIN_BYTES = 300 * 1024  # 300 KB
 
 
-def load_categories_file(path: str = CATEGORIES_FILE):
-    p = Path(path)
-    if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
-    return []
+def _animated_frame_indices(n_frames: int, max_frames: int = ANIMATED_MAX_FRAMES) -> list[int]:
+    if n_frames <= max_frames:
+        return list(range(n_frames))
+    step = max(1, (n_frames + max_frames - 1) // max_frames)
+    return list(range(0, n_frames, step))
 
 
-def reload_categories_cache(force: bool = False):
-    """Перезавантажує categories.json при зміні файлу."""
-    global CATEGORIES_CACHE, _categories_mtime
-    fp = Path(CATEGORIES_FILE)
-    if not fp.exists():
-        return False
-    mtime = fp.stat().st_mtime
-    if force or mtime != _categories_mtime:
-        CATEGORIES_CACHE = load_categories_file()
-        _categories_mtime = mtime
-        return True
-    return False
+def prepare_animated_for_upload(file_data: bytes, content_type: str = "", max_megapixels: float = ANIMATED_MAX_MEGAPIXELS) -> bytes:
+    """Зменшити анімований GIF/WebP, якщо сума пікселів у кадрах перевищує ліміт Cloudinary (50 MP)."""
+    try:
+        with Image.open(io.BytesIO(file_data)) as img:
+            width, height = img.size
+            n_frames = getattr(img, "n_frames", 1)
+            frame_indices = _animated_frame_indices(n_frames)
+            effective_frames = len(frame_indices)
+            total_mp = (width * height * effective_frames) / 1_000_000
+            needs_resize = total_mp > max_megapixels
+            needs_reencode = needs_resize or effective_frames < n_frames
+            if not needs_reencode:
+                return file_data
 
+            new_w, new_h = width, height
+            if needs_resize:
+                scale = (max_megapixels / total_mp) ** 0.5
+                new_w = max(ANIMATED_MIN_WIDTH, int(width * scale))
+                new_h = max(1, int(height * new_w / width))
+            output_format = "WEBP" if is_webp_image(file_data, content_type) else "GIF"
+            frame_step = frame_indices[1] - frame_indices[0] if len(frame_indices) > 1 else 1
 
-reload_categories_cache(force=True)
+            frames = []
+            durations = []
+            loop = img.info.get("loop", 0)
 
+            for frame_idx in frame_indices:
+                img.seek(frame_idx)
+                frame = img.convert("RGBA")
+                if needs_resize:
+                    frame = frame.resize((new_w, new_h), ANIMATED_RESAMPLE)
+                if output_format == "GIF":
+                    frames.append(frame.convert("P", palette=Image.ADAPTIVE, colors=256))
+                else:
+                    frames.append(frame)
+                durations.append(max(20, img.info.get("duration", 100) * frame_step))
 
-def reload_products_cache(force: bool = False):
-    """Перезавантажує products.json / custom_products.json якщо файл змінився."""
-    global PRODUCTS_CACHE, CUSTOM_PRODUCTS_CACHE, _products_mtime, _custom_mtime
-    changed = False
-    for path, attr_mtime, attr_cache in (
-        (PRODUCTS_FILE, "_products_mtime", "PRODUCTS_CACHE"),
-        (CUSTOM_PRODUCTS_FILE, "_custom_mtime", "CUSTOM_PRODUCTS_CACHE"),
-    ):
-        fp = Path(path)
-        if not fp.exists():
-            continue
-        mtime = fp.stat().st_mtime
-        current_mtime = _products_mtime if path == PRODUCTS_FILE else _custom_mtime
-        if force or mtime != current_mtime:
-            data = load_products_file(path)
-            if path == PRODUCTS_FILE:
-                PRODUCTS_CACHE = data
-                _products_mtime = mtime
+            out = io.BytesIO()
+            if output_format == "GIF":
+                frames[0].save(
+                    out,
+                    format="GIF",
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=durations,
+                    loop=loop,
+                    disposal=2,
+                )
             else:
-                CUSTOM_PRODUCTS_CACHE = data
-                _custom_mtime = mtime
-            changed = True
-            logger.info("🔄 Оновлено кеш: %s (%s товарів)", path, len(data))
-    return changed
+                frames[0].save(
+                    out,
+                    format="WEBP",
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=durations,
+                    loop=loop,
+                    lossless=False,
+                    quality=85,
+                    method=4,
+                )
+            logger.info(
+                f"{output_format} оптимізовано: {width}x{height}x{n_frames} ({total_mp:.1f} MP) "
+                f"-> {new_w}x{new_h}x{effective_frames}"
+            )
+            return out.getvalue()
+    except Exception as e:
+        logger.warning(f"⚠️ Не вдалося оптимізувати анімоване зображення локально: {e}")
+        return file_data
 
 
-def get_product_by_id(product_id: int):
-    reload_products_cache()
-    if not product_id:
+def prepare_static_for_upload(file_data: bytes, content_type: str = "") -> tuple[bytes, str]:
+    """Стиск статичних зображень перед завантаженням (paste, файл, URL)."""
+    try:
+        with Image.open(io.BytesIO(file_data)) as img:
+            if getattr(img, "n_frames", 1) > 1:
+                return file_data, content_type
+
+            width, height = img.size
+            needs_resize = width > STATIC_MAX_WIDTH
+            needs_compress = len(file_data) > STATIC_REENCODE_MIN_BYTES
+            if not needs_resize and not needs_compress:
+                return file_data, content_type
+
+            work = img
+            if needs_resize:
+                new_w = STATIC_MAX_WIDTH
+                new_h = max(1, int(height * new_w / width))
+                work = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+            has_alpha = work.mode in ("RGBA", "LA") or (
+                work.mode == "P" and "transparency" in work.info
+            )
+
+            out = io.BytesIO()
+            if has_alpha:
+                if work.mode != "RGBA":
+                    work = work.convert("RGBA")
+                work.save(out, format="WEBP", quality=STATIC_WEBP_QUALITY, method=4)
+                new_type = "image/webp"
+            else:
+                if work.mode != "RGB":
+                    work = work.convert("RGB")
+                work.save(out, format="JPEG", quality=STATIC_JPEG_QUALITY, optimize=True)
+                new_type = "image/jpeg"
+
+            optimized = out.getvalue()
+            logger.info(
+                f"Статичне фото оптимізовано: {width}x{height} "
+                f"{len(file_data) // 1024}KB -> {len(optimized) // 1024}KB"
+            )
+            return optimized, new_type
+    except Exception as e:
+        logger.warning(f"⚠️ Не вдалося оптимізувати статичне зображення: {e}")
+        return file_data, content_type
+
+
+def normalize_image_content_type(file_data: bytes, content_type: str = "") -> str:
+    if is_gif_image(file_data, content_type):
+        return "image/gif"
+    if is_webp_image(file_data, content_type):
+        return "image/webp"
+    return content_type
+
+
+def get_admin_webapp_url(order_id: int | None = None) -> str | None:
+    admin_url = (os.environ.get("ADMIN_WEBAPP_URL") or "").strip()
+    if not admin_url or not admin_url.lower().startswith("https://"):
         return None
-    for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE:
-        if p.get("id") == product_id:
-            return p
-    return None
+    if "ngrok" in admin_url and "bypass=admin" not in admin_url:
+        sep = "&" if "?" in admin_url else "?"
+        admin_url = f"{admin_url}{sep}bypass=admin"
+    if order_id:
+        sep = "&" if "?" in admin_url else "?"
+        admin_url = f"{admin_url}{sep}order={order_id}"
+    return admin_url
 
 
-# ─── АДМІН ФУНКЦІЇ ──────────────────────────────────────────
+def fetch_image_bytes_from_url(url: str, max_bytes: int = MAX_UPLOAD_BYTES) -> tuple[bytes, str]:
+    import urllib.request
 
-def get_all_products():
-    """Отримати всі товари (products + custom_products змішані)"""
-    reload_products_cache()
-    return PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE
+    if not is_safe_http_url(url):
+        raise ValueError("URL не дозволений для завантаження")
 
-
-def get_all_categories(active_only: bool = True):
-    reload_categories_cache()
-    categories = sorted(CATEGORIES_CACHE, key=lambda c: c.get("order", 999))
-    if active_only:
-        return [c for c in categories if c.get("active", True)]
-    return categories
-
-
-def get_category_by_id(category_id: str):
-    if not category_id:
-        return None
-    category_id = str(category_id).strip()
-    for category in get_all_categories(active_only=False):
-        if category.get("id") == category_id:
-            return category
-    return None
-
-
-def is_valid_category_id(category_id: str):
-    category = get_category_by_id(category_id)
-    return bool(category and category.get("active", True))
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "poselyanov3dprint-admin/1.0"},
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        content_type = resp.headers.get("Content-Type", "")
+        chunks = []
+        total = 0
+        while True:
+            chunk = resp.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(f"Файл занадто великий (>{max_bytes // 1024 // 1024}MB)")
+            chunks.append(chunk)
+        return b"".join(chunks), content_type
 
 
-def save_products_to_file():
-    """Зберегти товари в JSON файли"""
-    Path(PRODUCTS_FILE).write_text(json.dumps(PRODUCTS_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
-    Path(CUSTOM_PRODUCTS_FILE).write_text(json.dumps(CUSTOM_PRODUCTS_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
-    reload_products_cache(force=True)
-
-
-def save_categories_to_file():
-    """Зберегти категорії в JSON файл"""
-    Path(CATEGORIES_FILE).write_text(json.dumps(CATEGORIES_CACHE, ensure_ascii=False, indent=2), encoding="utf-8")
-    reload_categories_cache(force=True)
-
-
-def add_product(data: dict):
-    """Додати новий товар"""
+def upload_photo_to_cloudinary_sync(file_data: bytes, filename: str = "product_photo", content_type: str = ""):
+    """Завантажити фото на Cloudinary з оптимізацією (синхронно, для asyncio.to_thread)."""
     try:
-        category_id = data.get("cat", "toy")
-        if not is_valid_category_id(category_id):
-            return {"ok": False, "error": "Невірна або неактивна категорія"}
+        if len(file_data) > MAX_UPLOAD_BYTES:
+            return {"ok": False, "error": f"Файл занадто великий ({len(file_data) / 1024 / 1024:.1f}MB). Максимум {MAX_UPLOAD_BYTES // 1024 // 1024}MB"}
 
-        is_custom = category_id == "custom"
-        target_list = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
-
-        if not target_list:
-            new_id = 101 if is_custom else 1
+        content_type = normalize_image_content_type(file_data, content_type)
+        is_animated = is_animated_image(file_data, content_type)
+        original_data = file_data
+        if is_animated:
+            file_data = prepare_animated_for_upload(original_data, content_type)
         else:
-            new_id = max(p.get("id", 0) for p in target_list) + 1
+            file_data, content_type = prepare_static_for_upload(file_data, content_type)
+            content_type = normalize_image_content_type(file_data, content_type)
 
-        product = {
-            "id": new_id,
-            "cat": category_id,
-            "emoji": data.get("emoji", "📦"),
-            "photos": data.get("photos", []),
-            "name": data.get("name", ""),
-            "mat": data.get("mat", ""),
-            "price": int(data.get("price", 0)),
+        upload_opts = {
+            "folder": "poselyanov3dprint",
+            "resource_type": "image",
+            "public_id": f"{filename}_{int(datetime.now().timestamp())}",
         }
-
-        if data.get("oldPrice"):
-            product["oldPrice"] = int(data["oldPrice"])
-        
-        product["hot"] = data.get("hot", False)
-        product["pinned"] = data.get("pinned", False)
-        product["stlLink"] = data.get("stlLink", "")  # Додаємо поле для посилання на STL файл
-
-        if is_custom:
-            product["custom_fields"] = data.get("custom_fields", "")
+        if not is_animated:
+            # Оптимізація статичних зображень: стиск до 1000px ширини
+            upload_opts.update(
+                width=1000,
+                crop="scale",
+                quality="auto:good",
+                fetch_format="auto",
+            )
         else:
-            product["gift"] = data.get("gift", False)
-            if "filamentChoice" in data:
-                product["filamentChoice"] = data.get("filamentChoice", True)
+            upload_opts["flags"] = "lossy"
 
-        target_list.append(product)
-        save_products_to_file()
-        logger.info(f"✅ Товар додано: {product['name']} (ID: {new_id})")
-        return {"ok": True, "id": new_id}
-
-    except Exception as e:
-        logger.error(f"❌ Помилка додавання товару: {e}")
-        return {"ok": False, "error": str(e)}
-
-
-def update_product(product_id: int, data: dict):
-    """Редагувати існуючий товар"""
-    try:
-        product = get_product_by_id(product_id)
-        if not product:
-            return {"ok": False, "error": "Товар не знайдено"}
-
-        if "cat" in data and not is_valid_category_id(data.get("cat")):
-            return {"ok": False, "error": "Невірна або неактивна категорія"}
-
-        current_category = product.get("cat")
-        next_category = data.get("cat", current_category)
-        is_current_custom = current_category == "custom"
-        is_next_custom = next_category == "custom"
-
-        if is_current_custom != is_next_custom:
-            source_list = CUSTOM_PRODUCTS_CACHE if is_current_custom else PRODUCTS_CACHE
-            destination_list = CUSTOM_PRODUCTS_CACHE if is_next_custom else PRODUCTS_CACHE
-            source_list[:] = [p for p in source_list if p.get("id") != product_id]
-            destination_list.append(product)
-
-        product["cat"] = next_category
-
-        product.update({
-            "emoji": data.get("emoji", product.get("emoji")),
-            "photos": data.get("photos", product.get("photos", [])),
-            "name": data.get("name", product.get("name")),
-            "mat": data.get("mat", product.get("mat")),
-            "hot": data.get("hot", product.get("hot", False)),
-            "pinned": data.get("pinned", product.get("pinned", False)),
-            "stlLink": data.get("stlLink", product.get("stlLink", "")),  # Додаємо поле для посилання на STL файл
-        })
-
-        if data.get("price") is not None:
-            product["price"] = int(data["price"])
-
-        if data.get("oldPrice"):
-            product["oldPrice"] = int(data["oldPrice"])
-        elif "oldPrice" in product and not data.get("oldPrice"):
-            del product["oldPrice"]
-
-        if not is_next_custom:
-            product["gift"] = data.get("gift", product.get("gift", False))
-            if "filamentChoice" in data:
-                product["filamentChoice"] = data.get("filamentChoice")
-            product.pop("custom_fields", None)
-        else:
-            product["custom_fields"] = data.get("custom_fields", product.get("custom_fields", ""))
-            product.pop("gift", None)
-            product.pop("filamentChoice", None)
-
-        save_products_to_file()
-        logger.info(f"✏️ Товар оновлено: {product['name']} (ID: {product_id})")
-        return {"ok": True}
-
-    except Exception as e:
-        logger.error(f"❌ Помилка редагування товару: {e}")
-        return {"ok": False, "error": str(e)}
-
-
-def add_category(data: dict):
-    """Додати нову категорію"""
-    try:
-        category_id = str(data.get("id", "")).strip().lower()
-        name = str(data.get("name", "")).strip()
-        emoji = str(data.get("emoji", "")).strip() or "📦"
-        badge_class = str(data.get("badgeClass", "")).strip() or f"category-{category_id}"
-
-        if not category_id or not name:
-            return {"ok": False, "error": "ID та назва категорії обов'язкові"}
-        if get_category_by_id(category_id):
-            return {"ok": False, "error": "Категорія з таким ID вже існує"}
-
-        max_order = max((c.get("order", 0) for c in CATEGORIES_CACHE), default=0)
-        category = {
-            "id": category_id,
-            "name": name,
-            "emoji": emoji,
-            "badgeClass": badge_class,
-            "order": int(data.get("order", max_order + 1)),
-            "active": bool(data.get("active", True)),
-            "quickSlot": data.get("quickSlot"),
-        }
-        CATEGORIES_CACHE.append(category)
-        save_categories_to_file()
-        return {"ok": True, "category": category}
-    except Exception as e:
-        logger.error(f"❌ Помилка додавання категорії: {e}")
-        return {"ok": False, "error": str(e)}
-
-
-def update_category(category_id: str, data: dict):
-    """Оновити категорію"""
-    try:
-        category = get_category_by_id(category_id)
-        if not category:
-            return {"ok": False, "error": "Категорія не знайдена"}
-
-        if "id" in data:
-            new_id = str(data.get("id", "")).strip().lower()
-            if not new_id:
-                return {"ok": False, "error": "ID категорії не може бути порожнім"}
-            if new_id != category_id and get_category_by_id(new_id):
-                return {"ok": False, "error": "Категорія з таким ID вже існує"}
-            if new_id != category_id:
-                for product in get_all_products():
-                    if product.get("cat") == category_id:
-                        product["cat"] = new_id
-                category["id"] = new_id
-
-        if "name" in data:
-            name = str(data.get("name", "")).strip()
-            if not name:
-                return {"ok": False, "error": "Назва категорії не може бути порожньою"}
-            category["name"] = name
-
-        if "emoji" in data:
-            category["emoji"] = str(data.get("emoji", "")).strip() or "📦"
-        if "badgeClass" in data:
-            category["badgeClass"] = str(data.get("badgeClass", "")).strip()
-        if "order" in data:
-            category["order"] = int(data.get("order", category.get("order", 0)))
-        if "active" in data:
-            category["active"] = bool(data.get("active"))
-        if "quickSlot" in data:
-            slot = data.get("quickSlot")
-            category["quickSlot"] = int(slot) if slot is not None else None
-
-        save_categories_to_file()
-        save_products_to_file()
-        return {"ok": True, "category": category}
-    except Exception as e:
-        logger.error(f"❌ Помилка оновлення категорії: {e}")
-        return {"ok": False, "error": str(e)}
-
-
-def delete_category(category_id: str):
-    """Видалити категорію, якщо вона не використовується товарами"""
-    try:
-        category = get_category_by_id(category_id)
-        if not category:
-            return {"ok": False, "error": "Категорія не знайдена"}
-
-        products_in_category = [p for p in get_all_products() if p.get("cat") == category_id]
-        if products_in_category:
-            return {
-                "ok": False,
-                "error": f"Не можна видалити категорію: у ній є товари ({len(products_in_category)})",
-            }
-
-        CATEGORIES_CACHE[:] = [c for c in CATEGORIES_CACHE if c.get("id") != category_id]
-        save_categories_to_file()
-        return {"ok": True}
-    except Exception as e:
-        logger.error(f"❌ Помилка видалення категорії: {e}")
-        return {"ok": False, "error": str(e)}
-
-
-def delete_product(product_id: int):
-    """Видалити товар"""
-    try:
-        product = get_product_by_id(product_id)
-        if not product:
-            return {"ok": False, "error": "Товар не знайдено"}
-
-        is_custom = product.get("cat") == "custom"
-        target_list = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
-
-        target_list[:] = [p for p in target_list if p.get("id") != product_id]
-        save_products_to_file()
-        logger.info(f"🗑️ Товар видалено: {product['name']} (ID: {product_id})")
-        return {"ok": True}
-
-    except Exception as e:
-        logger.error(f"❌ Помилка видалення товару: {e}")
-        return {"ok": False, "error": str(e)}
-
-
-async def upload_photo_to_cloudinary(file_data: bytes, filename: str = "product_photo"):
-    """Завантажити фото на Cloudinary з оптимізацією"""
-    try:
-        # Перевірка розміру файлу (максимум 25 MB)
-        max_size = 25 * 1024 * 1024  # 25 MB
-        if len(file_data) > max_size:
-            return {"ok": False, "error": f"Файл занадто великий ({len(file_data) / 1024 / 1024:.1f}MB). Максимум 25MB"}
-        
-        # Оптимізація зображення: стиск до 1000px ширини, якість 85%
-        result = cloudinary.uploader.upload(
-            file_data,
-            folder="poselyanov3dprint",
-            resource_type="auto",
-            public_id=f"{filename}_{int(datetime.now().timestamp())}",
-            # Оптимізація
-            width=1000,
-            crop="scale",
-            quality="auto:good",  # Автоматична якість
-            fetch_format="auto"   # Автоматичний формат (webp для сучасних браузерів)
-        )
+        try:
+            result = cloudinary.uploader.upload(file_data, **upload_opts)
+        except Exception as first_error:
+            if is_animated and "Megapixels" in str(first_error):
+                file_data = prepare_animated_for_upload(original_data, content_type, max_megapixels=30.0)
+                result = cloudinary.uploader.upload(file_data, **upload_opts)
+            else:
+                raise first_error
         return {
             "ok": True, 
             "url": result.get("secure_url"),
@@ -569,108 +383,32 @@ async def upload_photo_to_cloudinary(file_data: bytes, filename: str = "product_
         }
     except Exception as e:
         logger.error(f"❌ Помилка завантаження на Cloudinary: {e}")
-        return {"ok": False, "error": str(e)}
+        err = str(e)
+        if "Megapixels" in err:
+            err = "GIF/WebP занадто великий для завантаження. Спробуй коротший або менший файл (до ~50 млн пікселів у всіх кадрах)."
+        return {"ok": False, "error": err}
 
 
-
-def validate_telegram_init_data(init_data: str) -> dict | None:
-    if not init_data or not BOT_TOKEN:
-        return None
-    try:
-        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
-        received_hash = parsed.pop("hash", None)
-        if not received_hash:
-            return None
-        check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
-        secret = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
-        calc = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
-        if calc != received_hash:
-            return None
-        user = json.loads(parsed.get("user", "{}")) if parsed.get("user") else {}
-        return {
-            "user_id": user.get("id"),
-            "username": user.get("username"),
-            "first_name": user.get("first_name"),
-        }
-    except Exception:
-        return None
-
-
-def cors_headers(request: web.Request) -> dict:
-    origin = request.headers.get("Origin", "")
-    normalized_origin = normalize_origin(origin)
-    normalized_allowed = {normalize_origin(o): o.rstrip("/") for o in CORS_ORIGINS if o.strip()}
-
-    allow = "*"
-    if normalized_origin and ("*" in CORS_ORIGINS or normalized_origin in normalized_allowed):
-        allow = origin.rstrip("/")
-    elif CORS_ORIGINS and CORS_ORIGINS[0] != "*":
-        allow = CORS_ORIGINS[0].rstrip("/")
-    return {
-        "Access-Control-Allow-Origin": allow,
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data",
-        "Vary": "Origin",
-    }
+async def upload_photo_to_cloudinary(file_data: bytes, filename: str = "product_photo", content_type: str = ""):
+    return await asyncio.to_thread(upload_photo_to_cloudinary_sync, file_data, filename, content_type)
 
 
 async def handle_options(request: web.Request):
-    """Обробник CORS preflight запитів"""
     return web.Response(status=200, headers=cors_headers(request))
 
 
-def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None, web.Response | None]:
-    init_data = request.headers.get("X-Telegram-Init-Data") or data.get("init_data") or ""
-    auth = validate_telegram_init_data(init_data) if init_data else None
-
-    if VALIDATE_INIT_DATA:
-        if not auth or not auth.get("user_id"):
-            return None, web.json_response(
-                {"ok": False, "error": "invalid_init_data"},
-                status=403,
-                headers=cors_headers(request),
-            )
-        return auth, None
-
-    if auth and auth.get("user_id"):
-        return auth, None
-
-    uid = data.get("user_id")
-    if uid:
-        return {
-            "user_id": uid,
-            "username": (data.get("tg_username") or data.get("username") or "").lstrip("@"),
-            "first_name": data.get("first_name") or "",
-        }, None
-
-    return {"user_id": 0, "username": "", "first_name": ""}, None
-
-
-def is_local_dev_origin(request: web.Request) -> bool:
-    origin = request.headers.get("Origin", "").strip()
-    if not origin:
-        return False
-    try:
-        host = (urlparse(origin).hostname or "").lower()
-        return host in {"localhost", "127.0.0.1"}
-    except Exception:
-        return False
-
-
-def is_admin_authorized(request: web.Request, auth: dict | None) -> bool:
-    # In Telegram context we still require strict owner validation.
-    if auth and auth.get("user_id") == OWNER_ID:
-        return True
-    # For local browser-based development, allow requests from localhost origins.
-    if is_local_dev_origin(request):
-        return True
-    return False
+async def handle_health(request: web.Request):
+    return web.json_response(
+        {"ok": True, "validate_init_data": VALIDATE_INIT_DATA, "catalog_backend": config.CATALOG_BACKEND},
+        headers=cors_headers(request),
+    )
 
 
 def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
     """Перерахунок суми на сервері. Повертає (ok, result_dict|error_message)."""
     reload_products_cache()
     reload_filaments_cache()
+    products_by_id = {p["id"]: p for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE}
     if not items:
         return False, "Порожній кошик"
 
@@ -680,10 +418,15 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
     for raw in items:
         pid = int(raw.get("product_id") or raw.get("id") or 0)
         qty = max(1, min(99, int(raw.get("quantity", 1))))
-        product = get_product_by_id(pid)
+        product = products_by_id.get(pid)
+        is_contract = False
 
         if product:
-            price = int(product["price"])
+            if is_contract_product(product):
+                price = 0
+                is_contract = True
+            else:
+                price = int(product["price"])
             name = product["name"]
         elif raw.get("fromCustom"):
             price = int(raw.get("price", 0))
@@ -713,7 +456,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                     return False, f"Колір «{meta.get('name', '')}» зараз недоступний для замовлення"
                 filament_name = str(meta.get("name") or "").strip()
 
-        subtotal += price * qty
+        if not is_contract:
+            subtotal += price * qty
         normalized.append({
             "product_id": pid,
             "product_name": name,
@@ -723,6 +467,7 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
             "fromCustom": bool(raw.get("fromCustom")),
             "filament_id": filament_id,
             "filament_name": filament_name,
+            "is_contract_price": is_contract,
         })
 
     discount = 0
@@ -732,16 +477,10 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
             return False, coupon_result.get("message", "Невалідний купон")
         discount = int(coupon_result.get("discount", 0))
 
-    # Обчислюємо суму після застосування купона
     after_coupon_total = max(0, subtotal - discount)
-    
-    # Перевіряємо акцію -10% на замовлення від 500 грн
-    # Якщо купон застосовано, акція відключається (не підсумовується)
     promotion_discount = 0 if coupon_code else check_promotion(after_coupon_total)
-    
-    # Загальна сума з урахуванням обох знижок
     server_total = max(0, after_coupon_total - promotion_discount)
-    
+
     if server_total != int(client_total):
         return False, f"Сума не збігається (клієнт {client_total}, сервер {server_total})"
 
@@ -751,6 +490,7 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         "coupon_discount": discount,
         "promotion_discount": promotion_discount,
         "total_price": server_total,
+        "price_pending": 1 if any(i.get("is_contract_price") for i in normalized) else 0,
     }
 
 
@@ -826,9 +566,12 @@ def init_db():
         """)
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS personal_user_id BIGINT")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_pending INTEGER DEFAULT 0")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked)")
+        init_catalog_tables(conn)
     else:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -901,35 +644,14 @@ def init_db():
         oi_cols = [row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()]
         if "filament" not in oi_cols:
             conn.execute("ALTER TABLE order_items ADD COLUMN filament TEXT DEFAULT ''")
+        if "is_contract_price" not in oi_cols:
+            conn.execute("ALTER TABLE order_items ADD COLUMN is_contract_price INTEGER DEFAULT 0")
+        o_cols = [row[1] for row in conn.execute("PRAGMA table_info(orders)").fetchall()]
+        if "price_pending" not in o_cols:
+            conn.execute("ALTER TABLE orders ADD COLUMN price_pending INTEGER DEFAULT 0")
 
-    for r in load_filaments_file():
-        if _is_postgres():
-            conn.execute(
-                """
-                INSERT INTO filament_colors (id, name, hex, available)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (id) DO UPDATE
-                SET name = EXCLUDED.name,
-                    hex = EXCLUDED.hex,
-                    available = EXCLUDED.available
-                """,
-                (
-                    r.get("id"),
-                    r.get("name"),
-                    r.get("hex") or "",
-                    1 if r.get("available") else 0,
-                ),
-            )
-        else:
-            conn.execute(
-                "INSERT OR REPLACE INTO filament_colors (id, name, hex, available) VALUES (?, ?, ?, ?)",
-                (
-                    r.get("id"),
-                    r.get("name"),
-                    r.get("hex") or "",
-                    1 if r.get("available") else 0,
-                ),
-            )
+    for r in load_filaments_file(config.FILAMENTS_FILE):
+        sync_filament_colors_table(conn, r)
 
     conn.commit()
     conn.close()
@@ -951,26 +673,27 @@ def save_user(user):
     conn.close()
 
 # Функція для збереження замовлення в базі даних, яка приймає всі необхідні дані про замовлення (користувача, товари, загальну суму, коментар, подарунок і купон), зберігає їх у відповідних таблицях (orders і order_items) і повертає ID створеного замовлення для подальшого використання в логах і кнопках.
-def save_order(user_id, username, first_name, items, total_price, comment, gift_product_name=None, coupon_code=None, discount_amount=0):
+def save_order(user_id, username, first_name, items, total_price, comment, gift_product_name=None, coupon_code=None, discount_amount=0, price_pending=0):
     conn = db_connect()
     if _is_postgres():
         cursor = conn.execute("""
-            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'new')
+            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status, price_pending)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'new', %s)
             RETURNING id
-        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount))
+        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, int(price_pending or 0)))
         order_id = cursor.fetchone()[0]
     else:
         cursor = conn.execute("""
-            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')
-        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount))
+            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status, price_pending)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
+        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, int(price_pending or 0)))
         order_id = cursor.lastrowid
     for item in items:
         fl = (item.get("filament_name") or item.get("filament_id") or "").strip()
+        is_contract = 1 if item.get("is_contract_price") else 0
         conn.execute(_sql("""
-            INSERT INTO order_items (order_id, product_id, product_name, price, quantity, filament)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO order_items (order_id, product_id, product_name, price, quantity, filament, is_contract_price)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """), (
             order_id,
             int(item.get("product_id") or item.get("id") or 0),
@@ -978,6 +701,7 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
             int(item.get("price", 0)),
             int(item.get("quantity", 1)),
             fl,
+            is_contract,
         ))
 
     # Якщо є подарунок, додаємо його як окремий рядок в order_items з ціною 0 і спеціальною назвою для зручності відображення в звітах і повідомленнях
@@ -1004,17 +728,20 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
 # Функція для отримання статистики по користувачах і замовленнях, яка використовується в адмінській команді /stats для відображення актуальної інформації про діяльність бота.
 def get_stats():
     conn = db_connect()
-    user_count       = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    order_count      = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
-    order_confirmed  = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'confirmed'").fetchone()[0]
-    order_draft      = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'draft'").fetchone()[0]
-    order_cancelled  = conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'cancelled'").fetchone()[0]
-    earned = conn.execute("SELECT SUM(total_price) FROM orders WHERE status = 'confirmed'").fetchone()[0] or 0
-    recent           = conn.execute(
+    row = conn.execute("""
+        SELECT
+            (SELECT COUNT(*) FROM users) AS user_count,
+            (SELECT COUNT(*) FROM orders) AS order_count,
+            (SELECT COUNT(*) FROM orders WHERE status = 'confirmed') AS order_confirmed,
+            (SELECT COUNT(*) FROM orders WHERE status = 'draft') AS order_draft,
+            (SELECT COUNT(*) FROM orders WHERE status = 'cancelled') AS order_cancelled,
+            (SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE status = 'confirmed') AS earned,
+            (SELECT COALESCE(SUM(discount_amount), 0) FROM orders WHERE status = 'confirmed') AS total_discount
+    """).fetchone()
+    user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, total_discount = row
+    recent = conn.execute(
         "SELECT name, username FROM users ORDER BY joined_at DESC LIMIT 10"
     ).fetchall()
-
-    # Витягуємо топ-5 найпопулярніших товарів серед підтверджених замовлень
     top_products = conn.execute("""
         SELECT oi.product_name, SUM(oi.quantity) as cnt
         FROM order_items oi
@@ -1024,8 +751,6 @@ def get_stats():
         ORDER BY cnt DESC
         LIMIT 5
     """).fetchall()
-
-    # Витягуємо статистику по купонам: код, кількість використань і загальну суму знижки, яку вони надали. Це дозволяє адміністраторам оцінити ефективність кожного купона і приймати рішення про їх подальше використання або модифікацію.
     coupon_stats = conn.execute("""
         SELECT c.code, c.uses_count,
                COALESCE(SUM(o.discount_amount), 0) as total_discount
@@ -1035,9 +760,6 @@ def get_stats():
         ORDER BY c.uses_count DESC
         LIMIT 3
     """).fetchall()
-    total_discount = conn.execute(
-        "SELECT COALESCE(SUM(discount_amount), 0) FROM orders WHERE status = 'confirmed'"
-    ).fetchone()[0]
     conn.close()
     return user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent, top_products, coupon_stats, total_discount
 
@@ -1078,6 +800,10 @@ def check_coupon(code: str, user_id: int, cart_total: int):
         if used:
             conn.close()
             return {"valid": False, "message": "Ти вже використовував цей купон ❌"}
+
+    if c.get('personal_user_id') and user_id and int(c['personal_user_id']) != int(user_id):
+        conn.close()
+        return {"valid": False, "message": "Цей купон призначений іншому користувачу ❌"}
 
     conn.close()
 
@@ -1121,18 +847,85 @@ def get_order_with_items(order_id: int):
     conn = db_connect(dict_rows=True)
     order = conn.execute(_sql("""
         SELECT id, user_id, username, first_name, total_price, comment,
-               gift_product_name, coupon_code, discount_amount, status, ordered_at
+               gift_product_name, coupon_code, discount_amount, status, ordered_at, price_pending
         FROM orders WHERE id = ?
     """), (order_id,)).fetchone()
     if not order:
         conn.close()
         return None, []
     items = conn.execute(_sql("""
-        SELECT product_id, product_name, price, quantity, filament
+        SELECT id, product_id, product_name, price, quantity, filament, is_contract_price
         FROM order_items WHERE order_id = ?
     """), (order_id,)).fetchall()
     conn.close()
     return order, items
+
+
+def list_orders(*, pending_price_only: bool = False, limit: int = 50):
+    conn = db_connect(dict_rows=True)
+    sql = """
+        SELECT id, user_id, username, first_name, total_price, comment,
+               gift_product_name, coupon_code, discount_amount, status, ordered_at, price_pending
+        FROM orders
+    """
+    params: list = []
+    if pending_price_only:
+        sql += " WHERE price_pending = ?"
+        params.append(1)
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(int(limit))
+    rows = conn.execute(_sql(sql), tuple(params)).fetchall()
+    conn.close()
+    return rows
+
+
+def update_order_pricing(order_id: int, item_prices: dict[int, int]) -> dict:
+    conn = db_connect(dict_rows=True)
+    order = conn.execute(_sql("""
+        SELECT id, discount_amount, user_id, first_name
+        FROM orders WHERE id = ?
+    """), (order_id,)).fetchone()
+    if not order:
+        conn.close()
+        return {"ok": False, "error": "Замовлення не знайдено"}
+
+    for item_id, price in item_prices.items():
+        new_price = max(0, int(price))
+        conn.execute(_sql("""
+            UPDATE order_items
+            SET price = ?, is_contract_price = 0
+            WHERE id = ? AND order_id = ?
+        """), (new_price, int(item_id), order_id))
+
+    items = conn.execute(_sql("""
+        SELECT id, product_name, price, quantity, is_contract_price
+        FROM order_items WHERE order_id = ?
+    """), (order_id,)).fetchall()
+
+    subtotal = sum(
+        int(i.get("price") or 0) * int(i.get("quantity") or 1)
+        for i in items
+        if not str(i.get("product_name", "")).startswith("🎁")
+    )
+    discount = int(order.get("discount_amount") or 0)
+    total = max(0, subtotal - discount)
+    still_pending = any(
+        int(i.get("is_contract_price") or 0)
+        for i in items
+        if not str(i.get("product_name", "")).startswith("🎁")
+    )
+    conn.execute(_sql("""
+        UPDATE orders SET total_price = ?, price_pending = ? WHERE id = ?
+    """), (total, 1 if still_pending else 0, order_id))
+    conn.commit()
+    conn.close()
+    return {
+        "ok": True,
+        "total_price": total,
+        "price_pending": still_pending,
+        "user_id": order.get("user_id"),
+        "first_name": order.get("first_name"),
+    }
 
 
 def find_gift_product_id(gift_name: str | None) -> int | None:
@@ -1194,7 +987,7 @@ async def catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != 718746623:
+    if update.message.from_user.id != OWNER_ID:
         return
     user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent, top_products, coupon_stats, total_discount = get_stats()
     lines = [
@@ -1226,7 +1019,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != 718746623:
+    if update.message.from_user.id != OWNER_ID:
         return
 
     args = context.args
@@ -1318,6 +1111,8 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=markup
                 )
             sent += 1
+            if config.BROADCAST_DELAY_SEC > 0:
+                await asyncio.sleep(config.BROADCAST_DELAY_SEC)
         except Exception as e:
             logger.warning(f"Broadcast error for {user_id}: {e}")
             if "bot was blocked" in str(e) or "user is deactivated" in str(e):
@@ -1511,12 +1306,20 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     items_by_order = {}
-    for o in orders:
-        items_by_order[o["id"]] = conn.execute(_sql("""
-            SELECT product_name, price, quantity, filament
-            FROM order_items
-            WHERE order_id = ?
-        """), (o["id"],)).fetchall()
+    if orders:
+        order_ids = [o["id"] for o in orders]
+        placeholders = ",".join("?" * len(order_ids))
+        all_items = conn.execute(
+            _sql(f"""
+                SELECT order_id, product_name, price, quantity, filament
+                FROM order_items
+                WHERE order_id IN ({placeholders})
+            """),
+            tuple(order_ids),
+        ).fetchall()
+        for item in all_items:
+            oid = item["order_id"] if isinstance(item, dict) else item[0]
+            items_by_order.setdefault(oid, []).append(item)
 
     conn.close()
 
@@ -1527,7 +1330,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Команда для управління купонами, яка дозволяє адміністраторам створювати, переглядати, активувати і деактивувати купони зі знижками. Вона підтримує різні формати знижок (відсоткові і фіксовані), а також додаткові параметри для обмеження використання купонів (мінімальна сума замовлення, максимальна кількість використань, використання одним користувачем і термін дії). Команда має підкоманди для кожної операції (add, list, disable, enable) і відповідає повідомленнями з результатами операцій у форматі Markdown.
 async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != 718746623:
+    if update.message.from_user.id != OWNER_ID:
         return
 
     args = context.args
@@ -1654,6 +1457,9 @@ async def handle_order(request):
         return err
 
     user_id = auth.get("user_id") or data.get("user_id") or 0
+    if is_user_blocked(user_id):
+        return web.json_response({"ok": False, "error": "Замовлення недоступне"}, status=403, headers=cors_headers(request))
+
     first_name = auth.get("first_name") or data.get("first_name", "")
     tg_username = auth.get("username") or data.get("tg_username")
     username = data.get("user") or (f"@{tg_username}" if tg_username else "невідомо")
@@ -1674,12 +1480,13 @@ async def handle_order(request):
     promotion_discount = result.get("promotion_discount", 0)
     total_discount = coupon_discount + promotion_discount
     coupon_code = coupon_code if coupon_discount else None
+    price_pending = result.get("price_pending", 0)
 
     # Формуємо назву для збереження в БД (всі товари через кому)
     product_name = ', '.join(i.get('product_name', '—') for i in items)
 
     # Зберігаємо замовлення в базі даних і отримуємо його ID для подальшого використання в логах і кнопках
-    order_id = save_order(user_id or 0, username, first_name, items, total_price, comment, gift, coupon_code, total_discount)
+    order_id = save_order(user_id or 0, username, first_name, items, total_price, comment, gift, coupon_code, total_discount, price_pending)
 
     # Логування нового замовлення з інформацією про ID замовлення, назву товару, загальну суму, інформацію про купон і знижку (якщо є) і ім'я користувача. Це дозволяє відстежувати всі замовлення, які надходять через веб-додаток, і отримувати повну інформацію про них для подальшої обробки.
     coupon_info = f"  🏷️ {coupon_code} −{coupon_discount}₴" if coupon_code else ""
@@ -1700,6 +1507,7 @@ async def handle_order(request):
                 "promotion_discount": promotion_discount,
                 "gift": gift,
                 "comment": comment,
+                "price_pending": price_pending,
             }
 
             if existing and now - existing["time"] < timedelta(hours=4):
@@ -1756,6 +1564,7 @@ async def handle_order(request):
             "quantity": int(i.get("quantity", 1)),
             "filament_name": i.get("filament_name"),
             "customValue": i.get("customValue"),
+            "is_contract_price": bool(i.get("is_contract_price")),
         }
         for i in items
     ]
@@ -1771,6 +1580,7 @@ async def handle_order(request):
         gift=gift,
         gift_product_id=gift_product_id,
         comment=comment or None,
+        price_pending=bool(price_pending),
     )
 
     status_buttons = [
@@ -1779,13 +1589,14 @@ async def handle_order(request):
         InlineKeyboardButton("❌ Відміна",      callback_data=f"cancel_{order_id}"),
     ]
     tg_username = data.get('tg_username')
+    admin_url = get_admin_webapp_url(order_id) if price_pending else None
+    keyboard_rows = []
+    if admin_url:
+        keyboard_rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
+    keyboard_rows.append(status_buttons)
     if tg_username:
-        markup = InlineKeyboardMarkup([
-            status_buttons,
-            [InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")]
-        ])
-    else:
-        markup = InlineKeyboardMarkup([status_buttons])
+        keyboard_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+    markup = InlineKeyboardMarkup(keyboard_rows)
 
     try:
         await send_rich_message(
@@ -1821,13 +1632,12 @@ async def handle_index(request: web.Request):
         return web.Response(status=404, text="Index file not found", headers=cors_headers(request))
 
 async def handle_static(request: web.Request):
-    """Обслуговування статичних файлів"""
+    """Обслуговування статичних файлів (allowlist)."""
     file_path = request.match_info.get('path', '')
-    
-    # Безпека: не дозволяємо доступ до файлів за межами поточної директорії
-    if '..' in file_path or file_path.startswith('/'):
+
+    if not is_static_file_allowed(file_path):
         return web.Response(status=403, text="Access denied", headers=cors_headers(request))
-    
+
     try:
         file = Path(file_path)
         if not file.exists():
@@ -1859,18 +1669,19 @@ async def handle_static(request: web.Request):
         return web.Response(status=500, text=str(e), headers=cors_headers(request))
 
 async def handle_admin_panel(request: web.Request):
-    """Отримати HTML адмін панелі"""
-    init_data = (
-        request.query.get("initData") or 
-        request.headers.get("X-Telegram-Init-Data") or 
-        request.cookies.get("tgInitData", "") or
-        ""
-    )
+    """Отримати HTML адмін панелі (лише для OWNER_ID)."""
+    init_data = extract_init_data(request)
+    auth = validate_telegram_init_data(init_data) if init_data else None
 
-    # Перевіряємо, чи користувач є адміном
+    if config.VALIDATE_INIT_DATA:
+        if not auth or auth.get("user_id") != OWNER_ID:
+            return web.Response(status=403, text="Forbidden", headers=cors_headers(request))
+    elif config.LOCAL_DEV_MODE and not is_admin_authorized(request, auth):
+        return web.Response(status=403, text="Forbidden", headers=cors_headers(request))
+
     try:
-        html = Path("admin-panel.html").read_text(encoding="utf-8")
-        return web.Response(text=html, content_type='text/html', headers=cors_headers(request))
+        html_content = Path("admin-panel.html").read_text(encoding="utf-8")
+        return web.Response(text=html_content, content_type='text/html', headers=cors_headers(request))
     except FileNotFoundError:
         return web.Response(status=404, text="Admin panel file not found", headers=cors_headers(request))
 
@@ -1908,8 +1719,9 @@ async def handle_update_filament(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err:
         return err
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
     try:
         filament_id = request.match_info.get('id', '')
         data = await request.json()
@@ -1925,8 +1737,9 @@ async def handle_create_category(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err:
         return err
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
 
     try:
         data = await request.json()
@@ -1942,8 +1755,9 @@ async def handle_update_category(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err:
         return err
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
 
     try:
         category_id = request.match_info.get('id', '')
@@ -1960,8 +1774,9 @@ async def handle_delete_category(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err:
         return err
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
 
     try:
         category_id = request.match_info.get('id', '')
@@ -1978,8 +1793,9 @@ async def handle_create_product(request: web.Request):
     if err:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
 
     try:
         data = await request.json()
@@ -1996,8 +1812,9 @@ async def handle_update_product(request: web.Request):
     if err:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
 
     try:
         product_id = int(request.match_info.get('id', 0))
@@ -2015,8 +1832,9 @@ async def handle_delete_product(request: web.Request):
     if err:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
 
     try:
         product_id = int(request.match_info.get('id', 0))
@@ -2025,6 +1843,74 @@ async def handle_delete_product(request: web.Request):
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
         return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_get_orders(request: web.Request):
+    """Список замовлень для адмін-панелі."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    pending_only = request.query.get("pending_price", "false").lower() in ("1", "true", "yes")
+    limit = min(100, max(1, int(request.query.get("limit", "50") or 50)))
+    orders = list_orders(pending_price_only=pending_only, limit=limit)
+    return web.json_response(orders, headers=cors_headers(request))
+
+
+async def handle_get_order(request: web.Request):
+    """Деталі замовлення з позиціями."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    order_id = int(request.match_info.get("id", 0))
+    order, items = get_order_with_items(order_id)
+    if not order:
+        return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    return web.json_response({"order": order, "items": items}, headers=cors_headers(request))
+
+
+async def handle_update_order_pricing(request: web.Request):
+    """Оновити ціни позицій замовлення."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        order_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+        raw_items = data.get("items") or []
+        item_prices = {}
+        for row in raw_items:
+            item_id = int(row.get("id") or 0)
+            if item_id:
+                item_prices[item_id] = int(row.get("price") or 0)
+
+        result = update_order_pricing(order_id, item_prices)
+        if not result.get("ok"):
+            return web.json_response(result, status=400, headers=cors_headers(request))
+
+        if data.get("notify_client") and result.get("user_id"):
+            order, items = get_order_with_items(order_id)
+            if order and items:
+                quote_html = build_client_price_quote(order_id, int(order.get("total_price") or 0), items)
+                try:
+                    await send_rich_message(bot_app.bot, int(result["user_id"]), quote_html)
+                except Exception as e:
+                    logger.error(f"Помилка повідомлення клієнту про ціну: {e}")
+
+        return web.json_response(result, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
 
 
 async def handle_upload_photo(request: web.Request):
@@ -2037,32 +1923,39 @@ async def handle_upload_photo(request: web.Request):
         return web.json_response({"ok": False, "error": "❌ Забачено доступу (тільки адмін)"}, status=403, headers=cors_headers(request))
 
     try:
-        reader = await request.multipart()
-        field = await reader.next()
+        form = await request.post()
+        file_field = form.get("file")
 
-        if not field or field.name != 'file':
+        if not file_field or not isinstance(file_field, web.FileField):
             return web.json_response(
-                {"ok": False, "error": "❌ Файл не знайдено"}, 
-                status=400, 
+                {"ok": False, "error": "❌ Файл не знайдено"},
+                status=400,
                 headers=cors_headers(request)
             )
 
-        file_data = await field.read()
-        filename = (field.filename or f"product_{int(datetime.now().timestamp())}").rsplit('.', 1)[0]
+        file_data = file_field.file.read()
+        filename = (file_field.filename or f"product_{int(datetime.now().timestamp())}").rsplit('.', 1)[0]
 
-        # Перевіримо, що це зображення
-        content_type = field.headers.get('Content-Type', '')
-        if not content_type or not content_type.startswith('image/'):
+        content_type = file_field.content_type or ''
+        is_image = content_type.startswith('image/') if content_type else False
+        if not is_image and not is_gif_image(file_data, content_type) and not is_webp_image(file_data, content_type):
             return web.json_response(
-                {"ok": False, "error": f"❌ Не дозволений тип файлу: {content_type}. Тільки зображення"}, 
-                status=400, 
+                {"ok": False, "error": f"❌ Не дозволений тип файлу: {content_type}. Тільки зображення"},
+                status=400,
                 headers=cors_headers(request)
             )
+        content_type = normalize_image_content_type(file_data, content_type)
 
-        result = await upload_photo_to_cloudinary(file_data, filename)
+        result = await upload_photo_to_cloudinary(file_data, filename, content_type)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
-        
+
+    except web.HTTPRequestEntityTooLarge:
+        return web.json_response(
+            {"ok": False, "error": f"❌ Файл занадто великий. Максимум {MAX_UPLOAD_BYTES // 1024 // 1024}MB"},
+            status=413,
+            headers=cors_headers(request)
+        )
     except ValueError as e:
         logger.error(f"❌ Помилка валідації: {e}")
         return web.json_response(
@@ -2078,7 +1971,42 @@ async def handle_upload_photo(request: web.Request):
             headers=cors_headers(request)
         )
 
-# Новий HTTP хендлер для перевірки купона, який приймає код купона, ID користувача і загальну суму кошика, виконує всі необхідні перевірки валідності купона і повертає результат у вигляді JSON-об'єкта з інформацією про валідність купона, тип і значення знижки, а також повідомлення для клієнта. Цей хендлер дозволяє веб-додатку динамічно перевіряти купони при оформленні замовлення і відображати відповідні повідомлення клієнту.
+
+async def handle_upload_photo_url(request: web.Request):
+    """Завантажити фото на Cloudinary за URL (зручно для анімованих GIF/WebP з інтернету)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
+        return web.json_response({"ok": False, "error": "❌ Забачено доступу (тільки адмін)"}, status=403, headers=cors_headers(request))
+
+    try:
+        data = await request.json()
+        url = str(data.get("url", "")).strip()
+        if not url:
+            return web.json_response({"ok": False, "error": "❌ Посилання не вказано"}, status=400, headers=cors_headers(request))
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return web.json_response({"ok": False, "error": "❌ Дозволені лише http/https посилання"}, status=400, headers=cors_headers(request))
+
+        try:
+            file_data, content_type = await asyncio.to_thread(fetch_image_bytes_from_url, url)
+        except ValueError as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+        if not content_type.startswith("image/") and not is_gif_image(file_data, content_type) and not is_webp_image(file_data, content_type):
+            return web.json_response({"ok": False, "error": "❌ За посиланням не зображення"}, status=400, headers=cors_headers(request))
+
+        content_type = normalize_image_content_type(file_data, content_type)
+        filename = Path(parsed.path).stem or "product_url"
+        result = await upload_photo_to_cloudinary(file_data, filename, content_type)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        logger.error(f"❌ Помилка завантаження за URL: {e}")
+        return web.json_response({"ok": False, "error": f"❌ Помилка: {str(e)}"}, status=400, headers=cors_headers(request))
+
+# Новий HTTP хендлер для перевірки купона, ID користувача і загальну суму кошика, виконує всі необхідні перевірки валідності купона і повертає результат у вигляді JSON-об'єкта з інформацією про валідність купона, тип і значення знижки, а також повідомлення для клієнта. Цей хендлер дозволяє веб-додатку динамічно перевіряти купони при оформленні замовлення і відображати відповідні повідомлення клієнту.
 async def handle_check_coupon(request):
     try:
         data = await request.json()
@@ -2102,7 +2030,7 @@ async def handle_check_coupon(request):
 
 
 async def reload_products_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != 718746623:
+    if update.effective_user.id != OWNER_ID:
         return
     reload_products_cache(force=True)
     reload_filaments_cache(force=True)
@@ -2113,6 +2041,9 @@ async def reload_products_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    if query.from_user.id != OWNER_ID:
+        return
 
     if query.data == "done":
         return
@@ -2130,21 +2061,12 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "confirm":
         update_order_status(order_id, "confirmed")
         label = "✅ Підтверджено"
-        markup = InlineKeyboardMarkup([[write_button]]) if write_button else None
     elif action == "draft":
         update_order_status(order_id, "draft")
         label = "❓ Під питанням"
-        buttons = [
-            InlineKeyboardButton("✅ Підтвердити", callback_data=f"confirm_{order_id}"),
-            InlineKeyboardButton("❌ Відмінити",   callback_data=f"cancel_{order_id}"),
-        ]
-        markup = InlineKeyboardMarkup(
-            [buttons, [write_button]] if write_button else [buttons]
-        )
     elif action == "cancel":
         update_order_status(order_id, "cancelled")
         label = "❌ Відмінено"
-        markup = None
     else:
         return
 
@@ -2154,13 +2076,52 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     gift_product_id = find_gift_product_id(order.get("gift_product_name"))
     linked = action != "cancel"
-    admin_html = build_admin_order_with_status(
-        order,
-        items,
-        label,
-        linked=linked,
+    admin_items = [
+        {
+            "product_id": int(i.get("product_id") or 0),
+            "product_name": i.get("product_name", "—"),
+            "price": int(i.get("price") or 0),
+            "quantity": int(i.get("quantity") or 1),
+            "filament_name": i.get("filament"),
+            "is_contract_price": bool(i.get("is_contract_price")),
+        }
+        for i in items
+        if not str(i.get("product_name", "")).startswith("🎁")
+    ]
+    admin_html = build_admin_order_notification(
+        order_id=int(order["id"]),
+        username=order.get("username") or "невідомо",
+        items=admin_items,
+        total_price=int(order.get("total_price") or 0),
+        coupon_code=order.get("coupon_code"),
+        discount_amount=int(order.get("discount_amount") or 0),
+        gift=order.get("gift_product_name"),
         gift_product_id=gift_product_id,
+        comment=order.get("comment"),
+        status_label=label,
+        linked=linked,
+        price_pending=bool(order.get("price_pending")),
     )
+
+    admin_url = get_admin_webapp_url(order_id) if order.get("price_pending") else None
+    if action == "confirm":
+        markup = InlineKeyboardMarkup([[write_button]]) if write_button else None
+    elif action == "draft":
+        buttons = [
+            InlineKeyboardButton("✅ Підтвердити", callback_data=f"confirm_{order_id}"),
+            InlineKeyboardButton("❌ Відмінити",   callback_data=f"cancel_{order_id}"),
+        ]
+        rows = []
+        if admin_url:
+            rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
+        rows.append(buttons)
+        if write_button:
+            rows.append([write_button])
+        markup = InlineKeyboardMarkup(rows)
+    elif action == "cancel":
+        markup = None
+    else:
+        markup = None
 
     try:
         await edit_rich_message(
@@ -2232,9 +2193,7 @@ confirmation_messages = {}  # {user_id: {"message_id", "orders", "html", "time",
 def main():
     global bot_app
     init_db()
-    reload_products_cache(force=True)
-    reload_filaments_cache(force=True)
-    reload_categories_cache(force=True)
+    bootstrap_json_catalog(force=True)
     logger.info(
         "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom | філаментів: %s | категорій: %s",
         VALIDATE_INIT_DATA, len(PRODUCTS_CACHE), len(CUSTOM_PRODUCTS_CACHE), len(FILAMENTS_CACHE), len(CATEGORIES_CACHE),
@@ -2266,7 +2225,7 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(order_action, pattern=r"^(confirm|draft|cancel)_"))
 
     async def run():
-        http_app = web.Application()
+        http_app = web.Application(client_max_size=MAX_UPLOAD_BYTES)
         # API маршрути (перші, щоб не перехоплювалися статичними файлами)
         http_app.router.add_post('/order', handle_order)
         http_app.router.add_route('OPTIONS', '/order', handle_options)
@@ -2274,6 +2233,7 @@ def main():
         http_app.router.add_route('OPTIONS', '/check_coupon', handle_options)
         http_app.router.add_route('OPTIONS', '/api/{tail:.*}', handle_options)
         # Адмін API
+        http_app.router.add_get('/health', handle_health)
         http_app.router.add_get('/admin/panel', handle_admin_panel)
         http_app.router.add_get('/api/products', handle_get_products)
         http_app.router.add_get('/api/categories', handle_get_categories)
@@ -2286,7 +2246,11 @@ def main():
         http_app.router.add_post('/api/products', handle_create_product)
         http_app.router.add_put('/api/products/{id}', handle_update_product)
         http_app.router.add_delete('/api/products/{id}', handle_delete_product)
+        http_app.router.add_get('/api/orders', handle_get_orders)
+        http_app.router.add_get('/api/orders/{id}', handle_get_order)
+        http_app.router.add_put('/api/orders/{id}/pricing', handle_update_order_pricing)
         http_app.router.add_post('/api/upload-photo', handle_upload_photo)
+        http_app.router.add_post('/api/upload-photo-url', handle_upload_photo_url)
         # Головна сторінка
         http_app.router.add_get('/', handle_index)
         # Статичні файли (останній, як catch-all)
@@ -2327,7 +2291,7 @@ def main():
                     ("contact",   "📬 Контакти"),
                     ("myid",      "🪪 Мій ID"),
                 ],
-                scope=BotCommandScopeChat(chat_id=718746623)  # тільки ти
+                scope=BotCommandScopeChat(chat_id=OWNER_ID)
             )
 
             # Команди для звичайних юзерів (окремо для всіх приватних чатів,

@@ -10,28 +10,34 @@
     ],
     "name": "Fidget-спіраль",
     "mat": "PLA · один або два кольори",
-    "price": 300,
-    "hot": true,
+    "price": 125,
+    "hot": false,
     "gift": false,
     "filamentChoice": true,
     "stlLink": "https://makerworld.com/uk/models/562008-spiral-cone-fidget?from=search#profileId-481500",
-    "pinned": true
+    "pinned": true,
+    "oldPrice": 150
   },
   {
     "id": 2,
-    "cat": "toy",
+    "cat": "key",
     "emoji": "🦕",
     "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781954578/poselyanov3dprint/image_1781954577.jpg",
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779174337/poselyanov3dprint/image_1779174335.jpg",
-      "https://res.cloudinary.com/df5stvc1c/image/upload/v1779174351/poselyanov3dprint/image_1779174351.jpg"
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781954523/poselyanov3dprint/image_1781954520.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781954538/poselyanov3dprint/image_1781954537.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781954559/poselyanov3dprint/image_1781954557.jpg"
     ],
     "name": "Флекс-динозавр",
-    "mat": "PLA flex · кольоровий",
-    "price": 110,
+    "mat": "PLA · різні кольори",
+    "price": 125,
     "oldPrice": 150,
     "hot": false,
     "gift": false,
-    "filamentChoice": false
+    "filamentChoice": true,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/1092959-flexi-brontosaurus-keychain-no-supports?from=search#profileId-1086774"
   },
   {
     "id": 3,
@@ -43,12 +49,14 @@
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779174585/poselyanov3dprint/image_1779174584.jpg",
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779174597/poselyanov3dprint/image_1779174597.jpg"
     ],
-    "name": "Кіт-нянька",
-    "mat": "PLA · є різні кольори",
-    "price": 90,
+    "name": "Flexi-Кіт",
+    "mat": "PLA · чорний або білий",
+    "price": 200,
     "hot": false,
     "gift": false,
-    "filamentChoice": false
+    "filamentChoice": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/584640-flexi-holding-cat-print-in-place?from=search#profileId-505737"
   },
   {
     "id": 4,
@@ -59,12 +67,14 @@
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779174683/poselyanov3dprint/image_1779174682.jpg",
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779174695/poselyanov3dprint/image_1779174694.jpg"
     ],
-    "name": "T-Rex шарнірний",
-    "mat": "PLA · великий 20 см",
-    "price": 150,
-    "hot": true,
-    "gift": false,
-    "filamentChoice": true
+    "name": "Flexi-Rex",
+    "mat": "PLA · один колір",
+    "price": 100,
+    "hot": false,
+    "gift": true,
+    "filamentChoice": true,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/90174-the-original-dragon-flexi-rex?from=search#profileId-96586"
   },
   {
     "id": 5,
@@ -73,26 +83,18 @@
     "photos": [
       "https://i.ibb.co/9mwT0H0L/image.png",
       "https://i.ibb.co/WWF0xmCB/image.png",
-      "https://i.ibb.co/F4df3ZBw/image.png"
+      "https://i.ibb.co/F4df3ZBw/image.png",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781954739/poselyanov3dprint/image_1781954738.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781954799/poselyanov3dprint/image_1781954798.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781954808/poselyanov3dprint/image_1781954807.jpg"
     ],
     "name": "Брелок-серце",
     "mat": "PLA · будь-який колір",
-    "price": 50,
-    "hot": false,
-    "gift": true
-  },
-  {
-    "id": 6,
-    "cat": "key",
-    "emoji": "💀",
-    "photos": [
-      "https://res.cloudinary.com/df5stvc1c/image/upload/v1779175251/poselyanov3dprint/image_1779175250.jpg"
-    ],
-    "name": "Брелок-скелет",
-    "mat": "PLA · чорний або білий",
-    "price": 60,
+    "price": 100,
     "hot": false,
     "gift": true,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/2375540-knitted-heart-cute-valentine-keychain?from=search#profileId-2600548",
     "filamentChoice": true
   },
   {
@@ -100,77 +102,353 @@
     "cat": "key",
     "emoji": "⭐",
     "photos": [
-      "https://res.cloudinary.com/df5stvc1c/image/upload/v1779184501/poselyanov3dprint/image_1779184500.png",
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779184504/poselyanov3dprint/image_1779184505.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1779184501/poselyanov3dprint/image_1779184500.png",
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779184508/poselyanov3dprint/image_1779184509.jpg",
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779184512/poselyanov3dprint/image_1779184513.jpg",
       "https://res.cloudinary.com/df5stvc1c/image/upload/v1779184516/poselyanov3dprint/image_1779184516.jpg"
     ],
     "name": "Брелок-зірка",
-    "mat": "PLA · гліттер доступний",
-    "price": 100,
-    "oldPrice": 150,
+    "mat": "PLA · будь-який колір",
+    "price": 50,
     "hot": false,
     "gift": true,
-    "stlLink": "https://makerworld.com/uk/models/1078824-star-fidget-keychain-stylish-fun?from=search#profileId-1070169",
+    "stlLink": "https://makerworld.com/uk/models/1078824-star-fidget-keychain-stylish-fun#profileId-1070169",
     "filamentChoice": true,
-    "pinned": true
+    "pinned": false
   },
   {
     "id": 8,
     "cat": "key",
     "emoji": "🔑",
-    "photos": [],
-    "name": "Брелок з ім'ям",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781958393/poselyanov3dprint/2025-06-25_7279e0a17606f_1781958390.webp",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781957677/poselyanov3dprint/image_1781957677.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781957681/poselyanov3dprint/image_1781957680.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781957706/poselyanov3dprint/image_1781957705.jpg"
+    ],
+    "name": "Коробка передач",
     "mat": "PLA · персоналізований",
-    "price": 70,
+    "price": 100,
     "hot": true,
-    "gift": false
+    "gift": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/1548507-gear-shift-fidget-toy-v2-print-in-place#profileId-1626202",
+    "oldPrice": 125,
+    "filamentChoice": false
   },
   {
     "id": 9,
-    "cat": "anti",
-    "emoji": "🔵",
-    "photos": [],
-    "name": "Спінер-куб",
-    "mat": "PLA+PETG · крутиться",
-    "filamentChoice": false,
-    "price": 110,
+    "cat": "toy",
+    "emoji": "🦎",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959190/poselyanov3dprint/image_1781959187.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959192/poselyanov3dprint/image_1781959191.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959200/poselyanov3dprint/image_1781959199.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959206/poselyanov3dprint/image_1781959205.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959212/poselyanov3dprint/image_1781959210.jpg"
+    ],
+    "name": "Шарнірна Ящірка",
+    "mat": "PLA · будь-який колір",
+    "filamentChoice": true,
+    "price": 100,
     "hot": false,
-    "gift": false
+    "gift": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/13862-articulated-lizard-v2#profileId-13660"
   },
   {
     "id": 10,
-    "cat": "anti",
-    "emoji": "🟦",
-    "photos": [],
-    "name": "Pop-it кнопки",
-    "mat": "TPU · м'який силіконовий",
-    "filamentChoice": false,
-    "price": 80,
-    "hot": true,
-    "gift": false
+    "cat": "home",
+    "emoji": "🪝",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959563/poselyanov3dprint/image_1781959562.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959585/poselyanov3dprint/image_1781959583.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959566/poselyanov3dprint/image_1781959565.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959570/poselyanov3dprint/image_1781959569.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781959573/poselyanov3dprint/image_1781959572.jpg"
+    ],
+    "name": "Настінний гачок (Невидиме кріплення)",
+    "mat": "PLA · набір 4 шт",
+    "filamentChoice": true,
+    "price": 100,
+    "hot": false,
+    "gift": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/2471544-wall-hook-invisible-mounting#profileId-3247025"
   },
   {
     "id": 11,
     "cat": "anti",
-    "emoji": "🌀",
-    "photos": [],
-    "name": "Fidget-кільця",
-    "mat": "PLA · набір 3 шт",
-    "price": 90,
-    "hot": false,
-    "gift": false
+    "emoji": "👆",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968025/poselyanov3dprint/image_1781968023.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968040/poselyanov3dprint/image_1781968039.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968045/poselyanov3dprint/image_1781968044.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968048/poselyanov3dprint/image_1781968047.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968079/poselyanov3dprint/image_1781968078.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968084/poselyanov3dprint/image_1781968083.jpg"
+    ],
+    "name": "PentaClick - Клікер з ризинкою",
+    "mat": "PLA · один або два кольори",
+    "price": 100,
+    "hot": true,
+    "gift": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/2661039-pentaclick-the-ultimate-rubber-band-clicker#profileId-2943455",
+    "filamentChoice": true
   },
   {
     "id": 12,
     "cat": "anti",
     "emoji": "🧊",
-    "photos": [],
-    "name": "Infinite cube",
-    "mat": "PLA · складається нескінченно",
-    "price": 130,
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968297/poselyanov3dprint/image_1781968296.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968305/poselyanov3dprint/image_1781968304.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968308/poselyanov3dprint/image_1781968307.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968312/poselyanov3dprint/image_1781968310.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968370/poselyanov3dprint/image_1781968368.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968391/poselyanov3dprint/image_1781968390.jpg"
+    ],
+    "name": "Безкінечний куб",
+    "mat": "PLA · будь-який колір",
+    "price": 150,
     "hot": false,
-    "gift": false
+    "gift": false,
+    "pinned": true,
+    "stlLink": "https://makerworld.com/uk/models/65426-fidget-cube-toy-angled#profileId-68762",
+    "filamentChoice": true
+  },
+  {
+    "id": 101,
+    "cat": "anti",
+    "emoji": "🌀",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969347/poselyanov3dprint/43e66bd2b8fb49be_1781969344.webp",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968531/poselyanov3dprint/image_1781968529.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968537/poselyanov3dprint/image_1781968535.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968541/poselyanov3dprint/image_1781968539.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968556/poselyanov3dprint/image_1781968555.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968564/poselyanov3dprint/image_1781968562.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781968589/poselyanov3dprint/image_1781968586.jpg"
+    ],
+    "name": "Брелок з номером авто",
+    "mat": "PLA · різні кольори",
+    "price": 100,
+    "hot": true,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/2315136-octaspin-arcspin-re-edged-40min-print#profileId-2527871",
+    "gift": false,
+    "filamentChoice": true
+  },
+  {
+    "id": 102,
+    "cat": "home",
+    "emoji": "⬣",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969438/poselyanov3dprint/image_1781969436.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969885/poselyanov3dprint/image_1781969882.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969443/poselyanov3dprint/image_1781969443.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969451/poselyanov3dprint/image_1781969450.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969455/poselyanov3dprint/image_1781969454.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969459/poselyanov3dprint/image_1781969458.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969462/poselyanov3dprint/image_1781969461.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969466/poselyanov3dprint/image_1781969465.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781969470/poselyanov3dprint/image_1781969469.jpg"
+    ],
+    "name": "Модульний органайзер - на стіну",
+    "mat": "Модульна система · набір елементів на вибір",
+    "price": 0,
+    "hot": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/2698876-hexa-gallery-modular-wall-art-organizer#profileId-2991655",
+    "gift": false,
+    "filamentChoice": false,
+    "contractPrice": true
+  },
+  {
+    "id": 103,
+    "cat": "home",
+    "emoji": "🏠",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973194/poselyanov3dprint/2025-09-17_f59fcb7ac0bef8_1781973193.webp",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973072/poselyanov3dprint/image_1781973071.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973075/poselyanov3dprint/image_1781973074.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973079/poselyanov3dprint/image_1781973078.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973455/poselyanov3dprint/image_1781973455.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973525/poselyanov3dprint/image_1781973525.jpg"
+    ],
+    "name": "Модульний органайзер - для столу",
+    "mat": "Модульна система · набір елементів на вибір",
+    "price": 0,
+    "hot": true,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/1802763-modular-desk-organizer#profileId-1922564",
+    "contractPrice": true,
+    "gift": false,
+    "filamentChoice": true
+  },
+  {
+    "id": 104,
+    "cat": "gadget",
+    "emoji": "📱",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973832/poselyanov3dprint/image_1781973831.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973836/poselyanov3dprint/image_1781973835.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973846/poselyanov3dprint/image_1781973845.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973850/poselyanov3dprint/image_1781973849.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781973867/poselyanov3dprint/image_1781973866.jpg"
+    ],
+    "name": "Маленька підставка для смартфона",
+    "mat": "PLA · будь-який колір",
+    "price": 100,
+    "oldPrice": 120,
+    "hot": true,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/1087279-small-smartphone-stand-print-in-place-design#profileId-1969996",
+    "gift": false,
+    "filamentChoice": true
+  },
+  {
+    "id": 105,
+    "cat": "toy",
+    "emoji": "🐱",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974133/poselyanov3dprint/image_1781974132.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974138/poselyanov3dprint/image_1781974137.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974146/poselyanov3dprint/image_1781974145.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974168/poselyanov3dprint/image_1781974168.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974158/poselyanov3dprint/image_1781974157.jpg"
+    ],
+    "name": "Пружинний кіт",
+    "mat": "PLA · колір на вибір",
+    "price": 200,
+    "hot": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/2606676-springy-cat#profileId-2876711",
+    "gift": false,
+    "filamentChoice": true
+  },
+  {
+    "id": 106,
+    "cat": "toy",
+    "emoji": "🦖",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974289/poselyanov3dprint/2025-07-13_5d84a48228796_1781974288.webp",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974294/poselyanov3dprint/image_1781974293.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974340/poselyanov3dprint/image_1781974340.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974337/poselyanov3dprint/2025-07-13_1fe508b9e10cc_1781974336.webp"
+    ],
+    "name": "Dino Run - Cамобалансуюча",
+    "mat": "PLA · колір на вибір",
+    "price": 100,
+    "oldPrice": 150,
+    "hot": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/1601514-dino-run-self-balancing-toy#profileId-1688159",
+    "gift": false,
+    "filamentChoice": true
+  },
+  {
+    "id": 107,
+    "cat": "key",
+    "emoji": "🪼",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974621/poselyanov3dprint/image_1781974621.png",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974625/poselyanov3dprint/image_1781974624.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974640/poselyanov3dprint/image_1781974639.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974656/poselyanov3dprint/image_1781974655.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974670/poselyanov3dprint/image_1781974669.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974683/poselyanov3dprint/image_1781974682.jpg"
+    ],
+    "name": "Морська медуза – Шарнірна",
+    "mat": "PLA · колір на вибір",
+    "price": 150,
+    "hot": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/2061586-sea-jellyfish-articulated-keychain#profileId-2226031",
+    "gift": false,
+    "filamentChoice": true
+  },
+  {
+    "id": 108,
+    "cat": "key",
+    "emoji": "👟",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974815/poselyanov3dprint/image_1781974814.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974829/poselyanov3dprint/image_1781974828.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974840/poselyanov3dprint/image_1781974840.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781974874/poselyanov3dprint/image_1781974874.jpg"
+    ],
+    "name": "Футбольний бутс",
+    "mat": "PLA · колір на вибір",
+    "price": 150,
+    "oldPrice": 200,
+    "hot": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/2641366-golden-soccer-cleat-keychain#profileId-2918511",
+    "gift": false,
+    "filamentChoice": true
+  },
+  {
+    "id": 109,
+    "cat": "key",
+    "emoji": "🏷",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975099/poselyanov3dprint/image_1781975098.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975103/poselyanov3dprint/image_1781975102.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975107/poselyanov3dprint/image_1781975106.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975121/poselyanov3dprint/image_1781975120.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975138/poselyanov3dprint/image_1781975137.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975147/poselyanov3dprint/image_1781975146.jpg"
+    ],
+    "name": "Poki Keyrambit",
+    "mat": "PLA · колір на вибір",
+    "price": 100,
+    "hot": true,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/428216-poki-keyrambit-keychain#profileId-332301",
+    "gift": false,
+    "filamentChoice": true
+  },
+  {
+    "id": 110,
+    "cat": "key",
+    "emoji": "📦",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975472/poselyanov3dprint/2025-01-18_c4269698a7f3b_1781975471.webp",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975288/poselyanov3dprint/image_1781975288.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975348/poselyanov3dprint/image_1781975348.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975356/poselyanov3dprint/image_1781975356.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975366/poselyanov3dprint/image_1781975365.jpg"
+    ],
+    "name": "Серце з Майнкрафту",
+    "mat": "PLA · персоналізований",
+    "price": 150,
+    "hot": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/1009193-minecraft-heart-key-clicker-keychain#profileId-988391",
+    "gift": false,
+    "filamentChoice": false
+  },
+  {
+    "id": 111,
+    "cat": "key",
+    "emoji": "📦",
+    "photos": [
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975655/poselyanov3dprint/image_1781975653.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975669/poselyanov3dprint/2025-02-09_94980a8e65f9e_1781975668.webp",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975677/poselyanov3dprint/image_1781975676.jpg",
+      "https://res.cloudinary.com/df5stvc1c/image/upload/v1781975704/poselyanov3dprint/image_1781975703.jpg"
+    ],
+    "name": "Макарун у формі серця",
+    "mat": "PLA · персоналізований",
+    "price": 250,
+    "oldPrice": 300,
+    "hot": false,
+    "pinned": false,
+    "stlLink": "https://makerworld.com/uk/models/1091700-clicky-heart-macaron-keychain#profileId-1464959",
+    "gift": false,
+    "filamentChoice": false
   }
 ]

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Denis 3D Print</title>
+<script src="shared.js"></script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -597,6 +598,7 @@
   .pinned-card { min-width: 100%; display: grid; grid-template-columns: 100px 1fr; gap: 10px; padding: 10px; cursor: pointer; }
   .pinned-card:active { transform: scale(.98); }
   .pinned-thumb {
+    position: relative;
     border-radius: 12px; overflow: hidden; height: 100px;
     display: flex; align-items: center; justify-content: center;
     background: linear-gradient(135deg, #f0f4ff, #e8f5ff); font-size: 34px;
@@ -606,6 +608,7 @@
   .pinned-mat { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.3; }
   .pinned-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .pinned-price { font-size: 16px; font-weight: 800; color: var(--tg-blue); }
+  .pinned-bottom.no-price { justify-content: flex-end; }
   .pinned-order-btn {
     border: none; background: var(--tg-blue); color: #fff; border-radius: 10px;
     min-height: 36px; padding: 8px 12px; font-size: 12px; font-weight: 800; cursor: pointer;
@@ -754,8 +757,9 @@
 
   .card-info { padding: 9px 10px 10px; }
   .card-name { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.35; margin-bottom: 3px; }
-  .card-mat { font-size: 12px; color: var(--muted); margin-bottom: 7px; line-height: 1.3; }
+  .card-mat { font-size: 12px; color: var(--muted); margin-bottom: 7px; line-height: 1.3; } /* додатковий опис */
   .card-footer { display: flex; align-items: center; justify-content: space-between; }
+  .card-footer.no-price { justify-content: flex-end; }
 
   .card-price-wrap { display: flex; flex-direction: column; }
 
@@ -769,6 +773,18 @@
   /* Червона ціна тільки при знижці */
   .card-price.has-discount {
     color: #ff2f2f;        /* червоний */
+  }
+  .card-contract-badge {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 6px;
+    z-index: 4;
   }
   /* Стара ціна (закреслена) */
   .card-price-old {
@@ -1075,7 +1091,26 @@
   }
 
   .modal-pname { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
-  .modal-price-row { display: flex; align-items: baseline; gap: 8px; }
+  .modal-pmat {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.35;
+    margin: -2px 0 8px;
+  }
+  .modal-pmat:empty { display: none; }
+  .modal-price-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .modal-pprice.contract {
+    font-size: 20px;
+    color: var(--muted);
+  }
+  .modal-price-hint {
+    width: 100%;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+    margin-top: 2px;
+  }
+  .modal-price-hint.hidden { display: none; }
   .modal-pprice {
     font-size: 26px;
     font-weight: 800;
@@ -1295,6 +1330,33 @@
     background: rgba(255, 179, 0, 0.12);
     color: #FFCC80;
   }
+
+  .contract-notice {
+    background: #EDE7F6;
+    border-left: 3px solid #7E57C2;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 10px 12px;
+    margin: 0 18px 12px;
+    display: none;
+  }
+  .contract-notice.visible { display: block; }
+  .contract-notice-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #4527A0;
+    margin-bottom: 4px;
+  }
+  .contract-notice-steps {
+    font-size: 12px;
+    color: #5E35B1;
+    line-height: 1.45;
+    font-weight: 500;
+  }
+  body.dark .contract-notice {
+    background: rgba(126, 87, 194, 0.15);
+  }
+  body.dark .contract-notice-title { color: #B39DDB; }
+  body.dark .contract-notice-steps { color: #CE93D8; }
 
   /* Бейдж "В кошику" на картці */
   .card-in-cart-badge {
@@ -1999,7 +2061,22 @@
     0%   { transform: translateY(12px);  opacity: 0; }
     100% { transform: translateY(0);     opacity: 1; }
   }
-  .cart-total-sum { font-size: 20px; font-weight: 800; color: var(--text); transition: color .3s; }
+  .cart-item-total.contract {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .cart-total-sum.contract-label {
+    font-size: 17px;
+    color: var(--muted);
+  }
+  .cart-total-hint {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 500;
+    margin-top: 2px;
+    text-align: right;
+  }
   .cart-total-sum.discounted { color: var(--tg-blue);
   }
 </style>
@@ -2199,10 +2276,11 @@
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
           <span class="cart-old-price" id="cartOldPrice"><span></span></span>
           <span class="cart-total-sum" id="cart-total">0 ₴</span>
+          <div class="cart-total-hint" id="cart-total-hint" style="display:none">Суму узгодимо після замовлення</div>
         </div>
       </div>
 
-      <button class="cart-submit-btn" onclick="submitOrder()">✓ Оформити замовлення</button>
+      <button class="cart-submit-btn" id="cart-submit-btn" onclick="submitOrder()">✓ Оформити замовлення</button>
     </div>
   </div>
 </div>
@@ -2240,11 +2318,18 @@
           <div class="modal-pname" id="m-name"></div>
           <div class="modal-sale-chip" id="m-sale-chip" style="display:none"></div>
         </div>
-        <div class="modal-price-row">
+        <div class="modal-pmat" id="m-mat"></div>
+        <div class="modal-price-row" id="m-price-row">
           <div class="modal-pprice" id="m-price"></div>
           <div class="modal-pprice-old" id="m-price-old" style="display:none"></div>
+          <div class="modal-price-hint hidden" id="m-price-hint">Ціну узгодимо після замовлення</div>
         </div>
       </div>
+    </div>
+
+    <div class="contract-notice" id="m-contract-notice">
+      <div class="contract-notice-title">Ціна за домовленістю</div>
+      <div class="contract-notice-steps">Додай до замовлення → напишу з сумою → оплата</div>
     </div>
 
     <div class="filament-block" id="m-filament-block" style="display:none">
@@ -2275,7 +2360,7 @@
         <textarea id="m-custom-value" rows="2" placeholder="Вкажи деталі..."></textarea>
       </div>
 
-      <div class="notice">
+      <div class="notice" id="m-general-notice">
         📲 Після замовлення я напишу тобі особисто для уточнення деталей та оплати.
       </div>
     </div>
@@ -2296,7 +2381,7 @@
 <div class="success-screen" id="success-screen">
   <div class="success-emoji">🎉</div>
   <div class="success-title">Замовлення прийнято!</div>
-  <div class="success-sub">Я отримав твоє замовлення і зв'яжусь найближчим часом для підтвердження та оплати.</div>
+  <div class="success-sub">Я отримав твоє замовлення і зв'яжусь найближчим часом для підтвердження та оплати. Якщо в замовленні є товари з договірною ціною — напишу з фінальною сумою.</div>
   <button class="success-back" onclick="backToCatalog()">← Переглянути ще товари</button>
 </div>
 
@@ -2390,12 +2475,11 @@
 <script>
 
 // ─── API (локально / прод) ───────────────────────────────────
-const API_BASE = (() => {
+const API_BASE = (window.SharedApp && window.SharedApp.resolveApiBase()) || (() => {
   const h = location.hostname;
   if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8080';
-  // Локальний dev через ngrok: фронтенд і API йдуть через один origin.
   if (h.includes('ngrok-free.dev') || h.includes('ngrok-free.app')) return location.origin;
-  return window.__API_BASE__ || 'https://poselyanov3dprint-1.onrender.com';
+  return window.__API_BASE__ || 'https://api.yourdomain.ua';
 })();
 
 function apiHeaders() {
@@ -2446,10 +2530,31 @@ function setGridHtml(grid, html) {
   grid.replaceChildren(...tpl.content.childNodes);
 }
 
-// Хелпер для ImgBB (і будь-яких прямих посилань)
-function photo(url) {
+// Оптимізована доставка фото (Cloudinary CDN) — менший розмір у магазині
+function photo(url, opts = {}) {
   if (!url) return '';
-  return url.trim();
+  url = url.trim();
+  if (!url.includes('res.cloudinary.com/') || !url.includes('/image/upload/')) {
+    return url;
+  }
+  const marker = '/image/upload/';
+  const markerIdx = url.indexOf(marker);
+  const prefix = url.slice(0, markerIdx + marker.length);
+  const suffix = url.slice(markerIdx + marker.length);
+  const firstSegment = suffix.split('/')[0] || '';
+  if (firstSegment && !/^v\d+$/.test(firstSegment)) {
+    return url;
+  }
+
+  const lower = url.toLowerCase();
+  const w = opts.w || 800;
+
+  // GIF/WebP: w_ і f_auto часто дають 400 — лише легке стиснення якості
+  if (lower.includes('.gif') || lower.includes('.webp')) {
+    return `${prefix}q_auto/${suffix}`;
+  }
+
+  return `${prefix}f_auto,q_auto,w_${w}/${suffix}`;
 }
 
 // Застосування теми (можна викликати з Telegram Web App або додаткової кнопки)
@@ -2577,11 +2682,14 @@ function updateModalAddBtn() {
     return;
   }
   const existing = getCartItem(currentProduct.id);
+  const isContract = isContractProduct(currentProduct);
   if (existing) {
-    btn.textContent = `✓ В кошику (${existing.quantity} шт)`;
+    btn.textContent = isContract
+      ? `✓ У замовленні (${existing.quantity} шт)`
+      : `✓ В кошику (${existing.quantity} шт)`;
     btn.classList.add('in-cart');
   } else {
-    btn.textContent = '+ Додати в кошик';
+    btn.textContent = isContract ? '+ Додати до замовлення' : '+ Додати в кошик';
     btn.classList.remove('in-cart');
   }
 }
@@ -2698,7 +2806,9 @@ function addToCartFromModal() {
       const row = {
         id: currentProduct.id,
         name: currentProduct.name,
-        price: currentProduct.price,
+        price: currentProduct.contractPrice ? 0 : currentProduct.price,
+        contractPrice: !!currentProduct.contractPrice,
+        mat: currentProduct.mat || '',
         quantity: modalQty,
         fromCustom: currentProduct._isCustom || false,
         addedFrom: currentProduct._isCustom ? 'custom' : modalCartSource,
@@ -2750,9 +2860,30 @@ function renderCustom() {
 }
 
 // ─── СПІЛЬНИЙ РЕНДЕР КАРТКИ ──────────────────────────────────
+function isContractProduct(p) {
+  return !!(p && p.contractPrice);
+}
+
+function getCartFixedTotal() {
+  return cart.reduce((s, i) => s + (i.contractPrice ? 0 : i.price * i.quantity), 0);
+}
+
+function cartHasContractItems() {
+  return cart.some(i => i.contractPrice);
+}
+
+function formatCartTotalLabel(finalTotal) {
+  const fixed = getCartFixedTotal();
+  const hasContract = cartHasContractItems();
+  if (!hasContract) return `${finalTotal} ₴`;
+  if (fixed === 0) return 'За домовленістю';
+  return `${finalTotal} ₴ + узгодимо`;
+}
+
 function buildCard(p, i, isCustom, pageSource) {
   const hasPhotos = p.photos && p.photos.length > 0;
-  const discount = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
+  const isContract = isContractProduct(p);
+  const discount = !isContract && p.oldPrice && p.price < p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
   const safeName = escapeHtml(p.name);
   const safeMat = escapeHtml(p.mat);
   const source = isCustom ? 'custom' : (pageSource || 'products');
@@ -2770,15 +2901,13 @@ function buildCard(p, i, isCustom, pageSource) {
         ${topBadges ? `<div class="card-top-badges">${topBadges}</div>` : ''}
         ${discount ? `<div class="card-sale-badge">−${discount}%</div>` : ''}
         ${isCustom ? '<div class="card-custom-badge">✏️ Індив.</div>' : ''}
+        ${isContract ? '<div class="card-contract-badge">🤝 Договірна</div>' : ''}
       </div>
       <div class="card-info">
         <div class="card-name">${safeName}</div>
         <div class="card-mat">${safeMat}</div>
-        <div class="card-footer">
-          <div class="card-price-wrap">
-            ${p.oldPrice ? `<div class="card-price-old">${p.oldPrice} ₴</div>` : ''}
-            <div class="card-price${p.oldPrice ? ' has-discount' : ''}">${p.price} ₴</div>
-          </div>
+        <div class="card-footer${isContract ? ' no-price' : ''}">
+          ${isContract ? '' : `<div class="card-price-wrap">${discount ? `<div class="card-price-old">${p.oldPrice} ₴</div>` : ''}<div class="card-price${discount ? ' has-discount' : ''}">${p.price} ₴</div></div>`}
           <button class="card-btn" onclick="event.stopPropagation(); openModal(${p.id}, '${source}')">Замовити</button>
         </div>
       </div>
@@ -2849,7 +2978,7 @@ function getGiftCandidates() {
 
 // Перевіряє, чи позиція кошика підходить під акцію подарунку: іграшки з основного каталогу (не «Індивідуальне»)
 function isGiftEligibleToyItem(item) {
-  if (!item || item.fromCustom || item.addedFrom === 'custom') return false;
+  if (!item || item.contractPrice || item.fromCustom || item.addedFrom === 'custom') return false;
   const itemCat = item.cat || PRODUCTS.find(p => p.id === item.id)?.cat;
   return itemCat === 'toy';
 }
@@ -2895,7 +3024,7 @@ function openGiftModal() {
       <div class="gift-option${selectedGift?.id === p.id ? ' selected' : ''}" onclick="selectGift(${p.id})">
             <div class="gift-option-emoji" onclick="event.stopPropagation(); previewGift(${p.id})" style="cursor:pointer;position:relative;width:36px;height:36px;flex-shrink:0;" title="Переглянути товар">
         ${p.photos && p.photos.length > 0
-          ? `<img src="${p.photos[0]}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${escapeHtml(p.name)}" decoding="async" loading="lazy">`
+          ? `<img src="${photo(p.photos[0], { w: 120 })}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${escapeHtml(p.name)}" decoding="async" loading="lazy">`
           : p.emoji}
       </div>
       <div class="gift-option-info">
@@ -2979,14 +3108,31 @@ function renderCart() {
 
   // Інакше — показуємо товари та підвал з сумою
   footer.style.display = '';
-  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-
-  // Розрахунок з урахуванням знижки (якщо застосовано купон)
-  const rawTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const rawTotal = getCartFixedTotal();
   const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
   const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
   const discount = couponDiscount + promotionDiscount;
   const finalTotal = rawTotal - discount;
+  const totalLabel = formatCartTotalLabel(finalTotal);
+  const hasContract = cartHasContractItems();
+  const totalHintEl = document.getElementById('cart-total-hint');
+  if (totalHintEl) {
+    totalHintEl.style.display = hasContract && getCartFixedTotal() === 0 ? '' : 'none';
+  }
+
+  const commentEl = document.getElementById('cart-comment');
+  if (commentEl) {
+    commentEl.placeholder = hasContract
+      ? 'Опиши конфігурацію / кількість модулів / побажання — це допоможе порахувати ціну'
+      : 'Колір, написи, особливі побажання...';
+  }
+
+  const submitBtn = document.getElementById('cart-submit-btn');
+  if (submitBtn) {
+    submitBtn.textContent = hasContract && getCartFixedTotal() === 0
+      ? '✓ Надіслати заявку'
+      : '✓ Оформити замовлення';
+  }
 
   // Показуємо стару ціну з анімацією, якщо є знижка
   const oldPriceEl = document.getElementById('cartOldPrice');
@@ -3024,11 +3170,17 @@ function renderCart() {
   }
 
   // Якщо сума змінилась — запускаємо анімацію, інакше просто оновлюємо текст без анімації
-  if (prevTotal !== finalTotal) {
+  if (hasContract || /узгодимо|домовленістю/i.test(String(totalLabel))) {
+    totalEl2.style.animation = 'none';
+    totalEl2.textContent = totalLabel;
+    totalEl2.classList.toggle('contract-label', hasContract && getCartFixedTotal() === 0);
+  } else if (prevTotal !== finalTotal) {
     animatePrice(totalEl2, prevTotal, finalTotal);
+    totalEl2.classList.remove('contract-label');
   } else {
-    totalEl2.style.animation = 'none';  
+    totalEl2.style.animation = 'none';
     totalEl2.textContent = `${finalTotal} ₴`;
+    totalEl2.classList.remove('contract-label');
   }
   // Оновлюємо останню відому суму в кошику після анімації
   _lastCartTotal = finalTotal;
@@ -3061,12 +3213,12 @@ function renderCart() {
     <div class="cart-item" id="cart-item-${item.id}">
       <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}')">
         ${item.photos && item.photos.length > 0
-          ? `<img src="${item.photos[0]}" alt="${item.name}" decoding="async" loading="lazy">`
+          ? `<img src="${photo(item.photos[0], { w: 160 })}" alt="${item.name}" decoding="async" loading="lazy">`
           : item.emoji}
       </div>
       <div class="cart-item-info">
         <div class="cart-item-top">
-          <div class="cart-item-name">${item.name}</div>
+          <div class="cart-item-name">${escapeHtml(item.name)}</div>
           <button class="cart-item-remove" onclick="cartRemoveItem(${item.id})" aria-label="Видалити ${escapeHtml(item.name)}">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M9 3.75A1.75 1.75 0 0 0 7.25 5.5V6H5.5a.75.75 0 0 0 0 1.5h.7l.72 10.16A2.25 2.25 0 0 0 9.16 19.75h5.68a2.25 2.25 0 0 0 2.24-2.09l.72-10.16h.7a.75.75 0 0 0 0-1.5h-1.75v-.5A1.75 1.75 0 0 0 15 3.75H9Zm6.25 2.25V5.5a.25.25 0 0 0-.25-.25H9a.25.25 0 0 0-.25.25V6h6.5ZM9.42 8.75a.75.75 0 0 1 .75.7l.3 6a.75.75 0 1 1-1.5.08l-.3-6a.75.75 0 0 1 .7-.78h.05Zm5.16 0a.75.75 0 0 1 .7.78l-.3 6a.75.75 0 1 1-1.5-.08l.3-6a.75.75 0 0 1 .75-.7h.05ZM12 8.75a.75.75 0 0 1 .75.75v6a.75.75 0 0 1-1.5 0v-6A.75.75 0 0 1 12 8.75Z"/>
@@ -3076,7 +3228,9 @@ function renderCart() {
         <div class="cart-item-sub ${item.customValue ? 'is-accent' : ''}">
           ${item.customValue
             ? escapeHtml(item.customValue)
-            : (!item.fromCustom && item.filamentName ? `PLA · ${escapeHtml(item.filamentName).toUpperCase()}` : '&nbsp;')}
+            : (item.contractPrice && item.mat
+              ? escapeHtml(item.mat)
+              : (!item.fromCustom && item.filamentName ? `PLA · ${escapeHtml(item.filamentName).toUpperCase()}` : '&nbsp;'))}
         </div>
         <div class="cart-item-bottom">
           <div class="cart-item-controls">
@@ -3084,7 +3238,9 @@ function renderCart() {
             <span class="cart-qty-val" id="cart-qty-${item.id}">${item.quantity}</span>
             <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, 1)" aria-label="Збільшити кількість">+</button>
           </div>
-          <div class="cart-item-total" id="cart-total-${item.id}"><span class="amount">${item.price * item.quantity}</span> <span class="currency">₴</span></div>
+          ${item.contractPrice
+            ? '<div class="cart-item-total contract" id="cart-total-' + item.id + '">Узгодимо</div>'
+            : `<div class="cart-item-total" id="cart-total-${item.id}"><span class="amount">${item.price * item.quantity}</span> <span class="currency">₴</span></div>`}
         </div>
       </div>
     </div>
@@ -3111,7 +3267,7 @@ function buildUndoBar(item, endsAt) {
   div.innerHTML = `
     <span style="font-size:28px">${item.emoji}</span>
     <div style="flex:1">
-      <div class="cart-undo-text">Повернути «${item.name}»</div>
+      <div class="cart-undo-text">Повернути «${escapeHtml(item.name)}»</div>
       <div class="cart-undo-hint">Натисни щоб скасувати</div>
     </div>
     <div class="cart-undo-progress" id="undo-prog-${item.id}"></div>
@@ -3209,8 +3365,8 @@ function cartQtyChange(id, delta) {
 
   // Якщо може бути акція -10% (немає купону і сума може перетнути 500 грн або вже більше 500 грн, коли сума змінюється) - просто перемальовуємо кошик
   if (!appliedCoupon) {
-    const rawTotalAfter = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-    const wasPromo = (rawTotalAfter - item.price * delta) >= 500;
+    const rawTotalAfter = getCartFixedTotal();
+    const wasPromo = (rawTotalAfter - (item.contractPrice ? 0 : item.price * delta)) >= 500;
     const isPromo = rawTotalAfter >= 500;
     if (wasPromo || isPromo) {
       renderCart();
@@ -3237,12 +3393,12 @@ function updateCartTotal() {
   const totalEl = document.getElementById('cart-total');
   const footer  = document.getElementById('cart-footer');
   if (!totalEl) return;
-  const rawTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const rawTotal = getCartFixedTotal();
   const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
   const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
   const discount = couponDiscount + promotionDiscount;
   const total = rawTotal - discount;
-  totalEl.textContent = total + ' ₴';
+  totalEl.textContent = formatCartTotalLabel(total);
   if (footer) footer.style.display = cart.length || Object.keys(pendingRemovals).length ? '' : 'none';
 }
 
@@ -3362,11 +3518,17 @@ function switchPage(page, btn) {
 }
 
 // ─── ЗАВАНТАЖЕННЯ ТОВАРІВ ────────────────────────────────────
+async function apiGet(path) {
+  const res = await fetch(API_BASE + path, { headers: apiHeaders() });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
 async function loadProducts() {
   try {
-    const response = await fetch('products.json');
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    PRODUCTS = await response.json();
+    const all = await apiGet('/api/products');
+    PRODUCTS = all.filter(p => p.cat !== 'custom');
+    CUSTOM_PRODUCTS = all.filter(p => p.cat === 'custom');
   } catch (e) {
     console.error('Помилка завантаження товарів:', e);
     document.getElementById('grid').innerHTML =
@@ -3376,9 +3538,7 @@ async function loadProducts() {
 
 async function loadCategories() {
   try {
-    const response = await fetch('categories.json');
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    CATEGORIES = await response.json();
+    CATEGORIES = await apiGet('/api/categories');
     CATEGORIES = CATEGORIES
       .filter(cat => cat && cat.id)
       .sort((a, b) => Number(a.order ?? 999) - Number(b.order ?? 999));
@@ -3407,9 +3567,7 @@ async function loadCategories() {
 
 async function loadFilaments() {
   try {
-    const r = await fetch('filaments.json');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    FILAMENTS = await r.json();
+    FILAMENTS = await apiGet('/api/filaments');
   } catch (e) {
     console.error('Помилка завантаження filaments.json:', e);
     FILAMENTS = [];
@@ -3631,8 +3789,8 @@ function getFilteredProductsByNameAndCategory(searchQuery = '', category = '', s
     const matchCategory = !category || p.cat === category;
     const matchMultiCategories = !selectedCategoryList.length || selectedCategoryList.includes(p.cat);
     const price = Number(p.price || 0);
-    const matchMinPrice = minPrice === null || Number.isNaN(minPrice) || price >= minPrice;
-    const matchMaxPrice = maxPrice === null || Number.isNaN(maxPrice) || price <= maxPrice;
+    const matchMinPrice = p.contractPrice || minPrice === null || Number.isNaN(minPrice) || price >= minPrice;
+    const matchMaxPrice = p.contractPrice || maxPrice === null || Number.isNaN(maxPrice) || price <= maxPrice;
     return matchName && matchCategory && matchMultiCategories && matchMinPrice && matchMaxPrice;
   });
 
@@ -4060,12 +4218,13 @@ function renderPinnedProducts() {
     <div class="pinned-card" onclick="openModal(${p.id}, 'products')">
       <div class="pinned-thumb">
         ${p.photos?.length ? `<img src="${photo(p.photos[0])}" alt="${escapeAttr(p.name)}">` : escapeHtml(p.emoji || '📦')}
+        ${p.contractPrice ? '<div class="card-contract-badge">🤝 Договірна</div>' : ''}
       </div>
       <div>
         <div class="pinned-name">${escapeHtml(p.name)}</div>
         <div class="pinned-mat">${escapeHtml(p.mat || '')}</div>
-        <div class="pinned-bottom">
-          <div class="pinned-price">${p.price} ₴</div>
+        <div class="pinned-bottom${p.contractPrice ? ' no-price' : ''}">
+          ${p.contractPrice ? '' : `<div class="pinned-price">${p.price} ₴</div>`}
           <button class="pinned-order-btn" type="button" onclick="event.stopPropagation(); openModal(${p.id}, 'products')">Замовити</button>
         </div>
       </div>
@@ -4109,7 +4268,11 @@ function filterCat(_, cat) {
 }
 
 // ─── CAROUSEL ───────────────────────────────────────────────
-function isGif(url) { return url && url.toLowerCase().includes('.gif'); }
+function isAnimatedPhoto(url) {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return u.includes('.gif') || u.includes('.webp');
+}
 
 function buildCarousel(photos) {
   const wrap = document.getElementById('carousel-wrap');
@@ -4132,8 +4295,8 @@ function buildCarousel(photos) {
 
   track.innerHTML = photos.map((url, i) => `
     <div class="carousel-slide" onclick="openLightbox(${i})">
-      <img src="${url}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async">
-      ${isGif(url) ? '<div class="gif-badge">GIF</div>' : ''}
+      <img src="${photo(url, { w: 1000 })}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async">
+      ${isAnimatedPhoto(url) ? '<div class="gif-badge">Анім.</div>' : ''}
     </div>
   `).join('');
 
@@ -4294,7 +4457,7 @@ function openLightbox(startIndex) {
   const dots  = document.getElementById('lb-dots');
 
   track.innerHTML = photos.map((url, i) =>
-    `<div class="lightbox-slide"><img src="${url}" alt="фото ${i+1}" loading="lazy" decoding="async"></div>`
+    `<div class="lightbox-slide"><img src="${photo(url, { w: 1400 })}" alt="фото ${i+1}" loading="lazy" decoding="async"></div>`
   ).join('');
 
   dots.innerHTML = photos.map((_, i) =>
@@ -4511,21 +4674,37 @@ function openModal(id, source = 'products', options = {}) {
   if (!currentProduct) return;
   currentProduct._isCustom = source === 'custom';
 
-  const discount = currentProduct.oldPrice
+  const discount = !currentProduct.contractPrice && currentProduct.oldPrice && currentProduct.price < currentProduct.oldPrice
     ? Math.round((1 - currentProduct.price / currentProduct.oldPrice) * 100) : 0;
 
   document.getElementById('m-name').textContent = currentProduct.name;
+  document.getElementById('m-mat').textContent = currentProduct.mat || '';
   const priceEl = document.getElementById('m-price');
-  priceEl.textContent = currentProduct.price + ' ₴';
-  if (currentProduct.oldPrice) {
-    priceEl.classList.add('has-discount');
+  const priceHintEl = document.getElementById('m-price-hint');
+  const priceRowEl = document.getElementById('m-price-row');
+  const contractNoticeEl = document.getElementById('m-contract-notice');
+  const generalNoticeEl = document.getElementById('m-general-notice');
+  if (currentProduct.contractPrice) {
+    if (priceRowEl) priceRowEl.style.display = 'none';
+    contractNoticeEl?.classList.add('visible');
+    generalNoticeEl && (generalNoticeEl.style.display = 'none');
   } else {
-    priceEl.classList.remove('has-discount');
+    if (priceRowEl) priceRowEl.style.display = '';
+    contractNoticeEl?.classList.remove('visible');
+    generalNoticeEl && (generalNoticeEl.style.display = '');
+    priceEl.textContent = currentProduct.price + ' ₴';
+    priceEl.classList.remove('contract');
+    priceHintEl.classList.add('hidden');
+    if (discount) {
+      priceEl.classList.add('has-discount');
+    } else {
+      priceEl.classList.remove('has-discount');
+    }
   }
 
   const oldEl  = document.getElementById('m-price-old');
   const chipEl = document.getElementById('m-sale-chip');
-  if (currentProduct.oldPrice) {
+  if (discount && !currentProduct.contractPrice) {
     oldEl.textContent  = currentProduct.oldPrice + ' ₴';
     chipEl.textContent = `−${discount}%`;
     oldEl.style.display  = '';
@@ -4566,7 +4745,7 @@ function openModal(id, source = 'products', options = {}) {
     const tg = window.Telegram?.WebApp;
     const userId = tg?.initDataUnsafe?.user?.id;
     // Кнопка STL показується тільки для адміністратора
-    const isAdmin = userId === 718746623;
+    const isAdmin = userId === window.__OWNER_ID__ || userId === 718746623;
 
   modalSavedScrollY = getMainScrollTop();
   document.body.classList.add('modal-open');
@@ -4754,7 +4933,7 @@ async function submitOrder() {
   const user = tg?.initDataUnsafe?.user;
 
   // Розрахунок загальної суми замовлення з урахуванням кількості кожного товару та застосованої знижки. Це дозволяє нам отримати точну суму, яку користувач повинен сплатити, враховуючи всі товари в кошику та можливі знижки від купонів.
-  const rawTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const rawTotal = getCartFixedTotal();
   const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
   const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
   const discount = couponDiscount + promotionDiscount;
@@ -4765,7 +4944,7 @@ async function submitOrder() {
     items: cart.map(i => ({
       product_id:   i.id,
       product_name: i.name,
-      price:        i.price,
+      price:        i.contractPrice ? 0 : i.price,
       quantity:     i.quantity,
       fromCustom:   i.fromCustom,
       customValue:  i.customValue || '',
@@ -4978,18 +5157,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderGrid();
   renderSales();
 
-  // Завантажуємо індивідуальні товари
-  fetch('custom_products.json')
-    .then(r => r.json())
-    .then(data => {
-      CUSTOM_PRODUCTS = data;
-      renderCustom();
-    })
-    // Якщо не вдалось завантажити індивідуальні товари, показуємо повідомлення про помилку
-    .catch(() => {
-      document.getElementById('grid-custom').innerHTML =
-        '<div class="empty"><div class="empty-ico">😕</div>Не вдалось завантажити</div>';
-    });
+  if (CUSTOM_PRODUCTS.length) {
+    renderCustom();
+  }
 
   // Відкрити конкретний товар якщо прийшли через startapp=product_1
   const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
@@ -5095,7 +5265,7 @@ async function applyCoupon() {
   statusEl.className = 'coupon-status loading';
   btn.disabled = true;
 
-  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const cartTotal = getCartFixedTotal();
   const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0;
 
   try {

@@ -23,7 +23,14 @@ python scripts/validate_migration.py --sqlite-path users.db --database-url "post
 Set env vars:
 
 - `DB_BACKEND=postgres`
+- `CATALOG_BACKEND=postgres`
 - `DATABASE_URL=postgresql://...sslmode=require`
+
+Import catalog:
+
+```bash
+python scripts/migrate_catalog_to_supabase.py --database-url "postgresql://...sslmode=require" --truncate-first
+```
 
 Restart bot and verify flows:
 

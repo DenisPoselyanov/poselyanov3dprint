@@ -129,6 +129,8 @@ def _client_item_line(item: dict) -> str:
     line = f"{name} × {qty}"
     if item.get("filament_name"):
         line += f" · 🎨 {escape(item['filament_name'])}"
+    if item.get("is_contract_price"):
+        line += " · договірна ціна"
     return f"<li>{line}</li>"
 
 
@@ -141,6 +143,8 @@ def _client_order_block(order: dict) -> str:
     coupon_code = order.get("coupon_code")
     gift = order.get("gift")
     comment = (order.get("comment") or "").strip()
+    price_pending = bool(order.get("price_pending"))
+    has_contract = any(i.get("is_contract_price") for i in items)
 
     parts = ['<p><b>Товари:</b></p>', "<ul>"]
     parts.extend(_client_item_line(i) for i in items)
@@ -152,9 +156,19 @@ def _client_order_block(order: dict) -> str:
             parts.append(f"<p>🏷️ <b>Купон {escape(coupon_code)}:</b> −{coupon_discount} ₴</p>")
         if promotion_discount > 0:
             parts.append(f"<p>🔥 <b>Акція -10%:</b> −{promotion_discount} ₴</p>")
-        parts.append(
-            f"<p>💰 <b>Разом:</b> <s>{original_price} ₴</s> → <b>{total_price} ₴</b></p>"
-        )
+        if has_contract and price_pending:
+            parts.append(
+                f"<p>💰 <b>Разом:</b> <s>{original_price} ₴</s> → <b>{total_price} ₴</b> + договірна</p>"
+            )
+        else:
+            parts.append(
+                f"<p>💰 <b>Разом:</b> <s>{original_price} ₴</s> → <b>{total_price} ₴</b></p>"
+            )
+    elif price_pending or (has_contract and total_price == 0):
+        if total_price > 0 and has_contract:
+            parts.append(f"<p>💰 <b>Разом: {total_price} ₴</b> + договірна позиція</p>")
+        else:
+            parts.append("<p>💰 <b>Договірна ціна</b> — суму узгодимо після замовлення</p>")
     else:
         parts.append(f"<p>💰 <b>Разом: {total_price} ₴</b></p>")
 
@@ -188,7 +202,10 @@ def _admin_item_line(item: dict, *, linked: bool = True) -> str:
     price = int(item.get("price") or 0)
     subtotal = price * qty
     linked_name = product_link(name, product_id, linked=linked)
-    line = f"{linked_name} × {qty} — {subtotal} ₴"
+    if item.get("is_contract_price") and price == 0:
+        line = f"{linked_name} × {qty} — договірна"
+    else:
+        line = f"{linked_name} × {qty} — {subtotal} ₴"
     filament = (item.get("filament_name") or item.get("filament") or "").strip()
     if filament:
         line += f" · 🎨 {escape(filament)}"
@@ -205,9 +222,14 @@ def _admin_pricing_table(
     *,
     coupon_discount: int | None = None,
     promotion_discount: int | None = None,
+    price_pending: bool = False,
 ) -> str:
+    if price_pending and total_price == 0 and discount_amount <= 0:
+        return "<p>⚠️ <b>Є договірні позиції</b> — вкажи ціну в адмін-панелі</p>"
+
     if discount_amount <= 0:
-        return f"<p>💰 <b>Разом: {total_price} ₴</b></p>"
+        suffix = " + договірна" if price_pending else ""
+        return f"<p>💰 <b>Разом: {total_price} ₴{suffix}</b></p>"
 
     original_price = total_price + discount_amount
     discount_parts = []
@@ -249,6 +271,7 @@ def build_admin_order_notification(
     comment: str | None = None,
     status_label: str | None = None,
     linked: bool = True,
+    price_pending: bool = False,
 ) -> str:
     parts = [
         f"<h2>🔔 НОВЕ ЗАМОВЛЕННЯ #{order_id}</h2>",
@@ -270,6 +293,7 @@ def build_admin_order_notification(
             coupon_code,
             coupon_discount=coupon_discount,
             promotion_discount=promotion_discount,
+            price_pending=price_pending,
         )
     )
 
@@ -310,7 +334,37 @@ def build_admin_order_with_status(
         comment=order.get("comment"),
         status_label=status_label,
         linked=linked,
+        price_pending=bool(order.get("price_pending")),
     )
+
+
+def build_client_price_quote(order_id: int, total_price: int, items: list[dict]) -> str:
+    """HTML-повідомлення клієнту з фінальною сумою після узгодження."""
+    parts = [
+        f"<h2>💰 Замовлення #{order_id}</h2>",
+        "<p>Фінальна сума узгоджена:</p>",
+        "<ul>",
+    ]
+    for item in items:
+        if str(item.get("product_name", "")).startswith("🎁"):
+            continue
+        name = escape(item.get("product_name", "—"))
+        qty = int(item.get("quantity") or 1)
+        price = int(item.get("price") or 0)
+        line = f"{name} × {qty}"
+        fl = (item.get("filament") or "").strip()
+        if fl:
+            line += f" · 🎨 {escape(fl)}"
+        if price > 0:
+            line += f" — {price * qty} ₴"
+        parts.append(f"<li>{line}</li>")
+    parts.append("</ul>")
+    parts.append(f"<p><b>До сплати: {total_price} ₴</b></p>")
+    parts.append(
+        f'<footer><a href="{DENIS_LINK}">Денис</a> '
+        "зв'яжеться з тобою для оплати 🙌</footer>"
+    )
+    return "\n".join(parts)
 
 
 def build_order_status(order: dict) -> str:

@@ -1,5 +1,49 @@
 BEGIN;
 
+-- Catalog tables (Phase 2b)
+CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    emoji TEXT,
+    badge_class TEXT,
+    sort_order INTEGER DEFAULT 0,
+    active BOOLEAN DEFAULT true,
+    quick_slot INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id BIGSERIAL PRIMARY KEY,
+    category_id TEXT REFERENCES categories(id),
+    name TEXT NOT NULL,
+    emoji TEXT,
+    mat TEXT,
+    price INTEGER DEFAULT 0,
+    old_price INTEGER,
+    photos JSONB DEFAULT '[]',
+    custom_fields TEXT DEFAULT '',
+    hot BOOLEAN DEFAULT false,
+    gift BOOLEAN DEFAULT false,
+    filament_choice BOOLEAN DEFAULT true,
+    pinned BOOLEAN DEFAULT false,
+    stl_link TEXT DEFAULT '',
+    contract_price BOOLEAN DEFAULT false,
+    is_custom BOOLEAN DEFAULT false,
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS filaments (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    hex TEXT,
+    available BOOLEAN DEFAULT true,
+    sort_order INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
+
+-- Transaction tables
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT PRIMARY KEY,
     name TEXT,
@@ -19,7 +63,8 @@ CREATE TABLE IF NOT EXISTS orders (
     status TEXT NOT NULL DEFAULT 'new',
     coupon_code TEXT,
     discount_amount INTEGER NOT NULL DEFAULT 0,
-    ordered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    ordered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    price_pending INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -29,7 +74,8 @@ CREATE TABLE IF NOT EXISTS order_items (
     product_name TEXT,
     price INTEGER,
     quantity INTEGER NOT NULL DEFAULT 1,
-    filament TEXT NOT NULL DEFAULT ''
+    filament TEXT NOT NULL DEFAULT '',
+    is_contract_price INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS coupons (
@@ -63,5 +109,24 @@ CREATE TABLE IF NOT EXISTS filament_colors (
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked);
+
+-- RLS: service role (bot) bypasses; anon read-only for catalog if needed
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE filaments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupon_uses ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS catalog_categories_read ON categories;
+CREATE POLICY catalog_categories_read ON categories FOR SELECT TO anon, authenticated USING (active = true);
+
+DROP POLICY IF EXISTS catalog_products_read ON products;
+CREATE POLICY catalog_products_read ON products FOR SELECT TO anon, authenticated USING (active = true);
+
+DROP POLICY IF EXISTS catalog_filaments_read ON filaments;
+CREATE POLICY catalog_filaments_read ON filaments FOR SELECT TO anon, authenticated USING (true);
 
 COMMIT;
