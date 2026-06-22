@@ -1,0 +1,41 @@
+name: Migrate Catalog to Supabase
+
+on:
+  workflow_dispatch:
+    inputs:
+      database_url:
+        description: "Supabase Database URL (postgresql://postgres:PASS@db.xxx.supabase.co:5432/postgres)"
+        required: true
+        type: string
+      truncate_first:
+        description: "Clear existing catalog before migration?"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mask database URL in logs
+        run: echo "::add-mask::${{ inputs.database_url }}"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run catalog migration
+        run: |
+          ARGS="--database-url ${{ inputs.database_url }}"
+          if [ "${{ inputs.truncate_first }}" = "true" ]; then
+            ARGS="$ARGS --truncate-first"
+          fi
+          python scripts/migrate_catalog_to_supabase.py $ARGS
