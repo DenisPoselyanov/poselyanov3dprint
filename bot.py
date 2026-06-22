@@ -2348,17 +2348,27 @@ async def handle_update_order_pricing(request: web.Request):
         user_id_from_result = result.get("user_id")
 
         if data.get("notify_client") and user_id_from_result:
+            uid_int = int(user_id_from_result)
             order, items = get_order_with_items(order_id)
             if order and items:
                 quote_html = build_client_price_quote(order_id, int(order.get("total_price") or 0), items)
-                try:
-                    await send_rich_message(bot_app.bot, int(user_id_from_result), quote_html)
-                    # Після нового повідомлення про ціну скидаємо кеш підтверджень,
-                    # щоб наступне замовлення надіслало НОВЕ повідомлення, а не тихо
-                    # відредагувало старе (редагування не генерує нотифікацію в Telegram).
-                    confirmation_messages.pop(int(user_id_from_result), None)
-                except Exception as e:
-                    logger.error(f"Помилка повідомлення клієнту про ціну: {e}")
+                existing_confirm = confirmation_messages.get(uid_int)
+                edited = False
+                if existing_confirm:
+                    try:
+                        await edit_rich_message(
+                            bot_app.bot, uid_int, existing_confirm["message_id"], quote_html
+                        )
+                        confirmation_messages.pop(uid_int, None)
+                        edited = True
+                    except Exception as e:
+                        logger.warning(f"Не вдалось відредагувати підтвердження клієнту, надсилаємо нове: {e}")
+                if not edited:
+                    try:
+                        await send_rich_message(bot_app.bot, uid_int, quote_html)
+                        confirmation_messages.pop(uid_int, None)
+                    except Exception as e:
+                        logger.error(f"Помилка повідомлення клієнту про ціну: {e}")
 
         # Оновлюємо повідомлення в адмін-каналі — прибираємо «договірна» та ставимо актуальну суму
         if user_id_from_result:
