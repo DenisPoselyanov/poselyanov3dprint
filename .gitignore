@@ -1,8 +1,29 @@
+# Локальні скрипти запуску
 start.bat
 Start.bat
-users.sqbpro
-.env
 start-bot.bat
 start-ngrok.bat
-.env.example
-.env.example
+
+# Середовище
+.env
+
+# SQLite Browser
+*.sqbpro
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# База даних
+*.db
+*.sqlite
+*.sqlite3
+
+# Тести / кеш
+.pytest_cache/
+
+# Генеровані артефакти
+extracted_chunks.md
+package-lock.json
