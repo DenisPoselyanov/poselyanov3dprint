@@ -677,22 +677,7 @@ def save_user(user):
     conn.commit()
     conn.close()
 
-# Функція для збереження замовлення в базі даних, яка приймає всі необхідні дані про замовлення (користувача, товари, загальну суму, коментар, подарунок і купон), зберігає їх у відповідних таблицях (orders і order_items) і повертає ID створеного замовлення для подальшого використання в логах і кнопках.
-def save_order(user_id, username, first_name, items, total_price, comment, gift_product_name=None, coupon_code=None, discount_amount=0, price_pending=0):
-    conn = db_connect()
-    if _is_postgres():
-        cursor = conn.execute("""
-            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status, price_pending)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'new', %s)
-            RETURNING id
-        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, int(price_pending or 0)))
-        order_id = cursor.fetchone()[0]
-    else:
-        cursor = conn.execute("""
-            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status, price_pending)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
-        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, int(price_pending or 0)))
-        order_id = cursor.lastrowid
+def _insert_order_items(conn, order_id: int, items: list) -> None:
     for item in items:
         fl = (item.get("filament_name") or item.get("filament_id") or "").strip()
         is_contract = 1 if item.get("is_contract_price") else 0
@@ -709,14 +694,90 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
             is_contract,
         ))
 
-    # Якщо є подарунок, додаємо його як окремий рядок в order_items з ціною 0 і спеціальною назвою для зручності відображення в звітах і повідомленнях
+
+def _find_active_order(user_id: int) -> dict | None:
+    """Активне (new/draft) замовлення користувача за останні 4 години."""
+    if not user_id or int(user_id) <= 0:
+        return None
+    conn = db_connect(dict_rows=True)
+    date_expr = "NOW() - INTERVAL '4 hours'" if _is_postgres() else "datetime('now', '-4 hours')"
+    row = conn.execute(_sql(f"""
+        SELECT id, total_price, price_pending, comment, gift_product_name
+        FROM orders
+        WHERE user_id = ? AND status IN ('new', 'draft')
+          AND ordered_at > {date_expr}
+        ORDER BY ordered_at DESC
+        LIMIT 1
+    """), (int(user_id),)).fetchone()
+    conn.close()
+    return _row_to_dict(row) if row else None
+
+
+# Функція для збереження замовлення в базі даних. Якщо у користувача вже є активне
+# замовлення (new/draft) за останні 4 год — дописує товари до нього. Повертає (order_id, is_new).
+def save_order(user_id, username, first_name, items, total_price, comment, gift_product_name=None, coupon_code=None, discount_amount=0, price_pending=0):
+    conn = db_connect()
+    uid = int(user_id or 0)
+    active = _find_active_order(uid) if uid > 0 else None
+
+    if active:
+        order_id = int(active["id"])
+        new_total = int(active.get("total_price") or 0) + int(total_price)
+        new_price_pending = max(int(active.get("price_pending") or 0), int(price_pending or 0))
+        old_comment = (active.get("comment") or "").strip()
+        new_comment = (comment or "").strip()
+        if new_comment and old_comment:
+            merged_comment = f"{old_comment}\n{new_comment}"
+        else:
+            merged_comment = new_comment or old_comment
+
+        old_gift = (active.get("gift_product_name") or "").strip()
+        new_gift = (gift_product_name or "").strip()
+        if new_gift and old_gift:
+            merged_gift = f"{old_gift}, {new_gift}"
+        else:
+            merged_gift = new_gift or old_gift or None
+
+        conn.execute(_sql("""
+            UPDATE orders
+            SET total_price = ?, price_pending = ?, comment = ?, gift_product_name = ?
+            WHERE id = ?
+        """), (new_total, new_price_pending, merged_comment or None, merged_gift, order_id))
+
+        _insert_order_items(conn, order_id, items)
+
+        if gift_product_name:
+            conn.execute(_sql("""
+                INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
+                VALUES (?, 0, ?, 0, 1)
+            """), (order_id, f"🎁 {gift_product_name} (безкоштовно)"))
+
+        conn.commit()
+        conn.close()
+        return order_id, False
+
+    if _is_postgres():
+        cursor = conn.execute("""
+            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status, price_pending)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'new', %s)
+            RETURNING id
+        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, int(price_pending or 0)))
+        order_id = cursor.fetchone()[0]
+    else:
+        cursor = conn.execute("""
+            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status, price_pending)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
+        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, int(price_pending or 0)))
+        order_id = cursor.lastrowid
+
+    _insert_order_items(conn, order_id, items)
+
     if gift_product_name:
         conn.execute(_sql("""
             INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
             VALUES (?, 0, ?, 0, 1)
         """), (order_id, f"🎁 {gift_product_name} (безкоштовно)"))
 
-    # Якщо замовлення було оформлено з купоном, оновлюємо лічильник використань цього купона і додаємо запис в таблицю coupon_uses для відстеження, хто і коли його використовував. Це дозволяє реалізувати обмеження на кількість використань купона і використання одним користувачем, а також отримувати статистику по купонам.
     if coupon_code:
         conn.execute(_sql(
             "UPDATE coupons SET uses_count = uses_count + 1 WHERE code = ?"),
@@ -728,7 +789,7 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
         )
     conn.commit()
     conn.close()
-    return order_id
+    return order_id, True
 
 # Функція для отримання статистики по користувачах і замовленнях, яка використовується в адмінській команді /stats для відображення актуальної інформації про діяльність бота.
 def get_stats():
@@ -1481,6 +1542,73 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Невірний формат команди")
 
+def _admin_items_from_db(db_items: list[dict]) -> list[dict]:
+    return [
+        {
+            "product_id": int(i.get("product_id") or 0),
+            "product_name": i.get("product_name", "—"),
+            "price": int(i.get("price") or 0),
+            "quantity": int(i.get("quantity") or 1),
+            "filament_name": i.get("filament"),
+            "is_contract_price": bool(i.get("is_contract_price")),
+        }
+        for i in db_items
+        if not str(i.get("product_name", "")).startswith("🎁")
+    ]
+
+
+def _client_block_from_db(order: dict, db_items: list[dict]) -> dict:
+    discount_amount = int(order.get("discount_amount") or 0)
+    coupon_code = order.get("coupon_code")
+    if coupon_code:
+        coupon_discount = discount_amount
+        promotion_discount = 0
+    else:
+        coupon_discount = 0
+        promotion_discount = discount_amount
+    return {
+        "items": [
+            {
+                "product_name": i.get("product_name", "—"),
+                "price": int(i.get("price") or 0),
+                "quantity": int(i.get("quantity") or 1),
+                "filament_name": i.get("filament"),
+                "is_contract_price": bool(i.get("is_contract_price")),
+            }
+            for i in db_items
+            if not str(i.get("product_name", "")).startswith("🎁")
+        ],
+        "total_price": int(order.get("total_price") or 0),
+        "coupon_code": coupon_code,
+        "coupon_discount": coupon_discount,
+        "promotion_discount": promotion_discount,
+        "gift": order.get("gift_product_name"),
+        "comment": order.get("comment"),
+        "price_pending": bool(order.get("price_pending")),
+    }
+
+
+def _build_single_order_channel_markup(
+    order_id: int,
+    price_pending: bool,
+    tg_username: str | None,
+    first_name: str,
+) -> InlineKeyboardMarkup:
+    status_buttons = [
+        InlineKeyboardButton("✅ Підтвердити", callback_data=f"confirm_{order_id}"),
+        InlineKeyboardButton("❓ Під питанням", callback_data=f"draft_{order_id}"),
+        InlineKeyboardButton("❌ Відміна", callback_data=f"cancel_{order_id}"),
+    ]
+    channel_rows = []
+    admin_url = get_admin_webapp_url(order_id) if price_pending else None
+    if admin_url:
+        channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
+    channel_rows.append(status_buttons)
+    if tg_username:
+        channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+    return InlineKeyboardMarkup(channel_rows)
+
+
 def _build_admin_batch_section_data(order_id: int) -> dict | None:
     """Дані одного замовлення для build_admin_orders_batch (читає з БД)."""
     order, items = get_order_with_items(order_id)
@@ -1599,12 +1727,143 @@ async def handle_order(request):
     product_name = ', '.join(i.get('product_name', '—') for i in items)
 
     # Зберігаємо замовлення в базі даних і отримуємо його ID для подальшого використання в логах і кнопках
-    order_id = save_order(user_id or 0, username, first_name, items, total_price, comment, gift, coupon_code, total_discount, price_pending)
+    order_id, is_new = save_order(user_id or 0, username, first_name, items, total_price, comment, gift, coupon_code, total_discount, price_pending)
 
     # Логування нового замовлення з інформацією про ID замовлення, назву товару, загальну суму, інформацію про купон і знижку (якщо є) і ім'я користувача. Це дозволяє відстежувати всі замовлення, які надходять через веб-додаток, і отримувати повну інформацію про них для подальшої обробки.
     coupon_info = f"  🏷️ {coupon_code} −{coupon_discount}₴" if coupon_code else ""
     promotion_info = f"  🔥 Акція −{promotion_discount}₴" if promotion_discount > 0 else ""
-    logger.info(f"📦 ЗАМОВЛЕННЯ #{order_id}  {product_name}  {total_price}₴{coupon_info}{promotion_info}  від {username}")
+    if is_new:
+        logger.info(f"📦 ЗАМОВЛЕННЯ #{order_id}  {product_name}  {total_price}₴{coupon_info}{promotion_info}  від {username}")
+    else:
+        logger.info(f"📦 ДОДАНО до #{order_id}  {product_name}  +{total_price}₴  від {username}")
+
+    if not is_new:
+        order, db_items = get_order_with_items(order_id)
+        if not order:
+            return web.json_response(
+                {"ok": False, "error": "Замовлення не знайдено"},
+                status=500,
+                headers=cors_headers(request),
+            )
+
+        gift_db = order.get("gift_product_name")
+        gift_product_id = find_gift_product_id(gift_db)
+        admin_items_db = _admin_items_from_db(db_items)
+        order_discount = int(order.get("discount_amount") or 0)
+        coupon_code_db = order.get("coupon_code")
+        coupon_discount_db = order_discount if coupon_code_db else 0
+        promotion_discount_db = 0 if coupon_code_db else order_discount
+        price_pending_db = bool(order.get("price_pending"))
+
+        owner_html = build_admin_order_notification(
+            order_id=order_id,
+            username=username,
+            items=admin_items_db,
+            total_price=int(order.get("total_price") or 0),
+            coupon_code=coupon_code_db,
+            discount_amount=order_discount,
+            coupon_discount=coupon_discount_db if coupon_discount_db else None,
+            promotion_discount=promotion_discount_db if promotion_discount_db else None,
+            gift=gift_db,
+            gift_product_id=gift_product_id,
+            comment=order.get("comment") or None,
+            price_pending=price_pending_db,
+        )
+        channel_markup = _build_single_order_channel_markup(
+            order_id, price_pending_db, tg_username, first_name,
+        )
+
+        if user_id:
+            try:
+                now = datetime.now()
+                order_block = _client_block_from_db(order, db_items)
+                confirm_html = build_client_order_confirmation([order_block])
+                existing = confirmation_messages.get(user_id)
+                if existing:
+                    try:
+                        await edit_rich_message(
+                            bot_app.bot,
+                            user_id,
+                            existing["message_id"],
+                            confirm_html,
+                        )
+                        confirmation_messages[user_id] = {
+                            "message_id": existing["message_id"],
+                            "orders": [order_block],
+                            "html": confirm_html,
+                            "time": now,
+                            "format": "rich",
+                        }
+                    except Exception:
+                        msg_id = await send_rich_message(bot_app.bot, user_id, confirm_html)
+                        confirmation_messages[user_id] = {
+                            "message_id": msg_id,
+                            "orders": [order_block],
+                            "html": confirm_html,
+                            "time": now,
+                            "format": "rich",
+                        }
+                else:
+                    msg_id = await send_rich_message(bot_app.bot, user_id, confirm_html)
+                    confirmation_messages[user_id] = {
+                        "message_id": msg_id,
+                        "orders": [order_block],
+                        "html": confirm_html,
+                        "time": now,
+                        "format": "rich",
+                    }
+            except Exception as e:
+                logger.error(f"Помилка оновлення підтвердження клієнту: {e}")
+
+        now_admin = datetime.now()
+        uid_for_batch = user_id if (user_id and int(user_id) > 0) else None
+        admin_batch = admin_channel_messages.get(uid_for_batch) if uid_for_batch else None
+
+        if admin_batch:
+            try:
+                await edit_rich_message(
+                    bot_app.bot, admin_batch["chat_id"], admin_batch["message_id"],
+                    owner_html, reply_markup=channel_markup,
+                )
+                admin_channel_messages[uid_for_batch] = {
+                    **admin_batch,
+                    "time": now_admin,
+                    "order_ids": [order_id],
+                    "username": username,
+                    "tg_username": tg_username,
+                    "first_name": first_name,
+                }
+                logger.info(f"✅ Оновлено замовлення #{order_id} в адмін-каналі")
+            except Exception as e:
+                logger.error(f"❌ Редагування адмін-повідомлення не вдалось, надсилаємо нове: {e}")
+                try:
+                    msg_id = await send_rich_message(
+                        bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup,
+                    )
+                    if uid_for_batch:
+                        admin_channel_messages[uid_for_batch] = {
+                            "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
+                            "order_ids": [order_id],
+                            "username": username, "tg_username": tg_username, "first_name": first_name,
+                        }
+                except Exception as e2:
+                    logger.error(f"❌ Помилка надсилання в канал: {e2}")
+        else:
+            try:
+                msg_id = await send_rich_message(
+                    bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup,
+                )
+                if uid_for_batch:
+                    admin_channel_messages[uid_for_batch] = {
+                        "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
+                        "order_ids": [order_id],
+                        "username": username, "tg_username": tg_username, "first_name": first_name,
+                    }
+                logger.info(f"✅ Надіслано оновлене замовлення #{order_id} в канал")
+            except Exception as e:
+                logger.error(f"❌ Помилка надсилання в канал: {e}")
+
+        return web.Response(text="ok", headers=cors_headers(request))
 
     # Підтвердження клієнту
     if user_id:
