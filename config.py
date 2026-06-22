@@ -48,7 +48,7 @@ STATIC_ALLOWED_FILES = frozenset(
     f.strip()
     for f in os.environ.get(
         "STATIC_ALLOWED_FILES",
-        "index.html,admin-panel.html,logo.svg,logo-dark.svg,shared.js,"
+        "index.html,admin-panel.html,logo.svg,logo-dark.svg,shared.js,api-config.js,"
         "products.json,custom_products.json,categories.json,filaments.json",
     ).split(",")
     if f.strip()

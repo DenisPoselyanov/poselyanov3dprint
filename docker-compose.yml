@@ -1,0 +1,20 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: http --domain=gargle-postal-everglade.ngrok-free.dev http://bot:8080 --log=stdout
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
+    depends_on:
+      - bot
+    restart: unless-stopped
