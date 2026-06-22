@@ -72,7 +72,7 @@ def cors_headers(request: web.Request) -> dict:
     return {
         "Access-Control-Allow-Origin": allow,
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data",
+        "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, ngrok-skip-browser-warning",
         "Vary": "Origin",
     }
 

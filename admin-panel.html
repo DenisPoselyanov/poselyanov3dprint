@@ -1649,6 +1649,7 @@
         const originalFetch = window.fetch;
         window.fetch = async function(url, options = {}) {
             if (!options.headers) options.headers = {};
+            options.headers['ngrok-skip-browser-warning'] = '1';
             if (tgInitData) {
                 options.headers['X-Telegram-Init-Data'] = tgInitData;
             }

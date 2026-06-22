@@ -2485,7 +2485,11 @@ const API_BASE = (window.SharedApp && window.SharedApp.resolveApiBase()) || (() 
 })();
 
 function apiHeaders() {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = {
+    'Content-Type': 'application/json',
+    // ngrok free tier: без цього заголовка браузер отримує HTML-сторінку попередження без CORS
+    'ngrok-skip-browser-warning': '1',
+  };
   const initData = window.Telegram?.WebApp?.initData;
   if (initData) headers['X-Telegram-Init-Data'] = initData;
   return headers;
