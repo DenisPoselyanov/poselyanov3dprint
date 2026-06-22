@@ -4979,12 +4979,14 @@ async function submitOrder() {
 
   try {
     await apiPost('/order', payload);
+    const orderedIds = cart.map(i => i.id);
     cart = [];
     appliedCoupon = null;
     renderCart();
     selectedGift = null;
     saveCart();
     updateCartBadge();
+    orderedIds.forEach(id => updateCardBadge(id));
     document.getElementById('success-screen').classList.add('open');
   } catch(e) {
     console.error('Помилка відправки:', e);
