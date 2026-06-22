@@ -134,15 +134,21 @@ def _items_have_comments(items: list[dict]) -> bool:
 def _render_admin_items_with_comments(items: list[dict], *, linked: bool = True) -> list[str]:
     parts: list[str] = []
     filtered = [i for i in items if not str(i.get("product_name", "")).startswith("🎁")]
+    if not filtered:
+        return parts
     idx = 0
     while idx < len(filtered):
         group_comment = (filtered[idx].get("comment") or "").strip()
         end = idx
+        group_items: list[str] = []
         while end < len(filtered) and (filtered[end].get("comment") or "").strip() == group_comment:
-            parts.append(_admin_item_line(filtered[end], linked=linked))
+            group_items.append(_admin_item_line(filtered[end], linked=linked))
             end += 1
+        parts.append("<ul>")
+        parts.extend(group_items)
+        parts.append("</ul>")
         if group_comment:
-            parts.append(f'<li style="list-style:none">📝 {escape(group_comment)}</li>')
+            parts.append(f"<blockquote><p>📝 {escape(group_comment)}</p></blockquote>")
         idx = end
     return parts
 
@@ -150,15 +156,21 @@ def _render_admin_items_with_comments(items: list[dict], *, linked: bool = True)
 def _render_client_items_with_comments(items: list[dict]) -> list[str]:
     parts: list[str] = []
     filtered = [i for i in items if not str(i.get("product_name", "")).startswith("🎁")]
+    if not filtered:
+        return parts
     idx = 0
     while idx < len(filtered):
         group_comment = (filtered[idx].get("comment") or "").strip()
         end = idx
+        group_items: list[str] = []
         while end < len(filtered) and (filtered[end].get("comment") or "").strip() == group_comment:
-            parts.append(_client_item_line(filtered[end]))
+            group_items.append(_client_item_line(filtered[end]))
             end += 1
+        parts.append("<ul>")
+        parts.extend(group_items)
+        parts.append("</ul>")
         if group_comment:
-            parts.append(f'<li style="list-style:none">📝 {escape(group_comment)}</li>')
+            parts.append(f"<blockquote><p>📝 {escape(group_comment)}</p></blockquote>")
         idx = end
     return parts
 
@@ -186,9 +198,8 @@ def _client_order_block(order: dict) -> str:
     price_pending = bool(order.get("price_pending"))
     has_contract = any(i.get("is_contract_price") for i in items)
 
-    parts = ['<p><b>Товари:</b></p>', "<ul>"]
+    parts = ['<p><b>Товари:</b></p>']
     parts.extend(_render_client_items_with_comments(items))
-    parts.append("</ul>")
 
     if total_discount > 0:
         original_price = total_price + total_discount
@@ -318,10 +329,8 @@ def build_admin_order_notification(
         f"<p>👤 Від: <b>{escape(username)}</b></p>",
         "<hr/>",
         "<p><b>Товари:</b></p>",
-        "<ul>",
     ]
     parts.extend(_render_admin_items_with_comments(items, linked=linked))
-    parts.append("</ul>")
 
     parts.append(
         _admin_pricing_table(
@@ -371,9 +380,7 @@ def build_admin_orders_batch(username: str, sections: list[dict]) -> str:
             hdr += f" — {escape(sl)}"
         parts.append(f"<p>{hdr}</p>")
         linked = s.get("linked", True)
-        parts.append("<ul>")
         parts.extend(_render_admin_items_with_comments(s.get("items", []), linked=linked))
-        parts.append("</ul>")
         parts.append(_admin_pricing_table(
             int(s.get("total_price") or 0),
             int(s.get("discount_amount") or 0),
