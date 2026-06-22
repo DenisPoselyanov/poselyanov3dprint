@@ -314,6 +314,51 @@ def build_admin_order_notification(
     return "\n".join(parts)
 
 
+def build_admin_orders_batch(username: str, sections: list[dict]) -> str:
+    """HTML для адмін-каналу: кілька замовлень одного клієнта в одному повідомленні.
+
+    Кожен елемент sections містить ті самі ключі, що й build_admin_order_notification,
+    плюс опційний 'status_label' і 'status'.
+    """
+    parts = [
+        f"<h2>🔔 ЗАМОВЛЕННЯ від <b>{escape(username)}</b></h2>",
+        "<hr/>",
+    ]
+    for i, s in enumerate(sections):
+        if i > 0:
+            parts.append("<hr/>")
+        oid = s["order_id"]
+        sl = s.get("status_label")
+        hdr = f"<b>Замовлення #{oid}</b>"
+        if sl:
+            hdr += f" — {escape(sl)}"
+        parts.append(f"<p>{hdr}</p>")
+        linked = s.get("linked", True)
+        parts.append("<ul>")
+        for item in s.get("items", []):
+            if str(item.get("product_name", "")).startswith("🎁"):
+                continue
+            parts.append(_admin_item_line(item, linked=linked))
+        parts.append("</ul>")
+        parts.append(_admin_pricing_table(
+            int(s.get("total_price") or 0),
+            int(s.get("discount_amount") or 0),
+            s.get("coupon_code"),
+            coupon_discount=s.get("coupon_discount"),
+            promotion_discount=s.get("promotion_discount"),
+            price_pending=bool(s.get("price_pending")),
+        ))
+        gift = s.get("gift")
+        if gift:
+            gift_name = str(gift).strip()
+            gid = s.get("gift_product_id")
+            gift_line = product_link(gift_name, gid, linked=linked) if (linked and gid) else escape(gift_name)
+            parts.append(f"<p>🎁 {gift_line} — безкоштовно</p>")
+        if s.get("comment"):
+            parts.append(f"<blockquote><p>📝 {escape(s['comment'])}</p></blockquote>")
+    return "\n".join(parts)
+
+
 def build_admin_order_with_status(
     order: dict,
     items: list[dict],
