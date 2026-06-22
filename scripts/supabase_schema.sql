@@ -131,4 +131,19 @@ CREATE POLICY catalog_products_read ON products FOR SELECT TO anon, authenticate
 DROP POLICY IF EXISTS catalog_filaments_read ON filaments;
 CREATE POLICY catalog_filaments_read ON filaments FOR SELECT TO anon, authenticated USING (true);
 
+DROP POLICY IF EXISTS catalog_filaments_write ON filaments;
+CREATE POLICY catalog_filaments_write ON filaments FOR ALL TO authenticated, service_role USING (true) WITH CHECK (true);
+
+-- Українські назви світних філаментів (раніше були англійською)
+UPDATE filaments SET name = 'Світний' WHERE id = 'luminous';
+UPDATE filaments SET name = 'Світний зелений' WHERE id = 'luminous-green';
+UPDATE filaments SET name = 'Світний синій' WHERE id = 'luminous-blue';
+UPDATE filaments SET name = 'Світний бірюзовий' WHERE id = 'luminous-aqua';
+UPDATE filaments SET name = 'Світний рожевий' WHERE id = 'luminous-pink';
+UPDATE filament_colors SET name = 'Світний' WHERE id = 'luminous';
+UPDATE filament_colors SET name = 'Світний зелений' WHERE id = 'luminous-green';
+UPDATE filament_colors SET name = 'Світний синій' WHERE id = 'luminous-blue';
+UPDATE filament_colors SET name = 'Світний бірюзовий' WHERE id = 'luminous-aqua';
+UPDATE filament_colors SET name = 'Світний рожевий' WHERE id = 'luminous-pink';
+
 COMMIT;

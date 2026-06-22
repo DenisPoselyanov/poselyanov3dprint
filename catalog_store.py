@@ -25,6 +25,12 @@ CATEGORIES_CACHE: list[dict] = []
 FILAMENTS_CACHE: list[dict] = []
 
 
+def _replace_cache_list(cache: list, items: list) -> None:
+    """Keep imported references valid (e.g. bot.py `from catalog_store import FILAMENTS_CACHE`)."""
+    cache.clear()
+    cache.extend(items)
+
+
 def use_catalog_db() -> bool:
     backend = config.CATALOG_BACKEND
     return backend in ("postgres", "supabase") or (
@@ -211,7 +217,7 @@ def reload_filaments_cache(force: bool = False):
             "SELECT id, name, hex, available FROM filaments ORDER BY sort_order, id"
         ).fetchall()
         conn.close()
-        FILAMENTS_CACHE = [_row_to_filament(dict(r)) for r in rows]
+        _replace_cache_list(FILAMENTS_CACHE, [_row_to_filament(dict(r)) for r in rows])
         return True
 
     fp = Path(config.FILAMENTS_FILE)
@@ -219,7 +225,7 @@ def reload_filaments_cache(force: bool = False):
         return False
     mtime = fp.stat().st_mtime
     if force or mtime != _filaments_mtime:
-        FILAMENTS_CACHE = load_filaments_file()
+        _replace_cache_list(FILAMENTS_CACHE, load_filaments_file())
         _filaments_mtime = mtime
         return True
     return False
@@ -233,7 +239,7 @@ def reload_categories_cache(force: bool = False):
             "SELECT id, name, emoji, badge_class, sort_order, active, quick_slot FROM categories ORDER BY sort_order"
         ).fetchall()
         conn.close()
-        CATEGORIES_CACHE = [_row_to_category(dict(r)) for r in rows]
+        _replace_cache_list(CATEGORIES_CACHE, [_row_to_category(dict(r)) for r in rows])
         return True
 
     fp = Path(config.CATEGORIES_FILE)
@@ -241,7 +247,7 @@ def reload_categories_cache(force: bool = False):
         return False
     mtime = fp.stat().st_mtime
     if force or mtime != _categories_mtime:
-        CATEGORIES_CACHE = load_categories_file()
+        _replace_cache_list(CATEGORIES_CACHE, load_categories_file())
         _categories_mtime = mtime
         return True
     return False
@@ -262,8 +268,8 @@ def reload_products_cache(force: bool = False):
                 custom.append(p)
             else:
                 standard.append(p)
-        PRODUCTS_CACHE = standard
-        CUSTOM_PRODUCTS_CACHE = custom
+        _replace_cache_list(PRODUCTS_CACHE, standard)
+        _replace_cache_list(CUSTOM_PRODUCTS_CACHE, custom)
         return True
 
     changed = False
@@ -279,10 +285,10 @@ def reload_products_cache(force: bool = False):
         if force or mtime != current:
             data = load_products_file(path)
             if path == config.PRODUCTS_FILE:
-                PRODUCTS_CACHE = data
+                _replace_cache_list(PRODUCTS_CACHE, data)
                 globals()["_products_mtime"] = mtime
             else:
-                CUSTOM_PRODUCTS_CACHE = data
+                _replace_cache_list(CUSTOM_PRODUCTS_CACHE, data)
                 globals()["_custom_mtime"] = mtime
             changed = True
             logger.info("Оновлено кеш: %s (%s товарів)", path, len(data))
@@ -777,10 +783,27 @@ def update_filament(filament_id: str, data: dict):
 
         if use_catalog_db():
             conn = db_connect()
-            conn.execute(
+            cur = conn.execute(
                 "UPDATE filaments SET name = %s, hex = %s, available = %s WHERE id = %s",
                 (filament.get("name"), filament.get("hex"), filament.get("available"), filament_id),
             )
+            if is_postgres() and getattr(cur, "rowcount", 1) == 0:
+                conn.execute(
+                    """
+                    INSERT INTO filaments (id, name, hex, available, sort_order)
+                    VALUES (%s, %s, %s, %s, 999)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        hex = EXCLUDED.hex,
+                        available = EXCLUDED.available
+                    """,
+                    (
+                        filament_id,
+                        filament.get("name"),
+                        filament.get("hex"),
+                        filament.get("available"),
+                    ),
+                )
             sync_filament_colors_table(conn, filament)
             conn.commit()
             conn.close()
@@ -792,8 +815,11 @@ def update_filament(filament_id: str, data: dict):
             conn.close()
 
         reload_filaments_cache(force=True)
-        logger.info("Філамент оновлено: %s", filament.get("id"))
-        return {"ok": True, "filament": filament}
+        saved = get_filament_by_id(filament_id)
+        if not saved:
+            return {"ok": False, "error": "Не вдалося зберегти філамент"}
+        logger.info("Філамент оновлено: %s", saved.get("id"))
+        return {"ok": True, "filament": saved}
     except Exception as e:
         logger.exception("Помилка оновлення філаменту")
         return {"ok": False, "error": str(e)}

@@ -121,31 +121,31 @@
   },
   {
     "id": "luminous",
-    "name": "Luminous",
+    "name": "Світний",
     "hex": "#c8ff66",
     "available": false
   },
   {
     "id": "luminous-green",
-    "name": "Luminous Green",
+    "name": "Світний зелений",
     "hex": "#b7ff4a",
     "available": false
   },
   {
     "id": "luminous-blue",
-    "name": "Luminous Blue",
+    "name": "Світний синій",
     "hex": "#7ad7ff",
     "available": false
   },
   {
     "id": "luminous-aqua",
-    "name": "Luminous Aqua",
+    "name": "Світний бірюзовий",
     "hex": "#66ffe0",
     "available": false
   },
   {
     "id": "luminous-pink",
-    "name": "Luminous Pink",
+    "name": "Світний рожевий",
     "hex": "#ff8bd6",
     "available": false
   }

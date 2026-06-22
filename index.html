@@ -2601,7 +2601,11 @@ function isLuminousFilament(f) {
 
 function availableFilaments(product) {
   const allowLuminous = !!(product && product.luminousFilamentChoice);
-  return FILAMENTS.filter(f => f.available || (allowLuminous && isLuminousFilament(f)));
+  return FILAMENTS.filter(f => {
+    if (!f.available) return false;
+    if (isLuminousFilament(f)) return allowLuminous;
+    return true;
+  });
 }
 
 /** false у products.json → без вибору кольору для цього товару */

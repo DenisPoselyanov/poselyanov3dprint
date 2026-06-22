@@ -24,7 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Deploy via SSH
-        if: ${{ secrets.VPS_SSH_HOST != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_SSH_HOST }}

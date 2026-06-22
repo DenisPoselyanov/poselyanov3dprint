@@ -3039,7 +3039,7 @@
             try {
                 submitBtn.disabled = true;
                 submitBtn.textContent = '⏳ Збереження...';
-                const res = await fetch(API_BASE + `/filaments/${currentFilamentId}`, {
+                const res = await fetch(API_BASE + `/filaments/${encodeURIComponent(currentFilamentId)}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -3047,9 +3047,14 @@
                     },
                     body: JSON.stringify(payload),
                 });
-                const result = await res.json();
+                let result = {};
+                try {
+                    result = await res.json();
+                } catch (_) {
+                    throw new Error(`Помилка сервера (${res.status})`);
+                }
                 if (!res.ok || !result.ok) {
-                    throw new Error(result.error || 'Не вдалося зберегти філамент');
+                    throw new Error(result.error || `Не вдалося зберегти філамент (${res.status})`);
                 }
 
                 showToast('Філамент оновлено ✅', 'success');

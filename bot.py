@@ -453,14 +453,11 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                 if not meta:
                     return False, f"Невідомий колір філаменту ({filament_id})"
                 if not meta.get("available"):
-                    allow_luminous = bool(
-                        product
-                        and product.get("filamentChoice", True) is not False
-                        and product.get("luminousFilamentChoice")
-                        and str(filament_id or "").startswith("luminous")
-                    )
-                    if not allow_luminous:
-                        return False, f"Колір «{meta.get('name', '')}» зараз недоступний для замовлення"
+                    return False, f"Колір «{meta.get('name', '')}» зараз недоступний для замовлення"
+                if str(filament_id or "").startswith("luminous") and not (
+                    product and product.get("luminousFilamentChoice")
+                ):
+                    return False, "Цей колір недоступний для обраного товару"
                 filament_name = str(meta.get("name") or "").strip()
 
         if not is_contract:
