@@ -2345,18 +2345,78 @@ async def handle_update_order_pricing(request: web.Request):
         if not result.get("ok"):
             return web.json_response(result, status=400, headers=cors_headers(request))
 
-        if data.get("notify_client") and result.get("user_id"):
+        user_id_from_result = result.get("user_id")
+
+        if data.get("notify_client") and user_id_from_result:
             order, items = get_order_with_items(order_id)
             if order and items:
                 quote_html = build_client_price_quote(order_id, int(order.get("total_price") or 0), items)
                 try:
-                    await send_rich_message(bot_app.bot, int(result["user_id"]), quote_html)
+                    await send_rich_message(bot_app.bot, int(user_id_from_result), quote_html)
                     # Після нового повідомлення про ціну скидаємо кеш підтверджень,
                     # щоб наступне замовлення надіслало НОВЕ повідомлення, а не тихо
                     # відредагувало старе (редагування не генерує нотифікацію в Telegram).
-                    confirmation_messages.pop(int(result["user_id"]), None)
+                    confirmation_messages.pop(int(user_id_from_result), None)
                 except Exception as e:
                     logger.error(f"Помилка повідомлення клієнту про ціну: {e}")
+
+        # Оновлюємо повідомлення в адмін-каналі — прибираємо «договірна» та ставимо актуальну суму
+        if user_id_from_result:
+            uid = int(user_id_from_result)
+            admin_batch = admin_channel_messages.get(uid)
+            if admin_batch:
+                try:
+                    order_ids = admin_batch.get("order_ids") or [order_id]
+                    if len(order_ids) == 1:
+                        upd_order, upd_items = get_order_with_items(order_ids[0])
+                        if upd_order and upd_items:
+                            gift_name = upd_order.get("gift_product_name")
+                            disc = int(upd_order.get("discount_amount") or 0)
+                            cpn = upd_order.get("coupon_code")
+                            new_html = build_admin_order_notification(
+                                order_id=order_ids[0],
+                                username=admin_batch.get("username") or "",
+                                items=_admin_items_from_db(upd_items),
+                                total_price=int(upd_order.get("total_price") or 0),
+                                coupon_code=cpn,
+                                discount_amount=disc,
+                                coupon_discount=disc if cpn else None,
+                                promotion_discount=None if cpn else (disc or None),
+                                gift=gift_name,
+                                gift_product_id=find_gift_product_id(gift_name),
+                                comment=upd_order.get("comment") or None,
+                                price_pending=bool(upd_order.get("price_pending")),
+                            )
+                            new_markup = _build_single_order_channel_markup(
+                                order_ids[0],
+                                bool(upd_order.get("price_pending")),
+                                admin_batch.get("tg_username"),
+                                admin_batch.get("first_name") or "",
+                            )
+                            await edit_rich_message(
+                                bot_app.bot,
+                                admin_batch["chat_id"],
+                                admin_batch["message_id"],
+                                new_html,
+                                reply_markup=new_markup,
+                            )
+                    else:
+                        batch_html, batch_markup = _build_admin_batch(
+                            order_ids,
+                            admin_batch.get("username") or "",
+                            admin_batch.get("tg_username"),
+                            admin_batch.get("first_name") or "",
+                        )
+                        await edit_rich_message(
+                            bot_app.bot,
+                            admin_batch["chat_id"],
+                            admin_batch["message_id"],
+                            batch_html,
+                            reply_markup=batch_markup,
+                        )
+                    logger.info(f"✅ Оновлено ціну в адмін-каналі для замовлення #{order_id}")
+                except Exception as e:
+                    logger.error(f"❌ Помилка оновлення ціни в адмін-каналі: {e}")
 
         return web.json_response(result, headers=cors_headers(request))
     except Exception as e:
