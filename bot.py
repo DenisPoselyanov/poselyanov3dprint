@@ -1612,30 +1612,46 @@ async def handle_order(request):
     ]
     tg_username = data.get('tg_username')
     admin_url = get_admin_webapp_url(order_id) if price_pending else None
-    keyboard_rows = []
-    if admin_url:
-        keyboard_rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
-    keyboard_rows.append(status_buttons)
+
+    # Клавіатура для каналу — без WebApp-кнопок (Telegram не підтримує їх у каналах)
+    channel_rows = [status_buttons]
     if tg_username:
-        keyboard_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
-    markup = InlineKeyboardMarkup(keyboard_rows)
+        channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+    channel_markup = InlineKeyboardMarkup(channel_rows)
+
+    # Клавіатура для особистого чату власника — з WebApp-кнопкою
+    owner_rows = []
+    if admin_url:
+        owner_rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
+    owner_rows.append(status_buttons)
+    if tg_username:
+        owner_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+    owner_markup = InlineKeyboardMarkup(owner_rows)
 
     try:
         await send_rich_message(
             bot_app.bot,
             ORDERS_CHAT_ID,
             owner_html,
-            reply_markup=markup,
+            reply_markup=channel_markup,
         )
         logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
     except Exception as e:
         logger.error(f"❌ Помилка надсилання в канал: {e}")
         if OWNER_ID and OWNER_ID != ORDERS_CHAT_ID:
             try:
-                await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=markup)
+                await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=owner_markup)
                 logger.info("✅ Надіслано резервно до власника (канал недоступний)")
             except Exception as e2:
                 logger.error(f"❌ Резервне надсилання власнику теж не вдалось: {e2}")
+
+    # Якщо є договірна ціна — окремо сповіщаємо власника з WebApp-кнопкою
+    if admin_url and OWNER_ID and OWNER_ID != ORDERS_CHAT_ID:
+        try:
+            await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=owner_markup)
+            logger.info("✅ Надіслано власнику з кнопкою встановлення ціни")
+        except Exception as e:
+            logger.error(f"❌ Помилка надсилання власнику: {e}")
 
     return web.Response(text="ok", headers=cors_headers(request))
 
