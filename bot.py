@@ -840,6 +840,24 @@ def check_promotion(cart_total: int):
     return 0
 
 
+def _row_to_dict(row) -> dict:
+    """Convert sqlite3.Row / psycopg dict-row to a plain JSON-serializable dict."""
+    if isinstance(row, dict):
+        d = row
+    else:
+        try:
+            d = dict(row)
+        except Exception:
+            d = {k: row[k] for k in row.keys()}
+    result = {}
+    for k, v in d.items():
+        if isinstance(v, datetime):
+            result[k] = v.isoformat()
+        else:
+            result[k] = v
+    return result
+
+
 def update_order_status(order_id: int, status: str):
     conn = db_connect()
     conn.execute(_sql("UPDATE orders SET status = ? WHERE id = ?"), (status, order_id))
@@ -862,7 +880,7 @@ def get_order_with_items(order_id: int):
         FROM order_items WHERE order_id = ?
     """), (order_id,)).fetchall()
     conn.close()
-    return order, items
+    return _row_to_dict(order), [_row_to_dict(i) for i in items]
 
 
 def list_orders(*, pending_price_only: bool = False, limit: int = 50):
@@ -880,7 +898,7 @@ def list_orders(*, pending_price_only: bool = False, limit: int = 50):
     params.append(int(limit))
     rows = conn.execute(_sql(sql), tuple(params)).fetchall()
     conn.close()
-    return rows
+    return [_row_to_dict(r) for r in rows]
 
 
 def update_order_pricing(order_id: int, item_prices: dict[int, int]) -> dict:
@@ -1612,6 +1630,12 @@ async def handle_order(request):
         logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
     except Exception as e:
         logger.error(f"❌ Помилка надсилання в канал: {e}")
+        if OWNER_ID and OWNER_ID != ORDERS_CHAT_ID:
+            try:
+                await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=markup)
+                logger.info("✅ Надіслано резервно до власника (канал недоступний)")
+            except Exception as e2:
+                logger.error(f"❌ Резервне надсилання власнику теж не вдалось: {e2}")
 
     return web.Response(text="ok", headers=cors_headers(request))
 
@@ -2079,6 +2103,11 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order, items = get_order_with_items(order_id)
     if not order:
         return
+
+    if action == "cancel":
+        cancelled_user_id = order.get("user_id")
+        if cancelled_user_id:
+            confirmation_messages.pop(int(cancelled_user_id), None)
 
     gift_product_id = find_gift_product_id(order.get("gift_product_name"))
     linked = action != "cancel"
