@@ -883,6 +883,19 @@ def get_order_with_items(order_id: int):
     return _row_to_dict(order), [_row_to_dict(i) for i in items]
 
 
+def delete_order(order_id: int):
+    conn = db_connect()
+    row = conn.execute(_sql("SELECT id FROM orders WHERE id = ?"), (order_id,)).fetchone()
+    if not row:
+        conn.close()
+        return {"ok": False, "error": "Замовлення не знайдено"}
+    conn.execute(_sql("DELETE FROM order_items WHERE order_id = ?"), (order_id,))
+    conn.execute(_sql("DELETE FROM orders WHERE id = ?"), (order_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
 def list_orders(*, pending_price_only: bool = False, limit: int = 50):
     conn = db_connect(dict_rows=True)
     sql = """
@@ -1613,13 +1626,16 @@ async def handle_order(request):
     tg_username = data.get('tg_username')
     admin_url = get_admin_webapp_url(order_id) if price_pending else None
 
-    # Клавіатура для каналу — без WebApp-кнопок (Telegram не підтримує їх у каналах)
-    channel_rows = [status_buttons]
+    # Клавіатура для каналу: URL-кнопка для WebApp (WebApp-кнопки в каналах не підтримуються)
+    channel_rows = []
+    if admin_url:
+        channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
+    channel_rows.append(status_buttons)
     if tg_username:
         channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
     channel_markup = InlineKeyboardMarkup(channel_rows)
 
-    # Клавіатура для особистого чату власника — з WebApp-кнопкою
+    # Резервна клавіатура для особистого чату власника — з WebApp-кнопкою
     owner_rows = []
     if admin_url:
         owner_rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
@@ -1644,14 +1660,6 @@ async def handle_order(request):
                 logger.info("✅ Надіслано резервно до власника (канал недоступний)")
             except Exception as e2:
                 logger.error(f"❌ Резервне надсилання власнику теж не вдалось: {e2}")
-
-    # Якщо є договірна ціна — окремо сповіщаємо власника з WebApp-кнопкою
-    if admin_url and OWNER_ID and OWNER_ID != ORDERS_CHAT_ID:
-        try:
-            await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=owner_markup)
-            logger.info("✅ Надіслано власнику з кнопкою встановлення ціни")
-        except Exception as e:
-            logger.error(f"❌ Помилка надсилання власнику: {e}")
 
     return web.Response(text="ok", headers=cors_headers(request))
 
@@ -1957,6 +1965,24 @@ async def handle_update_order_pricing(request: web.Request):
         return web.json_response(result, headers=cors_headers(request))
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_delete_order(request: web.Request):
+    """Видалити замовлення."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        order_id = int(request.match_info.get("id", 0))
+        result = delete_order(order_id)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
 
 
 async def handle_upload_photo(request: web.Request):
@@ -2300,6 +2326,7 @@ def main():
         http_app.router.add_get('/api/orders', handle_get_orders)
         http_app.router.add_get('/api/orders/{id}', handle_get_order)
         http_app.router.add_put('/api/orders/{id}/pricing', handle_update_order_pricing)
+        http_app.router.add_delete('/api/orders/{id}', handle_delete_order)
         http_app.router.add_post('/api/upload-photo', handle_upload_photo)
         http_app.router.add_post('/api/upload-photo-url', handle_upload_photo_url)
         # Головна сторінка
