@@ -1959,6 +1959,10 @@ async def handle_update_order_pricing(request: web.Request):
                 quote_html = build_client_price_quote(order_id, int(order.get("total_price") or 0), items)
                 try:
                     await send_rich_message(bot_app.bot, int(result["user_id"]), quote_html)
+                    # Після нового повідомлення про ціну скидаємо кеш підтверджень,
+                    # щоб наступне замовлення надіслало НОВЕ повідомлення, а не тихо
+                    # відредагувало старе (редагування не генерує нотифікацію в Telegram).
+                    confirmation_messages.pop(int(result["user_id"]), None)
                 except Exception as e:
                     logger.error(f"Помилка повідомлення клієнту про ціну: {e}")
 
@@ -2146,10 +2150,10 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not order:
         return
 
-    if action == "cancel":
-        cancelled_user_id = order.get("user_id")
-        if cancelled_user_id:
-            confirmation_messages.pop(int(cancelled_user_id), None)
+    if action in ("confirm", "cancel"):
+        affected_user_id = order.get("user_id")
+        if affected_user_id:
+            confirmation_messages.pop(int(affected_user_id), None)
 
     gift_product_id = find_gift_product_id(order.get("gift_product_name"))
     linked = action != "cancel"
