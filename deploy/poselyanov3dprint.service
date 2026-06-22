@@ -1,0 +1,16 @@
+[Unit]
+Description=Poselyanov 3D Print Telegram Bot + API
+After=network.target
+
+[Service]
+Type=simple
+User=poselyanov
+Group=poselyanov
+WorkingDirectory=/opt/poselyanov3dprint
+EnvironmentFile=/etc/poselyanov3dprint/.env
+ExecStart=/opt/poselyanov3dprint/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
