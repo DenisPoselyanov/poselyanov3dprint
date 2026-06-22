@@ -4965,6 +4965,7 @@ async function submitOrder() {
       customValue:  i.customValue || '',
       filament_id: i.fromCustom ? '' : (i.filamentId || ''),
       filament_name: i.fromCustom ? '' : (i.filamentName || ''),
+      comment:      comment,
     })),
     total_price:  total,
     coupon_code:    appliedCoupon ? appliedCoupon.code : '',

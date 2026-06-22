@@ -473,6 +473,7 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
             "filament_id": filament_id,
             "filament_name": filament_name,
             "is_contract_price": is_contract,
+            "comment": (raw.get("comment") or "").strip(),
         })
 
     discount = 0
@@ -572,6 +573,7 @@ def init_db():
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS personal_user_id BIGINT")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT ''")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_pending INTEGER DEFAULT 0")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id)")
@@ -651,6 +653,8 @@ def init_db():
             conn.execute("ALTER TABLE order_items ADD COLUMN filament TEXT DEFAULT ''")
         if "is_contract_price" not in oi_cols:
             conn.execute("ALTER TABLE order_items ADD COLUMN is_contract_price INTEGER DEFAULT 0")
+        if "comment" not in oi_cols:
+            conn.execute("ALTER TABLE order_items ADD COLUMN comment TEXT DEFAULT ''")
         o_cols = [row[1] for row in conn.execute("PRAGMA table_info(orders)").fetchall()]
         if "price_pending" not in o_cols:
             conn.execute("ALTER TABLE orders ADD COLUMN price_pending INTEGER DEFAULT 0")
@@ -681,9 +685,10 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
     for item in items:
         fl = (item.get("filament_name") or item.get("filament_id") or "").strip()
         is_contract = 1 if item.get("is_contract_price") else 0
+        item_comment = (item.get("comment") or "").strip()
         conn.execute(_sql("""
-            INSERT INTO order_items (order_id, product_id, product_name, price, quantity, filament, is_contract_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO order_items (order_id, product_id, product_name, price, quantity, filament, is_contract_price, comment)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """), (
             order_id,
             int(item.get("product_id") or item.get("id") or 0),
@@ -692,6 +697,7 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
             int(item.get("quantity", 1)),
             fl,
             is_contract,
+            item_comment or None,
         ))
 
 
@@ -724,12 +730,6 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
         order_id = int(active["id"])
         new_total = int(active.get("total_price") or 0) + int(total_price)
         new_price_pending = max(int(active.get("price_pending") or 0), int(price_pending or 0))
-        old_comment = (active.get("comment") or "").strip()
-        new_comment = (comment or "").strip()
-        if new_comment and old_comment:
-            merged_comment = f"{old_comment}\n{new_comment}"
-        else:
-            merged_comment = new_comment or old_comment
 
         old_gift = (active.get("gift_product_name") or "").strip()
         new_gift = (gift_product_name or "").strip()
@@ -740,9 +740,9 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
 
         conn.execute(_sql("""
             UPDATE orders
-            SET total_price = ?, price_pending = ?, comment = ?, gift_product_name = ?
+            SET total_price = ?, price_pending = ?, gift_product_name = ?
             WHERE id = ?
-        """), (new_total, new_price_pending, merged_comment or None, merged_gift, order_id))
+        """), (new_total, new_price_pending, merged_gift, order_id))
 
         _insert_order_items(conn, order_id, items)
 
@@ -938,7 +938,7 @@ def get_order_with_items(order_id: int):
         conn.close()
         return None, []
     items = conn.execute(_sql("""
-        SELECT id, product_id, product_name, price, quantity, filament, is_contract_price
+        SELECT id, product_id, product_name, price, quantity, filament, is_contract_price, comment
         FROM order_items WHERE order_id = ?
     """), (order_id,)).fetchall()
     conn.close()
@@ -1551,6 +1551,7 @@ def _admin_items_from_db(db_items: list[dict]) -> list[dict]:
             "quantity": int(i.get("quantity") or 1),
             "filament_name": i.get("filament"),
             "is_contract_price": bool(i.get("is_contract_price")),
+            "comment": i.get("comment") or "",
         }
         for i in db_items
         if not str(i.get("product_name", "")).startswith("🎁")
@@ -1574,6 +1575,7 @@ def _client_block_from_db(order: dict, db_items: list[dict]) -> dict:
                 "quantity": int(i.get("quantity") or 1),
                 "filament_name": i.get("filament"),
                 "is_contract_price": bool(i.get("is_contract_price")),
+                "comment": i.get("comment") or "",
             }
             for i in db_items
             if not str(i.get("product_name", "")).startswith("🎁")
@@ -1631,6 +1633,7 @@ def _build_admin_batch_section_data(order_id: int) -> dict | None:
             "quantity": int(i.get("quantity") or 1),
             "filament_name": i.get("filament"),
             "is_contract_price": bool(i.get("is_contract_price")),
+            "comment": i.get("comment") or "",
         }
         for i in items
         if not str(i.get("product_name", "")).startswith("🎁")
@@ -1722,6 +1725,10 @@ async def handle_order(request):
     total_discount = coupon_discount + promotion_discount
     coupon_code = coupon_code if coupon_discount else None
     price_pending = result.get("price_pending", 0)
+
+    for item in items:
+        if not (item.get("comment") or "").strip():
+            item["comment"] = comment
 
     # Формуємо назву для збереження в БД (всі товари через кому)
     product_name = ', '.join(i.get('product_name', '—') for i in items)
@@ -1937,6 +1944,7 @@ async def handle_order(request):
             "filament_name": i.get("filament_name"),
             "customValue": i.get("customValue"),
             "is_contract_price": bool(i.get("is_contract_price")),
+            "comment": i.get("comment") or "",
         }
         for i in items
     ]
@@ -2575,6 +2583,7 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "quantity": int(i.get("quantity") or 1),
             "filament_name": i.get("filament"),
             "is_contract_price": bool(i.get("is_contract_price")),
+            "comment": i.get("comment") or "",
         }
         for i in items
         if not str(i.get("product_name", "")).startswith("🎁")

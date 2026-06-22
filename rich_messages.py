@@ -123,6 +123,46 @@ async def edit_rich_message(bot, chat_id, message_id: int, html_content: str, re
         )
 
 
+def _items_have_comments(items: list[dict]) -> bool:
+    return any(
+        (i.get("comment") or "").strip()
+        for i in items
+        if not str(i.get("product_name", "")).startswith("🎁")
+    )
+
+
+def _render_admin_items_with_comments(items: list[dict], *, linked: bool = True) -> list[str]:
+    parts: list[str] = []
+    filtered = [i for i in items if not str(i.get("product_name", "")).startswith("🎁")]
+    idx = 0
+    while idx < len(filtered):
+        group_comment = (filtered[idx].get("comment") or "").strip()
+        end = idx
+        while end < len(filtered) and (filtered[end].get("comment") or "").strip() == group_comment:
+            parts.append(_admin_item_line(filtered[end], linked=linked))
+            end += 1
+        if group_comment:
+            parts.append(f'<li style="list-style:none">📝 {escape(group_comment)}</li>')
+        idx = end
+    return parts
+
+
+def _render_client_items_with_comments(items: list[dict]) -> list[str]:
+    parts: list[str] = []
+    filtered = [i for i in items if not str(i.get("product_name", "")).startswith("🎁")]
+    idx = 0
+    while idx < len(filtered):
+        group_comment = (filtered[idx].get("comment") or "").strip()
+        end = idx
+        while end < len(filtered) and (filtered[end].get("comment") or "").strip() == group_comment:
+            parts.append(_client_item_line(filtered[end]))
+            end += 1
+        if group_comment:
+            parts.append(f'<li style="list-style:none">📝 {escape(group_comment)}</li>')
+        idx = end
+    return parts
+
+
 def _client_item_line(item: dict) -> str:
     name = escape(item.get("product_name", "—"))
     qty = item.get("quantity", 1)
@@ -147,7 +187,7 @@ def _client_order_block(order: dict) -> str:
     has_contract = any(i.get("is_contract_price") for i in items)
 
     parts = ['<p><b>Товари:</b></p>', "<ul>"]
-    parts.extend(_client_item_line(i) for i in items)
+    parts.extend(_render_client_items_with_comments(items))
     parts.append("</ul>")
 
     if total_discount > 0:
@@ -174,7 +214,7 @@ def _client_order_block(order: dict) -> str:
 
     if gift:
         parts.append(f"<p>🎁 Подарунок: {escape(gift)} — <b>безкоштовно</b></p>")
-    if comment:
+    if comment and not _items_have_comments(items):
         parts.append(
             f'<blockquote expandable="true"><p>📝 {escape(comment)}</p></blockquote>'
         )
@@ -280,10 +320,7 @@ def build_admin_order_notification(
         "<p><b>Товари:</b></p>",
         "<ul>",
     ]
-    for item in items:
-        if str(item.get("product_name", "")).startswith("🎁"):
-            continue
-        parts.append(_admin_item_line(item, linked=linked))
+    parts.extend(_render_admin_items_with_comments(items, linked=linked))
     parts.append("</ul>")
 
     parts.append(
@@ -305,7 +342,7 @@ def build_admin_order_notification(
             gift_line = escape(gift_name)
         parts.append(f"<p>🎁 Подарунок: {gift_line} — безкоштовно</p>")
 
-    if comment:
+    if comment and not _items_have_comments(items):
         parts.append(f"<blockquote><p>📝 {escape(comment)}</p></blockquote>")
 
     if status_label:
@@ -335,10 +372,7 @@ def build_admin_orders_batch(username: str, sections: list[dict]) -> str:
         parts.append(f"<p>{hdr}</p>")
         linked = s.get("linked", True)
         parts.append("<ul>")
-        for item in s.get("items", []):
-            if str(item.get("product_name", "")).startswith("🎁"):
-                continue
-            parts.append(_admin_item_line(item, linked=linked))
+        parts.extend(_render_admin_items_with_comments(s.get("items", []), linked=linked))
         parts.append("</ul>")
         parts.append(_admin_pricing_table(
             int(s.get("total_price") or 0),
@@ -354,7 +388,7 @@ def build_admin_orders_batch(username: str, sections: list[dict]) -> str:
             gid = s.get("gift_product_id")
             gift_line = product_link(gift_name, gid, linked=linked) if (linked and gid) else escape(gift_name)
             parts.append(f"<p>🎁 {gift_line} — безкоштовно</p>")
-        if s.get("comment"):
+        if s.get("comment") and not _items_have_comments(s.get("items", [])):
             parts.append(f"<blockquote><p>📝 {escape(s['comment'])}</p></blockquote>")
     return "\n".join(parts)
 
