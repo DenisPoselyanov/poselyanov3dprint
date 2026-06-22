@@ -13,20 +13,126 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        :root {
+            --bg-page:       linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --bg-container:  #ffffff;
+            --bg-card:       #ffffff;
+            --bg-input:      #ffffff;
+            --bg-tab-idle:   #f3f4f6;
+            --bg-tab-active: #eef2ff;
+            --bg-upload:     #f8fafc;
+            --bg-section:    #f8f9fa;
+            --bg-surface-alt:#f9fafb;
+            --bg-tag:        #e8eaf6;
+            --bg-drag-drop:  linear-gradient(135deg, #f0f2ff 0%, #e8eaff 100%);
+            --bg-drag-active:#e8eaff;
+            --text-main:     #333333;
+            --text-secondary:#4b5563;
+            --text-muted:    #6b7280;
+            --text-faint:    #999999;
+            --text-subtle:   #888888;
+            --text-chip:     #666666;
+            --text-toggle:   #374151;
+            --text-checkbox: #5b6472;
+            --border:        #e5e7eb;
+            --border-alt:    #d1d5db;
+            --border-input:  #dddddd;
+            --border-dashed: #cbd5e1;
+            --border-row:    #eeeeee;
+            --border-checkbox:#d8dee9;
+            --accent:        #667eea;
+            --accent-dark:   #764ba2;
+            --accent-text:   #4338ca;
+            --spinner-track: #f0f0f0;
+            --shadow-container: rgba(0,0,0,0.30);
+            --shadow-card:      rgba(0,0,0,0.12);
+        }
+
+        body.dark {
+            --bg-page:       linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            --bg-container:  #1c1c1e;
+            --bg-card:       #2c2c2e;
+            --bg-input:      #3a3a3c;
+            --bg-tab-idle:   #2c2c2e;
+            --bg-tab-active: rgba(102,126,234,0.18);
+            --bg-upload:     #252527;
+            --bg-section:    #242426;
+            --bg-surface-alt:#2c2c2e;
+            --bg-tag:        rgba(102,126,234,0.22);
+            --bg-drag-drop:  linear-gradient(135deg, #252547 0%, #1e1e3a 100%);
+            --bg-drag-active:rgba(102,126,234,0.25);
+            --text-main:     #f0f0f0;
+            --text-secondary:#c4c4c4;
+            --text-muted:    #aaaaaa;
+            --text-faint:    #777777;
+            --text-subtle:   #888888;
+            --text-chip:     #bbbbbb;
+            --text-toggle:   #e0e0e0;
+            --text-checkbox: #b0b0b0;
+            --border:        rgba(255,255,255,0.10);
+            --border-alt:    rgba(255,255,255,0.08);
+            --border-input:  rgba(255,255,255,0.15);
+            --border-dashed: rgba(255,255,255,0.12);
+            --border-row:    rgba(255,255,255,0.08);
+            --border-checkbox:rgba(255,255,255,0.12);
+            --accent-text:   #818cf8;
+            --spinner-track: #3a3a3c;
+            --shadow-container: rgba(0,0,0,0.60);
+            --shadow-card:      rgba(0,0,0,0.30);
+            color-scheme: dark;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                --bg-page:       linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                --bg-container:  #1c1c1e;
+                --bg-card:       #2c2c2e;
+                --bg-input:      #3a3a3c;
+                --bg-tab-idle:   #2c2c2e;
+                --bg-tab-active: rgba(102,126,234,0.18);
+                --bg-upload:     #252527;
+                --bg-section:    #242426;
+                --bg-surface-alt:#2c2c2e;
+                --bg-tag:        rgba(102,126,234,0.22);
+                --bg-drag-drop:  linear-gradient(135deg, #252547 0%, #1e1e3a 100%);
+                --bg-drag-active:rgba(102,126,234,0.25);
+                --text-main:     #f0f0f0;
+                --text-secondary:#c4c4c4;
+                --text-muted:    #aaaaaa;
+                --text-faint:    #777777;
+                --text-subtle:   #888888;
+                --text-chip:     #bbbbbb;
+                --text-toggle:   #e0e0e0;
+                --text-checkbox: #b0b0b0;
+                --border:        rgba(255,255,255,0.10);
+                --border-alt:    rgba(255,255,255,0.08);
+                --border-input:  rgba(255,255,255,0.15);
+                --border-dashed: rgba(255,255,255,0.12);
+                --border-row:    rgba(255,255,255,0.08);
+                --border-checkbox:rgba(255,255,255,0.12);
+                --accent-text:   #818cf8;
+                --spinner-track: #3a3a3c;
+                --shadow-container: rgba(0,0,0,0.60);
+                --shadow-card:      rgba(0,0,0,0.30);
+                color-scheme: dark;
+            }
+        }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-page);
             min-height: 100vh;
             padding: 20px;
-            color: #333;
+            color: var(--text-main);
+            color-scheme: light;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            background: white;
+            background: var(--bg-container);
             border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-shadow: 0 20px 60px var(--shadow-container);
             overflow: hidden;
         }
 
@@ -126,9 +232,9 @@
         }
 
         .page-tab {
-            border: 2px solid #e5e7eb;
-            background: #fff;
-            color: #4b5563;
+            border: 2px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
             border-radius: 10px;
             padding: 10px 14px;
             font-size: 14px;
@@ -137,9 +243,9 @@
         }
 
         .page-tab.active {
-            border-color: #667eea;
-            color: #4338ca;
-            background: #eef2ff;
+            border-color: var(--accent);
+            color: var(--accent-text);
+            background: var(--bg-tab-active);
         }
 
         .page-section {
@@ -155,14 +261,14 @@
             justify-content: space-between;
             align-items: center;
             gap: 12px;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 14px 16px;
-            background: #fff;
+            background: var(--bg-card);
         }
 
         .category-row.drag-over {
-            border-color: #667eea;
+            border-color: var(--accent);
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
         }
 
@@ -175,9 +281,9 @@
             min-width: 32px;
             height: 32px;
             border-radius: 8px;
-            border: 1px dashed #cbd5e1;
-            background: #f8fafc;
-            color: #64748b;
+            border: 1px dashed var(--border-dashed);
+            background: var(--bg-upload);
+            color: var(--text-muted);
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -212,13 +318,13 @@
 
         .filter-btn {
             padding: 10px 14px;
-            border: 2px solid #ddd;
-            background: #fff;
+            border: 2px solid var(--border-input);
+            background: var(--bg-card);
             border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
             font-weight: 600;
-            color: #555;
+            color: var(--text-secondary);
             display: inline-flex;
             align-items: center;
             gap: 8px;
@@ -227,8 +333,8 @@
         }
 
         .filter-btn.active {
-            border-color: #667eea;
-            color: #667eea;
+            border-color: var(--accent);
+            color: var(--accent);
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
@@ -237,10 +343,10 @@
             top: calc(100% + 8px);
             right: 0;
             min-width: 240px;
-            background: #fff;
-            border: 1px solid #e5e7eb;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
             border-radius: 12px;
-            box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+            box-shadow: 0 12px 30px var(--shadow-card);
             padding: 8px;
             display: none;
             z-index: 20;
@@ -253,25 +359,25 @@
         .filter-option {
             width: 100%;
             border: none;
-            background: #fff;
+            background: var(--bg-card);
             border-radius: 8px;
             padding: 10px 10px;
             text-align: left;
             cursor: pointer;
             font-size: 14px;
-            color: #444;
+            color: var(--text-main);
             display: flex;
             align-items: center;
             justify-content: space-between;
         }
 
         .filter-option:hover {
-            background: #f3f4f6;
+            background: var(--bg-tab-idle);
         }
 
         .filter-option.active {
-            background: #eef2ff;
-            color: #4338ca;
+            background: var(--bg-tab-active);
+            color: var(--accent-text);
             font-weight: 700;
         }
 
@@ -292,8 +398,8 @@
 
         .chip {
             padding: 10px 16px;
-            border: 2px solid #e0e0e0;
-            background: white;
+            border: 2px solid var(--border-input);
+            background: var(--bg-card);
             border-radius: 20px;
             cursor: pointer;
             font-size: 14px;
@@ -302,19 +408,19 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            color: #666;
+            color: var(--text-chip);
         }
 
         .chip:hover {
-            border-color: #667eea;
-            color: #667eea;
+            border-color: var(--accent);
+            color: var(--accent);
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
         }
 
         .chip.active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-color: #667eea;
+            border-color: var(--accent);
             color: white;
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
         }
@@ -326,19 +432,21 @@
         .search-box input {
             flex: 1;
             padding: 10px 16px;
-            border: 2px solid #ddd;
+            border: 2px solid var(--border-input);
             border-radius: 8px;
             font-size: 14px;
             transition: all 0.3s ease;
+            background: var(--bg-input);
+            color: var(--text-main);
         }
 
         .search-box input:focus {
-            border-color: #667eea;
+            border-color: var(--accent);
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         .search-box select:focus {
-            border-color: #667eea;
+            border-color: var(--accent);
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
@@ -351,10 +459,10 @@
         }
 
         .product-card {
-            background: #f8f9fa;
+            background: var(--bg-section);
             border-radius: 12px;
             padding: 20px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid var(--accent);
             transition: all 0.3s ease;
             display: flex;
             flex-direction: column;
@@ -364,8 +472,8 @@
 
         .product-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            border-left-color: #764ba2;
+            box-shadow: 0 10px 30px var(--shadow-card);
+            border-left-color: var(--accent-dark);
         }
 
         .product-card:active {
@@ -391,26 +499,26 @@
             font-size: 16px;
             font-weight: 600;
             margin-bottom: 4px;
-            color: #333;
+            color: var(--text-main);
         }
 
         .product-meta {
             display: flex;
             gap: 12px;
             font-size: 12px;
-            color: #999;
+            color: var(--text-faint);
             flex-wrap: wrap;
         }
 
         .product-price {
             font-size: 18px;
-            color: #667eea;
+            color: var(--accent);
             font-weight: 700;
         }
 
         .price-old {
             font-size: 14px;
-            color: #999;
+            color: var(--text-faint);
             text-decoration: line-through;
             margin-left: 8px;
         }
@@ -427,8 +535,8 @@
 
         .contract-badge {
             display: inline-block;
-            background: #eef2ff;
-            color: #4338ca;
+            background: var(--bg-tab-active);
+            color: var(--accent-text);
             font-size: 11px;
             font-weight: 700;
             padding: 2px 8px;
@@ -437,8 +545,8 @@
         }
 
         .order-card {
-            background: #fff;
-            border: 1px solid #e5e7eb;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 16px;
             margin-bottom: 12px;
@@ -455,7 +563,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 10px 0;
-            border-bottom: 1px dashed #eee;
+            border-bottom: 1px dashed var(--border-row);
         }
 
         .order-item-row:last-child { border-bottom: none; }
@@ -463,16 +571,18 @@
         .order-price-input {
             width: 100px;
             padding: 8px 10px;
-            border: 1px solid #d1d5db;
+            border: 1px solid var(--border-alt);
             border-radius: 8px;
             font-size: 14px;
+            background: var(--bg-input);
+            color: var(--text-main);
         }
 
         .price-fields-group.hidden { display: none; }
 
         .contract-hint {
             font-size: 12px;
-            color: #6b7280;
+            color: var(--text-muted);
             margin-top: 6px;
             line-height: 1.4;
         }
@@ -489,13 +599,13 @@
             height: 60px;
             object-fit: cover;
             border-radius: 6px;
-            border: 2px solid #ddd;
+            border: 2px solid var(--border-input);
             cursor: pointer;
             transition: all 0.2s ease;
         }
 
         .photo-thumb:hover {
-            border-color: #667eea;
+            border-color: var(--accent);
             transform: scale(1.05);
         }
 
@@ -509,8 +619,8 @@
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            background: #e8eaf6;
-            color: #667eea;
+            background: var(--bg-tag);
+            color: var(--accent);
             padding: 4px 10px;
             border-radius: 12px;
             font-size: 12px;
@@ -577,12 +687,12 @@
         }
 
         .product-unsaved-confirm-box {
-            background: white;
+            background: var(--bg-container);
             border-radius: 16px;
             width: 100%;
             max-width: 420px;
             padding: 24px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 20px 60px var(--shadow-container);
             text-align: center;
         }
 
@@ -590,7 +700,7 @@
             margin: 0 0 20px;
             font-size: 15px;
             line-height: 1.5;
-            color: #333;
+            color: var(--text-main);
         }
 
         .product-unsaved-confirm-box .form-buttons {
@@ -598,14 +708,14 @@
         }
 
         .modal-content {
-            background: white;
+            background: var(--bg-container);
             border-radius: 16px;
             width: 100%;
             max-width: 600px;
             padding: 30px;
             max-height: 85vh;
             overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-shadow: 0 20px 60px var(--shadow-container);
             animation: slideUp 0.3s ease;
         }
 
@@ -632,7 +742,7 @@
             font-size: 14px;
             font-weight: 600;
             margin-bottom: 8px;
-            color: #333;
+            color: var(--text-main);
         }
 
         .form-group.required label::after {
@@ -645,18 +755,20 @@
         .form-group select {
             width: 100%;
             padding: 12px;
-            border: 2px solid #ddd;
+            border: 2px solid var(--border-input);
             border-radius: 8px;
             font-size: 14px;
             font-family: inherit;
             transition: border-color 0.3s ease;
+            background: var(--bg-input);
+            color: var(--text-main);
         }
 
         .form-group input:focus,
         .form-group textarea:focus,
         .form-group select:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--accent);
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
@@ -682,7 +794,7 @@
         }
 
         .form-hint {
-            color: #6b7280;
+            color: var(--text-muted);
             font-size: 12px;
             margin-top: 6px;
         }
@@ -705,26 +817,26 @@
         .emoji-trigger {
             flex-shrink: 0;
             width: 48px;
-            border: 2px solid #ddd;
+            border: 2px solid var(--border-input);
             border-radius: 8px;
-            background: #f9fafb;
+            background: var(--bg-surface-alt);
             font-size: 22px;
             cursor: pointer;
             transition: border-color 0.3s ease, background 0.3s ease;
         }
 
         .emoji-trigger:hover {
-            border-color: #667eea;
-            background: #eef2ff;
+            border-color: var(--accent);
+            background: var(--bg-tab-active);
         }
 
         .emoji-picker-popover {
             display: none;
             position: fixed;
             z-index: 1100;
-            background: #fff;
+            background: var(--bg-card);
             border-radius: 12px;
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+            box-shadow: 0 12px 40px var(--shadow-card);
             overflow: hidden;
             width: min(352px, calc(100vw - 24px));
         }
@@ -742,24 +854,24 @@
         }
 
         .drag-drop {
-            border: 2px dashed #667eea;
+            border: 2px dashed var(--accent);
             border-radius: 8px;
             padding: 30px 20px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
-            background: linear-gradient(135deg, #f0f2ff 0%, #e8eaff 100%);
+            background: var(--bg-drag-drop);
         }
 
         .drag-drop.active {
-            background: #e8eaff;
+            background: var(--bg-drag-active);
             border-color: #5568d3;
             transform: scale(1.02);
         }
 
         .drag-drop-text {
             font-size: 14px;
-            color: #667eea;
+            color: var(--accent);
             font-weight: 500;
         }
 
@@ -772,16 +884,18 @@
         .photo-url-row input {
             flex: 1;
             padding: 10px 12px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-input);
             border-radius: 8px;
             font-size: 13px;
+            background: var(--bg-input);
+            color: var(--text-main);
         }
 
         .photo-url-row button {
             padding: 10px 14px;
             border: none;
             border-radius: 8px;
-            background: #667eea;
+            background: var(--accent);
             color: #fff;
             font-size: 13px;
             font-weight: 600;
@@ -797,7 +911,7 @@
         .photo-url-hint {
             margin-top: 6px;
             font-size: 12px;
-            color: #888;
+            color: var(--text-subtle);
         }
 
         .form-buttons {
@@ -819,15 +933,15 @@
             justify-content: space-between;
             gap: 12px;
             padding: 12px 14px;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border);
             border-radius: 10px;
-            background: #f9fafb;
+            background: var(--bg-surface-alt);
         }
 
         .toggle-row-label {
             font-size: 14px;
             font-weight: 600;
-            color: #374151;
+            color: var(--text-toggle);
         }
 
         .switch {
@@ -877,7 +991,7 @@
             margin: 8px 0 0;
             font-size: 12px;
             font-weight: 600;
-            color: #6b7280;
+            color: var(--text-muted);
         }
 
         .quick-status.dirty {
@@ -945,7 +1059,7 @@
             display: none;
             margin: 2px 0 0 28px;
             padding: 0 0 0 12px;
-            border-left: 2px solid #d8dee9;
+            border-left: 2px solid var(--border-checkbox);
         }
 
         .checkbox-nested.is-visible {
@@ -959,7 +1073,7 @@
             margin: 0;
             font-weight: 400;
             font-size: 14px;
-            color: #5b6472;
+            color: var(--text-checkbox);
             cursor: pointer;
         }
 
@@ -993,11 +1107,11 @@
 
         .preview-item.drag-over {
             transform: scale(1.1);
-            box-shadow: 0 0 0 3px #667eea;
+            box-shadow: 0 0 0 3px var(--accent);
         }
 
         .preview-item:first-child img {
-            border-color: #667eea;
+            border-color: var(--accent);
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
         }
 
@@ -1008,7 +1122,7 @@
             left: -8px;
             width: 24px;
             height: 24px;
-            background: #667eea;
+            background: var(--accent);
             color: white;
             border-radius: 50%;
             display: flex;
@@ -1023,7 +1137,7 @@
             height: 100%;
             object-fit: cover;
             border-radius: 8px;
-            border: 2px solid #ddd;
+            border: 2px solid var(--border-input);
             pointer-events: none;
         }
 
@@ -1059,7 +1173,7 @@
         .empty-state {
             text-align: center;
             padding: 80px 20px;
-            color: #999;
+            color: var(--text-faint);
         }
 
         .empty-state-icon {
@@ -1076,7 +1190,7 @@
         .empty-state p {
             font-size: 18px;
             margin-bottom: 24px;
-            color: #666;
+            color: var(--text-chip);
         }
 
         .loading {
@@ -1089,8 +1203,8 @@
         .spinner {
             width: 40px;
             height: 40px;
-            border: 4px solid #f0f0f0;
-            border-top: 4px solid #667eea;
+            border: 4px solid var(--spinner-track);
+            border-top: 4px solid var(--accent);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -1275,7 +1389,7 @@
                     <button class="btn btn-primary" type="button" onclick="openCategoryModal()">➕ Додати категорію</button>
                 </div>
                 <div id="categoriesList" style="margin-top:16px; display:grid; gap:12px;"></div>
-                <div style="margin-top: 20px; border-top: 1px dashed #e5e7eb; padding-top: 16px;">
+                <div style="margin-top: 20px; border-top: 1px dashed var(--border); padding-top: 16px;">
                     <h3 style="font-size:16px; margin-bottom: 10px;">⚡ Швидкі категорії (сторінка "Товари")</h3>
                     <div id="quickCategoriesList" style="display:grid; gap:10px;"></div>
                     <div id="quickCategoriesStatus" class="quick-status">Усі зміни збережено</div>
@@ -1492,6 +1606,13 @@
 
     <script src="/shared.js"></script>
     <script>
+        (function() {
+            const mq = window.matchMedia('(prefers-color-scheme: dark)');
+            const apply = (e) => document.body.classList.toggle('dark', e.matches);
+            apply(mq);
+            mq.addEventListener('change', apply);
+        })();
+
         const escapeHtml = (text) => (window.SharedApp ? window.SharedApp.escapeHtml(text) : String(text || ''));
         const escapeAttr = (text) => (window.SharedApp ? window.SharedApp.escapeAttr(text) : escapeHtml(text));
         // API base: local frontend (5500) talks to local backend (8080).
@@ -1750,7 +1871,7 @@
             const sortedCategories = [...allCategories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
             if (!sortedCategories.length) {
-                list.innerHTML = '<div style="padding: 16px; background: #f8f9fa; border-radius: 10px;">Категорій ще немає.</div>';
+                list.innerHTML = '<div style="padding: 16px; background: var(--bg-section); border-radius: 10px;">Категорій ще немає.</div>';
                 return;
             }
 
@@ -1759,7 +1880,7 @@
                     <div class="category-drag-handle" title="Перетягни для зміни порядку" onpointerdown="startCategoryDrag(event, '${escapeAttr(cat.id)}')">⋮⋮</div>
                     <div>
                         <div style="font-weight:700;">${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}</div>
-                        <div style="font-size:12px; color:#6b7280;">ID: ${escapeHtml(cat.id)} · Товарів: ${productCountByCategory[cat.id] || 0} · Порядок: ${cat.order ?? '—'}</div>
+                        <div style="font-size:12px; color:var(--text-muted);">ID: ${escapeHtml(cat.id)} · Товарів: ${productCountByCategory[cat.id] || 0} · Порядок: ${cat.order ?? '—'}</div>
                     </div>
                     <div style="display:flex; gap:8px;">
                         <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${escapeAttr(cat.id)}', -1)" style="padding:8px 10px;" ${idx === 0 ? 'disabled' : ''}>↑</button>
@@ -1895,16 +2016,16 @@
                 .slice(0, 4);
 
             if (!quickCategories.length) {
-                host.innerHTML = '<div style="padding: 12px; background: #f8f9fa; border-radius: 10px;">Немає категорій для швидкого блоку.</div>';
+                host.innerHTML = '<div style="padding: 12px; background: var(--bg-section); border-radius: 10px;">Немає категорій для швидкого блоку.</div>';
                 updateQuickCategoriesSaveButton();
                 return;
             }
 
             host.innerHTML = quickCategories.map((cat, idx) => `
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#fff;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--bg-card);">
                     <div style="display:flex; flex-direction:column; gap:6px; min-width:0; flex:1;">
                         <div style="font-weight:600;">${idx + 1}. ${cat.emoji} ${cat.name}</div>
-                        <select onchange="setQuickCategory(${idx}, this.value)" style="padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:13px;">
+                        <select onchange="setQuickCategory(${idx}, this.value)" style="padding:8px 10px; border:1px solid var(--border-alt); border-radius:8px; font-size:13px; background:var(--bg-input); color:var(--text-main);">
                             ${eligibleCategories.map(option => `
                                 <option value="${option.id}" ${option.id === cat.id ? 'selected' : ''}>
                                     ${option.emoji} ${option.name}
@@ -2056,7 +2177,7 @@
         function renderFilamentsManager() {
             const list = document.getElementById('filamentsList');
             if (!allFilaments.length) {
-                list.innerHTML = '<div style="padding: 16px; background: #f8f9fa; border-radius: 10px;">Філаменти не знайдені.</div>';
+                list.innerHTML = '<div style="padding: 16px; background: var(--bg-section); border-radius: 10px;">Філаменти не знайдені.</div>';
                 return;
             }
 
@@ -2068,19 +2189,19 @@
             });
 
             list.innerHTML = sortedFilaments.map(f => `
-                <div data-filament-id="${f.id}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${f.available ? '#d1fae5' : '#e5e7eb'}; border-radius:12px; padding:14px 16px; background:${f.available ? '#ffffff' : '#f9fafb'}; opacity:${f.available ? '1' : '0.7'};">
+                <div data-filament-id="${f.id}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${f.available ? '#d1fae5' : 'var(--border)'}; border-radius:12px; padding:14px 16px; background:${f.available ? 'var(--bg-card)' : 'var(--bg-surface-alt)'}; opacity:${f.available ? '1' : '0.7'};">
                     <div style="display:flex; align-items:center; gap:12px;">
-                        <span style="display:inline-block; width:20px; height:20px; border-radius:50%; border:1px solid #ddd; background:${f.hex || '#ccc'}; box-shadow:${f.available ? '0 0 0 2px rgba(16,185,129,0.18)' : 'none'};"></span>
+                        <span style="display:inline-block; width:20px; height:20px; border-radius:50%; border:1px solid var(--border-input); background:${f.hex || '#ccc'}; box-shadow:${f.available ? '0 0 0 2px rgba(16,185,129,0.18)' : 'none'};"></span>
                         <div>
                             <div style="font-weight:700;">${f.name}</div>
-                            <div style="font-size:12px; color:#6b7280;">
+                            <div style="font-size:12px; color:var(--text-muted);">
                                 ID: ${f.id} · ${f.hex}
                                 ${String(f.id || '').startsWith('luminous') ? ' · 🌙 Світиться вночі' : ''}
                             </div>
                         </div>
                     </div>
                     <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-size:12px; font-weight:700; padding:6px 10px; border-radius:999px; background:${f.available ? '#d1fae5' : '#e5e7eb'}; color:${f.available ? '#065f46' : '#374151'};">
+                        <span style="font-size:12px; font-weight:700; padding:6px 10px; border-radius:999px; background:${f.available ? '#d1fae5' : 'var(--border)'}; color:${f.available ? '#065f46' : 'var(--text-toggle)'};">
                             ${f.available ? 'В наявності' : 'Відсутній'}
                         </span>
                     <button class="btn btn-secondary" type="button" onclick="openFilamentModal('${f.id}')" style="padding:8px 12px;">✏️ Редагувати</button>
@@ -2245,7 +2366,7 @@
                         ${p.photos && p.photos.length ? `
                             <div class="product-photos">
                                 ${p.photos.slice(0, 4).map(url => `<img src="${escapeAttr(url)}" class="photo-thumb" alt="фото" title="Натисни для приміру">`).join('')}
-                                ${p.photos.length > 4 ? `<div style="width: 60px; height: 60px; background: #ddd; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999; font-weight: bold;">+${p.photos.length - 4}</div>` : ''}
+                                ${p.photos.length > 4 ? `<div style="width: 60px; height: 60px; background: var(--border-input); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-faint); font-weight: bold;">+${p.photos.length - 4}</div>` : ''}
                             </div>
                         ` : ''}
 
@@ -3112,11 +3233,11 @@
                     <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
                         <div>
                             <div style="font-weight:800; font-size:16px;">#${o.id} · ${escapeHtml(o.username || 'невідомо')}</div>
-                            <div style="font-size:12px; color:#6b7280; margin-top:4px;">${escapeHtml(o.first_name || '')} · ${formatOrderDate(o.ordered_at)} · ${escapeHtml(o.status || 'new')}</div>
+                            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${escapeHtml(o.first_name || '')} · ${formatOrderDate(o.ordered_at)} · ${escapeHtml(o.status || 'new')}</div>
                         </div>
                         <div style="text-align:right;">
                             <div style="font-weight:800;">${o.price_pending ? '⚠️ Ціна не вказана' : `${o.total_price} ₴`}</div>
-                            ${o.comment ? `<div style="font-size:12px; color:#6b7280; margin-top:4px;">📝 ${escapeHtml(o.comment)}</div>` : ''}
+                            ${o.comment ? `<div style="font-size:12px; color:var(--text-muted); margin-top:4px;">📝 ${escapeHtml(o.comment)}</div>` : ''}
                         </div>
                     </div>
                     <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -3161,7 +3282,7 @@
                         <div class="order-item-row">
                             <div style="flex:1;">
                                 <div style="font-weight:700;">${escapeHtml(item.product_name)} × ${item.quantity}</div>
-                                ${item.filament ? `<div style="font-size:12px; color:#6b7280;">🎨 ${escapeHtml(item.filament)}</div>` : ''}
+                                ${item.filament ? `<div style="font-size:12px; color:var(--text-muted);">🎨 ${escapeHtml(item.filament)}</div>` : ''}
                             </div>
                             ${item.is_contract_price
                                 ? `<input class="order-price-input" type="number" min="0" step="1" data-item-id="${item.id}" value="${item.price || ''}" placeholder="₴">`
