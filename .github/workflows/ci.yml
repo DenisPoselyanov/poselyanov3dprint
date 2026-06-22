@@ -18,7 +18,7 @@ jobs:
       - run: python -m pytest tests/ -q
 
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: false # тимчасово вимкнено — увімкнути після налаштування VPS і секретів
     needs: test
     runs-on: ubuntu-latest
     steps:
