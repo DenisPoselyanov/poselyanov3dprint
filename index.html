@@ -5379,5 +5379,10 @@ async function applyCoupon() {
   document.addEventListener('DOMContentLoaded', initPromo);
 })();
 </script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/poselyanov3dprint/sw.js').catch(() => {});
+  }
+</script>
 </body>
 </html>

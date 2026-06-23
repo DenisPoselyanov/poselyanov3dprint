@@ -1766,13 +1766,17 @@
             }
         }
 
-        // Додаємо initData в кожен fetch-запит
+        // Додаємо initData в кожен fetch-запит лише для власного сервера
         const originalFetch = window.fetch;
         window.fetch = async function(url, options = {}) {
-            if (!options.headers) options.headers = {};
-            options.headers['ngrok-skip-browser-warning'] = '1';
-            if (tgInitData) {
-                options.headers['X-Telegram-Init-Data'] = tgInitData;
+            const urlStr = typeof url === 'string' ? url : (url instanceof Request ? url.url : String(url));
+            const isSameOrigin = urlStr.startsWith('/') || urlStr.startsWith(window.location.origin);
+            if (isSameOrigin) {
+                if (!options.headers) options.headers = {};
+                options.headers['ngrok-skip-browser-warning'] = '1';
+                if (tgInitData) {
+                    options.headers['X-Telegram-Init-Data'] = tgInitData;
+                }
             }
             return originalFetch(url, options);
         };
@@ -3439,6 +3443,11 @@
             customElements.whenDefined('emoji-picker').then(initEmojiPickers);
         }
         toggleFilamentChoiceFields();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/poselyanov3dprint/sw.js').catch(() => {});
+        }
     </script>
 </body>
 </html>
