@@ -564,14 +564,17 @@ def build_order_history(orders: list[dict], items_by_order: dict[int, list], fir
             name = item.get("product_name", "—")
             qty = item.get("quantity", 1)
             price = int(item.get("price") or 0)
+            product_id = int(item.get("product_id") or 0) or None
             fl = (item.get("filament") or "").strip()
             if price == 0:
-                parts.append(f"<li>{escape(name)}</li>")
+                parts.append(f"<li>{product_link(name, product_id)}</li>")
             else:
                 subtotal = price * qty
                 qty_str = f" × {qty}" if qty > 1 else ""
                 fl_str = f" · 🎨 {escape(fl)}" if fl else ""
-                parts.append(f"<li>{escape(name)}{qty_str} — {subtotal} ₴{fl_str}</li>")
+                parts.append(
+                    f"<li>{product_link(name, product_id)}{qty_str} — {subtotal} ₴{fl_str}</li>"
+                )
 
         parts.append("</ul>")
 
@@ -686,4 +689,111 @@ def build_broadcast_report(sent: int, failed: int, audience: str) -> str:
         "<hr/>"
         f"<p>✅ Надіслано: <b>{sent}</b></p>"
         f"<p>❌ Помилок/блокувань: <b>{failed}</b></p>"
+    )
+
+
+def build_start_welcome() -> str:
+    return (
+        "<h2>👋 Привіт! Я — Poselyanov 3D Print</h2>"
+        "<p>Роблю 3D-принти на замовлення.</p>"
+        "<p>Натисни кнопку нижче, щоб переглянути каталог 👇</p>"
+    )
+
+
+def build_catalog_hint() -> str:
+    return "<h2>🛍️ Каталог Poselyanov 3D Print</h2><p>Натисни кнопку нижче 👇</p>"
+
+
+def build_no_orders() -> str:
+    return (
+        "<h2>📭 Замовлень поки немає</h2>"
+        "<p>Відкрий каталог і зроби перше замовлення! 🛍️</p>"
+    )
+
+
+def build_sales_empty() -> str:
+    return (
+        "<h2>😔 Зараз акцій немає</h2>"
+        "<p>Слідкуй за оновленнями — знижки з'являться незабаром! 🔔</p>"
+    )
+
+
+def build_sales_list(sale_items: list[dict]) -> str:
+    parts = ["<h2>🔥 Поточні акції</h2>", "<hr/>", "<ul>"]
+    for p in sale_items:
+        emoji = p.get("emoji", "📦")
+        name = p.get("name", "—")
+        price = int(p.get("price") or 0)
+        old_price = int(p.get("oldPrice") or 0)
+        product_id = int(p.get("id") or 0) or None
+        discount = old_price - price
+        percent = round(discount / old_price * 100) if old_price else 0
+        linked_name = product_link(f"{emoji} {name}", product_id)
+        parts.append(
+            f"<li>{linked_name}"
+            f"<br/>💸 <s>{old_price} ₴</s> → <b>{price} ₴</b>"
+            f"<br/>🏷️ Економія: {discount} ₴ ({percent}%)</li>"
+        )
+    parts.extend([
+        "</ul>",
+        "<hr/>",
+        "<footer>Натисни на назву товару, щоб відкрити його в каталозі 👇</footer>",
+    ])
+    return "\n".join(parts)
+
+
+def build_mycoupons_empty() -> str:
+    return (
+        "<h2>🎟️ Персональних купонів немає</h2>"
+        "<p>Слідкуй за новинами — іноді ми даруємо знижки! 🎁</p>"
+    )
+
+
+def build_mycoupons_list(rows: list[tuple]) -> str:
+    parts = ["<h2>🎟️ Твої купони</h2>", "<hr/>", "<ul>"]
+    for code, ctype, value, min_order, uses_max, uses_count, one_per_user, expires_at, used_by_user in rows:
+        label = f"{value}%" if ctype == "percent" else f"{value} ₴"
+        lines = [f"🏷️ <b><code>{escape(code)}</code></b> — знижка {label}"]
+        if min_order:
+            lines.append(f"Від суми: {min_order} ₴")
+        if one_per_user:
+            lines.append("⛔ Вже використано" if used_by_user else "⚡ Одноразовий")
+        elif uses_max:
+            left = max(0, uses_max - uses_count)
+            lines.append(f"Залишилось використань: {left}")
+        if expires_at:
+            lines.append(f"Діє до: {format_date(expires_at)}")
+        else:
+            lines.append("Безстроковий ♾️")
+        parts.append(f"<li>{'<br/>'.join(lines)}</li>")
+    parts.extend([
+        "</ul>",
+        "<hr/>",
+        "<footer>Введи код у кошику при оформленні замовлення 🛍️</footer>",
+    ])
+    return "\n".join(parts)
+
+
+def build_contact() -> str:
+    return (
+        "<h2>📬 Контакти</h2>"
+        "<hr/>"
+        "<p>👤 <b>Денис Поселянов</b></p>"
+        f'<p>💬 Написати особисто: <a href="{DENIS_LINK}">@denisposelyanov</a></p>'
+        "<p>🤖 Бот магазину: @poselyanov3dprint_bot</p>"
+        "<hr/>"
+        "<footer>Відповідає зазвичай протягом кількох годин ⏰</footer>"
+    )
+
+
+def build_admin_panel_hint() -> str:
+    return (
+        "<h2>🔐 Адмін панель</h2>"
+        "<ul>"
+        "<li>➕ Додавати нові товари</li>"
+        "<li>✏️ Редагувати існуючі товари</li>"
+        "<li>🗑️ Видаляти товари</li>"
+        "<li>📸 Завантажувати фото на Cloudinary</li>"
+        "</ul>"
+        "<footer>Натисни кнопку нижче, щоб відкрити панель</footer>"
     )

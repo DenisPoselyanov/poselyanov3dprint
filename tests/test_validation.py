@@ -10,7 +10,12 @@ os.environ.setdefault("LOCAL_DEV_MODE", "true")
 
 from catalog_store import validate_product_prices, is_contract_product  # noqa: E402
 from bot import check_coupon, check_promotion, validate_order_payload  # noqa: E402
-from rich_messages import build_personal_coupon_notification  # noqa: E402
+from rich_messages import (  # noqa: E402
+    build_personal_coupon_notification,
+    build_sales_list,
+    product_link,
+    BOT_LINK_BASE,
+)
 
 
 def test_validate_product_prices_sale():
@@ -59,3 +64,14 @@ def test_build_personal_coupon_notification():
     assert "Одноразовий" in html
     assert "Промокод" in html
     assert "/mycoupons" in html
+
+
+def test_build_sales_list_product_links():
+    items = [
+        {"id": 42, "emoji": "🎁", "name": "Тестовий товар", "price": 80, "oldPrice": 100},
+    ]
+    html = build_sales_list(items)
+    assert f'href="{BOT_LINK_BASE}42"' in html
+    assert product_link("🎁 Тестовий товар", 42) in html
+    assert "80 ₴" in html
+    assert "Економія: 20 ₴" in html

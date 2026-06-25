@@ -43,6 +43,15 @@ from rich_messages import (
     build_personal_coupon_notification,
     build_order_history,
     build_order_status,
+    build_start_welcome,
+    build_catalog_hint,
+    build_no_orders,
+    build_sales_empty,
+    build_sales_list,
+    build_mycoupons_empty,
+    build_mycoupons_list,
+    build_contact,
+    build_admin_panel_hint,
     edit_rich_message,
     is_telegram_rate_limited,
     send_rich_message,
@@ -464,11 +473,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     ]])
 
-    await update.message.reply_text(
-        "👋 Привіт! Я — Poselyanov 3D Print\n\n"
-        "Роблю 3D-принти на замовлення:\n"
-        "Натисни кнопку нижче щоб переглянути каталог 👇",
-        reply_markup=markup
+    await send_rich_message(
+        context.bot,
+        update.message.chat_id,
+        build_start_welcome(),
+        reply_markup=markup,
     )
 
 async def catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -478,9 +487,11 @@ async def catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
             web_app=WebAppInfo(url=WEBAPP_URL)
         )
     ]])
-    await update.message.reply_text(
-        "🛍️ Каталог Poselyanov 3D Print 👇",
-        reply_markup=markup
+    await send_rich_message(
+        context.bot,
+        update.message.chat_id,
+        build_catalog_hint(),
+        reply_markup=markup,
     )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -644,78 +655,40 @@ async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rows = await run_db(get_my_coupons, user_id)
 
     if not rows:
-        await update.message.reply_text(
-            "🎟️ У тебе поки немає персональних купонів\n\n"
-            "Слідкуй за новинами — іноді ми даруємо знижки! 🎁"
+        await send_rich_message(
+            context.bot,
+            update.message.chat_id,
+            build_mycoupons_empty(),
         )
         return
 
-    months = ['січ','лют','бер','кві','тра','чер','лип','сер','вер','жов','лис','гру']
-
-    text = "🎟️ <b>Твої купони:</b>\n" + "─" * 22 + "\n\n"
-
-    for code, ctype, value, min_order, uses_max, uses_count, one_per_user, expires_at, used_by_user in rows:
-        label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
-        text += f"🏷️ <b><code>{code}</code></b> — знижка {label}\n"
-
-        if min_order:
-            text += f"   • Від суми: {min_order} ₴\n"
-
-        if one_per_user:
-            text += f"   • {'⛔ Вже використано' if used_by_user else '⚡ Одноразовий'}\n"
-        elif uses_max:
-            left = max(0, uses_max - uses_count)
-            text += f"   • Залишилось використань: {left}\n"
-
-        if expires_at:
-            try:
-                dt = datetime.strptime(expires_at[:10], "%Y-%m-%d")
-                exp_fmt = f"{dt.day} {months[dt.month-1]} {dt.year}"
-            except Exception:
-                exp_fmt = str(expires_at)[:10]
-            text += f"   • Діє до: {exp_fmt}\n"
-        else:
-            text += f"   • Безстроковий ♾️\n"
-
-        text += "\n"
-
-    text += "─" * 22 + "\n"
-    text += "Введи код в кошику при оформленні замовлення 🛍️"
-
-    await update.message.reply_text(text, parse_mode='HTML')
+    await send_rich_message(
+        context.bot,
+        update.message.chat_id,
+        build_mycoupons_list(rows),
+    )
 
 # /sales — поточні акції з products.json
 async def sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sale_items = [p for p in PRODUCTS_CACHE if p.get('oldPrice')]
 
     if not sale_items:
-        await update.message.reply_text(
-            "😔 Зараз акцій немає\n\n"
-            "Слідкуй за оновленнями — знижки з'являться незабаром! 🔔"
+        await send_rich_message(
+            context.bot,
+            update.message.chat_id,
+            build_sales_empty(),
         )
         return
-
-    text = "🔥 <b>Поточні акції:</b>\n" + "─" * 22 + "\n\n"
-
-    for p in sale_items:
-        emoji = p.get('emoji', '📦')
-        name = p.get('name', '—')
-        price = p.get('price', 0)
-        old_price = p.get('oldPrice', 0)
-        discount = old_price - price
-        percent = round(discount / old_price * 100)
-
-        text += f"{emoji} <b>{name}</b>\n"
-        text += f"   💸 <s>{old_price} ₴</s> → <b>{price} ₴</b>\n"
-        text += f"   🏷️ Економія: {discount} ₴ ({percent}%)\n\n"
-
-    text += "─" * 22 + "\n"
-    text += "Відкрий каталог щоб замовити 👇"
 
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton("🛍️ Відкрити каталог", web_app=WebAppInfo(url=WEBAPP_URL))
     ]])
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+    await send_rich_message(
+        context.bot,
+        update.message.chat_id,
+        build_sales_list(sale_items),
+        reply_markup=markup,
+    )
 
 
 # /status — статус останнього замовлення
@@ -732,9 +705,10 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
 
     if not order:
-        await update.message.reply_text(
-            "📭 У тебе поки немає замовлень\n\n"
-            "Відкрий каталог і зроби перше замовлення! 🛍️"
+        await send_rich_message(
+            context.bot,
+            update.message.chat_id,
+            build_no_orders(),
         )
         return
 
@@ -744,18 +718,15 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # /contact — контакти
 async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "📬 <b>Контакти</b>\n"
-        "──────────────────────\n\n"
-        "👤 <b>Денис Поселянов</b>\n"
-        "💬 Написати особисто: @denisposelyanov\n"
-        "🤖 Бот магазину: @poselyanov3dprint_bot\n\n"
-        "⏰ Відповідає зазвичай протягом кількох годин\n"
-    )
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton("💬 Написати Денису", url="https://t.me/denisposelyanov")
     ]])
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+    await send_rich_message(
+        context.bot,
+        update.message.chat_id,
+        build_contact(),
+        reply_markup=markup,
+    )
 
 # Команда для перегляду історії замовлень користувача, яка витягує останні 10 замовлень з бази даних і формує зручне текстове повідомлення з деталями кожного замовлення (статус, дата, товари, сума, коментарі) для відправки користувачу. Якщо замовлень немає, вона надсилає відповідне повідомлення з підказкою зробити перше замовлення.
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -772,9 +743,10 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """), (user_id,)).fetchall()
 
     if not orders:
-        await update.message.reply_text(
-            "📭 У тебе поки немає замовлень\n\n"
-            "Відкрий каталог і зроби перше замовлення! 🛍️"
+        await send_rich_message(
+            context.bot,
+            update.message.chat_id,
+            build_no_orders(),
         )
         conn.close()
         return
@@ -785,7 +757,7 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         placeholders = ",".join("?" * len(order_ids))
         all_items = conn.execute(
             _sql(f"""
-                SELECT order_id, product_name, price, quantity, filament
+                SELECT order_id, product_id, product_name, price, quantity, filament
                 FROM order_items
                 WHERE order_id IN ({placeholders})
             """),
@@ -2591,15 +2563,11 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     ]])
 
-    await update.message.reply_text(
-        "🔐 <b>Адмін панель для управління товарами</b>\n\n"
-        "• ➕ Додавати нові товари\n"
-        "• ✏️ Редагувати існуючі товари\n"
-        "• 🗑️ Видаляти товари\n"
-        "• 📸 Завантажувати фото на Cloudinary\n\n"
-        "<i>Натисніть кнопку нижче щоб відкрити панель</i>",
-        parse_mode='HTML',
-        reply_markup=markup
+    await send_rich_message(
+        context.bot,
+        update.message.chat_id,
+        build_admin_panel_hint(),
+        reply_markup=markup,
     )
 # ─── ЗАПУСК ─────────────────────────────────────────────────
 
