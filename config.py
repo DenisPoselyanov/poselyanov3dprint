@@ -25,6 +25,8 @@ CATEGORIES_FILE = os.environ.get("CATEGORIES_FILE", "categories.json")
 
 VALIDATE_INIT_DATA = os.environ.get("VALIDATE_INIT_DATA", "true").lower() in ("1", "true", "yes")
 LOCAL_DEV_MODE = os.environ.get("LOCAL_DEV_MODE", "false").lower() in ("1", "true", "yes")
+# Дозволити адмін-доступ з будь-якого пристрою локальної мережі (192.168.x.x, 10.x.x.x тощо).
+ALLOW_LOCAL_NETWORK = os.environ.get("ALLOW_LOCAL_NETWORK", "false").lower() in ("1", "true", "yes")
 INIT_DATA_MAX_AGE_SEC = int(os.environ.get("INIT_DATA_MAX_AGE_SEC", "86400"))
 
 # Secure token for direct browser admin access (e.g. via ngrok without Telegram context).
