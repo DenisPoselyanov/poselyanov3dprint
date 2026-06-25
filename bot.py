@@ -33,7 +33,7 @@ from telegram import (
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, filters, ContextTypes
+    CallbackQueryHandler, TypeHandler, filters, ContextTypes
 )
 
 # Завантажуємо змінні середовища з .env файлу, щоб не зберігати конфіденційні дані (як-от токен бота) прямо в коді.
@@ -688,21 +688,34 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Зберігаємо користувача при першому контакті з ботом (або ігноруємо, якщо вже є)
-def save_user(user):
+def _save_user_record(user_id: int, name: str, username: str) -> None:
     conn = db_connect()
     if _is_postgres():
         conn.execute(
             "INSERT INTO users (id, name, username) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
-            (user.id, user.first_name, f"@{user.username}" if user.username else "—"),
+            (user_id, name, username),
         )
     else:
         conn.execute("""
             INSERT OR IGNORE INTO users (id, name, username)
             VALUES (?, ?, ?)
-        """, (user.id, user.first_name, f"@{user.username}" if user.username else "—"))
+        """, (user_id, name, username))
     conn.commit()
     conn.close()
+
+
+def save_user_id(user_id: int, name: str = "", username: str = "") -> None:
+    if not user_id or user_id <= 0:
+        return
+    _save_user_record(user_id, name or "", f"@{username}" if username else "—")
+
+
+def save_user(user) -> None:
+    save_user_id(
+        user.id,
+        user.first_name or "",
+        (user.username or "").lstrip("@"),
+    )
 
 def _insert_order_items(conn, order_id: int, items: list) -> None:
     for item in items:
@@ -1377,9 +1390,13 @@ def get_all_users():
 
 # ─── ХЕНДЛЕРИ ───────────────────────────────────────────────
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    save_user(update.message.from_user)
+async def auto_register_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if user and not user.is_bot:
+        save_user(user)
 
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from telegram import ReplyKeyboardRemove
     # Видаляємо стару нижню клавіатуру, якщо вона була
     tmp = await update.message.reply_text("⏳", reply_markup=ReplyKeyboardRemove())
@@ -2503,6 +2520,11 @@ async def handle_order(request):
 
     first_name = auth.get("first_name") or data.get("first_name", "")
     tg_username = auth.get("username") or data.get("tg_username")
+    save_user_id(
+        int(user_id or 0),
+        first_name,
+        (tg_username or "").lstrip("@"),
+    )
     username = data.get("user") or (f"@{tg_username}" if tg_username else "невідомо")
 
     items = data.get("items", [])
@@ -3391,7 +3413,9 @@ def main():
     )
 
     bot_app = Application.builder().token(BOT_TOKEN).build()
-    
+
+    bot_app.add_handler(TypeHandler(Update, auto_register_user), group=-1)
+
     bot_app.add_handler(CommandHandler("catalog", catalog))
     bot_app.add_handler(CommandHandler("start",     start))
     bot_app.add_handler(CommandHandler("myid",      myid))
