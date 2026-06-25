@@ -588,6 +588,7 @@ def init_db():
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT ''")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_pending INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS channel_message_id BIGINT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked)")
@@ -681,6 +682,8 @@ def init_db():
         o_cols = [row[1] for row in conn.execute("PRAGMA table_info(orders)").fetchall()]
         if "price_pending" not in o_cols:
             conn.execute("ALTER TABLE orders ADD COLUMN price_pending INTEGER DEFAULT 0")
+        if "channel_message_id" not in o_cols:
+            conn.execute("ALTER TABLE orders ADD COLUMN channel_message_id INTEGER")
 
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)
@@ -1268,19 +1271,74 @@ def update_order_status(order_id: int, status: str):
     conn.close()
 
 
+def set_order_channel_message_id(order_id: int, message_id: int | None) -> None:
+    conn = db_connect()
+    conn.execute(
+        _sql("UPDATE orders SET channel_message_id = ? WHERE id = ?"),
+        (message_id, order_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_orders_channel_message_ids(order_ids: list[int], message_id: int | None) -> None:
+    if not order_ids:
+        return
+    conn = db_connect()
+    placeholders = ", ".join("?" * len(order_ids))
+    conn.execute(
+        _sql(f"UPDATE orders SET channel_message_id = ? WHERE id IN ({placeholders})"),
+        (message_id, *order_ids),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_orders_sharing_channel_message(order_id: int) -> list[int]:
+    conn = db_connect(dict_rows=True)
+    row = conn.execute(
+        _sql("SELECT channel_message_id FROM orders WHERE id = ?"),
+        (order_id,),
+    ).fetchone()
+    if not row or not row.get("channel_message_id"):
+        conn.close()
+        return [order_id]
+    msg_id = row["channel_message_id"]
+    rows = conn.execute(
+        _sql("SELECT id FROM orders WHERE channel_message_id = ? ORDER BY id"),
+        (msg_id,),
+    ).fetchall()
+    conn.close()
+    ids = [int(r["id"]) for r in rows]
+    return ids if ids else [order_id]
+
+
+def _tg_username_from_order(order: dict) -> str | None:
+    username = (order.get("username") or "").strip()
+    if username.startswith("@"):
+        handle = username[1:].strip()
+        if handle and handle != "невідомо":
+            return handle
+    return None
+
+
 def get_order_with_items(order_id: int):
     conn = db_connect(dict_rows=True)
     order = conn.execute(_sql("""
         SELECT id, user_id, username, first_name, total_price, comment,
-               gift_product_name, coupon_code, discount_amount, status, ordered_at, price_pending
+               gift_product_name, coupon_code, discount_amount, status, ordered_at,
+               price_pending, channel_message_id
         FROM orders WHERE id = ?
     """), (order_id,)).fetchone()
     if not order:
         conn.close()
         return None, []
     items = conn.execute(_sql("""
-        SELECT id, product_id, product_name, price, quantity, filament, is_contract_price, comment
-        FROM order_items WHERE order_id = ?
+        SELECT oi.id, oi.product_id, oi.product_name, oi.price, oi.quantity,
+               oi.filament, oi.is_contract_price, oi.comment, p.stl_link
+        FROM order_items oi
+        LEFT JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = ?
     """), (order_id,)).fetchall()
     conn.close()
     return _row_to_dict(order), [_row_to_dict(i) for i in items]
@@ -1965,6 +2023,139 @@ def _build_single_order_channel_markup(
     return InlineKeyboardMarkup(channel_rows)
 
 
+def _build_order_status_channel_markup(
+    order_id: int,
+    status: str,
+    *,
+    price_pending: bool,
+    tg_username: str | None,
+    first_name: str,
+) -> InlineKeyboardMarkup | None:
+    write_button = None
+    if tg_username:
+        write_button = InlineKeyboardButton(
+            f"💬 Написати {first_name or 'клієнт'}",
+            url=f"https://t.me/{tg_username}",
+        )
+
+    if status == "confirmed":
+        return InlineKeyboardMarkup([[write_button]]) if write_button else None
+    if status == "cancelled":
+        return None
+    if status == "draft":
+        buttons = [
+            InlineKeyboardButton("✅ Підтвердити", callback_data=f"confirm_{order_id}"),
+            InlineKeyboardButton("❌ Відмінити", callback_data=f"cancel_{order_id}"),
+        ]
+        rows = []
+        admin_url = get_admin_webapp_url(order_id) if price_pending else None
+        if admin_url:
+            rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
+        rows.append(buttons)
+        if write_button:
+            rows.append([write_button])
+        return InlineKeyboardMarkup(rows)
+    return _build_single_order_channel_markup(order_id, price_pending, tg_username, first_name)
+
+
+async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
+    """Синхронізує статус замовлення з повідомленням у Telegram-каналі (як order_action)."""
+    status_map = {"confirm": "confirmed", "draft": "draft", "cancel": "cancelled"}
+    label_map = {
+        "confirm": "✅ Підтверджено",
+        "draft": "❓ Під питанням",
+        "cancel": "❌ Відмінено",
+    }
+    if action not in status_map:
+        return
+
+    update_order_status(order_id, status_map[action])
+    order, items = get_order_with_items(order_id)
+    if not order:
+        return
+
+    if action in ("confirm", "cancel"):
+        affected_user_id = order.get("user_id")
+        if affected_user_id:
+            confirmation_messages.pop(int(affected_user_id), None)
+
+    channel_message_id = order.get("channel_message_id")
+    batch_order_ids = get_orders_sharing_channel_message(order_id)
+    tg_username = _tg_username_from_order(order)
+    first_name = order.get("first_name") or ""
+
+    if len(batch_order_ids) > 1 and channel_message_id:
+        batch_html, batch_markup = _build_admin_batch(
+            batch_order_ids,
+            order.get("username") or "невідомо",
+            tg_username,
+            first_name,
+        )
+        try:
+            await edit_rich_message(
+                bot_app.bot,
+                ORDERS_CHAT_ID,
+                int(channel_message_id),
+                batch_html,
+                reply_markup=batch_markup,
+            )
+        except Exception as e:
+            logger.warning("Не вдалось оновити батч-повідомлення каналу для #%s: %s", order_id, e)
+        return
+
+    gift_product_id = find_gift_product_id(order.get("gift_product_name"))
+    linked = action != "cancel"
+    admin_items = [
+        {
+            "product_id": int(i.get("product_id") or 0),
+            "product_name": i.get("product_name", "—"),
+            "price": int(i.get("price") or 0),
+            "quantity": int(i.get("quantity") or 1),
+            "filament_name": i.get("filament"),
+            "is_contract_price": bool(i.get("is_contract_price")),
+            "comment": i.get("comment") or "",
+        }
+        for i in items
+        if not str(i.get("product_name", "")).startswith("🎁")
+    ]
+    admin_html = build_admin_order_notification(
+        order_id=int(order["id"]),
+        username=order.get("username") or "невідомо",
+        items=admin_items,
+        total_price=int(order.get("total_price") or 0),
+        coupon_code=order.get("coupon_code"),
+        discount_amount=int(order.get("discount_amount") or 0),
+        gift=order.get("gift_product_name"),
+        gift_product_id=gift_product_id,
+        comment=order.get("comment"),
+        status_label=label_map[action],
+        linked=linked,
+        price_pending=bool(order.get("price_pending")),
+    )
+    markup = _build_order_status_channel_markup(
+        order_id,
+        status_map[action],
+        price_pending=bool(order.get("price_pending")),
+        tg_username=tg_username,
+        first_name=first_name,
+    )
+
+    if not channel_message_id:
+        logger.warning("Немає channel_message_id для замовлення #%s — пропускаємо оновлення каналу", order_id)
+        return
+
+    try:
+        await edit_rich_message(
+            bot_app.bot,
+            ORDERS_CHAT_ID,
+            int(channel_message_id),
+            admin_html,
+            reply_markup=markup,
+        )
+    except Exception as e:
+        logger.warning("Не вдалось оновити повідомлення каналу для #%s: %s", order_id, e)
+
+
 def _build_admin_batch_section_data(order_id: int) -> dict | None:
     """Дані одного замовлення для build_admin_orders_batch (читає з БД)."""
     order, items = get_order_with_items(order_id)
@@ -2115,6 +2306,7 @@ async def _apply_admin_channel_edit(
             "tg_username": tg_username,
             "first_name": first_name,
         }
+        set_orders_channel_message_ids(order_ids, admin_batch["message_id"])
         logger.info("✅ Оновлено адмін-повідомлення для замовлень %s", order_ids)
     except Exception as e:
         if is_telegram_rate_limited(e):
@@ -2141,6 +2333,7 @@ async def _apply_admin_channel_edit(
                 "tg_username": tg_username,
                 "first_name": first_name,
             }
+            set_orders_channel_message_ids(order_ids, msg_id)
             logger.info("✅ Надіслано нове адмін-повідомлення (fallback)")
         except Exception as e2:
             if is_telegram_rate_limited(e2):
@@ -2327,6 +2520,7 @@ async def _deliver_order_notifications(
                             "tg_username": tg_username,
                             "first_name": first_name,
                         }
+                        set_order_channel_message_id(order_id, msg_id)
                         logger.info(f"✅ Надіслано оновлене замовлення #{order_id} в канал")
                     except Exception as e:
                         if is_telegram_rate_limited(e):
@@ -2473,6 +2667,7 @@ async def _deliver_order_notifications(
                 "tg_username": admin_batch.get("tg_username") or tg_username,
                 "first_name": admin_batch.get("first_name") or first_name,
             }
+            set_order_channel_message_id(order_id, admin_batch.get("message_id"))
             _schedule_admin_batch_order_edit(
                 uid_for_batch,
                 fallback_html=owner_html,
@@ -2490,6 +2685,7 @@ async def _deliver_order_notifications(
                         "order_ids": [order_id],
                         "username": username, "tg_username": tg_username, "first_name": first_name,
                     }
+                set_order_channel_message_id(order_id, msg_id)
                 logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
             except Exception as e:
                 logger.error(f"❌ Помилка надсилання в канал: {e}")
@@ -2998,6 +3194,45 @@ async def handle_update_order_pricing(request: web.Request):
         return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
 
 
+async def handle_update_order_status(request: web.Request):
+    """Змінити статус замовлення та синхронізувати з Telegram-каналом."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        order_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+        status = (data.get("status") or "").strip().lower()
+        action_map = {
+            "confirmed": "confirm",
+            "cancelled": "cancel",
+            "draft": "draft",
+        }
+        if status not in action_map:
+            return web.json_response(
+                {"ok": False, "error": "Невідомий статус. Дозволено: confirmed, cancelled, draft"},
+                status=400,
+                headers=cors_headers(request),
+            )
+
+        order, _ = get_order_with_items(order_id)
+        if not order:
+            return web.json_response(
+                {"ok": False, "error": "Замовлення не знайдено"},
+                status=404,
+                headers=cors_headers(request),
+            )
+
+        await _sync_order_status_to_telegram(order_id, action_map[status])
+        return web.json_response({"ok": True, "status": status}, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
 async def handle_delete_order(request: web.Request):
     """Видалити замовлення."""
     auth, err = resolve_request_user(request, {})
@@ -3464,6 +3699,7 @@ def main():
         http_app.router.add_get('/api/orders', handle_get_orders)
         http_app.router.add_get('/api/orders/{id}', handle_get_order)
         http_app.router.add_put('/api/orders/{id}/pricing', handle_update_order_pricing)
+        http_app.router.add_put('/api/orders/{id}/status', handle_update_order_status)
         http_app.router.add_delete('/api/orders/{id}', handle_delete_order)
         http_app.router.add_get('/api/coupons', handle_get_coupons)
         http_app.router.add_post('/api/coupons', handle_create_coupon)
