@@ -179,7 +179,7 @@ async def edit_rich_message(bot, chat_id, message_id: int, html_content: str, re
         payload["reply_markup"] = markup_dict
 
     async def _edit_rich() -> None:
-        await bot.do_api_request("editMessageText", payload)
+        await bot.editMessageText(**payload)
 
     lock = _edit_lock(chat_id, message_id)
     async with lock:
