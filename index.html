@@ -3097,7 +3097,7 @@ function buildCard(p, i, isCustom, pageSource) {
   return `
     <div class="card" data-id="${p.id}" style="${_firstRender ? 'animation-delay:' + Math.min(i * 0.05, 0.3) + 's' : 'animation:none'}" onclick="openModal(${p.id}, '${source}')">
       <div class="card-img">
-        ${hasPhotos ? `<img src="${photo(p.photos[0])}" alt="${escapeHtml(p.name)}" loading="lazy" decoding="async">` : ''}
+        ${hasPhotos ? `<img src="${photo(p.photos[0])}" alt="${escapeHtml(p.name)}" loading="lazy" decoding="async" crossorigin="anonymous">` : ''}
         <span style="position:relative;z-index:1">${hasPhotos ? '' : p.emoji}</span>
         ${topBadges ? `<div class="card-top-badges">${topBadges}</div>` : ''}
         ${discount ? `<div class="card-sale-badge">−${discount}%</div>` : ''}
@@ -3226,7 +3226,7 @@ function openGiftModal() {
       <div class="gift-option${selectedGift?.id === p.id ? ' selected' : ''}" onclick="selectGift(${p.id})">
             <div class="gift-option-emoji" onclick="event.stopPropagation(); previewGift(${p.id})" style="cursor:pointer;position:relative;width:36px;height:36px;flex-shrink:0;" title="Переглянути товар">
         ${p.photos && p.photos.length > 0
-          ? `<img src="${photo(p.photos[0], { w: 120 })}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${escapeHtml(p.name)}" decoding="async" loading="lazy">`
+          ? `<img src="${photo(p.photos[0], { w: 120 })}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${escapeHtml(p.name)}" decoding="async" loading="lazy" crossorigin="anonymous">`
           : p.emoji}
       </div>
       <div class="gift-option-info">
@@ -3417,7 +3417,7 @@ function renderCart() {
     <div class="cart-item" id="cart-item-${item.id}">
       <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}')">
         ${item.photos && item.photos.length > 0
-          ? `<img src="${photo(item.photos[0], { w: 160 })}" alt="${item.name}" decoding="async" loading="lazy">`
+          ? `<img src="${photo(item.photos[0], { w: 160 })}" alt="${item.name}" decoding="async" loading="lazy" crossorigin="anonymous">`
           : item.emoji}
       </div>
       <div class="cart-item-info">
@@ -4424,7 +4424,7 @@ function renderPinnedProducts() {
   setGridHtml(track, pinned.map(p => `
     <div class="pinned-card" onclick="openModal(${p.id}, 'products')">
       <div class="pinned-thumb">
-        ${p.photos?.length ? `<img src="${photo(p.photos[0])}" alt="${escapeAttr(p.name)}">` : escapeHtml(p.emoji || '📦')}
+        ${p.photos?.length ? `<img src="${photo(p.photos[0])}" alt="${escapeAttr(p.name)}" crossorigin="anonymous">` : escapeHtml(p.emoji || '📦')}
         ${p.contractPrice ? '<div class="card-contract-badge">🤝 Договірна</div>' : ''}
       </div>
       <div>
@@ -4502,7 +4502,7 @@ function buildCarousel(photos) {
 
   track.innerHTML = photos.map((url, i) => `
     <div class="carousel-slide" onclick="openLightbox(${i})">
-      <img src="${photo(url, { w: 1000 })}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async">
+      <img src="${photo(url, { w: 1000 })}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async" crossorigin="anonymous">
       ${isAnimatedPhoto(url) ? '<div class="gif-badge">Анім.</div>' : ''}
     </div>
   `).join('');
@@ -4664,7 +4664,7 @@ function openLightbox(startIndex) {
   const dots  = document.getElementById('lb-dots');
 
   track.innerHTML = photos.map((url, i) =>
-    `<div class="lightbox-slide"><img src="${photo(url, { w: 1400 })}" alt="фото ${i+1}" loading="lazy" decoding="async"></div>`
+    `<div class="lightbox-slide"><img src="${photo(url, { w: 1400 })}" alt="фото ${i+1}" loading="lazy" decoding="async" crossorigin="anonymous"></div>`
   ).join('');
 
   dots.innerHTML = photos.map((_, i) =>
