@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 from datetime import datetime, timezone
@@ -57,6 +58,22 @@ def validate_telegram_init_data(init_data: str) -> dict | None:
         return None
 
 
+def _is_private_ip(ip_str: str) -> bool:
+    """Повертає True якщо IP належить приватній або loopback-мережі."""
+    try:
+        return ipaddress.ip_address(ip_str).is_private
+    except ValueError:
+        return False
+
+
+def is_local_network_request(request: web.Request) -> bool:
+    """Повертає True якщо запит надійшов з локальної мережі (і ALLOW_LOCAL_NETWORK=true)."""
+    if not config.ALLOW_LOCAL_NETWORK:
+        return False
+    client_ip = request.remote or ""
+    return _is_private_ip(client_ip)
+
+
 def cors_headers(request: web.Request) -> dict:
     origin = request.headers.get("Origin", "")
     normalized_origin = normalize_origin(origin)
@@ -67,12 +84,20 @@ def cors_headers(request: web.Request) -> dict:
     allow = "*"
     if normalized_origin and ("*" in config.CORS_ORIGINS or normalized_origin in normalized_allowed):
         allow = origin.rstrip("/")
+    elif config.ALLOW_LOCAL_NETWORK and normalized_origin:
+        # Дозволити будь-який origin з приватної мережі.
+        try:
+            origin_host = urlparse(origin).hostname or ""
+            if _is_private_ip(origin_host):
+                allow = origin.rstrip("/")
+        except Exception:
+            pass
     elif config.CORS_ORIGINS and config.CORS_ORIGINS[0] != "*":
         allow = config.CORS_ORIGINS[0].rstrip("/")
     return {
         "Access-Control-Allow-Origin": allow,
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, ngrok-skip-browser-warning",
+        "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, X-Admin-Bypass-Token, ngrok-skip-browser-warning",
         "Vary": "Origin",
     }
 
@@ -81,6 +106,10 @@ def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None,
     # Allow direct browser admin access via secure bypass token (e.g. ngrok without Telegram context).
     bypass_token = request.headers.get("X-Admin-Bypass-Token", "")
     if bypass_token and config.ADMIN_BYPASS_TOKEN and hmac.compare_digest(bypass_token, config.ADMIN_BYPASS_TOKEN):
+        return {"user_id": config.OWNER_ID, "username": "admin", "first_name": "Admin"}, None
+
+    # Allow access from local network without initData (ALLOW_LOCAL_NETWORK=true).
+    if is_local_network_request(request):
         return {"user_id": config.OWNER_ID, "username": "admin", "first_name": "Admin"}, None
 
     init_data = request.headers.get("X-Telegram-Init-Data") or data.get("init_data") or ""
@@ -137,6 +166,8 @@ def is_admin_authorized(request: web.Request, auth: dict | None) -> bool:
     if auth and auth.get("user_id") == config.OWNER_ID:
         return True
     if is_local_dev_origin(request):
+        return True
+    if is_local_network_request(request):
         return True
     # Allow direct browser access (e.g. ngrok) when a valid bypass token is presented.
     token = request.headers.get("X-Admin-Bypass-Token", "")
