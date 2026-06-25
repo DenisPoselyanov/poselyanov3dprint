@@ -179,16 +179,16 @@ async def edit_rich_message(bot, chat_id, message_id: int, html_content: str, re
         payload["reply_markup"] = markup_dict
 
     async def _edit_rich() -> None:
-        await bot.editMessageText(**payload)
+        await bot.do_api_request("editRichMessageText", payload)
 
     lock = _edit_lock(chat_id, message_id)
     async with lock:
         try:
-            await _telegram_retry(_edit_rich, label="editMessageText (rich)")
+            await _telegram_retry(_edit_rich, label="editRichMessageText (rich)")
         except Exception as e:
             if is_telegram_rate_limited(e):
                 raise
-            logger.warning("editMessageText (rich) failed, falling back to HTML: %s", e)
+            logger.warning("editRichMessageText failed, falling back to HTML: %s", e)
             fallback = rich_to_fallback_html(html_content)
 
             async def _edit_html() -> None:
