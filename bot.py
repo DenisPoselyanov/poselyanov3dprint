@@ -1846,16 +1846,13 @@ async def handle_static(request: web.Request):
         return web.Response(status=500, text=str(e), headers=cors_headers(request))
 
 async def handle_admin_panel(request: web.Request):
-    """Отримати HTML адмін панелі (лише для OWNER_ID)."""
-    init_data = extract_init_data(request)
-    auth = validate_telegram_init_data(init_data) if init_data else None
+    """Отримати HTML адмін панелі.
 
-    if config.VALIDATE_INIT_DATA:
-        if not auth or auth.get("user_id") != OWNER_ID:
-            return web.Response(status=403, text="Forbidden", headers=cors_headers(request))
-    elif config.LOCAL_DEV_MODE and not is_admin_authorized(request, auth):
-        return web.Response(status=403, text="Forbidden", headers=cors_headers(request))
-
+    Telegram WebApp відкриває цей URL через звичайний GET-запит браузера —
+    initData на цьому етапі ще недоступний серверу (він є лише на клієнті
+    через window.Telegram.WebApp.initData). Автентифікація відбувається
+    на рівні API-ендпоінтів через заголовок X-Telegram-Init-Data.
+    """
     try:
         html_content = Path("admin-panel.html").read_text(encoding="utf-8")
         headers = cors_headers(request)
