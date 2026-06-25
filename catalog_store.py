@@ -336,7 +336,9 @@ def get_category_by_id(category_id: str):
     if not category_id:
         return None
     category_id = str(category_id).strip()
-    for category in get_all_categories(active_only=False):
+    if not CATEGORIES_CACHE:
+        reload_categories_cache()
+    for category in CATEGORIES_CACHE:
         if category.get("id") == category_id:
             return category
     return None
@@ -679,14 +681,17 @@ def update_category(category_id: str, data: dict):
             if new_id != category_id and get_category_by_id(new_id):
                 return {"ok": False, "error": "Категорія з таким ID вже існує"}
             if new_id != category_id:
-                for product in get_all_products():
-                    if product.get("cat") == category_id:
-                        product["cat"] = new_id
-                        if use_catalog_db():
-                            conn = db_connect()
-                            conn.execute("UPDATE products SET category_id = %s WHERE category_id = %s", (new_id, category_id))
-                            conn.commit()
-                            conn.close()
+                products_to_recat = [p for p in get_all_products() if p.get("cat") == category_id]
+                for product in products_to_recat:
+                    product["cat"] = new_id
+                if use_catalog_db() and products_to_recat:
+                    conn = db_connect()
+                    conn.execute(
+                        "UPDATE products SET category_id = %s WHERE category_id = %s",
+                        (new_id, category_id),
+                    )
+                    conn.commit()
+                    conn.close()
                 category["id"] = new_id
 
         if "name" in data:

@@ -56,3 +56,23 @@ STATIC_ALLOWED_FILES = frozenset(
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 BROADCAST_DELAY_SEC = float(os.environ.get("BROADCAST_DELAY_SEC", "0.05"))
+
+
+def validate_startup_config() -> None:
+    """Fail fast on insecure or incomplete configuration."""
+    errors: list[str] = []
+
+    if not BOT_TOKEN:
+        errors.append("BOT_TOKEN is required")
+
+    if DB_BACKEND == "postgres" and not DATABASE_URL:
+        errors.append("DATABASE_URL (or SUPABASE_DB_URL) is required when DB_BACKEND=postgres")
+
+    if not VALIDATE_INIT_DATA and not LOCAL_DEV_MODE:
+        errors.append(
+            "VALIDATE_INIT_DATA=false is only allowed with LOCAL_DEV_MODE=true "
+            "(localhost development). Set VALIDATE_INIT_DATA=true for production."
+        )
+
+    if errors:
+        raise RuntimeError("Configuration error:\n  - " + "\n  - ".join(errors))

@@ -2,18 +2,15 @@
 Denis 3D Print — Telegram Bot
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from aiohttp import web
 import asyncio
-import hashlib
 import html
-import hmac
 import json
 import logging
 import os
-import sqlite3
+import sys
 from pathlib import Path
-from urllib.parse import parse_qsl
 from urllib.parse import urlparse
 try:
     import psycopg
@@ -23,17 +20,14 @@ except Exception:
     dict_row = None
 import cloudinary
 import cloudinary.uploader
-import base64
 import io
 from PIL import Image
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
-    BotCommandScopeChat, BotCommandScopeAllPrivateChats
+    WebAppInfo,
 )
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, TypeHandler, filters, ContextTypes
+    Application, ContextTypes,
 )
 
 # Завантажуємо змінні середовища з .env файлу, щоб не зберігати конфіденційні дані (як-от токен бота) прямо в коді.
@@ -94,7 +88,44 @@ from catalog_store import (
     validate_product_prices,
 )
 from db_core import db_connect, is_postgres as _is_postgres, run_db, sql as _sql
-from security_utils import is_safe_http_url, is_static_file_allowed, validate_stl_link
+from security_utils import is_safe_http_url, is_static_file_allowed
+import app_state
+from services.coupons import (
+    check_coupon,
+    check_promotion as _check_promotion_service,
+    create_coupon,
+    delete_coupon,
+    get_coupon,
+    get_my_coupons,
+    list_coupons,
+    replace_coupon,
+    set_coupon_active,
+    update_coupon,
+)
+from services.db_utils import init_db, row_to_dict as _row_to_dict
+from services.orders import (
+    delete_order,
+    find_gift_product_id,
+    get_idempotent_order,
+    get_order_with_items,
+    get_orders_sharing_channel_message,
+    get_orders_with_items_batch,
+    list_orders,
+    save_idempotent_order,
+    save_order,
+    set_order_channel_message_id,
+    set_orders_channel_message_ids,
+    tg_username_from_order as _tg_username_from_order,
+    update_order_pricing,
+    update_order_status,
+    user_order_lock as _user_order_lock,
+)
+from services.stats import get_stats
+from services.users import get_all_users, is_user_blocked, save_user, save_user_id, set_blocked
+from services.validation import validate_order_payload
+from services.notifications import notify_coupon_created
+from handlers.register import configure_bot_commands, register_telegram_handlers
+from routes.setup import register_http_routes
 
 BOT_TOKEN = config.BOT_TOKEN
 OWNER_ID = config.OWNER_ID
@@ -128,13 +159,10 @@ logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-def is_user_blocked(user_id: int) -> bool:
-    if not user_id:
-        return False
-    conn = db_connect()
-    row = conn.execute(_sql("SELECT blocked FROM users WHERE id = ?"), (user_id,)).fetchone()
-    conn.close()
-    return bool(row and row[0])
+def check_promotion(cart_total: int):
+    if not PROMOTION_ENABLED:
+        return 0
+    return _check_promotion_service(cart_total)
 
 
 def is_gif_image(file_data: bytes, content_type: str = "") -> bool:
@@ -408,472 +436,6 @@ async def handle_health(request: web.Request):
     )
 
 
-def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
-    """Перерахунок суми на сервері. Повертає (ok, result_dict|error_message)."""
-    reload_products_cache()
-    reload_filaments_cache()
-    products_by_id = {p["id"]: p for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE}
-    if not items:
-        return False, "Порожній кошик"
-
-    subtotal = 0
-    normalized = []
-
-    for raw in items:
-        pid = int(raw.get("product_id") or raw.get("id") or 0)
-        qty = max(1, min(99, int(raw.get("quantity", 1))))
-        product = products_by_id.get(pid)
-        is_contract = False
-
-        if product:
-            if is_contract_product(product):
-                price = 0
-                is_contract = True
-            else:
-                price = int(product["price"])
-            name = product["name"]
-        elif raw.get("fromCustom"):
-            price = int(raw.get("price", 0))
-            name = raw.get("product_name") or "—"
-            if price <= 0:
-                return False, f"Невідомий індивідуальний товар (id {pid})"
-        else:
-            return False, f"Невідомий товар (id {pid})"
-
-        filament_id = str(raw.get("filament_id") or raw.get("filamentId") or "").strip()
-        filament_name = ""
-        if raw.get("fromCustom"):
-            filament_id = ""
-            filament_name = ""
-        else:
-            no_filament_choice = bool(
-                product and product.get("filamentChoice") is False
-            )
-            if no_filament_choice:
-                filament_id = ""
-                filament_name = ""
-            elif filament_id:
-                meta = next((f for f in FILAMENTS_CACHE if f.get("id") == filament_id), None)
-                if not meta:
-                    return False, f"Невідомий колір філаменту ({filament_id})"
-                if not meta.get("available"):
-                    return False, f"Колір «{meta.get('name', '')}» зараз недоступний для замовлення"
-                if str(filament_id or "").startswith("luminous") and not (
-                    product and product.get("luminousFilamentChoice")
-                ):
-                    return False, "Цей колір недоступний для обраного товару"
-                filament_name = str(meta.get("name") or "").strip()
-
-        if not is_contract:
-            subtotal += price * qty
-        normalized.append({
-            "product_id": pid,
-            "product_name": name,
-            "price": price,
-            "quantity": qty,
-            "customValue": raw.get("customValue") or "",
-            "fromCustom": bool(raw.get("fromCustom")),
-            "filament_id": filament_id,
-            "filament_name": filament_name,
-            "is_contract_price": is_contract,
-            "comment": (raw.get("comment") or "").strip(),
-        })
-
-    discount = 0
-    if coupon_code:
-        coupon_result = check_coupon(coupon_code, user_id, subtotal)
-        if not coupon_result.get("valid"):
-            return False, coupon_result.get("message", "Невалідний купон")
-        discount = int(coupon_result.get("discount", 0))
-
-    after_coupon_total = max(0, subtotal - discount)
-    promotion_discount = 0 if coupon_code else check_promotion(after_coupon_total)
-    server_total = max(0, after_coupon_total - promotion_discount)
-
-    if server_total != int(client_total):
-        return False, f"Сума не збігається (клієнт {client_total}, сервер {server_total})"
-
-    return True, {
-        "items": normalized,
-        "subtotal": subtotal,
-        "coupon_discount": discount,
-        "promotion_discount": promotion_discount,
-        "total_price": server_total,
-        "price_pending": 1 if any(i.get("is_contract_price") for i in normalized) else 0,
-    }
-
-
-# ─── БАЗА ДАНИХ ─────────────────────────────────────────────
-def init_db():
-    conn = db_connect()
-    if _is_postgres():
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id BIGINT PRIMARY KEY,
-                name TEXT,
-                username TEXT,
-                blocked INTEGER DEFAULT 0,
-                joined_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS orders (
-                id BIGSERIAL PRIMARY KEY,
-                user_id BIGINT,
-                username TEXT,
-                first_name TEXT,
-                total_price INTEGER,
-                comment TEXT,
-                gift_product_name TEXT,
-                status TEXT DEFAULT 'new',
-                coupon_code TEXT,
-                discount_amount INTEGER DEFAULT 0,
-                ordered_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS order_items (
-                id BIGSERIAL PRIMARY KEY,
-                order_id BIGINT,
-                product_id BIGINT,
-                product_name TEXT,
-                price INTEGER,
-                quantity INTEGER DEFAULT 1,
-                filament TEXT DEFAULT ''
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS coupons (
-                code TEXT PRIMARY KEY,
-                type TEXT NOT NULL,
-                value INTEGER NOT NULL,
-                min_order INTEGER DEFAULT 0,
-                uses_max INTEGER DEFAULT 0,
-                uses_count INTEGER DEFAULT 0,
-                one_per_user INTEGER DEFAULT 0,
-                active INTEGER DEFAULT 1,
-                expires_at TIMESTAMPTZ,
-                personal_user_id BIGINT
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS coupon_uses (
-                id BIGSERIAL PRIMARY KEY,
-                code TEXT NOT NULL,
-                user_id BIGINT NOT NULL,
-                order_id BIGINT,
-                used_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS filament_colors (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                hex TEXT,
-                available INTEGER NOT NULL DEFAULT 0
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS order_idempotency (
-                user_id BIGINT NOT NULL,
-                idempotency_key TEXT NOT NULL,
-                order_id BIGINT NOT NULL,
-                is_new INTEGER NOT NULL DEFAULT 1,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE (user_id, idempotency_key)
-            )
-        """)
-        conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS personal_user_id BIGINT")
-        conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
-        conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
-        conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT ''")
-        conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_pending INTEGER DEFAULT 0")
-        conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS channel_message_id BIGINT")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked)")
-        init_catalog_tables(conn)
-    else:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id        INTEGER PRIMARY KEY,
-                name      TEXT,
-                username  TEXT,
-                blocked   INTEGER DEFAULT 0,
-                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS orders (
-                id                INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id           INTEGER,
-                username          TEXT,
-                first_name        TEXT,
-                total_price       INTEGER,
-                comment           TEXT,
-                gift_product_name TEXT,
-                status            TEXT DEFAULT 'new',
-                coupon_code       TEXT,
-                discount_amount   INTEGER DEFAULT 0,
-                ordered_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS order_items (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id     INTEGER,
-                product_id   INTEGER,
-                product_name TEXT,
-                price        INTEGER,
-                quantity     INTEGER DEFAULT 1
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS coupons (
-                code         TEXT PRIMARY KEY,
-                type         TEXT NOT NULL,      -- 'percent' або 'fixed'
-                value        INTEGER NOT NULL,   -- 20 або 50 (грн)
-                min_order    INTEGER DEFAULT 0,
-                uses_max     INTEGER DEFAULT 0,  -- 0 = необмежено
-                uses_count   INTEGER DEFAULT 0,
-                one_per_user INTEGER DEFAULT 0,  -- 1 = один раз на юзера
-                active       INTEGER DEFAULT 1,
-                expires_at   TIMESTAMP,
-                personal_user_id INTEGER
-            )
-        """)
-        c_cols = [row[1] for row in conn.execute("PRAGMA table_info(coupons)").fetchall()]
-        if "personal_user_id" not in c_cols:
-            conn.execute("ALTER TABLE coupons ADD COLUMN personal_user_id INTEGER")
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS coupon_uses (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                code      TEXT NOT NULL,
-                user_id   INTEGER NOT NULL,
-                order_id  INTEGER,
-                used_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS filament_colors (
-                id         TEXT PRIMARY KEY,
-                name       TEXT NOT NULL,
-                hex        TEXT,
-                available  INTEGER NOT NULL DEFAULT 0
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS order_idempotency (
-                user_id          INTEGER NOT NULL,
-                idempotency_key  TEXT NOT NULL,
-                order_id         INTEGER NOT NULL,
-                is_new           INTEGER NOT NULL DEFAULT 1,
-                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE (user_id, idempotency_key)
-            )
-        """)
-        oi_cols = [row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()]
-        if "filament" not in oi_cols:
-            conn.execute("ALTER TABLE order_items ADD COLUMN filament TEXT DEFAULT ''")
-        if "is_contract_price" not in oi_cols:
-            conn.execute("ALTER TABLE order_items ADD COLUMN is_contract_price INTEGER DEFAULT 0")
-        if "comment" not in oi_cols:
-            conn.execute("ALTER TABLE order_items ADD COLUMN comment TEXT DEFAULT ''")
-        o_cols = [row[1] for row in conn.execute("PRAGMA table_info(orders)").fetchall()]
-        if "price_pending" not in o_cols:
-            conn.execute("ALTER TABLE orders ADD COLUMN price_pending INTEGER DEFAULT 0")
-        if "channel_message_id" not in o_cols:
-            conn.execute("ALTER TABLE orders ADD COLUMN channel_message_id INTEGER")
-
-    for r in load_filaments_file(config.FILAMENTS_FILE):
-        sync_filament_colors_table(conn, r)
-
-    conn.commit()
-    conn.close()
-
-def _save_user_record(user_id: int, name: str, username: str) -> None:
-    conn = db_connect()
-    if _is_postgres():
-        conn.execute(
-            "INSERT INTO users (id, name, username) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
-            (user_id, name, username),
-        )
-    else:
-        conn.execute("""
-            INSERT OR IGNORE INTO users (id, name, username)
-            VALUES (?, ?, ?)
-        """, (user_id, name, username))
-    conn.commit()
-    conn.close()
-
-
-def save_user_id(user_id: int, name: str = "", username: str = "") -> None:
-    if not user_id or user_id <= 0:
-        return
-    _save_user_record(user_id, name or "", f"@{username}" if username else "—")
-
-
-def save_user(user) -> None:
-    save_user_id(
-        user.id,
-        user.first_name or "",
-        (user.username or "").lstrip("@"),
-    )
-
-def _insert_order_items(conn, order_id: int, items: list) -> None:
-    for item in items:
-        fl = (item.get("filament_name") or item.get("filament_id") or "").strip()
-        is_contract = 1 if item.get("is_contract_price") else 0
-        item_comment = (item.get("comment") or "").strip()
-        conn.execute(_sql("""
-            INSERT INTO order_items (order_id, product_id, product_name, price, quantity, filament, is_contract_price, comment)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """), (
-            order_id,
-            int(item.get("product_id") or item.get("id") or 0),
-            item.get("product_name", "—"),
-            int(item.get("price", 0)),
-            int(item.get("quantity", 1)),
-            fl,
-            is_contract,
-            item_comment or None,
-        ))
-
-
-def _find_active_order(user_id: int) -> dict | None:
-    """Активне (new/draft) замовлення користувача за останні 4 години."""
-    if not user_id or int(user_id) <= 0:
-        return None
-    conn = db_connect(dict_rows=True)
-    date_expr = "NOW() - INTERVAL '4 hours'" if _is_postgres() else "datetime('now', '-4 hours')"
-    row = conn.execute(_sql(f"""
-        SELECT id, total_price, price_pending, comment, gift_product_name
-        FROM orders
-        WHERE user_id = ? AND status IN ('new', 'draft')
-          AND ordered_at > {date_expr}
-        ORDER BY ordered_at DESC
-        LIMIT 1
-    """), (int(user_id),)).fetchone()
-    conn.close()
-    return _row_to_dict(row) if row else None
-
-
-# Функція для збереження замовлення в базі даних. Якщо у користувача вже є активне
-# замовлення (new/draft) за останні 4 год — дописує товари до нього. Повертає (order_id, is_new).
-def save_order(user_id, username, first_name, items, total_price, comment, gift_product_name=None, coupon_code=None, discount_amount=0, price_pending=0):
-    conn = db_connect()
-    uid = int(user_id or 0)
-    active = _find_active_order(uid) if uid > 0 else None
-
-    if active:
-        order_id = int(active["id"])
-        new_total = int(active.get("total_price") or 0) + int(total_price)
-        new_price_pending = max(int(active.get("price_pending") or 0), int(price_pending or 0))
-
-        old_gift = (active.get("gift_product_name") or "").strip()
-        new_gift = (gift_product_name or "").strip()
-        if new_gift and old_gift:
-            merged_gift = f"{old_gift}, {new_gift}"
-        else:
-            merged_gift = new_gift or old_gift or None
-
-        conn.execute(_sql("""
-            UPDATE orders
-            SET total_price = ?, price_pending = ?, gift_product_name = ?
-            WHERE id = ?
-        """), (new_total, new_price_pending, merged_gift, order_id))
-
-        _insert_order_items(conn, order_id, items)
-
-        if gift_product_name:
-            conn.execute(_sql("""
-                INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
-                VALUES (?, 0, ?, 0, 1)
-            """), (order_id, f"🎁 {gift_product_name} (безкоштовно)"))
-
-        conn.commit()
-        conn.close()
-        return order_id, False
-
-    if _is_postgres():
-        cursor = conn.execute("""
-            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status, price_pending)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'new', %s)
-            RETURNING id
-        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, int(price_pending or 0)))
-        order_id = cursor.fetchone()[0]
-    else:
-        cursor = conn.execute("""
-            INSERT INTO orders (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, status, price_pending)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
-        """, (user_id, username, first_name, total_price, comment, gift_product_name, coupon_code, discount_amount, int(price_pending or 0)))
-        order_id = cursor.lastrowid
-
-    _insert_order_items(conn, order_id, items)
-
-    if gift_product_name:
-        conn.execute(_sql("""
-            INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
-            VALUES (?, 0, ?, 0, 1)
-        """), (order_id, f"🎁 {gift_product_name} (безкоштовно)"))
-
-    if coupon_code:
-        conn.execute(_sql(
-            "UPDATE coupons SET uses_count = uses_count + 1 WHERE code = ?"),
-            (coupon_code.upper(),)
-        )
-        conn.execute(_sql(
-            "INSERT INTO coupon_uses (code, user_id, order_id) VALUES (?, ?, ?)"),
-            (coupon_code.upper(), user_id, order_id)
-        )
-    conn.commit()
-    conn.close()
-    return order_id, True
-
-
-_user_order_locks: dict[int, asyncio.Lock] = {}
-
-
-def _user_order_lock(user_id: int) -> asyncio.Lock:
-    uid = int(user_id or 0)
-    if uid not in _user_order_locks:
-        _user_order_locks[uid] = asyncio.Lock()
-    return _user_order_locks[uid]
-
-
-def get_idempotent_order(user_id: int, idempotency_key: str) -> dict | None:
-    if not idempotency_key or not user_id or int(user_id) <= 0:
-        return None
-    conn = db_connect(dict_rows=True)
-    row = conn.execute(_sql("""
-        SELECT order_id, is_new
-        FROM order_idempotency
-        WHERE user_id = ? AND idempotency_key = ?
-    """), (int(user_id), idempotency_key)).fetchone()
-    conn.close()
-    return _row_to_dict(row) if row else None
-
-
-def save_idempotent_order(user_id: int, idempotency_key: str, order_id: int, is_new: bool) -> None:
-    if not idempotency_key or not user_id or int(user_id) <= 0:
-        return
-    conn = db_connect()
-    is_new_val = 1 if is_new else 0
-    if _is_postgres():
-        conn.execute(_sql("""
-            INSERT INTO order_idempotency (user_id, idempotency_key, order_id, is_new)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT (user_id, idempotency_key) DO NOTHING
-        """), (int(user_id), idempotency_key, int(order_id), is_new_val))
-    else:
-        conn.execute(_sql("""
-            INSERT OR IGNORE INTO order_idempotency (user_id, idempotency_key, order_id, is_new)
-            VALUES (?, ?, ?, ?)
-        """), (int(user_id), idempotency_key, int(order_id), is_new_val))
-    conn.commit()
-    conn.close()
-
-
 def _order_ok_response(request: web.Request, order_id: int, *, duplicate: bool = False) -> web.Response:
     body: dict = {"ok": True, "order_id": int(order_id)}
     if duplicate:
@@ -881,577 +443,12 @@ def _order_ok_response(request: web.Request, order_id: int, *, duplicate: bool =
     return web.json_response(body, headers=cors_headers(request))
 
 
-# Функція для отримання статистики по користувачах і замовленнях, яка використовується в адмінській команді /stats для відображення актуальної інформації про діяльність бота.
-def get_stats():
-    conn = db_connect()
-    row = conn.execute("""
-        SELECT
-            (SELECT COUNT(*) FROM users) AS user_count,
-            (SELECT COUNT(*) FROM orders) AS order_count,
-            (SELECT COUNT(*) FROM orders WHERE status = 'confirmed') AS order_confirmed,
-            (SELECT COUNT(*) FROM orders WHERE status = 'draft') AS order_draft,
-            (SELECT COUNT(*) FROM orders WHERE status = 'cancelled') AS order_cancelled,
-            (SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE status = 'confirmed') AS earned,
-            (SELECT COALESCE(SUM(discount_amount), 0) FROM orders WHERE status = 'confirmed') AS total_discount
-    """).fetchone()
-    user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, total_discount = row
-    recent = conn.execute(
-        "SELECT name, username FROM users ORDER BY joined_at DESC LIMIT 10"
-    ).fetchall()
-    top_products = conn.execute("""
-        SELECT oi.product_name, SUM(oi.quantity) as cnt
-        FROM order_items oi
-        JOIN orders o ON o.id = oi.order_id
-        WHERE o.status = 'confirmed'
-        GROUP BY oi.product_name
-        ORDER BY cnt DESC
-        LIMIT 5
-    """).fetchall()
-    coupon_stats = conn.execute("""
-        SELECT c.code, c.uses_count,
-               COALESCE(SUM(o.discount_amount), 0) as total_discount
-        FROM coupons c
-        LEFT JOIN orders o ON o.coupon_code = c.code AND o.status = 'confirmed'
-        GROUP BY c.code
-        ORDER BY c.uses_count DESC
-        LIMIT 3
-    """).fetchall()
-    conn.close()
-    return user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent, top_products, coupon_stats, total_discount
-
-# Функція для перевірки купона при оформленні замовлення, яка враховує всі умови використання купона (активність, термін дії, мінімальна сума замовлення, обмеження на кількість використань і використання одним користувачем) і повертає результат у вигляді словника з інформацією про валідність купона, тип і значення знижки, а також повідомлення для клієнта.
-def check_coupon(code: str, user_id: int, cart_total: int):
-    conn = db_connect(dict_rows=True)
-    row = conn.execute(_sql(
-        "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id FROM coupons WHERE code = ?"), (code.upper(),)
-    ).fetchone()
-
-    if not row:
-        conn.close()
-        return {"valid": False, "message": "Купон не знайдено ❌"}
-
-    c = dict(row)
-
-    if not c['active']:
-        conn.close()
-        return {"valid": False, "message": "Купон вже не активний ❌"}
-
-    if c['expires_at'] and datetime.now() > datetime.fromisoformat(c['expires_at']):
-        conn.close()
-        return {"valid": False, "message": "Термін купону закінчився ❌"}
-
-    if c['min_order'] and cart_total < c['min_order']:
-        conn.close()
-        return {"valid": False, "message": f"Мінімальна сума замовлення: {c['min_order']} ₴ ❌"}
-
-    if c['uses_max'] and c['uses_count'] >= c['uses_max']:
-        conn.close()
-        return {"valid": False, "message": "Купон вичерпано ❌"}
-
-    if c['one_per_user'] and user_id:
-        used = conn.execute(_sql(
-            "SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ?"),
-            (c['code'], user_id)
-        ).fetchone()
-        if used:
-            conn.close()
-            return {"valid": False, "message": "Ти вже використовував цей купон ❌"}
-
-    if c.get('personal_user_id') and user_id and int(c['personal_user_id']) != int(user_id):
-        conn.close()
-        return {"valid": False, "message": "Цей купон призначений іншому користувачу ❌"}
-
-    conn.close()
-
-    discount = c['value'] if c['type'] == 'fixed' else round(cart_total * c['value'] / 100)
-    discount = min(discount, cart_total)  # не більше суми кошика
-
-    label = f"-{c['value']}%" if c['type'] == 'percent' else f"-{c['value']} ₴"
-    return {
-        "valid": True,
-        "type": c['type'],
-        "value": c['value'],
-        "discount": discount,
-        "message": f"Купон застосовано! Знижка {label} ✅"
-    }
-
-def check_promotion(cart_total: int):
-    """
-    Перевіряє, чи діє акція -10% на замовлення від 500 грн
-    Повертає розмір знижки, якщо акція діє
-    """
-    if not PROMOTION_ENABLED:
-        return 0
-    
-    PROMOTION_MIN_AMOUNT = 500  # мінімальна сума для акції
-    PROMOTION_DISCOUNT_RATE = 0.10  # 10% знижка
-    
-    if cart_total >= PROMOTION_MIN_AMOUNT:
-        discount = int(cart_total * PROMOTION_DISCOUNT_RATE)
-        return discount
-    return 0
-
-
-def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -> tuple[dict | None, str | None]:
-    code = (code_override or data.get("code") or "").strip().upper()
-    if not code:
-        return None, "Код купона обов'язковий"
-
-    ctype = str(data.get("type") or "").strip().lower()
-    if ctype not in ("percent", "fixed"):
-        return None, "Тип має бути percent або fixed"
-
-    try:
-        value = int(data.get("value"))
-    except (TypeError, ValueError):
-        return None, "Значення знижки має бути числом"
-    if value <= 0:
-        return None, "Значення знижки має бути більше 0"
-    if ctype == "percent" and value > 100:
-        return None, "Відсоткова знижка не може перевищувати 100"
-
-    try:
-        min_order = max(0, int(data.get("min_order") or 0))
-        uses_max = max(0, int(data.get("uses_max") or 0))
-        one_per_user = 1 if data.get("one_per_user") in (1, True, "1", "true") else 0
-        active = 1 if data.get("active", 1) in (1, True, "1", "true") else 0
-    except (TypeError, ValueError):
-        return None, "Невірні числові параметри купона"
-
-    expires_at = data.get("expires_at")
-    if expires_at is not None:
-        expires_at = str(expires_at).strip() or None
-
-    personal_user_id = data.get("personal_user_id")
-    if personal_user_id in ("", None):
-        personal_user_id = None
-    else:
-        try:
-            personal_user_id = int(personal_user_id)
-        except (TypeError, ValueError):
-            return None, "personal_user_id має бути числом"
-
-    return {
-        "code": code,
-        "type": ctype,
-        "value": value,
-        "min_order": min_order,
-        "uses_max": uses_max,
-        "one_per_user": one_per_user,
-        "active": active,
-        "expires_at": expires_at,
-        "personal_user_id": personal_user_id,
-    }, None
-
-
-def get_coupon(code: str) -> dict | None:
-    conn = db_connect(dict_rows=True)
-    row = conn.execute(_sql(
-        "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id "
-        "FROM coupons WHERE code = ?"
-    ), (code.upper(),)).fetchone()
-    conn.close()
-    return _row_to_dict(row) if row else None
-
-
-def list_coupons() -> list[dict]:
-    conn = db_connect(dict_rows=True)
-    rows = conn.execute(_sql(
-        "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id "
-        "FROM coupons ORDER BY active DESC, code ASC"
-    )).fetchall()
-    conn.close()
-    return [_row_to_dict(r) for r in rows]
-
-
-def create_coupon(data: dict) -> dict:
-    payload, err = _normalize_coupon_payload(data)
-    if err:
-        return {"ok": False, "error": err}
-    if get_coupon(payload["code"]):
-        return {"ok": False, "error": "Купон з таким кодом вже існує"}
-
-    conn = db_connect()
-    try:
-        conn.execute(_sql("""
-            INSERT INTO coupons
-            (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id)
-            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
-        """), (
-            payload["code"], payload["type"], payload["value"], payload["min_order"],
-            payload["uses_max"], payload["one_per_user"], payload["active"],
-            payload["expires_at"], payload["personal_user_id"],
-        ))
-        conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    finally:
-        conn.close()
-
-    coupon = get_coupon(payload["code"])
-    return {"ok": True, "created": True, "coupon": coupon}
-
-
-def update_coupon(code: str, data: dict) -> dict:
-    existing = get_coupon(code)
-    if not existing:
-        return {"ok": False, "error": "Не знайдено"}
-
-    payload, err = _normalize_coupon_payload(data, code_override=code)
-    if err:
-        return {"ok": False, "error": err}
-
-    conn = db_connect()
-    try:
-        conn.execute(_sql("""
-            UPDATE coupons SET
-                type = ?, value = ?, min_order = ?, uses_max = ?,
-                one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?
-            WHERE code = ?
-        """), (
-            payload["type"], payload["value"], payload["min_order"], payload["uses_max"],
-            payload["one_per_user"], payload["active"], payload["expires_at"],
-            payload["personal_user_id"], payload["code"],
-        ))
-        conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    finally:
-        conn.close()
-
-    return {"ok": True, "created": False, "coupon": get_coupon(payload["code"])}
-
-
-def replace_coupon(data: dict) -> dict:
-    """Створити або оновити купон (для /coupon add), зберігаючи uses_count."""
-    payload, err = _normalize_coupon_payload(data)
-    if err:
-        return {"ok": False, "error": err}
-
-    existing = get_coupon(payload["code"])
-    conn = db_connect()
-    try:
-        if existing:
-            conn.execute(_sql("""
-                UPDATE coupons SET
-                    type = ?, value = ?, min_order = ?, uses_max = ?,
-                    one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?
-                WHERE code = ?
-            """), (
-                payload["type"], payload["value"], payload["min_order"], payload["uses_max"],
-                payload["one_per_user"], payload["active"], payload["expires_at"],
-                payload["personal_user_id"], payload["code"],
-            ))
-            created = False
-        else:
-            conn.execute(_sql("""
-                INSERT INTO coupons
-                (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
-            """), (
-                payload["code"], payload["type"], payload["value"], payload["min_order"],
-                payload["uses_max"], payload["one_per_user"], payload["active"],
-                payload["expires_at"], payload["personal_user_id"],
-            ))
-            created = True
-        conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    finally:
-        conn.close()
-
-    coupon = get_coupon(payload["code"])
-    return {"ok": True, "created": created, "coupon": coupon}
-
-
-def set_coupon_active(code: str, active: bool) -> dict:
-    code = code.upper()
-    if not get_coupon(code):
-        return {"ok": False, "error": "Не знайдено"}
-    conn = db_connect()
-    try:
-        conn.execute(_sql("UPDATE coupons SET active = ? WHERE code = ?"), (1 if active else 0, code))
-        conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    finally:
-        conn.close()
-    return {"ok": True, "coupon": get_coupon(code)}
-
-
-def delete_coupon(code: str) -> dict:
-    code = code.upper()
-    if not get_coupon(code):
-        return {"ok": False, "error": "Не знайдено"}
-    conn = db_connect()
-    try:
-        conn.execute(_sql("DELETE FROM coupon_uses WHERE code = ?"), (code,))
-        conn.execute(_sql("DELETE FROM coupons WHERE code = ?"), (code,))
-        conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    finally:
-        conn.close()
-    return {"ok": True}
-
-
-async def notify_coupon_created(coupon: dict, *, source: str = "admin_panel") -> dict:
-    result = {"admin_sent": False, "user_sent": None, "user_error": None}
-    if not coupon or not bot_app or not OWNER_ID:
-        return result
-
-    bot = bot_app.bot
-    admin_html = build_admin_coupon_created_notification(
-        coupon["code"],
-        coupon["type"],
-        int(coupon["value"]),
-        min_order=int(coupon.get("min_order") or 0),
-        uses_max=int(coupon.get("uses_max") or 0),
-        one_per_user=int(coupon.get("one_per_user") or 0),
-        expires_at=coupon.get("expires_at"),
-        personal_user_id=coupon.get("personal_user_id"),
-        source=source,
-    )
-    try:
-        await send_rich_message(bot, OWNER_ID, admin_html)
-        result["admin_sent"] = True
-    except Exception as e:
-        logger.warning("Admin coupon notification failed: %s", e)
-
-    personal_user_id = coupon.get("personal_user_id")
-    if not personal_user_id:
-        return result
-
-    coupon_html = build_personal_coupon_notification(
-        coupon["code"],
-        coupon["type"],
-        int(coupon["value"]),
-        min_order=int(coupon.get("min_order") or 0),
-        one_per_user=int(coupon.get("one_per_user") or 0),
-        expires_at=coupon.get("expires_at"),
-    )
-    catalog_markup = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🛍️ Відкрити каталог", web_app=WebAppInfo(url=WEBAPP_URL))
-    ]])
-    try:
-        await send_rich_message(bot, int(personal_user_id), coupon_html, reply_markup=catalog_markup)
-        result["user_sent"] = True
-    except Exception as e:
-        logger.warning("Coupon notification failed for %s: %s", personal_user_id, e)
-        if "bot was blocked" in str(e) or "user is deactivated" in str(e):
-            set_blocked(int(personal_user_id), True)
-        result["user_sent"] = False
-        result["user_error"] = "Юзер не писав боту або заблокував"
-
-    return result
-
-
-def _row_to_dict(row) -> dict:
-    """Convert sqlite3.Row / psycopg dict-row to a plain JSON-serializable dict."""
-    if isinstance(row, dict):
-        d = row
-    else:
-        try:
-            d = dict(row)
-        except Exception:
-            d = {k: row[k] for k in row.keys()}
-    result = {}
-    for k, v in d.items():
-        if isinstance(v, datetime):
-            result[k] = v.isoformat()
-        else:
-            result[k] = v
-    return result
-
-
-def update_order_status(order_id: int, status: str):
-    conn = db_connect()
-    conn.execute(_sql("UPDATE orders SET status = ? WHERE id = ?"), (status, order_id))
-    conn.commit()
-    conn.close()
-
-
-def set_order_channel_message_id(order_id: int, message_id: int | None) -> None:
-    conn = db_connect()
-    conn.execute(
-        _sql("UPDATE orders SET channel_message_id = ? WHERE id = ?"),
-        (message_id, order_id),
-    )
-    conn.commit()
-    conn.close()
-
-
-def set_orders_channel_message_ids(order_ids: list[int], message_id: int | None) -> None:
-    if not order_ids:
-        return
-    conn = db_connect()
-    placeholders = ", ".join("?" * len(order_ids))
-    conn.execute(
-        _sql(f"UPDATE orders SET channel_message_id = ? WHERE id IN ({placeholders})"),
-        (message_id, *order_ids),
-    )
-    conn.commit()
-    conn.close()
-
-
-def get_orders_sharing_channel_message(order_id: int) -> list[int]:
-    conn = db_connect(dict_rows=True)
-    row = conn.execute(
-        _sql("SELECT channel_message_id FROM orders WHERE id = ?"),
-        (order_id,),
-    ).fetchone()
-    if not row or not row.get("channel_message_id"):
-        conn.close()
-        return [order_id]
-    msg_id = row["channel_message_id"]
-    rows = conn.execute(
-        _sql("SELECT id FROM orders WHERE channel_message_id = ? ORDER BY id"),
-        (msg_id,),
-    ).fetchall()
-    conn.close()
-    ids = [int(r["id"]) for r in rows]
-    return ids if ids else [order_id]
-
-
-def _tg_username_from_order(order: dict) -> str | None:
-    username = (order.get("username") or "").strip()
-    if username.startswith("@"):
-        handle = username[1:].strip()
-        if handle and handle != "невідомо":
-            return handle
-    return None
-
-
-def get_order_with_items(order_id: int):
-    conn = db_connect(dict_rows=True)
-    order = conn.execute(_sql("""
-        SELECT id, user_id, username, first_name, total_price, comment,
-               gift_product_name, coupon_code, discount_amount, status, ordered_at,
-               price_pending, channel_message_id
-        FROM orders WHERE id = ?
-    """), (order_id,)).fetchone()
-    if not order:
-        conn.close()
-        return None, []
-    items = conn.execute(_sql("""
-        SELECT oi.id, oi.product_id, oi.product_name, oi.price, oi.quantity,
-               oi.filament, oi.is_contract_price, oi.comment, p.stl_link
-        FROM order_items oi
-        LEFT JOIN products p ON p.id = oi.product_id
-        WHERE oi.order_id = ?
-    """), (order_id,)).fetchall()
-    conn.close()
-    return _row_to_dict(order), [_row_to_dict(i) for i in items]
-
-
-def delete_order(order_id: int):
-    conn = db_connect()
-    row = conn.execute(_sql("SELECT id FROM orders WHERE id = ?"), (order_id,)).fetchone()
-    if not row:
-        conn.close()
-        return {"ok": False, "error": "Замовлення не знайдено"}
-    conn.execute(_sql("DELETE FROM order_items WHERE order_id = ?"), (order_id,))
-    conn.execute(_sql("DELETE FROM orders WHERE id = ?"), (order_id,))
-    conn.commit()
-    conn.close()
-    return {"ok": True}
-
-
-def list_orders(*, pending_price_only: bool = False, limit: int = 50):
-    conn = db_connect(dict_rows=True)
-    sql = """
-        SELECT id, user_id, username, first_name, total_price, comment,
-               gift_product_name, coupon_code, discount_amount, status, ordered_at, price_pending
-        FROM orders
-    """
-    params: list = []
-    if pending_price_only:
-        sql += " WHERE price_pending = ?"
-        params.append(1)
-    sql += " ORDER BY id DESC LIMIT ?"
-    params.append(int(limit))
-    rows = conn.execute(_sql(sql), tuple(params)).fetchall()
-    conn.close()
-    return [_row_to_dict(r) for r in rows]
-
-
-def update_order_pricing(order_id: int, item_prices: dict[int, int]) -> dict:
-    conn = db_connect(dict_rows=True)
-    order = conn.execute(_sql("""
-        SELECT id, discount_amount, user_id, first_name
-        FROM orders WHERE id = ?
-    """), (order_id,)).fetchone()
-    if not order:
-        conn.close()
-        return {"ok": False, "error": "Замовлення не знайдено"}
-
-    for item_id, price in item_prices.items():
-        new_price = max(0, int(price))
-        conn.execute(_sql("""
-            UPDATE order_items
-            SET price = ?, is_contract_price = 0
-            WHERE id = ? AND order_id = ?
-        """), (new_price, int(item_id), order_id))
-
-    items = conn.execute(_sql("""
-        SELECT id, product_name, price, quantity, is_contract_price
-        FROM order_items WHERE order_id = ?
-    """), (order_id,)).fetchall()
-
-    subtotal = sum(
-        int(i.get("price") or 0) * int(i.get("quantity") or 1)
-        for i in items
-        if not str(i.get("product_name", "")).startswith("🎁")
-    )
-    discount = int(order.get("discount_amount") or 0)
-    total = max(0, subtotal - discount)
-    still_pending = any(
-        int(i.get("is_contract_price") or 0)
-        for i in items
-        if not str(i.get("product_name", "")).startswith("🎁")
-    )
-    conn.execute(_sql("""
-        UPDATE orders SET total_price = ?, price_pending = ? WHERE id = ?
-    """), (total, 1 if still_pending else 0, order_id))
-    conn.commit()
-    conn.close()
-    return {
-        "ok": True,
-        "total_price": total,
-        "price_pending": still_pending,
-        "user_id": order.get("user_id"),
-        "first_name": order.get("first_name"),
-    }
-
-
-def find_gift_product_id(gift_name: str | None) -> int | None:
-    if not gift_name:
-        return None
-    name = str(gift_name).strip().lower()
-    for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE:
-        if str(p.get("name", "")).strip().lower() == name and p.get("id"):
-            return int(p["id"])
-    return None
-
-def set_blocked(user_id, blocked: bool):
-    conn = db_connect()
-    conn.execute(_sql("UPDATE users SET blocked = ? WHERE id = ?"), (int(blocked), user_id))
-    conn.commit()
-    conn.close()
-
-def get_all_users():
-    conn = db_connect()
-    users = conn.execute("SELECT id FROM users WHERE blocked = 0").fetchall()
-    conn.close()
-    return users
-
-
 # ─── ХЕНДЛЕРИ ───────────────────────────────────────────────
 
 async def auto_register_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user and not user.is_bot:
-        save_user(user)
+        await run_db(save_user, user)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1489,7 +486,18 @@ async def catalog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != OWNER_ID:
         return
-    user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, recent, top_products, coupon_stats, total_discount = get_stats()
+    (
+        user_count,
+        order_count,
+        order_confirmed,
+        order_draft,
+        order_cancelled,
+        earned,
+        recent,
+        top_products,
+        coupon_stats,
+        total_discount,
+    ) = await run_db(get_stats)
     lines = [
         f"📊 *Статистика*\n",
         f"👥 Користувачів: *{user_count}*",
@@ -1508,14 +516,14 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"\n🏆 *Топ товари:*")
         for name, cnt in top_products:
             lines.append(f"• {name} — {cnt} шт")
-    await update.message.reply_text("\n".join(lines), parse_mode='Markdown')
 
-    # Виводимо статистику по купонам, якщо вони є, включаючи код купона, кількість використань і загальну суму знижки, яку вони надали. Це дозволяє адміністраторам оцінити ефективність кожного купона і приймати рішення про їх подальше використання або модифікацію.
     if coupon_stats:
         lines.append(f"\n🎟️ *Купони (топ-3):*")
         for code, uses, disc in coupon_stats:
             lines.append(f"• `{code}` — {uses} раз, -{disc} ₴")
         lines.append(f"💸 Всього знижок: *{total_discount} ₴*")
+
+    await update.message.reply_text("\n".join(lines), parse_mode='Markdown')
 
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1572,7 +580,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo_url = None
 
     if target_user_id:
-        known_users = {uid for (uid,) in get_all_users()}
+        known_users = {uid for (uid,) in await run_db(get_all_users)}
         if target_user_id not in known_users:
             await update.message.reply_text(
                 f"❌ Користувач `{target_user_id}` не знайдений у базі бота (або заблокований).",
@@ -1581,7 +589,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         users = [(target_user_id,)]
     else:
-        users = get_all_users()
+        users = await run_db(get_all_users)
 
     sent, failed = 0, 0
     logger.info(f"📨 Розсилка → {len(users)} користувачів")
@@ -1630,44 +638,10 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-# Функція для отримання активних купонів, які можна використати при оформленні замовлення. Вона витягує з бази даних всі купони, які відповідають умовам активності (не вичерпано, не прострочено, особисті або публічні) і повертає їх у вигляді списку рядків для відображення користувачу.
-def get_my_coupons(user_id: int):
-    """Повертає купони, доступні користувачу:
-    - персональні (personal_user_id = user_id)
-    - публічні (personal_user_id IS NULL)
-    з урахуванням строку дії, ліміту використань та one_per_user.
-    """
-    conn = db_connect()
-    date_expr = "NOW()" if _is_postgres() else "datetime('now')"
-    rows = conn.execute(_sql(f"""
-        SELECT
-            c.code,
-            c.type,
-            c.value,
-            c.min_order,
-            c.uses_max,
-            c.uses_count,
-            c.one_per_user,
-            c.expires_at,
-            EXISTS(
-                SELECT 1
-                FROM coupon_uses cu
-                WHERE cu.code = c.code AND cu.user_id = ?
-            ) AS used_by_user
-        FROM coupons c
-        WHERE c.active = 1
-          AND (c.personal_user_id IS NULL OR c.personal_user_id = ?)
-          AND (c.expires_at IS NULL OR c.expires_at > {date_expr})
-          AND (c.uses_max = 0 OR c.uses_count < c.uses_max)
-        ORDER BY c.personal_user_id DESC, c.code ASC
-    """), (user_id, user_id)).fetchall()
-    conn.close()
-    return rows
-
-# Команда для перегляду персональних купонів користувача, яка витягує з бази даних всі активні купони, прив'язані до цього користувача, і формує зручне текстове повідомлення з деталями кожного купона (тип знижки, умови використання, термін дії) для відправки користувачу. Якщо купонів немає, вона надсилає відповідне повідомлення з підказкою слідкувати за новинами для отримання знижок.
+# Команда для перегляду персональних купонів користувача
 async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    rows = get_my_coupons(user_id)
+    rows = await run_db(get_my_coupons, user_id)
 
     if not rows:
         await update.message.reply_text(
@@ -1919,7 +893,7 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("\n".join(reply_lines), parse_mode='Markdown')
 
     elif sub == 'list':
-        rows = list_coupons()
+        rows = await run_db(list_coupons)
         if not rows:
             await message.reply_text("Купонів ще немає")
             return
@@ -2156,9 +1130,10 @@ async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
         logger.warning("Не вдалось оновити повідомлення каналу для #%s: %s", order_id, e)
 
 
-def _build_admin_batch_section_data(order_id: int) -> dict | None:
+def _build_admin_batch_section_data(order_id: int, order: dict | None = None, items: list | None = None) -> dict | None:
     """Дані одного замовлення для build_admin_orders_batch (читає з БД)."""
-    order, items = get_order_with_items(order_id)
+    if order is None or items is None:
+        order, items = get_order_with_items(order_id)
     if not order:
         return None
     status = order.get("status", "new")
@@ -2206,9 +1181,14 @@ def _build_admin_batch(
     first_name: str,
 ) -> tuple:
     """Повертає (html, markup) для батч-повідомлення адмін-каналу."""
+    batch_data = get_orders_with_items_batch(order_ids)
     sections = []
     for oid in order_ids:
-        sec = _build_admin_batch_section_data(oid)
+        entry = batch_data.get(int(oid))
+        if not entry:
+            continue
+        order, items = entry
+        sec = _build_admin_batch_section_data(int(oid), order, items)
         if sec is not None:
             sections.append(sec)
 
@@ -2711,12 +1691,13 @@ async def handle_order(request):
         return err
 
     user_id = auth.get("user_id") or data.get("user_id") or 0
-    if is_user_blocked(user_id):
+    if await run_db(is_user_blocked, user_id):
         return web.json_response({"ok": False, "error": "Замовлення недоступне"}, status=403, headers=cors_headers(request))
 
     first_name = auth.get("first_name") or data.get("first_name", "")
     tg_username = auth.get("username") or data.get("tg_username")
-    save_user_id(
+    await run_db(
+        save_user_id,
         int(user_id or 0),
         first_name,
         (tg_username or "").lstrip("@"),
@@ -2729,7 +1710,7 @@ async def handle_order(request):
     gift = data.get("gift")
     coupon_code = (data.get("coupon_code") or "").strip() or None
 
-    ok, result = validate_order_payload(items, coupon_code, user_id, client_total)
+    ok, result = await run_db(validate_order_payload, items, coupon_code, user_id, client_total)
     if not ok:
         return web.json_response({"ok": False, "error": result}, status=400, headers=cors_headers(request))
 
@@ -2752,7 +1733,7 @@ async def handle_order(request):
     uid = int(user_id or 0)
 
     if idempotency_key and uid > 0:
-        cached = get_idempotent_order(uid, idempotency_key)
+        cached = await run_db(get_idempotent_order, uid, idempotency_key)
         if cached:
             logger.info(
                 "♻️ Idempotent duplicate: user=%s order=#%s",
@@ -2762,19 +1743,19 @@ async def handle_order(request):
 
     async with _user_order_lock(uid):
         if idempotency_key and uid > 0:
-            cached = get_idempotent_order(uid, idempotency_key)
+            cached = await run_db(get_idempotent_order, uid, idempotency_key)
             if cached:
                 return _order_ok_response(request, int(cached["order_id"]), duplicate=True)
 
-        # Зберігаємо замовлення в базі даних і отримуємо його ID для подальшого використання в логах і кнопках
-        order_id, is_new = save_order(
+        order_id, is_new = await run_db(
+            save_order,
             user_id or 0, username, first_name, items, total_price, comment,
             gift, coupon_code, total_discount, price_pending,
         )
 
         if idempotency_key and uid > 0:
             try:
-                save_idempotent_order(uid, idempotency_key, order_id, is_new)
+                await run_db(save_idempotent_order, uid, idempotency_key, order_id, is_new)
             except Exception as e:
                 logger.error("Не вдалось зберегти idempotency key: %s", e)
 
@@ -2787,7 +1768,7 @@ async def handle_order(request):
         logger.info(f"📦 ДОДАНО до #{order_id}  {product_name}  +{total_price}₴  від {username}")
 
     if not is_new:
-        order, _ = get_order_with_items(order_id)
+        order, _ = await run_db(get_order_with_items, order_id)
         if not order:
             return web.json_response(
                 {"ok": False, "error": "Замовлення не знайдено"},
@@ -2817,15 +1798,6 @@ async def handle_order(request):
 
 # ─── АДМІН HANDLERS ─────────────────────────────────────────
 
-async def is_admin_check(request: web.Request) -> bool:
-    """Перевірити чи користувач є адміном"""
-    auth, err = resolve_request_user(request, await request.json() if request.content_type == 'application/json' else {})
-    if err or not auth:
-        return False
-    return auth.get("user_id") == OWNER_ID
-
-
-# Хендлер для отримання HTML адмін панелі. Він перевіряє, чи користувач є власником (адміністратором) за допомогою resolve_request_user і initData, який може бути переданий через query параметр, заголовок або cookie. Якщо користувач не є адміном, він повертає 403 Forbidden. Якщо користувач є адміном, він намагається прочитати файл admin-panel.html і повернути його вміст як HTML відповідь. Якщо файл не знайдено, він повертає 404 Not Found.
 async def handle_index(request: web.Request):
     """Отримати HTML головної сторінки"""
     try:
@@ -3063,7 +2035,7 @@ async def handle_get_orders(request: web.Request):
 
     pending_only = request.query.get("pending_price", "false").lower() in ("1", "true", "yes")
     limit = min(100, max(1, int(request.query.get("limit", "50") or 50)))
-    orders = list_orders(pending_price_only=pending_only, limit=limit)
+    orders = await run_db(list_orders, pending_price_only=pending_only, limit=limit)
     return web.json_response(orders, headers=cors_headers(request))
 
 
@@ -3077,7 +2049,7 @@ async def handle_get_order(request: web.Request):
         return denied
 
     order_id = int(request.match_info.get("id", 0))
-    order, items = get_order_with_items(order_id)
+    order, items = await run_db(get_order_with_items, order_id)
     if not order:
         return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
     return web.json_response({"order": order, "items": items}, headers=cors_headers(request))
@@ -3102,7 +2074,7 @@ async def handle_update_order_pricing(request: web.Request):
             if item_id:
                 item_prices[item_id] = int(row.get("price") or 0)
 
-        result = update_order_pricing(order_id, item_prices)
+        result = await run_db(update_order_pricing, order_id, item_prices)
         if not result.get("ok"):
             return web.json_response(result, status=400, headers=cors_headers(request))
 
@@ -3110,7 +2082,7 @@ async def handle_update_order_pricing(request: web.Request):
 
         if data.get("notify_client") and user_id_from_result:
             uid_int = int(user_id_from_result)
-            order, items = get_order_with_items(order_id)
+            order, items = await run_db(get_order_with_items, order_id)
             if order and items:
                 quote_html = build_client_price_quote(order_id, int(order.get("total_price") or 0), items)
                 existing_confirm = confirmation_messages.get(uid_int)
@@ -3219,7 +2191,7 @@ async def handle_update_order_status(request: web.Request):
                 headers=cors_headers(request),
             )
 
-        order, _ = get_order_with_items(order_id)
+        order, _ = await run_db(get_order_with_items, order_id)
         if not order:
             return web.json_response(
                 {"ok": False, "error": "Замовлення не знайдено"},
@@ -3244,7 +2216,7 @@ async def handle_delete_order(request: web.Request):
 
     try:
         order_id = int(request.match_info.get("id", 0))
-        result = delete_order(order_id)
+        result = await run_db(delete_order, order_id)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -3259,7 +2231,7 @@ async def handle_get_coupons(request: web.Request):
     denied = require_admin(request, auth)
     if denied:
         return denied
-    return web.json_response(list_coupons(), headers=cors_headers(request))
+    return web.json_response(await run_db(list_coupons), headers=cors_headers(request))
 
 
 async def handle_create_coupon(request: web.Request):
@@ -3273,7 +2245,7 @@ async def handle_create_coupon(request: web.Request):
 
     try:
         data = await request.json()
-        result = create_coupon(data)
+        result = await run_db(create_coupon, data)
         if not result.get("ok"):
             return web.json_response(result, status=400, headers=cors_headers(request))
 
@@ -3298,9 +2270,9 @@ async def handle_update_coupon(request: web.Request):
         data = await request.json()
 
         if "active" in data and len(data) == 1:
-            result = set_coupon_active(code, bool(data.get("active")))
+            result = await run_db(set_coupon_active, code, bool(data.get("active")))
         else:
-            result = update_coupon(code, data)
+            result = await run_db(update_coupon, code, data)
 
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
@@ -3319,7 +2291,7 @@ async def handle_delete_coupon(request: web.Request):
 
     try:
         code = request.match_info.get("code", "")
-        result = delete_coupon(code)
+        result = await run_db(delete_coupon, code)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -3331,9 +2303,9 @@ async def handle_upload_photo(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err:
         return err
-    # Локально без валідації дозволяємо без перевірки OWNER_ID
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"ok": False, "error": "❌ Забачено доступу (тільки адмін)"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
 
     try:
         form = await request.post()
@@ -3390,8 +2362,9 @@ async def handle_upload_photo_url(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err:
         return err
-    if VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
-        return web.json_response({"ok": False, "error": "❌ Забачено доступу (тільки адмін)"}, status=403, headers=cors_headers(request))
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
 
     try:
         data = await request.json()
@@ -3437,7 +2410,7 @@ async def handle_check_coupon(request):
     if not code:
         result = {"valid": False, "message": "Введи код купону"}
     else:
-        result = check_coupon(code, user_id, cart_total)
+        result = await run_db(check_coupon, code, user_id, cart_total)
 
     return web.json_response(result, headers=cors_headers(request))
 
@@ -3474,18 +2447,18 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     write_button = btn
 
     if action == "confirm":
-        update_order_status(order_id, "confirmed")
+        await run_db(update_order_status, order_id, "confirmed")
         label = "✅ Підтверджено"
     elif action == "draft":
-        update_order_status(order_id, "draft")
+        await run_db(update_order_status, order_id, "draft")
         label = "❓ Під питанням"
     elif action == "cancel":
-        update_order_status(order_id, "cancelled")
+        await run_db(update_order_status, order_id, "cancelled")
         label = "❌ Відмінено"
     else:
         return
 
-    order, items = get_order_with_items(order_id)
+    order, items = await run_db(get_order_with_items, order_id)
     if not order:
         return
 
@@ -3633,13 +2606,14 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 # ─── ЗАПУСК ─────────────────────────────────────────────────
 
-bot_app = None
+confirmation_messages = app_state.confirmation_messages
+admin_channel_messages = app_state.admin_channel_messages
+bot_app = app_state.bot_app
 
-confirmation_messages = {}  # {user_id: {"message_id", "orders", "html", "time", "format"}}
-admin_channel_messages = {}  # {user_id: {"message_id", "chat_id", "time", "order_ids", "username", "tg_username", "first_name"}}
 
 def main():
     global bot_app
+    config.validate_startup_config()
     init_db()
     bootstrap_json_catalog(force=True)
     logger.info(
@@ -3647,70 +2621,14 @@ def main():
         VALIDATE_INIT_DATA, len(PRODUCTS_CACHE), len(CUSTOM_PRODUCTS_CACHE), len(FILAMENTS_CACHE), len(CATEGORIES_CACHE),
     )
 
-    bot_app = Application.builder().token(BOT_TOKEN).build()
+    app_state.bot_app = Application.builder().token(BOT_TOKEN).build()
+    bot_app = app_state.bot_app
 
-    bot_app.add_handler(TypeHandler(Update, auto_register_user), group=-1)
-
-    bot_app.add_handler(CommandHandler("catalog", catalog))
-    bot_app.add_handler(CommandHandler("start",     start))
-    bot_app.add_handler(CommandHandler("myid",      myid))
-    bot_app.add_handler(CommandHandler("stats",     stats))
-    bot_app.add_handler(CommandHandler("broadcast", broadcast))
-    bot_app.add_handler(CommandHandler("coupon", coupon_cmd))
-    bot_app.add_handler(CommandHandler("admin",     admin_cmd))
-    bot_app.add_handler(CommandHandler("history", history))
-    bot_app.add_handler(CommandHandler("mycoupons", mycoupons))
-    bot_app.add_handler(CommandHandler("sales",    sales))
-    bot_app.add_handler(CommandHandler("status",   status_cmd))
-    bot_app.add_handler(CommandHandler("contact",  contact))
-    bot_app.add_handler(CommandHandler("reload_products", reload_products_cmd))
-    # Додатково ловимо текстові варіанти кнопки/команди купонів,
-    # якщо користувач надсилає саме текст, а не slash-команду.
-    bot_app.add_handler(
-        MessageHandler(
-            filters.TEXT & filters.Regex(r"^(?:/mycoupons|🎟️ Мої купони)$"),
-            mycoupons,
-        )
-    )
-    bot_app.add_handler(CallbackQueryHandler(order_action, pattern=r"^(confirm|draft|cancel)_"))
+    register_telegram_handlers(bot_app, sys.modules[__name__])
 
     async def run():
         http_app = web.Application(client_max_size=MAX_UPLOAD_BYTES)
-        # API маршрути (перші, щоб не перехоплювалися статичними файлами)
-        http_app.router.add_post('/order', handle_order)
-        http_app.router.add_route('OPTIONS', '/order', handle_options)
-        http_app.router.add_post('/check_coupon', handle_check_coupon)
-        http_app.router.add_route('OPTIONS', '/check_coupon', handle_options)
-        http_app.router.add_route('OPTIONS', '/api/{tail:.*}', handle_options)
-        # Адмін API
-        http_app.router.add_get('/health', handle_health)
-        http_app.router.add_get('/admin/panel', handle_admin_panel)
-        http_app.router.add_get('/api/products', handle_get_products)
-        http_app.router.add_get('/api/categories', handle_get_categories)
-        http_app.router.add_get('/api/filaments', handle_get_filaments)
-        http_app.router.add_get('/api/products/{id}', handle_get_product)
-        http_app.router.add_post('/api/categories', handle_create_category)
-        http_app.router.add_put('/api/categories/{id}', handle_update_category)
-        http_app.router.add_delete('/api/categories/{id}', handle_delete_category)
-        http_app.router.add_put('/api/filaments/{id}', handle_update_filament)
-        http_app.router.add_post('/api/products', handle_create_product)
-        http_app.router.add_put('/api/products/{id}', handle_update_product)
-        http_app.router.add_delete('/api/products/{id}', handle_delete_product)
-        http_app.router.add_get('/api/orders', handle_get_orders)
-        http_app.router.add_get('/api/orders/{id}', handle_get_order)
-        http_app.router.add_put('/api/orders/{id}/pricing', handle_update_order_pricing)
-        http_app.router.add_put('/api/orders/{id}/status', handle_update_order_status)
-        http_app.router.add_delete('/api/orders/{id}', handle_delete_order)
-        http_app.router.add_get('/api/coupons', handle_get_coupons)
-        http_app.router.add_post('/api/coupons', handle_create_coupon)
-        http_app.router.add_put('/api/coupons/{code}', handle_update_coupon)
-        http_app.router.add_delete('/api/coupons/{code}', handle_delete_coupon)
-        http_app.router.add_post('/api/upload-photo', handle_upload_photo)
-        http_app.router.add_post('/api/upload-photo-url', handle_upload_photo_url)
-        # Головна сторінка
-        http_app.router.add_get('/', handle_index)
-        # Статичні файли (останній, як catch-all)
-        http_app.router.add_get('/{path:.*}', handle_static)
+        register_http_routes(http_app, sys.modules[__name__])
         runner = web.AppRunner(http_app)
         await runner.setup()
         site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
@@ -3731,40 +2649,15 @@ def main():
                 poll_interval=0.5,
             )
             logger.info("🤖 Бот запущено  →  очікую замовлення...")
-            # Встановлюємо адмін-команди для себе
-            from telegram import BotCommandScopeChat
-            await bot_app.bot.set_my_commands(
-                commands=[
-                    ("catalog",   "🛍️ Відкрити каталог"),
-                    ("admin",     "📊 Адмін панель"),
-                    ("stats",     "📊 Статистика"),
-                    ("coupon",    "🎟️ Керування купонами"),
-                    ("broadcast", "📨 Розсилка"),
-                    ("history",   "📦 Мої замовлення"),
-                    ("status",    "📋 Статус замовлення"),
-                    ("mycoupons", "🎟️ Мої купони"),
-                    ("sales",     "🔥 Акції"),
-                    ("contact",   "📬 Контакти"),
-                    ("myid",      "🪪 Мій ID"),
-                ],
-                scope=BotCommandScopeChat(chat_id=OWNER_ID)
-            )
-
-            # Команди для звичайних юзерів (окремо для всіх приватних чатів,
-            # щоб /catalog гарантовано з'являвся у швидкому меню команд)
             user_commands = [
-                ("catalog",   "🛍️ Відкрити каталог"),
-                ("history",   "📦 Мої замовлення"),
-                ("status",    "📋 Статус замовлення"),
+                ("catalog", "🛍️ Відкрити каталог"),
+                ("history", "📦 Мої замовлення"),
+                ("status", "📋 Статус замовлення"),
                 ("mycoupons", "🎟️ Мої купони"),
-                ("sales",     "🔥 Акції"),
-                ("contact",   "📬 Контакти"),
+                ("sales", "🔥 Акції"),
+                ("contact", "📬 Контакти"),
             ]
-            await bot_app.bot.set_my_commands(commands=user_commands)
-            await bot_app.bot.set_my_commands(
-                commands=user_commands,
-                scope=BotCommandScopeAllPrivateChats(),
-            )
+            await configure_bot_commands(bot_app, owner_id=OWNER_ID, user_commands=user_commands)
             await asyncio.Event().wait()
 
     asyncio.run(run())

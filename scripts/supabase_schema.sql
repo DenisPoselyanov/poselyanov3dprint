@@ -78,8 +78,11 @@ CREATE TABLE IF NOT EXISTS order_items (
     price INTEGER,
     quantity INTEGER NOT NULL DEFAULT 1,
     filament TEXT NOT NULL DEFAULT '',
-    is_contract_price INTEGER NOT NULL DEFAULT 0
+    is_contract_price INTEGER NOT NULL DEFAULT 0,
+    comment TEXT DEFAULT ''
 );
+
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS coupons (
     code TEXT PRIMARY KEY,
@@ -100,6 +103,15 @@ CREATE TABLE IF NOT EXISTS coupon_uses (
     user_id BIGINT NOT NULL,
     order_id BIGINT,
     used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS order_idempotency (
+    user_id BIGINT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    order_id BIGINT NOT NULL,
+    is_new INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, idempotency_key)
 );
 
 CREATE TABLE IF NOT EXISTS filament_colors (

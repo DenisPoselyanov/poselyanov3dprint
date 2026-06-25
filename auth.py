@@ -93,6 +93,14 @@ def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None,
     if auth and auth.get("user_id"):
         return auth, None
 
+    # Without initData validation, only allow spoofed user_id on localhost dev.
+    if not config.LOCAL_DEV_MODE:
+        return None, web.json_response(
+            {"ok": False, "error": "invalid_init_data"},
+            status=403,
+            headers=cors_headers(request),
+        )
+
     uid = data.get("user_id")
     if uid:
         return {
@@ -126,7 +134,7 @@ def is_admin_authorized(request: web.Request, auth: dict | None) -> bool:
 
 
 def require_admin(request: web.Request, auth: dict | None) -> web.Response | None:
-    if config.VALIDATE_INIT_DATA and not is_admin_authorized(request, auth):
+    if not is_admin_authorized(request, auth):
         return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
     return None
 

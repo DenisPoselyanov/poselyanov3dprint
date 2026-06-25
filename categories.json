@@ -76,7 +76,7 @@
     "name": "Рибальство",
     "emoji": "🐟",
     "badgeClass": "category-fishing",
-    "order": 6,
+    "order": 9,
     "active": true,
     "quickSlot": null
   }
