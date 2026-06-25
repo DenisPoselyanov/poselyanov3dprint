@@ -547,9 +547,14 @@
         .order-card {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 14px;
             padding: 16px;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
+            transition: box-shadow .2s ease, border-color .2s ease;
+        }
+
+        .order-card:hover {
+            box-shadow: 0 4px 16px var(--shadow-card);
         }
 
         .order-card.pending-price {
@@ -557,16 +562,196 @@
             box-shadow: 0 0 0 1px rgba(245, 158, 11, .15);
         }
 
+        .order-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .order-card-id {
+            font-weight: 800;
+            font-size: 17px;
+            line-height: 1.3;
+        }
+
+        .order-card-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            line-height: 1.5;
+        }
+
+        .order-card-meta a {
+            color: var(--accent-text);
+            text-decoration: none;
+        }
+
+        .order-card-meta a:hover {
+            text-decoration: underline;
+        }
+
+        .order-card-total {
+            text-align: right;
+            font-weight: 800;
+            font-size: 16px;
+        }
+
+        .order-card-total.pending {
+            color: #d97706;
+            font-size: 14px;
+        }
+
+        .order-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 999px;
+            margin-top: 6px;
+        }
+
+        .order-status-badge.new {
+            background: rgba(59, 130, 246, .12);
+            color: #2563eb;
+        }
+
+        .order-status-badge.confirmed {
+            background: rgba(34, 197, 94, .12);
+            color: #16a34a;
+        }
+
+        .order-status-badge.cancelled {
+            background: rgba(239, 68, 68, .12);
+            color: #dc2626;
+        }
+
+        .order-status-badge.draft {
+            background: rgba(245, 158, 11, .12);
+            color: #d97706;
+        }
+
+        body.dark .order-status-badge.new { color: #60a5fa; }
+        body.dark .order-status-badge.confirmed { color: #4ade80; }
+        body.dark .order-status-badge.cancelled { color: #f87171; }
+        body.dark .order-status-badge.draft { color: #fbbf24; }
+
+        .order-actions {
+            margin-top: 14px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .order-status-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+
+        .order-status-btn {
+            padding: 7px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-alt);
+            background: var(--bg-input);
+            color: var(--text-main);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .15s, opacity .15s;
+        }
+
+        .order-status-btn:hover:not(:disabled) {
+            background: var(--bg-section);
+        }
+
+        .order-status-btn:disabled {
+            opacity: .45;
+            cursor: default;
+        }
+
+        .order-status-btn.active {
+            border-color: var(--accent);
+            background: var(--bg-tab-active);
+            color: var(--accent-text);
+        }
+
+        .order-details-panel {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px dashed var(--border-row);
+        }
+
+        .order-customer-info {
+            background: var(--bg-section);
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .order-customer-info strong {
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
         .order-item-row {
             display: flex;
             gap: 12px;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 0;
+            padding: 12px 0;
             border-bottom: 1px dashed var(--border-row);
         }
 
         .order-item-row:last-child { border-bottom: none; }
+
+        .order-item-name {
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .order-stl-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-alt);
+            background: var(--bg-input);
+            color: var(--accent-text);
+            font-size: 11px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background .15s;
+        }
+
+        .order-stl-btn:hover {
+            background: var(--bg-tab-active);
+        }
+
+        .order-item-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .order-item-price {
+            font-weight: 700;
+            min-width: 80px;
+            text-align: right;
+            white-space: nowrap;
+        }
 
         .order-price-input {
             width: 100px;
@@ -576,6 +761,50 @@
             font-size: 14px;
             background: var(--bg-input);
             color: var(--text-main);
+        }
+
+        .order-summary-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            padding: 6px 0;
+            color: var(--text-muted);
+        }
+
+        .order-summary-row.total {
+            font-weight: 800;
+            font-size: 15px;
+            color: var(--text-main);
+            border-top: 1px solid var(--border-row);
+            margin-top: 6px;
+            padding-top: 10px;
+        }
+
+        .orders-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .orders-toolbar h2 {
+            font-size: 20px;
+            margin: 0;
+        }
+
+        .orders-toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .orders-count {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 600;
         }
 
         .price-fields-group.hidden { display: none; }
@@ -1367,12 +1596,15 @@
             </section>
 
             <section id="ordersPage" class="page-section">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 16px;">
-                    <h2 style="font-size:20px; margin:0;">📦 Замовлення</h2>
-                    <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
-                        <input type="checkbox" id="ordersPendingFilter" onchange="loadOrders()">
-                        Лише потребують ціни
-                    </label>
+                <div class="orders-toolbar">
+                    <h2>📦 Замовлення <span id="ordersCount" class="orders-count"></span></h2>
+                    <div class="orders-toolbar-right">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
+                            <input type="checkbox" id="ordersPendingFilter" onchange="loadOrders()">
+                            Лише потребують ціни
+                        </label>
+                        <button class="btn btn-secondary" type="button" onclick="loadOrders()">🔄 Оновити</button>
+                    </div>
                 </div>
                 <div id="ordersLoading" class="loading" style="display:none;">
                     <div class="spinner"></div>
@@ -3535,10 +3767,33 @@
 
         let expandedOrderId = null;
 
+        const ORDER_STATUS_LABELS = {
+            new: '🆕 Нове',
+            confirmed: '✅ Підтверджено',
+            cancelled: '❌ Відмінено',
+            draft: '❓ Під питанням',
+        };
+
+        function getOrderTgHandle(order) {
+            const username = String(order?.username || '').trim();
+            if (username.startsWith('@')) {
+                const handle = username.slice(1).trim();
+                if (handle && handle !== 'невідомо') return handle;
+            }
+            return '';
+        }
+
+        function renderOrderStatusBadge(status) {
+            const key = status || 'new';
+            const label = ORDER_STATUS_LABELS[key] || ORDER_STATUS_LABELS.new;
+            return `<span class="order-status-badge ${escapeAttr(key)}">${label}</span>`;
+        }
+
         async function loadOrders() {
             const loading = document.getElementById('ordersLoading');
             const list = document.getElementById('ordersList');
             const empty = document.getElementById('ordersEmpty');
+            const countEl = document.getElementById('ordersCount');
             const pendingOnly = document.getElementById('ordersPendingFilter')?.checked;
             try {
                 loading.style.display = 'flex';
@@ -3547,6 +3802,9 @@
                 const res = await fetch(API_BASE + '/orders' + qs);
                 if (!res.ok) throw new Error('Помилка завантаження замовлень');
                 allOrders = await res.json();
+                if (countEl) {
+                    countEl.textContent = allOrders.length ? `(${allOrders.length})` : '';
+                }
                 renderOrdersList();
             } catch (e) {
                 showToast(e.message || 'Помилка завантаження замовлень', 'error');
@@ -3566,31 +3824,61 @@
                 return;
             }
             empty.style.display = 'none';
-            list.innerHTML = allOrders.map(o => `
+            list.innerHTML = allOrders.map(o => {
+                const status = o.status || 'new';
+                const tgHandle = getOrderTgHandle(o);
+                const userLine = tgHandle
+                    ? `<a href="https://t.me/${escapeAttr(tgHandle)}" target="_blank" rel="noopener">${escapeHtml(o.first_name || '')} · @${escapeHtml(tgHandle)}</a>`
+                    : escapeHtml(o.first_name || o.username || 'невідомо');
+                const totalHtml = o.price_pending
+                    ? '<div class="order-card-total pending">⚠️ Ціна не вказана</div>'
+                    : `<div class="order-card-total">${o.total_price} ₴</div>`;
+                const detailsLabel = expandedOrderId === o.id
+                    ? '▲ Сховати'
+                    : (o.price_pending ? '💰 Встановити ціну' : '👁️ Деталі');
+
+                return `
                 <div class="order-card ${o.price_pending ? 'pending-price' : ''}" id="order-card-${o.id}">
-                    <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <div class="order-card-header">
                         <div>
-                            <div style="font-weight:800; font-size:16px;">#${o.id} · ${escapeHtml(o.username || 'невідомо')}</div>
-                            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${escapeHtml(o.first_name || '')} · ${formatOrderDate(o.ordered_at)} · ${escapeHtml(o.status || 'new')}</div>
+                            <div class="order-card-id">#${o.id}</div>
+                            <div class="order-card-meta">${userLine} · ${formatOrderDate(o.ordered_at)}</div>
+                            ${renderOrderStatusBadge(status)}
                         </div>
-                        <div style="text-align:right;">
-                            <div style="font-weight:800;">${o.price_pending ? '⚠️ Ціна не вказана' : `${o.total_price} ₴`}</div>
-                            ${o.comment ? `<div style="font-size:12px; color:var(--text-muted); margin-top:4px;">📝 ${escapeHtml(o.comment)}</div>` : ''}
+                        <div>
+                            ${totalHtml}
+                            ${o.comment ? `<div class="order-card-meta" style="margin-top:6px; max-width:220px;">📝 ${escapeHtml(o.comment)}</div>` : ''}
                         </div>
                     </div>
-                    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-                        <button class="btn btn-primary" type="button" onclick="toggleOrderDetails(${o.id})">${expandedOrderId === o.id ? '▲ Сховати' : '💰 Встановити ціну'}</button>
-                        <button class="btn btn-danger" type="button" onclick="deleteOrder(${o.id}, '${escapeAttr(o.status || 'new')}')">🗑️ Видалити</button>
+                    <div class="order-actions">
+                        <div class="order-status-actions">
+                            <button class="order-status-btn ${status === 'confirmed' ? 'active' : ''}" type="button"
+                                ${status === 'confirmed' ? 'disabled' : ''}
+                                onclick="changeOrderStatus(${o.id}, 'confirmed')">✅ Підтвердити</button>
+                            <button class="order-status-btn ${status === 'draft' ? 'active' : ''}" type="button"
+                                ${status === 'draft' ? 'disabled' : ''}
+                                onclick="changeOrderStatus(${o.id}, 'draft')">❓ Під питанням</button>
+                            <button class="order-status-btn ${status === 'cancelled' ? 'active' : ''}" type="button"
+                                ${status === 'cancelled' ? 'disabled' : ''}
+                                onclick="changeOrderStatus(${o.id}, 'cancelled')">❌ Відмінити</button>
+                        </div>
+                        <button class="btn btn-primary" type="button" onclick="toggleOrderDetails(${o.id})">${detailsLabel}</button>
+                        <button class="btn btn-danger" type="button" onclick="deleteOrder(${o.id}, '${escapeAttr(o.status || 'new')}')">🗑️</button>
                     </div>
-                    <div id="order-details-${o.id}" style="display:${expandedOrderId === o.id ? 'block' : 'none'}; margin-top:12px;"></div>
-                </div>
-            `).join('');
+                    <div id="order-details-${o.id}" class="order-details-panel" style="display:${expandedOrderId === o.id ? 'block' : 'none'};"></div>
+                </div>`;
+            }).join('');
             if (expandedOrderId) renderOrderDetails(expandedOrderId);
         }
 
         function formatOrderDate(raw) {
             if (!raw) return '—';
-            return String(raw).slice(0, 16).replace('T', ' ');
+            const d = new Date(raw);
+            if (Number.isNaN(d.getTime())) {
+                return String(raw).slice(0, 16).replace('T', ' ');
+            }
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }
 
         async function toggleOrderDetails(orderId) {
@@ -3606,6 +3894,29 @@
             if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
+        function renderOrderItemRow(item) {
+            const stlLink = (item.stl_link || '').trim();
+            const stlBtn = stlLink
+                ? `<a class="order-stl-btn" href="${escapeAttr(stlLink)}" target="_blank" rel="noopener" title="Відкрити STL">📐 STL</a>`
+                : '';
+            const priceCell = item.is_contract_price
+                ? `<input class="order-price-input" type="number" min="0" step="1" data-item-id="${item.id}" value="${item.price || ''}" placeholder="₴">`
+                : `<div class="order-item-price">${item.price * item.quantity} ₴</div>`;
+
+            return `
+                <div class="order-item-row">
+                    <div style="flex:1; min-width:0;">
+                        <div class="order-item-name">
+                            <span>${escapeHtml(item.product_name)} × ${item.quantity}</span>
+                            ${stlBtn}
+                        </div>
+                        ${item.filament ? `<div class="order-item-meta">🎨 ${escapeHtml(item.filament)}</div>` : ''}
+                        ${item.comment ? `<div class="order-item-meta">💬 ${escapeHtml(item.comment)}</div>` : ''}
+                    </div>
+                    ${priceCell}
+                </div>`;
+        }
+
         async function renderOrderDetails(orderId) {
             const container = document.getElementById(`order-details-${orderId}`);
             if (!container) return;
@@ -3614,27 +3925,78 @@
                 const res = await fetch(API_BASE + `/orders/${orderId}`);
                 if (!res.ok) throw new Error('Не вдалося завантажити замовлення');
                 const data = await res.json();
-                const items = (data.items || []).filter(i => !String(i.product_name || '').startsWith('🎁'));
+                const order = data.order || {};
+                const allItems = data.items || [];
+                const items = allItems.filter(i => !String(i.product_name || '').startsWith('🎁'));
+                const giftItems = allItems.filter(i => String(i.product_name || '').startsWith('🎁'));
+                const hasContractItems = items.some(i => i.is_contract_price);
+                const tgHandle = getOrderTgHandle(order);
+                const userLine = tgHandle
+                    ? `<a href="https://t.me/${escapeAttr(tgHandle)}" target="_blank" rel="noopener">@${escapeHtml(tgHandle)}</a>`
+                    : escapeHtml(order.username || 'невідомо');
+
+                const discount = Number(order.discount_amount || 0);
+                const summaryRows = [];
+                if (order.coupon_code && discount > 0) {
+                    summaryRows.push(`<div class="order-summary-row"><span>🎟️ Купон ${escapeHtml(order.coupon_code)}</span><span>−${discount} ₴</span></div>`);
+                } else if (discount > 0) {
+                    summaryRows.push(`<div class="order-summary-row"><span>Знижка</span><span>−${discount} ₴</span></div>`);
+                }
+                if (!order.price_pending) {
+                    summaryRows.push(`<div class="order-summary-row total"><span>Разом</span><span>${order.total_price} ₴</span></div>`);
+                }
+
                 container.innerHTML = `
-                    ${items.map(item => `
-                        <div class="order-item-row">
-                            <div style="flex:1;">
-                                <div style="font-weight:700;">${escapeHtml(item.product_name)} × ${item.quantity}</div>
-                                ${item.filament ? `<div style="font-size:12px; color:var(--text-muted);">🎨 ${escapeHtml(item.filament)}</div>` : ''}
-                            </div>
-                            ${item.is_contract_price
-                                ? `<input class="order-price-input" type="number" min="0" step="1" data-item-id="${item.id}" value="${item.price || ''}" placeholder="₴">`
-                                : `<div style="font-weight:700; min-width:80px; text-align:right;">${item.price * item.quantity} ₴</div>`}
-                        </div>
-                    `).join('')}
-                    <label style="display:flex; align-items:center; gap:8px; margin:12px 0; font-size:14px;">
-                        <input type="checkbox" id="notify-client-${orderId}">
-                        Надіслати клієнту повідомлення з сумою
-                    </label>
-                    <button class="btn btn-primary" type="button" onclick="saveOrderPricing(${orderId})">💾 Зберегти ціну</button>
+                    <div class="order-customer-info">
+                        <div><strong>Клієнт:</strong> ${escapeHtml(order.first_name || '—')} · ${userLine}</div>
+                        ${order.comment ? `<div><strong>Коментар:</strong> ${escapeHtml(order.comment)}</div>` : ''}
+                        ${order.gift_product_name ? `<div><strong>🎁 Подарунок:</strong> ${escapeHtml(order.gift_product_name)}</div>` : ''}
+                        ${giftItems.length ? `<div><strong>Позиції-подарунки:</strong> ${giftItems.map(g => escapeHtml(g.product_name)).join(', ')}</div>` : ''}
+                    </div>
+                    ${items.map(renderOrderItemRow).join('')}
+                    ${summaryRows.join('')}
+                    ${hasContractItems ? `
+                        <label style="display:flex; align-items:center; gap:8px; margin:12px 0 8px; font-size:14px;">
+                            <input type="checkbox" id="notify-client-${orderId}">
+                            Надіслати клієнту повідомлення з сумою
+                        </label>
+                        <button class="btn btn-primary" type="button" onclick="saveOrderPricing(${orderId})">💾 Зберегти ціну</button>
+                    ` : ''}
                 `;
             } catch (e) {
                 container.innerHTML = `<div style="color:#e53935;">${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        async function changeOrderStatus(orderId, status) {
+            const order = allOrders.find(o => o.id === orderId);
+            if (order && order.status === status) return;
+
+            const statusLabels = {
+                confirmed: 'підтвердити',
+                draft: 'позначити як «під питанням»',
+                cancelled: 'відмінити',
+            };
+            const actionLabel = statusLabels[status] || status;
+            if (!confirm(`Змінити статус замовлення #${orderId}: ${actionLabel}?`)) return;
+
+            try {
+                const res = await fetch(API_BASE + `/orders/${orderId}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                    body: JSON.stringify({ status }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Помилка зміни статусу');
+
+                const idx = allOrders.findIndex(o => o.id === orderId);
+                if (idx !== -1) {
+                    allOrders[idx] = { ...allOrders[idx], status };
+                }
+                showToast(`Статус #${orderId} оновлено ✅`, 'success');
+                renderOrdersList();
+            } catch (e) {
+                showToast(e.message || 'Помилка зміни статусу', 'error');
             }
         }
 
