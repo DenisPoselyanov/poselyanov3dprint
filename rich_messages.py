@@ -6,10 +6,12 @@ import asyncio
 import html
 import logging
 import re
+import warnings
 from datetime import datetime
 from typing import Any, Callable, TypeVar
 
 from telegram.error import RetryAfter, TimedOut
+from telegram.warnings import PTBUserWarning
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +181,9 @@ async def edit_rich_message(bot, chat_id, message_id: int, html_content: str, re
         payload["reply_markup"] = markup_dict
 
     async def _edit_rich() -> None:
-        await bot.do_api_request("editMessageText", payload)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=PTBUserWarning, message=".*editMessageText.*")
+            await bot.do_api_request("editMessageText", payload)
 
     lock = _edit_lock(chat_id, message_id)
     async with lock:
