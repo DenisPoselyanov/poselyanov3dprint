@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS orders (
     coupon_code TEXT,
     discount_amount INTEGER NOT NULL DEFAULT 0,
     ordered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    price_pending INTEGER NOT NULL DEFAULT 0
+    price_pending INTEGER NOT NULL DEFAULT 0,
+    channel_message_id BIGINT
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
