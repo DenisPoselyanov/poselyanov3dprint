@@ -1222,27 +1222,23 @@
   }
   .success-back:active { opacity: .8; }
 
-  /* ORDER LOADING */
+  /* ORDER LOADING — absolute всередині #page-cart (fixed ламається в Telegram WebView) */
   .order-loading-screen {
-    position: fixed;
+    display: none;
+    position: absolute;
     inset: 0;
     background: var(--card-bg);
-    z-index: 9999;
-    display: flex;
+    z-index: 80;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
     padding: 32px;
-    visibility: hidden;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity .2s ease, visibility .2s ease;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
   }
   .order-loading-screen.open {
-    visibility: visible;
-    opacity: 1;
-    pointer-events: all;
+    display: flex;
     animation: fadeInUp .35s ease;
   }
   .order-loading-spinner {
@@ -1316,6 +1312,9 @@
     pointer-events: none;
     opacity: 0.6;
   }
+  body.order-submitting #main-scroll {
+    pointer-events: none;
+  }
 
   .bottom-nav {
     bottom: -1px;
@@ -1355,7 +1354,7 @@
     padding-bottom: calc(60px + 44px + env(safe-area-inset-bottom) + 8px);
   }
 
-  #page-cart { padding-bottom: 0 !important; }
+  #page-cart { padding-bottom: 0 !important; position: relative; }
   #page-cart.active {
     display: flex;
     flex-direction: column;
@@ -1363,6 +1362,7 @@
     min-height: 100%;
     overflow: hidden;
     padding-bottom: 0 !important;
+    isolation: isolate;
   }
 
   /* Сторінка акцій — звичайний грид, без табів */
@@ -2327,6 +2327,11 @@
 
 <!-- PAGE: Кошик -->
 <div class="page" id="page-cart">
+  <div class="order-loading-screen" id="order-loading-screen" aria-hidden="true" aria-busy="false">
+    <div class="order-loading-spinner" aria-hidden="true"></div>
+    <div class="order-loading-title">Оформлюємо замовлення</div>
+    <div class="order-loading-step" id="order-loading-step">Перевіряємо товари…</div>
+  </div>
   <div class="cart-page">
     <div class="cart-scroll" id="cart-list"></div>
     <div class="cart-footer" id="cart-footer" style="display:none">
@@ -2450,13 +2455,6 @@
     <div class="lb-dots" id="lb-dots"></div>
   </div>
   <div class="lightbox-hint">← свайп для навігації • натисни ✕ щоб повернутись →</div>
-</div>
-
-<!-- ORDER LOADING -->
-<div class="order-loading-screen" id="order-loading-screen" aria-hidden="true" aria-busy="false">
-  <div class="order-loading-spinner" aria-hidden="true"></div>
-  <div class="order-loading-title">Оформлюємо замовлення</div>
-  <div class="order-loading-step" id="order-loading-step">Перевіряємо товари…</div>
 </div>
 
 <!-- SUCCESS -->
@@ -2726,10 +2724,22 @@ function flushOverlayPaint() {
 
 function ensureOrderLoadingScreen() {
   const el = document.getElementById('order-loading-screen');
-  if (el && el.parentElement !== document.body) {
-    document.body.appendChild(el);
+  const cartPage = document.getElementById('page-cart');
+  if (!el || !cartPage) return el;
+  if (el.parentElement !== cartPage) {
+    cartPage.insertBefore(el, cartPage.firstChild);
   }
   return el;
+}
+
+function syncTelegramViewport() {
+  const tg = window.Telegram?.WebApp;
+  if (!tg) return;
+  const h = tg.viewportStableHeight || tg.viewportHeight;
+  if (h) {
+    document.documentElement.style.setProperty('--tg-viewport-height', `${h}px`);
+    document.documentElement.style.setProperty('--tg-viewport-stable-height', `${h}px`);
+  }
 }
 
 function startLoadingStepRotation() {
@@ -2754,7 +2764,9 @@ function stopLoadingStepRotation() {
 function showOrderLoading() {
   const el = ensureOrderLoadingScreen();
   if (!el) return;
+  syncTelegramViewport();
   el.classList.add('open');
+  el.style.display = 'flex';
   el.setAttribute('aria-hidden', 'false');
   el.setAttribute('aria-busy', 'true');
   startLoadingStepRotation();
@@ -2767,6 +2779,7 @@ function hideOrderLoading() {
   const el = document.getElementById('order-loading-screen');
   if (!el) return;
   el.classList.remove('open');
+  el.style.display = '';
   el.setAttribute('aria-hidden', 'true');
   el.setAttribute('aria-busy', 'false');
   stopLoadingStepRotation();
@@ -5336,6 +5349,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
+    syncTelegramViewport();
 
     // Де потрібно, можна заборонити вертикальні свайпи, щоб не було конфліктів з модаллю та лайтбоксом
     if (Telegram.WebApp.disableVerticalSwipes) {
@@ -5345,6 +5359,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     Telegram.WebApp.onEvent('themeChanged', () => {
       applyTheme(Telegram.WebApp.colorScheme);
     });
+    Telegram.WebApp.onEvent('viewportChanged', syncTelegramViewport);
   }
 
   // Завантажуємо кошик з localStorage
