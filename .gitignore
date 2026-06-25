@@ -31,3 +31,4 @@ package-lock.json
 # Docker
 data/
 docker-compose.override.yml
+/.cursor

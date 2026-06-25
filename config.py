@@ -1,6 +1,7 @@
 """Central configuration from environment variables."""
 
 import os
+import secrets
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -25,6 +26,10 @@ CATEGORIES_FILE = os.environ.get("CATEGORIES_FILE", "categories.json")
 VALIDATE_INIT_DATA = os.environ.get("VALIDATE_INIT_DATA", "true").lower() in ("1", "true", "yes")
 LOCAL_DEV_MODE = os.environ.get("LOCAL_DEV_MODE", "false").lower() in ("1", "true", "yes")
 INIT_DATA_MAX_AGE_SEC = int(os.environ.get("INIT_DATA_MAX_AGE_SEC", "86400"))
+
+# Secure token for direct browser admin access (e.g. via ngrok without Telegram context).
+# Loaded from env if set, otherwise generated fresh each process start.
+ADMIN_BYPASS_TOKEN: str = os.environ.get("ADMIN_BYPASS_TOKEN") or secrets.token_urlsafe(32)
 
 PROMOTION_ENABLED = os.environ.get("PROMOTION_ENABLED", "true").lower() in ("1", "true", "yes")
 

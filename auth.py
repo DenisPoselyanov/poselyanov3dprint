@@ -78,6 +78,11 @@ def cors_headers(request: web.Request) -> dict:
 
 
 def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None, web.Response | None]:
+    # Allow direct browser admin access via secure bypass token (e.g. ngrok without Telegram context).
+    bypass_token = request.headers.get("X-Admin-Bypass-Token", "")
+    if bypass_token and config.ADMIN_BYPASS_TOKEN and hmac.compare_digest(bypass_token, config.ADMIN_BYPASS_TOKEN):
+        return {"user_id": config.OWNER_ID, "username": "admin", "first_name": "Admin"}, None
+
     init_data = request.headers.get("X-Telegram-Init-Data") or data.get("init_data") or ""
     auth = validate_telegram_init_data(init_data) if init_data else None
 
@@ -132,6 +137,10 @@ def is_admin_authorized(request: web.Request, auth: dict | None) -> bool:
     if auth and auth.get("user_id") == config.OWNER_ID:
         return True
     if is_local_dev_origin(request):
+        return True
+    # Allow direct browser access (e.g. ngrok) when a valid bypass token is presented.
+    token = request.headers.get("X-Admin-Bypass-Token", "")
+    if token and config.ADMIN_BYPASS_TOKEN and hmac.compare_digest(token, config.ADMIN_BYPASS_TOKEN):
         return True
     return False
 

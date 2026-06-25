@@ -335,7 +335,7 @@ def get_admin_webapp_url(order_id: int | None = None) -> str | None:
         return None
     if "ngrok" in admin_url and "bypass=admin" not in admin_url:
         sep = "&" if "?" in admin_url else "?"
-        admin_url = f"{admin_url}{sep}bypass=admin"
+        admin_url = f"{admin_url}{sep}bypass=admin&token={config.ADMIN_BYPASS_TOKEN}"
     if order_id:
         sep = "&" if "?" in admin_url else "?"
         admin_url = f"{admin_url}{sep}order={order_id}"
@@ -2579,10 +2579,10 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Для dev-режиму на ngrok додаємо bypass.
+    # Для dev-режиму на ngrok додаємо bypass з токеном.
     if "ngrok" in admin_url and "bypass=admin" not in admin_url:
         sep = "&" if "?" in admin_url else "?"
-        admin_url = f"{admin_url}{sep}bypass=admin"
+        admin_url = f"{admin_url}{sep}bypass=admin&token={config.ADMIN_BYPASS_TOKEN}"
 
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton(

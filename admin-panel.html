@@ -2066,6 +2066,10 @@
         let categoryDragState = { draggingId: null, overId: null };
         let tgInitData = "";
 
+        // Read secure bypass token from URL (e.g. ?bypass=admin&token=XXX sent via Telegram).
+        const _urlParams = new URLSearchParams(window.location.search);
+        const adminBypassToken = _urlParams.get('token') || '';
+
         // === ІНІЦІАЛІЗАЦІЯ TELEGRAM WEBAPP ===
         function initTelegramWebApp() {
             const tg = window.Telegram?.WebApp;
@@ -2082,7 +2086,7 @@
             }
         }
 
-        // Додаємо initData в кожен fetch-запит лише для власного сервера
+        // Додаємо initData/bypass-token в кожен fetch-запит лише для власного сервера
         const originalFetch = window.fetch;
         window.fetch = async function(url, options = {}) {
             const urlStr = typeof url === 'string' ? url : (url instanceof Request ? url.url : String(url));
@@ -2092,6 +2096,9 @@
                 options.headers['ngrok-skip-browser-warning'] = '1';
                 if (tgInitData) {
                     options.headers['X-Telegram-Init-Data'] = tgInitData;
+                }
+                if (adminBypassToken) {
+                    options.headers['X-Admin-Bypass-Token'] = adminBypassToken;
                 }
             }
             return originalFetch(url, options);
