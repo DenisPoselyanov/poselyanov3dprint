@@ -1334,6 +1334,7 @@
                 <button class="page-tab" type="button" data-page="orders" onclick="switchPage('orders')">📦 Замовлення</button>
                 <button class="page-tab" type="button" data-page="categories" onclick="switchPage('categories')">🗂️ Категорії</button>
                 <button class="page-tab" type="button" data-page="filaments" onclick="switchPage('filaments')">🎨 Філаменти</button>
+                <button class="page-tab" type="button" data-page="coupons" onclick="switchPage('coupons')">🎟️ Купони</button>
             </div>
 
             <section id="productsPage" class="page-section active">
@@ -1404,6 +1405,25 @@
                     <h2 style="font-size:20px;">🎨 Керування філаментами</h2>
                 </div>
                 <div id="filamentsList" style="margin-top:16px; display:grid; gap:12px;"></div>
+            </section>
+
+            <section id="couponsPage" class="page-section">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 16px;">
+                    <h2 style="font-size:20px; margin:0;">🎟️ Купони</h2>
+                    <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
+                        <input type="checkbox" id="couponsActiveOnlyFilter" onchange="renderCouponsManager()">
+                        Лише активні
+                    </label>
+                </div>
+                <div id="couponsLoading" class="loading" style="display:none;">
+                    <div class="spinner"></div>
+                </div>
+                <div id="couponsList" style="display:grid; gap:12px;"></div>
+                <div id="couponsEmpty" class="empty-state" style="display:none;">
+                    <div class="empty-state-icon">🎟️</div>
+                    <p>Купонів ще немає</p>
+                    <button class="btn btn-primary" type="button" onclick="openCouponModal()">➕ Додати купон</button>
+                </div>
             </section>
         </div>
     </div>
@@ -1600,6 +1620,68 @@
         </div>
     </div>
 
+    <div id="couponModal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header">
+                <span id="couponModalTitle">➕ Додати купон</span>
+                <button class="btn btn-secondary" onclick="closeCouponModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+            </div>
+            <form id="couponForm">
+                <div class="form-group required">
+                    <label>Код купона</label>
+                    <input type="text" name="code" placeholder="Напр.: ЛІТО" required>
+                    <div class="form-error">Код обов'язковий</div>
+                </div>
+                <div class="form-group required">
+                    <label>Тип знижки</label>
+                    <select name="type" required>
+                        <option value="percent">Відсоток (%)</option>
+                        <option value="fixed">Фіксована сума (₴)</option>
+                    </select>
+                </div>
+                <div class="form-group required">
+                    <label>Значення</label>
+                    <input type="number" name="value" required min="1" step="1">
+                    <div class="form-error">Значення обов'язкове</div>
+                </div>
+                <div class="form-group">
+                    <label>Мін. сума замовлення (₴)</label>
+                    <input type="number" name="min_order" min="0" step="1" value="0">
+                </div>
+                <div class="form-group">
+                    <label>Макс. використань (0 = безліміт)</label>
+                    <input type="number" name="uses_max" min="0" step="1" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-group" style="display:block;">
+                        <label><input type="checkbox" name="one_per_user"> Одноразовий (1 користувач — 1 раз)</label>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Термін дії</label>
+                    <input type="date" name="expires_at">
+                </div>
+                <div class="form-group">
+                    <label>Telegram user ID (персональний купон)</label>
+                    <input type="number" name="personal_user_id" min="1" step="1" placeholder="Опційно">
+                </div>
+                <div class="form-group">
+                    <div class="toggle-row">
+                        <span class="toggle-row-label">Активний</span>
+                        <label class="switch" title="Увімкнути/вимкнути купон">
+                            <input type="checkbox" name="active" checked>
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="closeCouponModal()">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" id="couponSubmitBtn">✅ Зберегти купон</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="emojiPickerPopover" class="emoji-picker-popover" role="dialog" aria-label="Обрати emoji">
         <emoji-picker locale="uk"></emoji-picker>
     </div>
@@ -1628,11 +1710,13 @@
         let currentProductId = null;
         let currentCategoryId = null;
         let currentFilamentId = null;
+        let currentCouponCode = null;
         let currentPage = 'products';
         let uploadedPhotos = [];
         let productFormSnapshot = null;
         let allProducts = [];
         let allOrders = [];
+        let allCoupons = [];
 
         // ═══════════════════════════════════════════════════════════
         // Emoji picker
@@ -1800,6 +1884,10 @@
                 btn.textContent = '➕ Додати категорію';
                 btn.onclick = () => openCategoryModal();
                 btn.style.display = 'inline-flex';
+            } else if (currentPage === 'coupons') {
+                btn.textContent = '➕ Додати купон';
+                btn.onclick = () => openCouponModal();
+                btn.style.display = 'inline-flex';
             } else if (currentPage === 'orders') {
                 btn.style.display = 'none';
             } else {
@@ -1815,6 +1903,13 @@
             if (currentPage === 'categories') {
                 label.textContent = 'Всього категорій';
                 value.textContent = String(allCategories.length);
+                return;
+            }
+
+            if (currentPage === 'coupons') {
+                const activeCount = allCoupons.filter(c => c.active).length;
+                label.textContent = 'Активних купонів';
+                value.textContent = `${activeCount} / ${allCoupons.length}`;
                 return;
             }
 
@@ -1842,6 +1937,7 @@
             updateHeaderPrimaryAction();
             updateHeaderStat();
             if (page === 'orders') loadOrders();
+            if (page === 'coupons') loadCoupons();
         }
 
         function renderCategoryFilterMenu() {
@@ -2224,6 +2320,183 @@
                 console.error('loadFilaments error:', e);
                 showToast('Помилка завантаження філаментів', 'error');
             }
+        }
+
+        function formatCouponDiscount(coupon) {
+            return coupon.type === 'percent' ? `${coupon.value}%` : `${coupon.value} ₴`;
+        }
+
+        function formatCouponExpires(expiresAt) {
+            if (!expiresAt) return '';
+            const raw = String(expiresAt);
+            return raw.includes('T') ? raw.split('T')[0] : raw.slice(0, 10);
+        }
+
+        function formatCouponMeta(coupon) {
+            const parts = [];
+            if (coupon.min_order) parts.push(`мін. ${coupon.min_order} ₴`);
+            const exp = formatCouponExpires(coupon.expires_at);
+            if (exp) parts.push(`до ${exp}`);
+            if (coupon.one_per_user) parts.push('одноразовий');
+            if (coupon.personal_user_id) parts.push(`персональний: ${coupon.personal_user_id}`);
+            return parts.join(' · ');
+        }
+
+        function renderCouponsManager() {
+            const list = document.getElementById('couponsList');
+            const empty = document.getElementById('couponsEmpty');
+            const activeOnly = document.getElementById('couponsActiveOnlyFilter')?.checked;
+            const coupons = activeOnly
+                ? allCoupons.filter(c => c.active)
+                : [...allCoupons];
+
+            updateHeaderStat();
+
+            if (!coupons.length) {
+                list.innerHTML = '';
+                empty.style.display = allCoupons.length ? 'none' : 'block';
+                if (allCoupons.length && activeOnly) {
+                    list.innerHTML = '<div style="padding: 16px; background: var(--bg-section); border-radius: 10px;">Активних купонів немає.</div>';
+                }
+                return;
+            }
+
+            empty.style.display = 'none';
+            list.innerHTML = coupons.map(c => {
+                const active = !!c.active;
+                const usesCount = Number(c.uses_count || 0);
+                const usesMax = Number(c.uses_max || 0);
+                const usesStr = usesMax ? `${usesCount}/${usesMax}` : `${usesCount}/∞`;
+                const meta = formatCouponMeta(c);
+                return `
+                <div data-coupon-code="${escapeAttr(c.code)}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${active ? '#dbeafe' : 'var(--border)'}; border-radius:12px; padding:14px 16px; background:${active ? 'var(--bg-card)' : 'var(--bg-surface-alt)'}; opacity:${active ? '1' : '0.75'};">
+                    <div style="min-width:0; flex:1;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <div style="font-weight:700; font-size:16px;">${escapeHtml(c.code)}</div>
+                            <span style="font-size:12px; font-weight:700; padding:6px 10px; border-radius:999px; background:${active ? '#dbeafe' : 'var(--border)'}; color:${active ? '#1e40af' : 'var(--text-toggle)'};">
+                                ${active ? 'Активний' : 'Вимкнено'}
+                            </span>
+                            <span style="font-size:13px; font-weight:700;">${escapeHtml(formatCouponDiscount(c))}</span>
+                        </div>
+                        <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+                            Використань: ${usesStr}${meta ? ` · ${escapeHtml(meta)}` : ''}
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+                        <label class="switch" title="Увімкнути/вимкнути купон">
+                            <input type="checkbox" ${active ? 'checked' : ''} onchange="toggleCouponActive('${escapeAttr(c.code)}', this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                        <button class="btn btn-secondary" type="button" onclick="openCouponModal('${escapeAttr(c.code)}')" style="padding:8px 12px;">✏️</button>
+                        <button class="btn btn-danger" type="button" onclick="deleteCoupon('${escapeAttr(c.code)}')" style="padding:8px 12px;">🗑️</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function loadCoupons() {
+            const loading = document.getElementById('couponsLoading');
+            try {
+                if (loading) loading.style.display = 'flex';
+                const res = await fetch(API_BASE + '/coupons');
+                if (!res.ok) throw new Error(`Помилка купонів (${res.status})`);
+                allCoupons = await res.json();
+                renderCouponsManager();
+            } catch (e) {
+                console.error('loadCoupons error:', e);
+                showToast('Помилка завантаження купонів', 'error');
+            } finally {
+                if (loading) loading.style.display = 'none';
+            }
+        }
+
+        function openCouponModal(code = null) {
+            const form = document.getElementById('couponForm');
+            currentCouponCode = code;
+            form.reset();
+            form.active.checked = true;
+            form.min_order.value = '0';
+            form.uses_max.value = '0';
+
+            if (code) {
+                const coupon = allCoupons.find(c => c.code === code);
+                if (!coupon) {
+                    showToast('Купон не знайдено', 'error');
+                    return;
+                }
+                document.getElementById('couponModalTitle').textContent = '✏️ Редагувати купон';
+                form.code.value = coupon.code;
+                form.code.readOnly = true;
+                form.type.value = coupon.type;
+                form.value.value = coupon.value;
+                form.min_order.value = coupon.min_order || 0;
+                form.uses_max.value = coupon.uses_max || 0;
+                form.one_per_user.checked = !!coupon.one_per_user;
+                form.expires_at.value = formatCouponExpires(coupon.expires_at);
+                form.personal_user_id.value = coupon.personal_user_id || '';
+                form.active.checked = !!coupon.active;
+            } else {
+                document.getElementById('couponModalTitle').textContent = '➕ Додати купон';
+                form.code.readOnly = false;
+            }
+
+            document.getElementById('couponModal').classList.add('active');
+        }
+
+        function closeCouponModal() {
+            document.getElementById('couponModal').classList.remove('active');
+            currentCouponCode = null;
+            const form = document.getElementById('couponForm');
+            form.code.readOnly = false;
+        }
+
+        async function toggleCouponActive(code, active) {
+            try {
+                const res = await fetch(API_BASE + `/coupons/${encodeURIComponent(code)}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData
+                    },
+                    body: JSON.stringify({ active }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) {
+                    throw new Error(result.error || 'Не вдалося оновити купон');
+                }
+                await loadCoupons();
+                showToast(active ? 'Купон увімкнено ✅' : 'Купон вимкнено', 'success');
+            } catch (e) {
+                showToast(e.message || 'Помилка оновлення купона', 'error');
+                await loadCoupons();
+            }
+        }
+
+        async function deleteCoupon(code) {
+            if (!confirm(`Видалити купон ${code}? Цю дію не можна скасувати.`)) return;
+            try {
+                const res = await fetch(API_BASE + `/coupons/${encodeURIComponent(code)}`, {
+                    method: 'DELETE',
+                    headers: { 'X-Telegram-Init-Data': tgInitData },
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) {
+                    throw new Error(result.error || 'Не вдалося видалити купон');
+                }
+                showToast('Купон видалено ✅', 'success');
+                await loadCoupons();
+            } catch (e) {
+                showToast(e.message || 'Помилка видалення купона', 'error');
+            }
+        }
+
+        function buildCouponCreatedToast(result) {
+            let msg = 'Купон створено ✅';
+            const n = result.notifications || {};
+            if (n.admin_sent) msg += ' · повідомлення надіслано в бот';
+            if (n.user_sent === true) msg += ' · користувачу надіслано';
+            if (n.user_sent === false) msg += ' · користувачу не доставлено';
+            return msg;
         }
 
         function keepFilamentInView(filamentId, fallbackScrollY = null) {
@@ -3137,6 +3410,67 @@
             }
         });
 
+        document.getElementById('couponForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const submitBtn = document.getElementById('couponSubmitBtn');
+
+            const payload = {
+                code: form.code.value.trim(),
+                type: form.type.value,
+                value: parseInt(form.value.value, 10),
+                min_order: parseInt(form.min_order.value || '0', 10),
+                uses_max: parseInt(form.uses_max.value || '0', 10),
+                one_per_user: form.one_per_user.checked,
+                expires_at: form.expires_at.value || null,
+                personal_user_id: form.personal_user_id.value ? parseInt(form.personal_user_id.value, 10) : null,
+                active: form.active.checked,
+            };
+
+            if (!payload.code) {
+                showToast('Вкажіть код купона', 'error');
+                return;
+            }
+            if (!payload.value || payload.value <= 0) {
+                showToast('Вкажіть коректне значення знижки', 'error');
+                return;
+            }
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '⏳ Збереження...';
+
+                const method = currentCouponCode ? 'PUT' : 'POST';
+                const url = currentCouponCode
+                    ? API_BASE + `/coupons/${encodeURIComponent(currentCouponCode)}`
+                    : API_BASE + '/coupons';
+                const res = await fetch(url, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) {
+                    throw new Error(result.error || 'Не вдалося зберегти купон');
+                }
+
+                const toastMsg = method === 'POST'
+                    ? buildCouponCreatedToast(result)
+                    : 'Купон оновлено ✅';
+                showToast(toastMsg, 'success');
+                closeCouponModal();
+                await loadCoupons();
+            } catch (err) {
+                showToast(err.message || 'Помилка збереження купона', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Зберегти купон';
+            }
+        });
+
         document.getElementById('filamentForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -3374,7 +3708,7 @@
                 return 'products';
             }
         })();
-        switchPage(['products', 'categories', 'filaments', 'orders'].includes(savedPage) ? savedPage : 'products');
+        switchPage(['products', 'categories', 'filaments', 'orders', 'coupons'].includes(savedPage) ? savedPage : 'products');
         loadCategories().then(loadProducts);
         loadFilaments();
         setInterval(loadProducts, 30000);
@@ -3409,6 +3743,12 @@
             const modal = document.getElementById('modal');
             if (modal.classList.contains('active')) {
                 closeModal();
+                return;
+            }
+
+            const couponModal = document.getElementById('couponModal');
+            if (couponModal.classList.contains('active')) {
+                closeCouponModal();
             }
         });
 
@@ -3434,6 +3774,12 @@
         document.getElementById('filamentModal').addEventListener('click', (e) => {
             if (e.target.id === 'filamentModal') {
                 closeFilamentModal();
+            }
+        });
+
+        document.getElementById('couponModal').addEventListener('click', (e) => {
+            if (e.target.id === 'couponModal') {
+                closeCouponModal();
             }
         });
 

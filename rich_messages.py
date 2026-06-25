@@ -2,13 +2,71 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable, TypeVar
+
+from telegram.error import RetryAfter, TimedOut
 
 logger = logging.getLogger(__name__)
+
+MAX_TELEGRAM_RETRIES = 3
+T = TypeVar("T")
+_edit_locks: dict[tuple[int | str, int], asyncio.Lock] = {}
+
+
+def is_telegram_rate_limited(exc: BaseException) -> bool:
+    if isinstance(exc, (RetryAfter, TimedOut)):
+        return True
+    msg = str(exc).lower()
+    return "flood control" in msg or "timed out" in msg or "retry after" in msg
+
+
+def _retry_after_seconds(exc: BaseException) -> float:
+    if isinstance(exc, RetryAfter):
+        return float(exc.retry_after) + 0.5
+    match = re.search(r"retry in (\d+)", str(exc), re.I)
+    if match:
+        return float(match.group(1)) + 0.5
+    return 3.0
+
+
+async def _telegram_retry(
+    coro_factory: Callable[[], Any],
+    *,
+    label: str = "telegram api",
+) -> T:
+    last_exc: BaseException | None = None
+    for attempt in range(MAX_TELEGRAM_RETRIES + 1):
+        try:
+            return await coro_factory()
+        except Exception as e:
+            last_exc = e
+            if not is_telegram_rate_limited(e) or attempt >= MAX_TELEGRAM_RETRIES:
+                raise
+            wait = _retry_after_seconds(e)
+            logger.warning(
+                "%s rate limited (attempt %s/%s), retry in %.1fs: %s",
+                label,
+                attempt + 1,
+                MAX_TELEGRAM_RETRIES,
+                wait,
+                e,
+            )
+            await asyncio.sleep(wait)
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"{label} failed without exception")
+
+
+def _edit_lock(chat_id, message_id: int) -> asyncio.Lock:
+    key = (chat_id, message_id)
+    if key not in _edit_locks:
+        _edit_locks[key] = asyncio.Lock()
+    return _edit_locks[key]
 
 BOT_LINK_BASE = "https://t.me/poselyanov3dprint_bot?startapp=product_"
 DENIS_LINK = "https://t.me/denisposelyanov"
@@ -85,18 +143,28 @@ async def send_rich_message(bot, chat_id, html_content: str, reply_markup=None):
     markup_dict = _serialize_markup(reply_markup)
     if markup_dict:
         payload["reply_markup"] = markup_dict
+
+    async def _send_rich() -> Any:
+        return await bot.do_api_request("sendRichMessage", payload)
+
     try:
-        result = await bot.do_api_request("sendRichMessage", payload)
+        result = await _telegram_retry(_send_rich, label="sendRichMessage")
         return _message_id(result)
     except Exception as e:
+        if is_telegram_rate_limited(e):
+            raise
         logger.warning("sendRichMessage failed, falling back to HTML: %s", e)
         fallback = rich_to_fallback_html(html_content)
-        msg = await bot.send_message(
-            chat_id=chat_id,
-            text=fallback,
-            parse_mode="HTML",
-            reply_markup=reply_markup,
-        )
+
+        async def _send_html():
+            return await bot.send_message(
+                chat_id=chat_id,
+                text=fallback,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+
+        msg = await _telegram_retry(_send_html, label="sendMessage (html)")
         return msg.message_id
 
 
@@ -109,18 +177,30 @@ async def edit_rich_message(bot, chat_id, message_id: int, html_content: str, re
     markup_dict = _serialize_markup(reply_markup)
     if markup_dict is not None:
         payload["reply_markup"] = markup_dict
-    try:
+
+    async def _edit_rich() -> None:
         await bot.do_api_request("editMessageText", payload)
-    except Exception as e:
-        logger.warning("editMessageText (rich) failed, falling back to HTML: %s", e)
-        fallback = rich_to_fallback_html(html_content)
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=fallback,
-            parse_mode="HTML",
-            reply_markup=reply_markup,
-        )
+
+    lock = _edit_lock(chat_id, message_id)
+    async with lock:
+        try:
+            await _telegram_retry(_edit_rich, label="editMessageText (rich)")
+        except Exception as e:
+            if is_telegram_rate_limited(e):
+                raise
+            logger.warning("editMessageText (rich) failed, falling back to HTML: %s", e)
+            fallback = rich_to_fallback_html(html_content)
+
+            async def _edit_html() -> None:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=fallback,
+                    parse_mode="HTML",
+                    reply_markup=reply_markup,
+                )
+
+            await _telegram_retry(_edit_html, label="editMessageText (html)")
 
 
 def _items_have_comments(items: list[dict]) -> bool:
@@ -507,6 +587,91 @@ def build_order_history(orders: list[dict], items_by_order: dict[int, list], fir
         parts.append("<hr/>")
 
     parts.append(f"<footer>Показано останніх замовлень: <b>{len(orders)}</b></footer>")
+    return "\n".join(parts)
+
+
+def build_personal_coupon_notification(
+    code: str,
+    ctype: str,
+    value: int,
+    *,
+    min_order: int = 0,
+    one_per_user: int = 0,
+    expires_at: str | None = None,
+) -> str:
+    """Rich HTML — сповіщення користувачу про персональний купон."""
+    label = f"{value}%" if ctype == "percent" else f"{value} ₴"
+    parts = [
+        "<h2>🎟️ Для тебе є купон!</h2>",
+        "<hr/>",
+        "<p>Денис створив для тебе персональний промокод:</p>",
+        f"<p>🏷️ <b><code>{escape(code)}</code></b> — знижка {label}</p>",
+    ]
+
+    conditions: list[str] = []
+    if min_order:
+        conditions.append(f"<li>Від суми: {min_order} ₴</li>")
+    if expires_at:
+        conditions.append(f"<li>Діє до: {format_date(expires_at)}</li>")
+    if one_per_user:
+        conditions.append("<li>Одноразовий ⚡</li>")
+    if conditions:
+        parts.append("<ul>")
+        parts.extend(conditions)
+        parts.append("</ul>")
+
+    parts.extend([
+        "<p><b>Як скористатися:</b></p>",
+        "<ul>",
+        "<li>Відкрий каталог і додай товари в кошик</li>",
+        "<li>Натисни «Промокод» у кошику та введи код</li>",
+        "<li>Оформи замовлення — знижка застосується автоматично</li>",
+        "</ul>",
+        "<footer>Усі твої купони також доступні через /mycoupons</footer>",
+    ])
+    return "\n".join(parts)
+
+
+def build_admin_coupon_created_notification(
+    code: str,
+    ctype: str,
+    value: int,
+    *,
+    min_order: int = 0,
+    uses_max: int = 0,
+    one_per_user: int = 0,
+    expires_at: str | None = None,
+    personal_user_id: int | None = None,
+    source: str = "admin_panel",
+) -> str:
+    """Rich HTML — підтвердження адміну про створення купона."""
+    label = f"{value}%" if ctype == "percent" else f"{value} ₴"
+    source_label = "адмін-панель" if source == "admin_panel" else "/coupon"
+    parts = [
+        "<h2>🎟️ Купон створено</h2>",
+        "<hr/>",
+        f"<p>Джерело: <b>{escape(source_label)}</b></p>",
+        f"<p>🏷️ <b><code>{escape(code)}</code></b> — знижка {label}</p>",
+    ]
+
+    conditions: list[str] = []
+    if min_order:
+        conditions.append(f"<li>Мін. сума замовлення: {min_order} ₴</li>")
+    if uses_max:
+        conditions.append(f"<li>Макс. використань: {uses_max}</li>")
+    else:
+        conditions.append("<li>Макс. використань: безліміт</li>")
+    if one_per_user:
+        conditions.append("<li>Одноразовий для кожного користувача ⚡</li>")
+    if expires_at:
+        conditions.append(f"<li>Діє до: {format_date(expires_at)}</li>")
+    if personal_user_id:
+        conditions.append(f"<li>Персональний для user_id: <code>{personal_user_id}</code></li>")
+    if conditions:
+        parts.append("<ul>")
+        parts.extend(conditions)
+        parts.append("</ul>")
+
     return "\n".join(parts)
 
 

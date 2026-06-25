@@ -45,9 +45,12 @@ from rich_messages import (
     build_broadcast_report,
     build_client_order_confirmation,
     build_client_price_quote,
+    build_admin_coupon_created_notification,
+    build_personal_coupon_notification,
     build_order_history,
     build_order_status,
     edit_rich_message,
+    is_telegram_rate_limited,
     send_rich_message,
 )
 BASE_DIR = Path(__file__).resolve().parent
@@ -570,6 +573,16 @@ def init_db():
                 available INTEGER NOT NULL DEFAULT 0
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS order_idempotency (
+                user_id BIGINT NOT NULL,
+                idempotency_key TEXT NOT NULL,
+                order_id BIGINT NOT NULL,
+                is_new INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (user_id, idempotency_key)
+            )
+        """)
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS personal_user_id BIGINT")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
@@ -646,6 +659,16 @@ def init_db():
                 name       TEXT NOT NULL,
                 hex        TEXT,
                 available  INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS order_idempotency (
+                user_id          INTEGER NOT NULL,
+                idempotency_key  TEXT NOT NULL,
+                order_id         INTEGER NOT NULL,
+                is_new           INTEGER NOT NULL DEFAULT 1,
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (user_id, idempotency_key)
             )
         """)
         oi_cols = [row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()]
@@ -791,6 +814,57 @@ def save_order(user_id, username, first_name, items, total_price, comment, gift_
     conn.close()
     return order_id, True
 
+
+_user_order_locks: dict[int, asyncio.Lock] = {}
+
+
+def _user_order_lock(user_id: int) -> asyncio.Lock:
+    uid = int(user_id or 0)
+    if uid not in _user_order_locks:
+        _user_order_locks[uid] = asyncio.Lock()
+    return _user_order_locks[uid]
+
+
+def get_idempotent_order(user_id: int, idempotency_key: str) -> dict | None:
+    if not idempotency_key or not user_id or int(user_id) <= 0:
+        return None
+    conn = db_connect(dict_rows=True)
+    row = conn.execute(_sql("""
+        SELECT order_id, is_new
+        FROM order_idempotency
+        WHERE user_id = ? AND idempotency_key = ?
+    """), (int(user_id), idempotency_key)).fetchone()
+    conn.close()
+    return _row_to_dict(row) if row else None
+
+
+def save_idempotent_order(user_id: int, idempotency_key: str, order_id: int, is_new: bool) -> None:
+    if not idempotency_key or not user_id or int(user_id) <= 0:
+        return
+    conn = db_connect()
+    is_new_val = 1 if is_new else 0
+    if _is_postgres():
+        conn.execute(_sql("""
+            INSERT INTO order_idempotency (user_id, idempotency_key, order_id, is_new)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (user_id, idempotency_key) DO NOTHING
+        """), (int(user_id), idempotency_key, int(order_id), is_new_val))
+    else:
+        conn.execute(_sql("""
+            INSERT OR IGNORE INTO order_idempotency (user_id, idempotency_key, order_id, is_new)
+            VALUES (?, ?, ?, ?)
+        """), (int(user_id), idempotency_key, int(order_id), is_new_val))
+    conn.commit()
+    conn.close()
+
+
+def _order_ok_response(request: web.Request, order_id: int, *, duplicate: bool = False) -> web.Response:
+    body: dict = {"ok": True, "order_id": int(order_id)}
+    if duplicate:
+        body["duplicate"] = True
+    return web.json_response(body, headers=cors_headers(request))
+
+
 # Функція для отримання статистики по користувачах і замовленнях, яка використовується в адмінській команді /stats для відображення актуальної інформації про діяльність бота.
 def get_stats():
     conn = db_connect()
@@ -900,6 +974,260 @@ def check_promotion(cart_total: int):
         discount = int(cart_total * PROMOTION_DISCOUNT_RATE)
         return discount
     return 0
+
+
+def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -> tuple[dict | None, str | None]:
+    code = (code_override or data.get("code") or "").strip().upper()
+    if not code:
+        return None, "Код купона обов'язковий"
+
+    ctype = str(data.get("type") or "").strip().lower()
+    if ctype not in ("percent", "fixed"):
+        return None, "Тип має бути percent або fixed"
+
+    try:
+        value = int(data.get("value"))
+    except (TypeError, ValueError):
+        return None, "Значення знижки має бути числом"
+    if value <= 0:
+        return None, "Значення знижки має бути більше 0"
+    if ctype == "percent" and value > 100:
+        return None, "Відсоткова знижка не може перевищувати 100"
+
+    try:
+        min_order = max(0, int(data.get("min_order") or 0))
+        uses_max = max(0, int(data.get("uses_max") or 0))
+        one_per_user = 1 if data.get("one_per_user") in (1, True, "1", "true") else 0
+        active = 1 if data.get("active", 1) in (1, True, "1", "true") else 0
+    except (TypeError, ValueError):
+        return None, "Невірні числові параметри купона"
+
+    expires_at = data.get("expires_at")
+    if expires_at is not None:
+        expires_at = str(expires_at).strip() or None
+
+    personal_user_id = data.get("personal_user_id")
+    if personal_user_id in ("", None):
+        personal_user_id = None
+    else:
+        try:
+            personal_user_id = int(personal_user_id)
+        except (TypeError, ValueError):
+            return None, "personal_user_id має бути числом"
+
+    return {
+        "code": code,
+        "type": ctype,
+        "value": value,
+        "min_order": min_order,
+        "uses_max": uses_max,
+        "one_per_user": one_per_user,
+        "active": active,
+        "expires_at": expires_at,
+        "personal_user_id": personal_user_id,
+    }, None
+
+
+def get_coupon(code: str) -> dict | None:
+    conn = db_connect(dict_rows=True)
+    row = conn.execute(_sql(
+        "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id "
+        "FROM coupons WHERE code = ?"
+    ), (code.upper(),)).fetchone()
+    conn.close()
+    return _row_to_dict(row) if row else None
+
+
+def list_coupons() -> list[dict]:
+    conn = db_connect(dict_rows=True)
+    rows = conn.execute(_sql(
+        "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id "
+        "FROM coupons ORDER BY active DESC, code ASC"
+    )).fetchall()
+    conn.close()
+    return [_row_to_dict(r) for r in rows]
+
+
+def create_coupon(data: dict) -> dict:
+    payload, err = _normalize_coupon_payload(data)
+    if err:
+        return {"ok": False, "error": err}
+    if get_coupon(payload["code"]):
+        return {"ok": False, "error": "Купон з таким кодом вже існує"}
+
+    conn = db_connect()
+    try:
+        conn.execute(_sql("""
+            INSERT INTO coupons
+            (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id)
+            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+        """), (
+            payload["code"], payload["type"], payload["value"], payload["min_order"],
+            payload["uses_max"], payload["one_per_user"], payload["active"],
+            payload["expires_at"], payload["personal_user_id"],
+        ))
+        conn.commit()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
+
+    coupon = get_coupon(payload["code"])
+    return {"ok": True, "created": True, "coupon": coupon}
+
+
+def update_coupon(code: str, data: dict) -> dict:
+    existing = get_coupon(code)
+    if not existing:
+        return {"ok": False, "error": "Не знайдено"}
+
+    payload, err = _normalize_coupon_payload(data, code_override=code)
+    if err:
+        return {"ok": False, "error": err}
+
+    conn = db_connect()
+    try:
+        conn.execute(_sql("""
+            UPDATE coupons SET
+                type = ?, value = ?, min_order = ?, uses_max = ?,
+                one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?
+            WHERE code = ?
+        """), (
+            payload["type"], payload["value"], payload["min_order"], payload["uses_max"],
+            payload["one_per_user"], payload["active"], payload["expires_at"],
+            payload["personal_user_id"], payload["code"],
+        ))
+        conn.commit()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
+
+    return {"ok": True, "created": False, "coupon": get_coupon(payload["code"])}
+
+
+def replace_coupon(data: dict) -> dict:
+    """Створити або оновити купон (для /coupon add), зберігаючи uses_count."""
+    payload, err = _normalize_coupon_payload(data)
+    if err:
+        return {"ok": False, "error": err}
+
+    existing = get_coupon(payload["code"])
+    conn = db_connect()
+    try:
+        if existing:
+            conn.execute(_sql("""
+                UPDATE coupons SET
+                    type = ?, value = ?, min_order = ?, uses_max = ?,
+                    one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?
+                WHERE code = ?
+            """), (
+                payload["type"], payload["value"], payload["min_order"], payload["uses_max"],
+                payload["one_per_user"], payload["active"], payload["expires_at"],
+                payload["personal_user_id"], payload["code"],
+            ))
+            created = False
+        else:
+            conn.execute(_sql("""
+                INSERT INTO coupons
+                (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+            """), (
+                payload["code"], payload["type"], payload["value"], payload["min_order"],
+                payload["uses_max"], payload["one_per_user"], payload["active"],
+                payload["expires_at"], payload["personal_user_id"],
+            ))
+            created = True
+        conn.commit()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
+
+    coupon = get_coupon(payload["code"])
+    return {"ok": True, "created": created, "coupon": coupon}
+
+
+def set_coupon_active(code: str, active: bool) -> dict:
+    code = code.upper()
+    if not get_coupon(code):
+        return {"ok": False, "error": "Не знайдено"}
+    conn = db_connect()
+    try:
+        conn.execute(_sql("UPDATE coupons SET active = ? WHERE code = ?"), (1 if active else 0, code))
+        conn.commit()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
+    return {"ok": True, "coupon": get_coupon(code)}
+
+
+def delete_coupon(code: str) -> dict:
+    code = code.upper()
+    if not get_coupon(code):
+        return {"ok": False, "error": "Не знайдено"}
+    conn = db_connect()
+    try:
+        conn.execute(_sql("DELETE FROM coupon_uses WHERE code = ?"), (code,))
+        conn.execute(_sql("DELETE FROM coupons WHERE code = ?"), (code,))
+        conn.commit()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
+async def notify_coupon_created(coupon: dict, *, source: str = "admin_panel") -> dict:
+    result = {"admin_sent": False, "user_sent": None, "user_error": None}
+    if not coupon or not bot_app or not OWNER_ID:
+        return result
+
+    bot = bot_app.bot
+    admin_html = build_admin_coupon_created_notification(
+        coupon["code"],
+        coupon["type"],
+        int(coupon["value"]),
+        min_order=int(coupon.get("min_order") or 0),
+        uses_max=int(coupon.get("uses_max") or 0),
+        one_per_user=int(coupon.get("one_per_user") or 0),
+        expires_at=coupon.get("expires_at"),
+        personal_user_id=coupon.get("personal_user_id"),
+        source=source,
+    )
+    try:
+        await send_rich_message(bot, OWNER_ID, admin_html)
+        result["admin_sent"] = True
+    except Exception as e:
+        logger.warning("Admin coupon notification failed: %s", e)
+
+    personal_user_id = coupon.get("personal_user_id")
+    if not personal_user_id:
+        return result
+
+    coupon_html = build_personal_coupon_notification(
+        coupon["code"],
+        coupon["type"],
+        int(coupon["value"]),
+        min_order=int(coupon.get("min_order") or 0),
+        one_per_user=int(coupon.get("one_per_user") or 0),
+        expires_at=coupon.get("expires_at"),
+    )
+    catalog_markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🛍️ Відкрити каталог", web_app=WebAppInfo(url=WEBAPP_URL))
+    ]])
+    try:
+        await send_rich_message(bot, int(personal_user_id), coupon_html, reply_markup=catalog_markup)
+        result["user_sent"] = True
+    except Exception as e:
+        logger.warning("Coupon notification failed for %s: %s", personal_user_id, e)
+        if "bot was blocked" in str(e) or "user is deactivated" in str(e):
+            set_blocked(int(personal_user_id), True)
+        result["user_sent"] = False
+        result["user_error"] = "Юзер не писав боту або заблокував"
+
+    return result
 
 
 def _row_to_dict(row) -> dict:
@@ -1427,12 +1755,14 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Команда для управління купонами, яка дозволяє адміністраторам створювати, переглядати, активувати і деактивувати купони зі знижками. Вона підтримує різні формати знижок (відсоткові і фіксовані), а також додаткові параметри для обмеження використання купонів (мінімальна сума замовлення, максимальна кількість використань, використання одним користувачем і термін дії). Команда має підкоманди для кожної операції (add, list, disable, enable) і відповідає повідомленнями з результатами операцій у форматі Markdown.
 async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != OWNER_ID:
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message or user.id != OWNER_ID:
         return
 
     args = context.args
     if not args:
-        await update.message.reply_text(
+        await message.reply_text(
             "🎟️ <b>Управління купонами</b>\n"
             "──────────────────────\n\n"
             "<b>Створити купон:</b>\n"
@@ -1450,7 +1780,8 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "<b>Інші команди:</b>\n"
             "<code>/coupon list</code> — всі купони\n"
             "<code>/coupon disable КОД</code> — вимкнути\n"
-            "<code>/coupon enable КОД</code> — увімкнути",
+            "<code>/coupon enable КОД</code> — увімкнути\n"
+            "<code>/coupon delete КОД</code> — видалити",
             parse_mode='HTML'
         )
         return
@@ -1463,10 +1794,9 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             value = int(args[3])
         except ValueError:
-            await update.message.reply_text("❌ Значення має бути числом")
+            await message.reply_text("❌ Значення має бути числом")
             return
 
-        # Додаткові параметри з дефолтними значеннями:
         min_order = 0; uses_max = 0; one_per_user = 0; expires_at = None; personal_user_id = None
         for opt in args[4:]:
             if opt.startswith('min='):
@@ -1480,67 +1810,74 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif opt.startswith('user='):
                 personal_user_id = int(opt[5:])
 
-        conn = db_connect()
-        try:
-            if _is_postgres():
-                conn.execute("""
-                    INSERT INTO coupons
-                    (code, type, value, min_order, uses_max, one_per_user, active, expires_at, personal_user_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, 1, %s, %s)
-                    ON CONFLICT (code) DO UPDATE SET
-                        type = EXCLUDED.type,
-                        value = EXCLUDED.value,
-                        min_order = EXCLUDED.min_order,
-                        uses_max = EXCLUDED.uses_max,
-                        one_per_user = EXCLUDED.one_per_user,
-                        active = EXCLUDED.active,
-                        expires_at = EXCLUDED.expires_at,
-                        personal_user_id = EXCLUDED.personal_user_id
-                """, (code, ctype, value, min_order, uses_max, one_per_user, expires_at, personal_user_id))
-            else:
-                conn.execute("""
-                    INSERT OR REPLACE INTO coupons
-                    (code, type, value, min_order, uses_max, one_per_user, active, expires_at, personal_user_id)
-                    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-                """, (code, ctype, value, min_order, uses_max, one_per_user, expires_at, personal_user_id))
-            conn.commit()
-            label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
-            user_str = f" для юзера `{personal_user_id}`" if personal_user_id else ""
-            await update.message.reply_text(f"✅ Купон `{code}` створено! Знижка {label}{user_str}", parse_mode='Markdown')
+        result = replace_coupon({
+            "code": code,
+            "type": ctype,
+            "value": value,
+            "min_order": min_order,
+            "uses_max": uses_max,
+            "one_per_user": one_per_user,
+            "active": 1,
+            "expires_at": expires_at,
+            "personal_user_id": personal_user_id,
+        })
+        if not result.get("ok"):
+            await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
+            return
 
-        except Exception as e:
-            await update.message.reply_text(f"❌ Помилка: {e}")
-        finally:
-            conn.close()
+        coupon = result.get("coupon") or {}
+        label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
+        user_str = f" для юзера `{personal_user_id}`" if personal_user_id else ""
+        reply_lines = [f"✅ Купон `{code}` створено! Знижка {label}{user_str}"]
+
+        if result.get("created"):
+            notifications = await notify_coupon_created(coupon, source="coupon_cmd")
+            if personal_user_id:
+                if notifications.get("user_sent"):
+                    reply_lines.append(f"📨 Повідомлення надіслано юзеру `{personal_user_id}`")
+                elif notifications.get("user_sent") is False:
+                    reply_lines.append(
+                        "⚠️ Купон створено, але повідомлення не доставлено "
+                        "(юзер не писав боту або заблокував)"
+                    )
+
+        await message.reply_text("\n".join(reply_lines), parse_mode='Markdown')
 
     elif sub == 'list':
-        conn = db_connect()
-        rows = conn.execute("SELECT code, type, value, uses_count, uses_max, active, expires_at FROM coupons").fetchall()
-        conn.close()
+        rows = list_coupons()
         if not rows:
-            await update.message.reply_text("Купонів ще немає")
+            await message.reply_text("Купонів ще немає")
             return
         lines = ["🎟️ *Всі купони:*\n"]
-        for code, ctype, value, uses_count, uses_max, active, expires_at in rows:
-            label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
-            status = "✅" if active else "🚫"
+        for c in rows:
+            label = f"{c['value']}%" if c['type'] == 'percent' else f"{c['value']} ₴"
+            status = "✅" if c.get('active') else "🚫"
+            uses_count = int(c.get('uses_count') or 0)
+            uses_max = int(c.get('uses_max') or 0)
             uses_str = f"{uses_count}/{uses_max}" if uses_max else f"{uses_count}/∞"
-            exp = f" · до {expires_at}" if expires_at else ""
-            lines.append(f"{status} `{code}` — {label} · {uses_str}{exp}")
-        await update.message.reply_text("\n".join(lines), parse_mode='Markdown')
+            exp = f" · до {c.get('expires_at')}" if c.get('expires_at') else ""
+            lines.append(f"{status} `{c['code']}` — {label} · {uses_str}{exp}")
+        await message.reply_text("\n".join(lines), parse_mode='Markdown')
 
     elif sub in ('disable', 'enable') and len(args) >= 2:
         code = args[1].upper()
-        active = 1 if sub == 'enable' else 0
-        conn = db_connect()
-        conn.execute(_sql("UPDATE coupons SET active = ? WHERE code = ?"), (active, code))
-        conn.commit()
-        conn.close()
-        icon = "✅" if active else "🚫"
-        await update.message.reply_text(f"{icon} Купон `{code}` {'увімкнено' if active else 'вимкнено'}", parse_mode='Markdown')
+        result = set_coupon_active(code, sub == 'enable')
+        if not result.get("ok"):
+            await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
+            return
+        icon = "✅" if sub == 'enable' else "🚫"
+        await message.reply_text(f"{icon} Купон `{code}` {'увімкнено' if sub == 'enable' else 'вимкнено'}", parse_mode='Markdown')
+
+    elif sub == 'delete' and len(args) >= 2:
+        code = args[1].upper()
+        result = delete_coupon(code)
+        if not result.get("ok"):
+            await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
+            return
+        await message.reply_text(f"🗑️ Купон `{code}` видалено", parse_mode='Markdown')
 
     else:
-        await update.message.reply_text("❌ Невірний формат команди")
+        await message.reply_text("❌ Невірний формат команди")
 
 def _admin_items_from_db(db_items: list[dict]) -> list[dict]:
     return [
@@ -1689,6 +2026,466 @@ def _build_admin_batch(
     return batch_html, markup
 
 
+ADMIN_EDIT_DEBOUNCE_SEC = 2.0
+_admin_edit_tasks: dict[int, asyncio.Task] = {}
+
+
+def _build_single_admin_order_payload(
+    order_id: int,
+    username: str,
+    tg_username: str | None,
+    first_name: str,
+) -> tuple[str, InlineKeyboardMarkup] | None:
+    order, db_items = get_order_with_items(order_id)
+    if not order:
+        return None
+    gift_db = order.get("gift_product_name")
+    gift_product_id = find_gift_product_id(gift_db)
+    order_discount = int(order.get("discount_amount") or 0)
+    coupon_code_db = order.get("coupon_code")
+    coupon_discount_db = order_discount if coupon_code_db else 0
+    promotion_discount_db = 0 if coupon_code_db else order_discount
+    price_pending_db = bool(order.get("price_pending"))
+    owner_html = build_admin_order_notification(
+        order_id=order_id,
+        username=username,
+        items=_admin_items_from_db(db_items),
+        total_price=int(order.get("total_price") or 0),
+        coupon_code=coupon_code_db,
+        discount_amount=order_discount,
+        coupon_discount=coupon_discount_db if coupon_discount_db else None,
+        promotion_discount=promotion_discount_db if promotion_discount_db else None,
+        gift=gift_db,
+        gift_product_id=gift_product_id,
+        comment=order.get("comment") or None,
+        price_pending=price_pending_db,
+    )
+    channel_markup = _build_single_order_channel_markup(
+        order_id, price_pending_db, tg_username, first_name,
+    )
+    return owner_html, channel_markup
+
+
+async def _apply_admin_channel_edit(
+    user_id: int,
+    *,
+    owner_html: str,
+    channel_markup,
+    order_ids: list[int],
+    username: str,
+    tg_username: str | None,
+    first_name: str,
+    fallback_html: str | None = None,
+    fallback_markup=None,
+) -> None:
+    admin_batch = admin_channel_messages.get(user_id)
+    if not admin_batch:
+        return
+    now_admin = datetime.now()
+    try:
+        await edit_rich_message(
+            bot_app.bot,
+            admin_batch["chat_id"],
+            admin_batch["message_id"],
+            owner_html,
+            reply_markup=channel_markup,
+        )
+        admin_channel_messages[user_id] = {
+            **admin_batch,
+            "time": now_admin,
+            "order_ids": order_ids,
+            "username": username,
+            "tg_username": tg_username,
+            "first_name": first_name,
+        }
+        logger.info("✅ Оновлено адмін-повідомлення для замовлень %s", order_ids)
+    except Exception as e:
+        if is_telegram_rate_limited(e):
+            logger.warning(
+                "Адмін-повідомлення тимчасово недоступне (rate limit), пропускаємо: %s", e
+            )
+            return
+        logger.error("❌ Редагування адмін-повідомлення не вдалось: %s", e)
+        if not fallback_html:
+            return
+        try:
+            msg_id = await send_rich_message(
+                bot_app.bot,
+                ORDERS_CHAT_ID,
+                fallback_html,
+                reply_markup=fallback_markup,
+            )
+            admin_channel_messages[user_id] = {
+                "message_id": msg_id,
+                "chat_id": ORDERS_CHAT_ID,
+                "time": now_admin,
+                "order_ids": order_ids,
+                "username": username,
+                "tg_username": tg_username,
+                "first_name": first_name,
+            }
+            logger.info("✅ Надіслано нове адмін-повідомлення (fallback)")
+        except Exception as e2:
+            if is_telegram_rate_limited(e2):
+                logger.warning("Адмін fallback тимчасово недоступний (rate limit): %s", e2)
+            else:
+                logger.error("❌ Помилка надсилання в канал: %s", e2)
+
+
+def _schedule_admin_channel_edit(user_id: int, flush_coro) -> None:
+    async def _debounced() -> None:
+        try:
+            await asyncio.sleep(ADMIN_EDIT_DEBOUNCE_SEC)
+            await flush_coro()
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if _admin_edit_tasks.get(user_id) is asyncio.current_task():
+                _admin_edit_tasks.pop(user_id, None)
+
+    old = _admin_edit_tasks.pop(user_id, None)
+    if old and not old.done():
+        old.cancel()
+    _admin_edit_tasks[user_id] = asyncio.create_task(_debounced())
+
+
+def _schedule_admin_single_order_edit(
+    user_id: int,
+    order_id: int,
+    username: str,
+    tg_username: str | None,
+    first_name: str,
+) -> None:
+    async def _flush() -> None:
+        payload = _build_single_admin_order_payload(
+            order_id, username, tg_username, first_name,
+        )
+        if not payload:
+            return
+        owner_html, channel_markup = payload
+        await _apply_admin_channel_edit(
+            user_id,
+            owner_html=owner_html,
+            channel_markup=channel_markup,
+            order_ids=[order_id],
+            username=username,
+            tg_username=tg_username,
+            first_name=first_name,
+            fallback_html=owner_html,
+            fallback_markup=channel_markup,
+        )
+
+    _schedule_admin_channel_edit(user_id, _flush)
+
+
+def _schedule_admin_batch_order_edit(
+    user_id: int,
+    *,
+    fallback_html: str,
+    fallback_markup,
+) -> None:
+    async def _flush() -> None:
+        admin_batch = admin_channel_messages.get(user_id)
+        if not admin_batch:
+            return
+        order_ids = admin_batch.get("order_ids") or []
+        batch_html, batch_markup = _build_admin_batch(
+            order_ids,
+            admin_batch.get("username") or "невідомо",
+            admin_batch.get("tg_username"),
+            admin_batch.get("first_name") or "",
+        )
+        await _apply_admin_channel_edit(
+            user_id,
+            owner_html=batch_html,
+            channel_markup=batch_markup,
+            order_ids=order_ids,
+            username=admin_batch.get("username") or "невідомо",
+            tg_username=admin_batch.get("tg_username"),
+            first_name=admin_batch.get("first_name") or "",
+            fallback_html=fallback_html,
+            fallback_markup=fallback_markup,
+        )
+
+    _schedule_admin_channel_edit(user_id, _flush)
+
+
+async def _deliver_order_notifications(
+    *,
+    order_id: int,
+    is_new: bool,
+    user_id,
+    username: str,
+    first_name: str,
+    tg_username: str | None,
+    items: list,
+    total_price: int,
+    coupon_code: str | None,
+    coupon_discount: int,
+    promotion_discount: int,
+    total_discount: int,
+    comment: str,
+    gift,
+    price_pending: int,
+) -> None:
+    """Telegram-повідомлення після збереження замовлення (фоново, не блокує HTTP)."""
+    if not bot_app:
+        return
+    try:
+        if not is_new:
+            order, db_items = get_order_with_items(order_id)
+            if not order:
+                return
+
+            if user_id:
+                try:
+                    now = datetime.now()
+                    order_block = _client_block_from_db(order, db_items)
+                    confirm_html = build_client_order_confirmation([order_block])
+                    existing = confirmation_messages.get(user_id)
+                    if existing:
+                        try:
+                            await edit_rich_message(
+                                bot_app.bot,
+                                user_id,
+                                existing["message_id"],
+                                confirm_html,
+                            )
+                            confirmation_messages[user_id] = {
+                                "message_id": existing["message_id"],
+                                "orders": [order_block],
+                                "html": confirm_html,
+                                "time": now,
+                                "format": "rich",
+                            }
+                        except Exception as e:
+                            if is_telegram_rate_limited(e):
+                                logger.warning(
+                                    "Підтвердження клієнту тимчасово недоступне (rate limit): %s", e
+                                )
+                            else:
+                                msg_id = await send_rich_message(bot_app.bot, user_id, confirm_html)
+                                confirmation_messages[user_id] = {
+                                    "message_id": msg_id,
+                                    "orders": [order_block],
+                                    "html": confirm_html,
+                                    "time": now,
+                                    "format": "rich",
+                                }
+                    else:
+                        msg_id = await send_rich_message(bot_app.bot, user_id, confirm_html)
+                        confirmation_messages[user_id] = {
+                            "message_id": msg_id,
+                            "orders": [order_block],
+                            "html": confirm_html,
+                            "time": now,
+                            "format": "rich",
+                        }
+                except Exception as e:
+                    logger.error(f"Помилка оновлення підтвердження клієнту: {e}")
+
+            uid_for_batch = user_id if (user_id and int(user_id) > 0) else None
+            admin_batch = admin_channel_messages.get(uid_for_batch) if uid_for_batch else None
+
+            if admin_batch and uid_for_batch:
+                _schedule_admin_single_order_edit(
+                    uid_for_batch, order_id, username, tg_username, first_name,
+                )
+            elif not admin_batch and uid_for_batch:
+                payload = _build_single_admin_order_payload(
+                    order_id, username, tg_username, first_name,
+                )
+                if payload:
+                    owner_html, channel_markup = payload
+                    try:
+                        msg_id = await send_rich_message(
+                            bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup,
+                        )
+                        admin_channel_messages[uid_for_batch] = {
+                            "message_id": msg_id,
+                            "chat_id": ORDERS_CHAT_ID,
+                            "time": datetime.now(),
+                            "order_ids": [order_id],
+                            "username": username,
+                            "tg_username": tg_username,
+                            "first_name": first_name,
+                        }
+                        logger.info(f"✅ Надіслано оновлене замовлення #{order_id} в канал")
+                    except Exception as e:
+                        if is_telegram_rate_limited(e):
+                            logger.warning("Надсилання в канал тимчасово недоступне (rate limit): %s", e)
+                        else:
+                            logger.error(f"❌ Помилка надсилання в канал: {e}")
+            return
+
+        if user_id:
+            try:
+                now = datetime.now()
+                existing = confirmation_messages.get(user_id)
+                order_block = {
+                    "items": items,
+                    "total_price": total_price,
+                    "coupon_code": coupon_code,
+                    "coupon_discount": coupon_discount,
+                    "promotion_discount": promotion_discount,
+                    "gift": gift,
+                    "comment": comment,
+                    "price_pending": price_pending,
+                }
+
+                if existing and now - existing["time"] < timedelta(hours=4):
+                    orders_batch = existing.get("orders", []) + [order_block]
+                    confirm_html = build_client_order_confirmation(orders_batch)
+                    try:
+                        await edit_rich_message(
+                            bot_app.bot,
+                            user_id,
+                            existing["message_id"],
+                            confirm_html,
+                        )
+                        confirmation_messages[user_id] = {
+                            "message_id": existing["message_id"],
+                            "orders": orders_batch,
+                            "html": confirm_html,
+                            "time": now,
+                            "format": "rich",
+                        }
+                    except Exception as e:
+                        if is_telegram_rate_limited(e):
+                            logger.warning(
+                                "Підтвердження клієнту тимчасово недоступне (rate limit): %s", e
+                            )
+                        else:
+                            msg_id = await send_rich_message(
+                                bot_app.bot, user_id, confirm_html
+                            )
+                            confirmation_messages[user_id] = {
+                                "message_id": msg_id,
+                                "orders": orders_batch,
+                                "html": confirm_html,
+                                "time": now,
+                                "format": "rich",
+                            }
+                else:
+                    orders_batch = [order_block]
+                    confirm_html = build_client_order_confirmation(orders_batch)
+                    msg_id = await send_rich_message(
+                        bot_app.bot, user_id, confirm_html
+                    )
+                    confirmation_messages[user_id] = {
+                        "message_id": msg_id,
+                        "orders": orders_batch,
+                        "html": confirm_html,
+                        "time": now,
+                        "format": "rich",
+                    }
+            except Exception as e:
+                logger.error(f"Помилка підтвердження клієнту: {e}")
+
+        gift_product_id = find_gift_product_id(gift)
+        admin_items = [
+            {
+                "product_id": int(i.get("product_id") or 0),
+                "product_name": i.get("product_name", "—"),
+                "price": int(i.get("price", 0)),
+                "quantity": int(i.get("quantity", 1)),
+                "filament_name": i.get("filament_name"),
+                "customValue": i.get("customValue"),
+                "is_contract_price": bool(i.get("is_contract_price")),
+                "comment": i.get("comment") or "",
+            }
+            for i in items
+        ]
+        owner_html = build_admin_order_notification(
+            order_id=order_id,
+            username=username,
+            items=admin_items,
+            total_price=total_price,
+            coupon_code=coupon_code,
+            discount_amount=total_discount,
+            coupon_discount=coupon_discount if coupon_discount else None,
+            promotion_discount=promotion_discount if promotion_discount else None,
+            gift=gift,
+            gift_product_id=gift_product_id,
+            comment=comment or None,
+            price_pending=bool(price_pending),
+        )
+
+        status_buttons = [
+            InlineKeyboardButton("✅ Підтвердити",     callback_data=f"confirm_{order_id}"),
+            InlineKeyboardButton("❓ Під питанням", callback_data=f"draft_{order_id}"),
+            InlineKeyboardButton("❌ Відміна",      callback_data=f"cancel_{order_id}"),
+        ]
+        admin_url = get_admin_webapp_url(order_id) if price_pending else None
+
+        channel_rows = []
+        if admin_url:
+            channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
+        channel_rows.append(status_buttons)
+        if tg_username:
+            channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+        channel_markup = InlineKeyboardMarkup(channel_rows)
+
+        owner_rows = []
+        if admin_url:
+            owner_rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
+        owner_rows.append(status_buttons)
+        if tg_username:
+            owner_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+        owner_markup = InlineKeyboardMarkup(owner_rows)
+
+        now_admin = datetime.now()
+        uid_for_batch = user_id if (user_id and int(user_id) > 0) else None
+        admin_batch = admin_channel_messages.get(uid_for_batch) if uid_for_batch else None
+        use_batch = False
+
+        if admin_batch and (now_admin - admin_batch["time"]) < timedelta(hours=4):
+            for _oid in admin_batch.get("order_ids", []):
+                _o, _ = get_order_with_items(_oid)
+                if _o and _o.get("status") in ("new", "draft"):
+                    use_batch = True
+                    break
+
+        if use_batch:
+            batch_order_ids = admin_batch["order_ids"] + [order_id]
+            admin_channel_messages[uid_for_batch] = {
+                **admin_batch,
+                "time": now_admin,
+                "order_ids": batch_order_ids,
+                "username": admin_batch.get("username") or username,
+                "tg_username": admin_batch.get("tg_username") or tg_username,
+                "first_name": admin_batch.get("first_name") or first_name,
+            }
+            _schedule_admin_batch_order_edit(
+                uid_for_batch,
+                fallback_html=owner_html,
+                fallback_markup=channel_markup,
+            )
+            logger.info(f"✅ Заплановано оновлення батчу адмін-каналу: {batch_order_ids}")
+        else:
+            if admin_batch:
+                admin_channel_messages.pop(uid_for_batch, None)
+            try:
+                msg_id = await send_rich_message(bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup)
+                if uid_for_batch:
+                    admin_channel_messages[uid_for_batch] = {
+                        "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
+                        "order_ids": [order_id],
+                        "username": username, "tg_username": tg_username, "first_name": first_name,
+                    }
+                logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
+            except Exception as e:
+                logger.error(f"❌ Помилка надсилання в канал: {e}")
+                if OWNER_ID and OWNER_ID != ORDERS_CHAT_ID:
+                    try:
+                        await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=owner_markup)
+                        logger.info("✅ Надіслано резервно до власника (канал недоступний)")
+                    except Exception as e2:
+                        logger.error(f"❌ Резервне надсилання власнику теж не вдалось: {e2}")
+    except Exception as e:
+        logger.error("Помилка фонової доставки повідомлень для #%s: %s", order_id, e)
+
+
 #Новий HTTP хендлер для прийому замовлень з веб-додатку
 async def handle_order(request):
     try:
@@ -1733,8 +2530,35 @@ async def handle_order(request):
     # Формуємо назву для збереження в БД (всі товари через кому)
     product_name = ', '.join(i.get('product_name', '—') for i in items)
 
-    # Зберігаємо замовлення в базі даних і отримуємо його ID для подальшого використання в логах і кнопках
-    order_id, is_new = save_order(user_id or 0, username, first_name, items, total_price, comment, gift, coupon_code, total_discount, price_pending)
+    idempotency_key = (data.get("idempotency_key") or "").strip() or None
+    uid = int(user_id or 0)
+
+    if idempotency_key and uid > 0:
+        cached = get_idempotent_order(uid, idempotency_key)
+        if cached:
+            logger.info(
+                "♻️ Idempotent duplicate: user=%s order=#%s",
+                uid, cached["order_id"],
+            )
+            return _order_ok_response(request, int(cached["order_id"]), duplicate=True)
+
+    async with _user_order_lock(uid):
+        if idempotency_key and uid > 0:
+            cached = get_idempotent_order(uid, idempotency_key)
+            if cached:
+                return _order_ok_response(request, int(cached["order_id"]), duplicate=True)
+
+        # Зберігаємо замовлення в базі даних і отримуємо його ID для подальшого використання в логах і кнопках
+        order_id, is_new = save_order(
+            user_id or 0, username, first_name, items, total_price, comment,
+            gift, coupon_code, total_discount, price_pending,
+        )
+
+        if idempotency_key and uid > 0:
+            try:
+                save_idempotent_order(uid, idempotency_key, order_id, is_new)
+            except Exception as e:
+                logger.error("Не вдалось зберегти idempotency key: %s", e)
 
     # Логування нового замовлення з інформацією про ID замовлення, назву товару, загальну суму, інформацію про купон і знижку (якщо є) і ім'я користувача. Це дозволяє відстежувати всі замовлення, які надходять через веб-додаток, і отримувати повну інформацію про них для подальшої обробки.
     coupon_info = f"  🏷️ {coupon_code} −{coupon_discount}₴" if coupon_code else ""
@@ -1745,7 +2569,7 @@ async def handle_order(request):
         logger.info(f"📦 ДОДАНО до #{order_id}  {product_name}  +{total_price}₴  від {username}")
 
     if not is_new:
-        order, db_items = get_order_with_items(order_id)
+        order, _ = get_order_with_items(order_id)
         if not order:
             return web.json_response(
                 {"ok": False, "error": "Замовлення не знайдено"},
@@ -1753,307 +2577,24 @@ async def handle_order(request):
                 headers=cors_headers(request),
             )
 
-        gift_db = order.get("gift_product_name")
-        gift_product_id = find_gift_product_id(gift_db)
-        admin_items_db = _admin_items_from_db(db_items)
-        order_discount = int(order.get("discount_amount") or 0)
-        coupon_code_db = order.get("coupon_code")
-        coupon_discount_db = order_discount if coupon_code_db else 0
-        promotion_discount_db = 0 if coupon_code_db else order_discount
-        price_pending_db = bool(order.get("price_pending"))
-
-        owner_html = build_admin_order_notification(
-            order_id=order_id,
-            username=username,
-            items=admin_items_db,
-            total_price=int(order.get("total_price") or 0),
-            coupon_code=coupon_code_db,
-            discount_amount=order_discount,
-            coupon_discount=coupon_discount_db if coupon_discount_db else None,
-            promotion_discount=promotion_discount_db if promotion_discount_db else None,
-            gift=gift_db,
-            gift_product_id=gift_product_id,
-            comment=order.get("comment") or None,
-            price_pending=price_pending_db,
-        )
-        channel_markup = _build_single_order_channel_markup(
-            order_id, price_pending_db, tg_username, first_name,
-        )
-
-        if user_id:
-            try:
-                now = datetime.now()
-                order_block = _client_block_from_db(order, db_items)
-                confirm_html = build_client_order_confirmation([order_block])
-                existing = confirmation_messages.get(user_id)
-                if existing:
-                    try:
-                        await edit_rich_message(
-                            bot_app.bot,
-                            user_id,
-                            existing["message_id"],
-                            confirm_html,
-                        )
-                        confirmation_messages[user_id] = {
-                            "message_id": existing["message_id"],
-                            "orders": [order_block],
-                            "html": confirm_html,
-                            "time": now,
-                            "format": "rich",
-                        }
-                    except Exception:
-                        msg_id = await send_rich_message(bot_app.bot, user_id, confirm_html)
-                        confirmation_messages[user_id] = {
-                            "message_id": msg_id,
-                            "orders": [order_block],
-                            "html": confirm_html,
-                            "time": now,
-                            "format": "rich",
-                        }
-                else:
-                    msg_id = await send_rich_message(bot_app.bot, user_id, confirm_html)
-                    confirmation_messages[user_id] = {
-                        "message_id": msg_id,
-                        "orders": [order_block],
-                        "html": confirm_html,
-                        "time": now,
-                        "format": "rich",
-                    }
-            except Exception as e:
-                logger.error(f"Помилка оновлення підтвердження клієнту: {e}")
-
-        now_admin = datetime.now()
-        uid_for_batch = user_id if (user_id and int(user_id) > 0) else None
-        admin_batch = admin_channel_messages.get(uid_for_batch) if uid_for_batch else None
-
-        if admin_batch:
-            try:
-                await edit_rich_message(
-                    bot_app.bot, admin_batch["chat_id"], admin_batch["message_id"],
-                    owner_html, reply_markup=channel_markup,
-                )
-                admin_channel_messages[uid_for_batch] = {
-                    **admin_batch,
-                    "time": now_admin,
-                    "order_ids": [order_id],
-                    "username": username,
-                    "tg_username": tg_username,
-                    "first_name": first_name,
-                }
-                logger.info(f"✅ Оновлено замовлення #{order_id} в адмін-каналі")
-            except Exception as e:
-                logger.error(f"❌ Редагування адмін-повідомлення не вдалось, надсилаємо нове: {e}")
-                try:
-                    msg_id = await send_rich_message(
-                        bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup,
-                    )
-                    if uid_for_batch:
-                        admin_channel_messages[uid_for_batch] = {
-                            "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
-                            "order_ids": [order_id],
-                            "username": username, "tg_username": tg_username, "first_name": first_name,
-                        }
-                except Exception as e2:
-                    logger.error(f"❌ Помилка надсилання в канал: {e2}")
-        else:
-            try:
-                msg_id = await send_rich_message(
-                    bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup,
-                )
-                if uid_for_batch:
-                    admin_channel_messages[uid_for_batch] = {
-                        "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
-                        "order_ids": [order_id],
-                        "username": username, "tg_username": tg_username, "first_name": first_name,
-                    }
-                logger.info(f"✅ Надіслано оновлене замовлення #{order_id} в канал")
-            except Exception as e:
-                logger.error(f"❌ Помилка надсилання в канал: {e}")
-
-        return web.Response(text="ok", headers=cors_headers(request))
-
-    # Підтвердження клієнту
-    if user_id:
-        try:
-            now = datetime.now()
-            existing = confirmation_messages.get(user_id)
-            gift = data.get('gift')
-            order_block = {
-                "items": items,
-                "total_price": total_price,
-                "coupon_code": coupon_code,
-                "coupon_discount": coupon_discount,
-                "promotion_discount": promotion_discount,
-                "gift": gift,
-                "comment": comment,
-                "price_pending": price_pending,
-            }
-
-            if existing and now - existing["time"] < timedelta(hours=4):
-                orders_batch = existing.get("orders", []) + [order_block]
-                confirm_html = build_client_order_confirmation(orders_batch)
-                try:
-                    await edit_rich_message(
-                        bot_app.bot,
-                        user_id,
-                        existing["message_id"],
-                        confirm_html,
-                    )
-                    confirmation_messages[user_id] = {
-                        "message_id": existing["message_id"],
-                        "orders": orders_batch,
-                        "html": confirm_html,
-                        "time": now,
-                        "format": "rich",
-                    }
-                except Exception:
-                    msg_id = await send_rich_message(
-                        bot_app.bot, user_id, confirm_html
-                    )
-                    confirmation_messages[user_id] = {
-                        "message_id": msg_id,
-                        "orders": orders_batch,
-                        "html": confirm_html,
-                        "time": now,
-                        "format": "rich",
-                    }
-            else:
-                orders_batch = [order_block]
-                confirm_html = build_client_order_confirmation(orders_batch)
-                msg_id = await send_rich_message(
-                    bot_app.bot, user_id, confirm_html
-                )
-                confirmation_messages[user_id] = {
-                    "message_id": msg_id,
-                    "orders": orders_batch,
-                    "html": confirm_html,
-                    "time": now,
-                    "format": "rich",
-                }
-        except Exception as e:
-            logger.error(f"Помилка підтвердження клієнту: {e}")
-
-    gift = data.get('gift')
-    gift_product_id = find_gift_product_id(gift)
-    admin_items = [
-        {
-            "product_id": int(i.get("product_id") or 0),
-            "product_name": i.get("product_name", "—"),
-            "price": int(i.get("price", 0)),
-            "quantity": int(i.get("quantity", 1)),
-            "filament_name": i.get("filament_name"),
-            "customValue": i.get("customValue"),
-            "is_contract_price": bool(i.get("is_contract_price")),
-            "comment": i.get("comment") or "",
-        }
-        for i in items
-    ]
-    owner_html = build_admin_order_notification(
+    asyncio.create_task(_deliver_order_notifications(
         order_id=order_id,
+        is_new=is_new,
+        user_id=user_id,
         username=username,
-        items=admin_items,
+        first_name=first_name,
+        tg_username=tg_username,
+        items=items,
         total_price=total_price,
         coupon_code=coupon_code,
-        discount_amount=total_discount,
-        coupon_discount=coupon_discount if coupon_discount else None,
-        promotion_discount=promotion_discount if promotion_discount else None,
+        coupon_discount=coupon_discount,
+        promotion_discount=promotion_discount,
+        total_discount=total_discount,
+        comment=comment,
         gift=gift,
-        gift_product_id=gift_product_id,
-        comment=comment or None,
-        price_pending=bool(price_pending),
-    )
-
-    status_buttons = [
-        InlineKeyboardButton("✅ Підтвердити",     callback_data=f"confirm_{order_id}"),
-        InlineKeyboardButton("❓ Під питанням", callback_data=f"draft_{order_id}"),
-        InlineKeyboardButton("❌ Відміна",      callback_data=f"cancel_{order_id}"),
-    ]
-    tg_username = data.get('tg_username')
-    admin_url = get_admin_webapp_url(order_id) if price_pending else None
-
-    # Клавіатура для каналу: URL-кнопка для WebApp (WebApp-кнопки в каналах не підтримуються)
-    channel_rows = []
-    if admin_url:
-        channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
-    channel_rows.append(status_buttons)
-    if tg_username:
-        channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
-    channel_markup = InlineKeyboardMarkup(channel_rows)
-
-    # Резервна клавіатура для особистого чату власника — з WebApp-кнопкою
-    owner_rows = []
-    if admin_url:
-        owner_rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
-    owner_rows.append(status_buttons)
-    if tg_username:
-        owner_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
-    owner_markup = InlineKeyboardMarkup(owner_rows)
-
-    # ── Надсилання в адмін-канал (з батчингом для одного клієнта) ──
-    now_admin = datetime.now()
-    uid_for_batch = user_id if (user_id and int(user_id) > 0) else None
-    admin_batch = admin_channel_messages.get(uid_for_batch) if uid_for_batch else None
-    use_batch = False
-
-    if admin_batch and (now_admin - admin_batch["time"]) < timedelta(hours=4):
-        for _oid in admin_batch.get("order_ids", []):
-            _o, _ = get_order_with_items(_oid)
-            if _o and _o.get("status") in ("new", "draft"):
-                use_batch = True
-                break
-
-    if use_batch:
-        batch_order_ids = admin_batch["order_ids"] + [order_id]
-        batch_html, batch_markup = _build_admin_batch(
-            batch_order_ids,
-            admin_batch.get("username") or username,
-            admin_batch.get("tg_username") or tg_username,
-            admin_batch.get("first_name") or first_name,
-        )
-        try:
-            await edit_rich_message(
-                bot_app.bot, admin_batch["chat_id"], admin_batch["message_id"],
-                batch_html, reply_markup=batch_markup,
-            )
-            admin_channel_messages[uid_for_batch] = {
-                **admin_batch, "time": now_admin, "order_ids": batch_order_ids,
-            }
-            logger.info(f"✅ Оновлено батч адмін-каналу: {batch_order_ids}")
-        except Exception as e:
-            logger.error(f"❌ Батч-редагування не вдалось, надсилаємо нове: {e}")
-            try:
-                msg_id = await send_rich_message(bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup)
-                if uid_for_batch:
-                    admin_channel_messages[uid_for_batch] = {
-                        "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
-                        "order_ids": [order_id],
-                        "username": username, "tg_username": tg_username, "first_name": first_name,
-                    }
-                logger.info(f"✅ Надіслано нове в канал (fallback): {ORDERS_CHAT_ID}")
-            except Exception as e2:
-                logger.error(f"❌ Помилка надсилання в канал: {e2}")
-    else:
-        if admin_batch:
-            admin_channel_messages.pop(uid_for_batch, None)
-        try:
-            msg_id = await send_rich_message(bot_app.bot, ORDERS_CHAT_ID, owner_html, reply_markup=channel_markup)
-            if uid_for_batch:
-                admin_channel_messages[uid_for_batch] = {
-                    "message_id": msg_id, "chat_id": ORDERS_CHAT_ID, "time": now_admin,
-                    "order_ids": [order_id],
-                    "username": username, "tg_username": tg_username, "first_name": first_name,
-                }
-            logger.info(f"✅ Надіслано в чат замовлень: {ORDERS_CHAT_ID}")
-        except Exception as e:
-            logger.error(f"❌ Помилка надсилання в канал: {e}")
-            if OWNER_ID and OWNER_ID != ORDERS_CHAT_ID:
-                try:
-                    await send_rich_message(bot_app.bot, OWNER_ID, owner_html, reply_markup=owner_markup)
-                    logger.info("✅ Надіслано резервно до власника (канал недоступний)")
-                except Exception as e2:
-                    logger.error(f"❌ Резервне надсилання власнику теж не вдалось: {e2}")
-
-    return web.Response(text="ok", headers=cors_headers(request))
+        price_pending=price_pending,
+    ))
+    return _order_ok_response(request, order_id)
 
 
 # ─── АДМІН HANDLERS ─────────────────────────────────────────
@@ -2071,7 +2612,9 @@ async def handle_index(request: web.Request):
     """Отримати HTML головної сторінки"""
     try:
         html = Path("index.html").read_text(encoding="utf-8")
-        return web.Response(text=html, content_type='text/html', headers=cors_headers(request))
+        headers = cors_headers(request)
+        headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return web.Response(text=html, content_type='text/html', headers=headers)
     except FileNotFoundError:
         return web.Response(status=404, text="Index file not found", headers=cors_headers(request))
 
@@ -2451,6 +2994,81 @@ async def handle_delete_order(request: web.Request):
         return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
 
 
+async def handle_get_coupons(request: web.Request):
+    """Список купонів для адмін-панелі."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    return web.json_response(list_coupons(), headers=cors_headers(request))
+
+
+async def handle_create_coupon(request: web.Request):
+    """Створити купон."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        data = await request.json()
+        result = create_coupon(data)
+        if not result.get("ok"):
+            return web.json_response(result, status=400, headers=cors_headers(request))
+
+        notifications = await notify_coupon_created(result.get("coupon") or {}, source="admin_panel")
+        result["notifications"] = notifications
+        return web.json_response(result, status=201, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_update_coupon(request: web.Request):
+    """Оновити купон."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        code = request.match_info.get("code", "")
+        data = await request.json()
+
+        if "active" in data and len(data) == 1:
+            result = set_coupon_active(code, bool(data.get("active")))
+        else:
+            result = update_coupon(code, data)
+
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_delete_coupon(request: web.Request):
+    """Видалити купон."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        code = request.match_info.get("code", "")
+        result = delete_coupon(code)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
 async def handle_upload_photo(request: web.Request):
     """Завантажити фото на Cloudinary з повною обробкою помилок"""
     auth, err = resolve_request_user(request, {})
@@ -2568,11 +3186,13 @@ async def handle_check_coupon(request):
 
 
 async def reload_products_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message or user.id != OWNER_ID:
         return
     reload_products_cache(force=True)
     reload_filaments_cache(force=True)
-    await update.message.reply_text(
+    await message.reply_text(
         f"✅ Кеш оновлено: products={len(PRODUCTS_CACHE)}, custom={len(CUSTOM_PRODUCTS_CACHE)}, filaments={len(FILAMENTS_CACHE)}"
     )
 
@@ -2821,6 +3441,10 @@ def main():
         http_app.router.add_get('/api/orders/{id}', handle_get_order)
         http_app.router.add_put('/api/orders/{id}/pricing', handle_update_order_pricing)
         http_app.router.add_delete('/api/orders/{id}', handle_delete_order)
+        http_app.router.add_get('/api/coupons', handle_get_coupons)
+        http_app.router.add_post('/api/coupons', handle_create_coupon)
+        http_app.router.add_put('/api/coupons/{code}', handle_update_coupon)
+        http_app.router.add_delete('/api/coupons/{code}', handle_delete_coupon)
         http_app.router.add_post('/api/upload-photo', handle_upload_photo)
         http_app.router.add_post('/api/upload-photo-url', handle_upload_photo_url)
         # Головна сторінка
