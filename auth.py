@@ -115,14 +115,17 @@ def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None,
 def is_local_dev_origin(request: web.Request) -> bool:
     if not config.LOCAL_DEV_MODE:
         return False
+    # Origin header is only sent on cross-origin requests; for direct browser
+    # navigation it is absent — fall back to the Host header.
     origin = request.headers.get("Origin", "").strip()
-    if not origin:
-        return False
-    try:
-        host = (urlparse(origin).hostname or "").lower()
-        return host in {"localhost", "127.0.0.1"}
-    except Exception:
-        return False
+    if origin:
+        try:
+            host = (urlparse(origin).hostname or "").lower()
+            return host in {"localhost", "127.0.0.1"}
+        except Exception:
+            return False
+    host_header = request.headers.get("Host", "").split(":")[0].strip().lower()
+    return host_header in {"localhost", "127.0.0.1"}
 
 
 def is_admin_authorized(request: web.Request, auth: dict | None) -> bool:
