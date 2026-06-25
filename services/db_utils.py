@@ -111,8 +111,6 @@ def init_db() -> None:
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT ''")
-        conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size TEXT DEFAULT ''")
-        conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS design TEXT DEFAULT ''")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_pending INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS channel_message_id BIGINT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
@@ -205,10 +203,6 @@ def init_db() -> None:
             conn.execute("ALTER TABLE order_items ADD COLUMN is_contract_price INTEGER DEFAULT 0")
         if "comment" not in oi_cols:
             conn.execute("ALTER TABLE order_items ADD COLUMN comment TEXT DEFAULT ''")
-        if "size" not in oi_cols:
-            conn.execute("ALTER TABLE order_items ADD COLUMN size TEXT DEFAULT ''")
-        if "design" not in oi_cols:
-            conn.execute("ALTER TABLE order_items ADD COLUMN design TEXT DEFAULT ''")
         o_cols = [row[1] for row in conn.execute("PRAGMA table_info(orders)").fetchall()]
         if "price_pending" not in o_cols:
             conn.execute("ALTER TABLE orders ADD COLUMN price_pending INTEGER DEFAULT 0")

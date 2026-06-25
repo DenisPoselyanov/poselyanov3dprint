@@ -30,8 +30,6 @@ CREATE TABLE IF NOT EXISTS products (
     contract_price BOOLEAN DEFAULT false,
     is_custom BOOLEAN DEFAULT false,
     active BOOLEAN DEFAULT true,
-    sizes JSONB DEFAULT '[]',
-    designs JSONB DEFAULT '[]',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -81,16 +79,10 @@ CREATE TABLE IF NOT EXISTS order_items (
     quantity INTEGER NOT NULL DEFAULT 1,
     filament TEXT NOT NULL DEFAULT '',
     is_contract_price INTEGER NOT NULL DEFAULT 0,
-    comment TEXT DEFAULT '',
-    size TEXT DEFAULT '',
-    design TEXT DEFAULT ''
+    comment TEXT DEFAULT ''
 );
 
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT '';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes JSONB DEFAULT '[]';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS designs JSONB DEFAULT '[]';
-ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size TEXT DEFAULT '';
-ALTER TABLE order_items ADD COLUMN IF NOT EXISTS design TEXT DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS coupons (
     code TEXT PRIMARY KEY,

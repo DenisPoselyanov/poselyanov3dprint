@@ -19,8 +19,8 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
         conn.execute(
             _sql("""
                 INSERT INTO order_items
-                (order_id, product_id, product_name, price, quantity, filament, is_contract_price, comment, size, design)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (order_id, product_id, product_name, price, quantity, filament, is_contract_price, comment)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """),
             (
                 order_id,
@@ -31,8 +31,6 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
                 fl,
                 is_contract,
                 item_comment or None,
-                (item.get("size") or "").strip(),
-                (item.get("design") or "").strip(),
             ),
         )
 
@@ -302,7 +300,7 @@ def get_order_with_items(order_id: int):
     items = conn.execute(
         _sql("""
             SELECT oi.id, oi.product_id, oi.product_name, oi.price, oi.quantity,
-                   oi.filament, oi.is_contract_price, oi.comment, oi.size, oi.design, p.stl_link
+                   oi.filament, oi.is_contract_price, oi.comment, p.stl_link
             FROM order_items oi
             LEFT JOIN products p ON p.id = oi.product_id
             WHERE oi.order_id = ?

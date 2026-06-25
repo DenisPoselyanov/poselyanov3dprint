@@ -1143,53 +1143,6 @@
             margin-top: 6px;
         }
 
-        .variant-admin-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        .size-row, .design-row {
-            display: flex;
-            gap: 8px;
-            align-items: flex-start;
-            padding: 12px;
-            border: 1px solid var(--border-input);
-            border-radius: 10px;
-            background: var(--bg);
-        }
-
-        .size-row input, .design-row input[type="text"] {
-            flex: 1;
-        }
-
-        .design-row {
-            flex-direction: column;
-        }
-
-        .design-row-header {
-            display: flex;
-            gap: 8px;
-            width: 100%;
-        }
-
-        .design-photos {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            width: 100%;
-        }
-
-        .design-photos .preview-item {
-            width: 72px;
-            height: 72px;
-        }
-
-        .variant-add-btn {
-            margin-top: 4px;
-        }
-
         .form-buttons {
             display: flex;
             gap: 12px;
@@ -2131,22 +2084,6 @@
                     <div class="photo-preview" id="photoPreview"></div>
                 </div>
 
-                <div id="variantsFieldsGroup">
-                    <div class="form-group">
-                        <label>Розміри</label>
-                        <div class="variant-admin-list" id="sizesList"></div>
-                        <button type="button" class="btn btn-secondary variant-add-btn" onclick="addSizeRow()">+ Додати розмір</button>
-                        <div class="form-hint">Наприклад: S, M, L. Залиште порожнім, якщо розмірів немає.</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Дизайни (окремі фото для кожного варіанту)</label>
-                        <div class="variant-admin-list" id="designsList"></div>
-                        <button type="button" class="btn btn-secondary variant-add-btn" onclick="addDesignRow()">+ Додати дизайн</button>
-                        <div class="form-hint">Кожен дизайн може мати власний набір фото. У каталозі покупець обирає дизайн і бачить лише його зображення.</div>
-                    </div>
-                </div>
-
                 <div class="form-buttons">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Скасувати</button>
                     <button type="submit" class="btn btn-primary">✅ Зберегти товар</button>
@@ -2333,8 +2270,6 @@
         let currentCouponCode = null;
         let currentPage = 'products';
         let uploadedPhotos = [];
-        let productSizes = [];
-        let productDesigns = [];
         let productFormSnapshot = null;
         let allProducts = [];
         let allOrders = [];
@@ -3323,122 +3258,6 @@
             }
         }
 
-        function collectAllProductPhotos() {
-            const all = [...uploadedPhotos];
-            productDesigns.forEach(d => {
-                (d.photos || []).forEach(url => {
-                    if (url && !all.includes(url)) all.push(url);
-                });
-            });
-            return all;
-        }
-
-        function renderSizesList() {
-            const list = document.getElementById('sizesList');
-            if (!list) return;
-            list.innerHTML = productSizes.map((size, i) => `
-                <div class="size-row">
-                    <input type="text" value="${escapeAttr(size)}" placeholder="Напр.: M" oninput="productSizes[${i}] = this.value">
-                    <button type="button" class="btn btn-secondary" onclick="removeSizeRow(${i})">✕</button>
-                </div>
-            `).join('');
-        }
-
-        function addSizeRow(value = '') {
-            productSizes.push(value);
-            renderSizesList();
-        }
-
-        function removeSizeRow(index) {
-            productSizes.splice(index, 1);
-            renderSizesList();
-        }
-
-        function renderDesignsList() {
-            const list = document.getElementById('designsList');
-            if (!list) return;
-            list.innerHTML = productDesigns.map((design, i) => `
-                <div class="design-row">
-                    <div class="design-row-header">
-                        <input type="text" value="${escapeAttr(design.name || '')}" placeholder="Назва дизайну" oninput="productDesigns[${i}].name = this.value">
-                        <button type="button" class="btn btn-secondary" onclick="removeDesignRow(${i})">✕</button>
-                    </div>
-                    <div class="design-photos">
-                        ${(design.photos || []).map((url, pi) => `
-                            <div class="preview-item">
-                                <img src="${escapeAttr(url)}" alt="дизайн">
-                                <button type="button" class="remove" onclick="removeDesignPhoto(${i}, ${pi})">×</button>
-                            </div>
-                        `).join('')}
-                    </div>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button type="button" class="btn btn-secondary" onclick="pickDesignPhotos(${i})">📸 Додати фото</button>
-                        <input type="file" id="designFile-${i}" multiple accept="image/*" style="display:none" onchange="handleDesignFiles(event, ${i})">
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function addDesignRow(name = '', photos = []) {
-            productDesigns.push({ name, photos: [...(photos || [])] });
-            renderDesignsList();
-        }
-
-        function removeDesignRow(index) {
-            productDesigns.splice(index, 1);
-            renderDesignsList();
-        }
-
-        function pickDesignPhotos(index) {
-            document.getElementById(`designFile-${index}`)?.click();
-        }
-
-        function removeDesignPhoto(designIndex, photoIndex) {
-            productDesigns[designIndex]?.photos?.splice(photoIndex, 1);
-            renderDesignsList();
-        }
-
-        async function uploadImageFile(file) {
-            const normalized = await normalizeImageFile(file);
-            if (!normalized.type.startsWith('image/')) {
-                showToast('Тільки фото дозволені', 'error');
-                return null;
-            }
-            const formData = new FormData();
-            formData.append('file', normalized, normalized.name);
-            const animated = await isLikelyAnimatedFile(normalized);
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), animated ? 180000 : 60000);
-            try {
-                const res = await fetch(API_BASE + '/upload-photo', {
-                    method: 'POST',
-                    headers: { 'X-Telegram-Init-Data': tgInitData },
-                    body: formData,
-                    signal: controller.signal
-                });
-                const data = await res.json();
-                if (data.ok) return data.url;
-                showToast('Помилка: ' + (data.error || 'Невідома помилка'), 'error');
-                return null;
-            } catch (e) {
-                showToast(e.name === 'AbortError' ? 'Завантаження занадто довге' : 'Помилка завантаження', 'error');
-                return null;
-            } finally {
-                clearTimeout(timeoutId);
-            }
-        }
-
-        async function handleDesignFiles(event, designIndex) {
-            const files = event.target.files;
-            if (!files?.length || !productDesigns[designIndex]) return;
-            for (const file of files) {
-                const url = await uploadImageFile(file);
-                if (url) productDesigns[designIndex].photos.push(url);
-            }
-            event.target.value = '';
-            renderDesignsList();
-        }
-
         function getProductFormState() {
             const form = document.getElementById('productForm');
             const contractPrice = form.contractPrice.checked;
@@ -3452,14 +3271,7 @@
                 oldPrice,
                 mat: form.mat.value.trim(),
                 stlLink: form.stlLink.value.trim(),
-                photos: collectAllProductPhotos(),
-                sizes: productSizes.map(s => String(s || '').trim()).filter(Boolean),
-                designs: productDesigns
-                    .map(d => ({
-                        name: String(d.name || '').trim(),
-                        photos: [...(d.photos || [])]
-                    }))
-                    .filter(d => d.name),
+                photos: [...uploadedPhotos],
             };
 
             if (state.cat === 'custom') {
@@ -3495,8 +3307,6 @@
         function openAddModal() {
             currentProductId = null;
             uploadedPhotos = [];
-            productSizes = [];
-            productDesigns = [];
             document.getElementById('modalTitle').textContent = '➕ Додати новий товар';
             const form = document.getElementById('productForm');
             form.reset();
@@ -3510,8 +3320,6 @@
             });
             
             document.getElementById('photoPreview').innerHTML = '';
-            renderSizesList();
-            renderDesignsList();
             updateCategoryFields();
             form.contractPrice.checked = false;
             toggleContractPriceFields();
@@ -3534,8 +3342,6 @@
             modal.classList.remove('active');
             currentProductId = null;
             uploadedPhotos = [];
-            productSizes = [];
-            productDesigns = [];
             productFormSnapshot = null;
         }
 
@@ -3629,11 +3435,6 @@
 
                 currentProductId = id;
                 uploadedPhotos = [...(product.photos || [])];
-                productSizes = [...(product.sizes || [])];
-                productDesigns = (product.designs || []).map(d => ({
-                    name: d.name || '',
-                    photos: [...(d.photos || [])]
-                }));
                 document.getElementById('modalTitle').textContent = '✏️ Редагувати товар';
 
                 const form = document.getElementById('productForm');
@@ -3659,8 +3460,6 @@
                 }
 
                 updatePhotoPreview();
-                renderSizesList();
-                renderDesignsList();
                 updateCategoryFields();
                 toggleContractPriceFields();
                 toggleFilamentChoiceFields();
@@ -4075,14 +3874,7 @@
                 oldPrice,
                 mat: form.mat.value.trim(),
                 stlLink: form.stlLink.value.trim(),
-                photos: collectAllProductPhotos(),
-                sizes: productSizes.map(s => String(s || '').trim()).filter(Boolean),
-                designs: productDesigns
-                    .map(d => ({
-                        name: String(d.name || '').trim(),
-                        photos: [...(d.photos || [])]
-                    }))
-                    .filter(d => d.name),
+                photos: uploadedPhotos,
             };
 
             if (data.cat === 'custom') {

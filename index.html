@@ -1101,37 +1101,6 @@
     transform: scale(.92);
   }
 
-  .variant-block {
-    padding: 0 20px 12px;
-  }
-  .variant-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-  }
-  .variant-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .variant-chip {
-    border: 1.5px solid var(--border);
-    background: var(--bg-card);
-    color: var(--text);
-    border-radius: 999px;
-    padding: 8px 14px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: border-color .15s, background .15s, transform .1s;
-  }
-  .variant-chip.selected {
-    border-color: var(--accent);
-    background: rgba(59, 130, 246, .12);
-    color: var(--accent);
-  }
-  .variant-chip:active { transform: scale(.96); }
   .carousel-dot {
     cursor: pointer;
   }
@@ -2453,16 +2422,6 @@
       <div class="filament-swatches" id="m-filament-swatches"></div>
     </div>
 
-    <div class="variant-block" id="m-design-block" style="display:none">
-      <div class="variant-label">Дизайн</div>
-      <div class="variant-options" id="m-design-options"></div>
-    </div>
-
-    <div class="variant-block" id="m-size-block" style="display:none">
-      <div class="variant-label">Розмір</div>
-      <div class="variant-options" id="m-size-options"></div>
-    </div>
-
     <div class="gift-preview-notice" id="m-gift-preview-notice">
       🎁 Це перегляд подарунку. Обери колір (якщо доступно) і натисни «Обрати подарунком» — товар не потрапить у кошик окремою позицією.
     </div>
@@ -2862,36 +2821,8 @@ function saveCart() {
   if (!isSubmitting) pendingIdempotencyKey = null;
 }
 
-function getCartQuantityForProduct(id) {
-  return cart.filter(i => i.id === id).reduce((sum, i) => sum + i.quantity, 0);
-}
-
-function getCartItem(id, size, design) {
-  if (size === undefined && design === undefined) {
-    return cart.find(i => i.id === id);
-  }
-  return cart.find(i =>
-    i.id === id &&
-    (i.size || '') === (size || '') &&
-    (i.design || '') === (design || '')
-  );
-}
-
-function itemVariantKey(item) {
-  return `${item.id}|${item.design || ''}|${item.size || ''}`;
-}
-
-function encodeVariantKey(key) {
-  return encodeURIComponent(key).replace(/%/g, '_');
-}
-
-function decodeVariantKey(encoded) {
-  return decodeURIComponent(String(encoded).replace(/_/g, '%'));
-}
-
-function getCartItemByKey(encodedKey) {
-  const key = decodeVariantKey(encodedKey);
-  return cart.find(i => itemVariantKey(i) === key);
+function getCartItem(id) {
+  return cart.find(i => i.id === id);
 }
 
 function updateCartBadge() {
@@ -2911,14 +2842,14 @@ let modalQty = 1;
 // Зміна кількості в модалці (кнопки "+" та "-")
 function modalQtyChange(delta) {
   if (!currentProduct) return;
-  const existing = getModalCartItem();
+  const existing = getCartItem(currentProduct.id);
 
   // Якщо товар вже в кошику — одразу змінюємо кількість в кошику
   if (existing) {
     if (delta < 0 && existing.quantity === 1) {
       // Зменшення до 0 — видаляємо з кошика з анімацією
       closeModal();
-      setTimeout(() => cartQtyChange(itemVariantKey(existing), -1), 250);
+      setTimeout(() => cartQtyChange(currentProduct.id, -1), 250);
       return;
     }
     existing.quantity += delta;
@@ -2928,8 +2859,8 @@ function modalQtyChange(delta) {
     updateCardBadge(currentProduct.id);
 
     // Оновлюємо кількість та ціну в кошику для цього товару
-    const qtyEl = document.getElementById(`cart-qty-${encodeVariantKey(itemVariantKey(existing))}`);
-    const totalEl = document.querySelector(`#cart-total-${encodeVariantKey(itemVariantKey(existing))} .amount`);
+    const qtyEl = document.getElementById(`cart-qty-${currentProduct.id}`);
+    const totalEl = document.querySelector(`#cart-total-${currentProduct.id} .amount`);
     if (qtyEl) qtyEl.textContent = existing.quantity;
     if (totalEl) totalEl.textContent = existing.price * existing.quantity;
     updateCartTotal();
@@ -2956,7 +2887,7 @@ function updateModalAddBtn() {
     btn.classList.toggle('in-cart', picked);
     return;
   }
-  const existing = getModalCartItem();
+  const existing = getCartItem(currentProduct.id);
   const isContract = isContractProduct(currentProduct);
   if (existing) {
     btn.textContent = isContract
@@ -3051,17 +2982,8 @@ function addToCartFromModal() {
     filamentName = fm.name;
   }
 
-  if ((currentProduct.sizes || []).length && !selectedSize) {
-    alert('Обери розмір.');
-    return;
-  }
-  if ((currentProduct.designs || []).length && !selectedDesign) {
-    alert('Обери дизайн.');
-    return;
-  }
-
   // Якщо товар вже в кошику — оновлюємо кількість та кастомізацію (якщо індивідуальний)
-  const existing = getModalCartItem();
+  const existing = getCartItem(currentProduct.id);
   const prevGiftLineCount = getGiftEligibleToyLineCount();
 
   // Якщо кількість стала 0 або менше — видаляємо товар з кошика
@@ -3071,8 +2993,7 @@ function addToCartFromModal() {
     // Якщо товар індивідуальний і є кастомізація — оновлюємо її
     if (existing.quantity <= 0) {
       // Просто видаляємо без анімації/таймеру
-      const vKey = itemVariantKey(existing);
-      cart = cart.filter(i => itemVariantKey(i) !== vKey);
+      cart = cart.filter(i => i.id !== currentProduct.id);
     } else {
       if (currentProduct._isCustom && customVal) existing.customValue = customVal;
       if (!currentProduct._isCustom) {
@@ -3083,10 +3004,6 @@ function addToCartFromModal() {
           delete existing.filamentId;
           delete existing.filamentName;
         }
-        if (selectedSize) existing.size = selectedSize;
-        else delete existing.size;
-        if (selectedDesign) existing.design = selectedDesign;
-        else delete existing.design;
       }
     }
   } else {
@@ -3103,11 +3020,9 @@ function addToCartFromModal() {
         addedFrom: currentProduct._isCustom ? 'custom' : modalCartSource,
         cat: currentProduct.cat,
         emoji: currentProduct.emoji,
-        photos: modalPhotos.length ? modalPhotos : (currentProduct.photos || []),
+        photos: currentProduct.photos || [],
         customValue: customVal
       };
-      if (selectedSize) row.size = selectedSize;
-      if (selectedDesign) row.design = selectedDesign;
       if (wantFil && av.length) {
         row.filamentId = filamentId;
         row.filamentName = filamentName;
@@ -3178,11 +3093,11 @@ function buildCard(p, i, isCustom, pageSource) {
   const safeName = escapeHtml(p.name);
   const safeMat = escapeHtml(p.mat);
   const source = isCustom ? 'custom' : (pageSource || 'products');
-  const cartQty = getCartQuantityForProduct(p.id);
-  const inCart = cartQty > 0;
+  const cartItem = getCartItem(p.id);
+  const inCart = !!cartItem;
   const topBadges = [
     p.hot && pageSource !== 'popular' ? '<div class="card-badge">🔥 Хіт</div>' : '',
-    inCart ? `<div class="card-in-cart-badge">✓ ${cartQty} шт</div>` : ''
+    inCart ? `<div class="card-in-cart-badge">✓ ${cartItem.quantity} шт</div>` : ''
   ].filter(Boolean).join('');
   return `
     <div class="card" data-id="${p.id}" style="${_firstRender ? 'animation-delay:' + Math.min(i * 0.05, 0.3) + 's' : 'animation:none'}" onclick="openModal(${p.id}, '${source}')">
@@ -3207,13 +3122,13 @@ function buildCard(p, i, isCustom, pageSource) {
 
 // Оновлює бейдж "в кошику" на всіх картках з однаковим id (якщо товар додано або оновлено в кошику)
 function updateCardBadge(id) {
-  const cartQty = getCartQuantityForProduct(id);
+  const cartItem = getCartItem(id);
 
   document.querySelectorAll(`.card[data-id="${id}"]`).forEach(card => {
     const cardImg = card.querySelector('.card-img');
     let topBadges = card.querySelector('.card-top-badges');
     let badge = card.querySelector('.card-in-cart-badge');
-    if (cartQty > 0) {
+    if (cartItem && cartItem.quantity > 0) {
       if (!topBadges) {
         topBadges = document.createElement('div');
         topBadges.className = 'card-top-badges';
@@ -3224,7 +3139,7 @@ function updateCardBadge(id) {
         badge.className = 'card-in-cart-badge';
         topBadges.appendChild(badge);
       }
-      badge.textContent = `✓ ${cartQty} шт`;
+      badge.textContent = `✓ ${cartItem.quantity} шт`;
     } else {
       if (badge) badge.remove();
       if (topBadges && !topBadges.children.length) topBadges.remove();
@@ -3242,8 +3157,6 @@ let _firstRender = true;
 let currentProduct = null;
 let carouselIndex = 0;
 let modalPhotos = [];
-let selectedDesign = '';
-let selectedSize = '';
 let lbIndex = 0;
 let pinnedIndex = 0;
 let pinnedTimer = null;
@@ -3506,21 +3419,8 @@ function renderCart() {
   ` : '';
 
   // Спочатку рендеримо товарні позиції, потім — якщо потрібно — блок з подарунком, а потім — плашки "Повернути" для товарів що очікують видалення
-  list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => {
-    const vKey = encodeVariantKey(itemVariantKey(item));
-  const variantParts = [];
-  if (item.design) variantParts.push(`🎭 ${escapeHtml(item.design)}`);
-  if (item.size) variantParts.push(`📏 ${escapeHtml(item.size)}`);
-  const variantLine = variantParts.length ? variantParts.join(' · ') : '';
-  const subLine = item.customValue
-    ? escapeHtml(item.customValue)
-    : (variantLine
-      ? variantLine + (item.filamentName ? ` · PLA · ${escapeHtml(item.filamentName).toUpperCase()}` : '')
-      : (item.contractPrice && item.mat
-        ? escapeHtml(item.mat)
-        : (!item.fromCustom && item.filamentName ? `PLA · ${escapeHtml(item.filamentName).toUpperCase()}` : '&nbsp;')));
-  return `
-    <div class="cart-item" id="cart-item-${vKey}">
+  list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => `
+    <div class="cart-item" id="cart-item-${item.id}">
       <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}')">
         ${item.photos && item.photos.length > 0
           ? `<img src="${photo(item.photos[0], { w: 160 })}" alt="${item.name}" decoding="async" loading="lazy" crossorigin="anonymous">`
@@ -3529,29 +3429,32 @@ function renderCart() {
       <div class="cart-item-info">
         <div class="cart-item-top">
           <div class="cart-item-name">${escapeHtml(item.name)}</div>
-          <button class="cart-item-remove" onclick="cartRemoveItem('${vKey}')" aria-label="Видалити ${escapeHtml(item.name)}">
+          <button class="cart-item-remove" onclick="cartRemoveItem(${item.id})" aria-label="Видалити ${escapeHtml(item.name)}">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M9 3.75A1.75 1.75 0 0 0 7.25 5.5V6H5.5a.75.75 0 0 0 0 1.5h.7l.72 10.16A2.25 2.25 0 0 0 9.16 19.75h5.68a2.25 2.25 0 0 0 2.24-2.09l.72-10.16h.7a.75.75 0 0 0 0-1.5h-1.75v-.5A1.75 1.75 0 0 0 15 3.75H9Zm6.25 2.25V5.5a.25.25 0 0 0-.25-.25H9a.25.25 0 0 0-.25.25V6h6.5ZM9.42 8.75a.75.75 0 0 1 .75.7l.3 6a.75.75 0 1 1-1.5.08l-.3-6a.75.75 0 0 1 .7-.78h.05Zm5.16 0a.75.75 0 0 1 .7.78l-.3 6a.75.75 0 1 1-1.5-.08l.3-6a.75.75 0 0 1 .75-.7h.05ZM12 8.75a.75.75 0 0 1 .75.75v6a.75.75 0 0 1-1.5 0v-6A.75.75 0 0 1 12 8.75Z"/>
             </svg>
           </button>
         </div>
         <div class="cart-item-sub ${item.customValue ? 'is-accent' : ''}">
-          ${subLine}
+          ${item.customValue
+            ? escapeHtml(item.customValue)
+            : (item.contractPrice && item.mat
+              ? escapeHtml(item.mat)
+              : (!item.fromCustom && item.filamentName ? `PLA · ${escapeHtml(item.filamentName).toUpperCase()}` : '&nbsp;'))}
         </div>
         <div class="cart-item-bottom">
           <div class="cart-item-controls">
-            <button class="cart-qty-btn" onclick="cartQtyChange('${vKey}', -1)" aria-label="Зменшити кількість">−</button>
-            <span class="cart-qty-val" id="cart-qty-${vKey}">${item.quantity}</span>
-            <button class="cart-qty-btn" onclick="cartQtyChange('${vKey}', 1)" aria-label="Збільшити кількість">+</button>
+            <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, -1)" aria-label="Зменшити кількість">−</button>
+            <span class="cart-qty-val" id="cart-qty-${item.id}">${item.quantity}</span>
+            <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, 1)" aria-label="Збільшити кількість">+</button>
           </div>
           ${item.contractPrice
-            ? '<div class="cart-item-total contract" id="cart-total-' + vKey + '">Узгодимо</div>'
-            : `<div class="cart-item-total" id="cart-total-${vKey}"><span class="amount">${item.price * item.quantity}</span> <span class="currency">₴</span></div>`}
+            ? '<div class="cart-item-total contract" id="cart-total-' + item.id + '">Узгодимо</div>'
+            : `<div class="cart-item-total" id="cart-total-${item.id}"><span class="amount">${item.price * item.quantity}</span> <span class="currency">₴</span></div>`}
         </div>
       </div>
     </div>
-  `;
-  }).join('');
+  `).join('');
 
   // Відновлюємо плашки "Повернути" для товарів що ще не видалились
   Object.values(pendingRemovals).forEach(({ item, endsAt }) => {
@@ -3568,19 +3471,18 @@ function renderCart() {
 // Створює плашку "Повернути" для видаленого товару з прогрес-баром, що показує час до остаточного видалення
 function buildUndoBar(item, endsAt) {
   const DURATION = 3000;
-  const vKey = encodeVariantKey(itemVariantKey(item));
   const div = document.createElement('div');
   div.className = 'cart-undo-bar';
-  div.id = `undo-${vKey}`;
+  div.id = `undo-${item.id}`;
   div.innerHTML = `
     <span style="font-size:28px">${item.emoji}</span>
     <div style="flex:1">
       <div class="cart-undo-text">Повернути «${escapeHtml(item.name)}»</div>
       <div class="cart-undo-hint">Натисни щоб скасувати</div>
     </div>
-    <div class="cart-undo-progress" id="undo-prog-${vKey}"></div>
+    <div class="cart-undo-progress" id="undo-prog-${item.id}"></div>
   `;
-  div.addEventListener('click', () => undoRemove(vKey));
+  div.addEventListener('click', () => undoRemove(item.id));
 
   // Запускаємо прогрес-бар
   const prog = div.querySelector('.cart-undo-progress');
@@ -3597,12 +3499,12 @@ function buildUndoBar(item, endsAt) {
   return div;
 }
 
-function undoRemove(key) {
+function undoRemove(id) {
   if (isSubmitting) return;
-  const pending = pendingRemovals[key];
+  const pending = pendingRemovals[id];
   if (!pending) return;
   clearTimeout(pending.timeoutId);
-  delete pendingRemovals[key];
+  delete pendingRemovals[id];
 
   // Повертаємо товар в кошик
   cart.push(pending.item);
@@ -3611,21 +3513,20 @@ function undoRemove(key) {
   renderCart();
 }
 
-function cartQtyChange(key, delta) {
+function cartQtyChange(id, delta) {
   if (isSubmitting) return;
-  const item = getCartItemByKey(key);
+  const item = getCartItem(id);
   if (!item) return;
-  const productId = item.id;
 
   if (delta < 0 && item.quantity === 1) {
     // Видаляємо з кошика — запускаємо анімацію
     const savedItem = { ...item };
-    cart = cart.filter(i => itemVariantKey(i) !== decodeVariantKey(key));
+    cart = cart.filter(i => i.id !== id);
     saveCart();
     // Оновлюємо бейджі на картках
     updateCartBadge();
     // Якщо після видалення товару в кошику менше 3 унікальних позицій — прибираємо подарунок
-    updateCardBadge(productId);
+    updateCardBadge(id);
     // Якщо подарунок більше не потрібен — прибираємо його з кошика та скидаємо вибір
     if (!shouldShowGift() && selectedGift) {
       selectedGift = null;
@@ -3637,7 +3538,7 @@ function cartQtyChange(key, delta) {
     } 
 
     // Анімуємо слайд вліво
-    const el = document.getElementById(`cart-item-${key}`);
+    const el = document.getElementById(`cart-item-${id}`);
     if (el) {
       el.classList.add('removing');
       el.addEventListener('transitionend', () => {
@@ -3650,14 +3551,14 @@ function cartQtyChange(key, delta) {
           list.appendChild(bar);
 
           const timeoutId = setTimeout(() => {
-            delete pendingRemovals[key];
-            const b = document.getElementById(`undo-${key}`);
+            delete pendingRemovals[id];
+            const b = document.getElementById(`undo-${id}`);
             if (b) b.remove();
             // Якщо кошик тепер порожній — оновити вигляд
             if (!cart.length && !Object.keys(pendingRemovals).length) renderCart();
           }, 3000);
 
-          pendingRemovals[key] = { item: savedItem, timeoutId, endsAt };
+          pendingRemovals[id] = { item: savedItem, timeoutId, endsAt };
         }
       }, { once: true });
     } else {
@@ -3686,18 +3587,18 @@ function cartQtyChange(key, delta) {
   }
 
   // Точкове оновлення — без повного перерендеру
-  const qtyEl = document.getElementById(`cart-qty-${key}`);
-  const totalEl = document.querySelector(`#cart-total-${key} .amount`);
+  const qtyEl = document.getElementById(`cart-qty-${id}`);
+  const totalEl = document.querySelector(`#cart-total-${id} .amount`);
   if (qtyEl) qtyEl.textContent = item.quantity;
   if (totalEl) totalEl.textContent = item.price * item.quantity;
   updateCartTotal();
 }
 
-function cartRemoveItem(key) {
-  const item = getCartItemByKey(key);
+function cartRemoveItem(id) {
+  const item = getCartItem(id);
   if (!item) return;
   item.quantity = 1;
-  cartQtyChange(key, -1);
+  cartQtyChange(id, -1);
 }
 
 function updateCartTotal() {
@@ -3933,7 +3834,7 @@ function setupModalFilamentPicker() {
       ? selectedGift.filamentId
       : defaultFilamentId(currentProduct);
   } else {
-    const existing = getModalCartItem();
+    const existing = getCartItem(currentProduct.id);
     fid = existing?.filamentId || defaultFilamentId(currentProduct);
   }
     if (!av.find(f => f.id === fid)) fid = defaultFilamentId(currentProduct);
@@ -4579,34 +4480,9 @@ function filterCat(_, cat) {
   selectCategory(cat);
 }
 
-// ─── PRODUCT VARIANTS & PHOTO LINKS ─────────────────────────
-function mergeProductPhotos(product) {
-  const all = [...(product?.photos || [])];
-  (product?.designs || []).forEach(d => {
-    (d.photos || []).forEach(url => {
-      if (url && !all.includes(url)) all.push(url);
-    });
-  });
-  return all;
-}
-
-function getModalPhotos(product, designName) {
-  if (!product) return [];
-  const designs = product.designs || [];
-  if (designs.length) {
-    const name = designName || designs[0]?.name || '';
-    const d = designs.find(x => x.name === name);
-    if (d?.photos?.length) return d.photos;
-  }
-  return product.photos || [];
-}
-
+// ─── PHOTO DEEP LINKS ───────────────────────────────────────
 function getGlobalPhotoIndex() {
-  if (!currentProduct || !modalPhotos.length) return 0;
-  const url = modalPhotos[carouselIndex];
-  const all = mergeProductPhotos(currentProduct);
-  const idx = all.indexOf(url);
-  return idx >= 0 ? idx : carouselIndex;
+  return carouselIndex;
 }
 
 function buildProductShareLink(productId, photoIndex) {
@@ -4621,101 +4497,6 @@ function parseProductStartParam(startParam) {
   const m = rest.match(/^(\d+)(?:_p(\d+))?$/);
   if (!m) return null;
   return { id: parseInt(m[1], 10), photoIndex: m[2] != null ? parseInt(m[2], 10) : 0 };
-}
-
-function resolvePhotoDeepLink(product, globalPhotoIndex) {
-  const all = mergeProductPhotos(product);
-  if (!all.length) return { design: '', localIndex: 0 };
-  const safeIdx = Math.min(Math.max(0, globalPhotoIndex), all.length - 1);
-  const url = all[safeIdx];
-  const designs = product.designs || [];
-  if (designs.length && url) {
-    for (const d of designs) {
-      const localIdx = (d.photos || []).indexOf(url);
-      if (localIdx >= 0) return { design: d.name, localIndex: localIdx };
-    }
-  }
-  const localIdx = (product.photos || []).indexOf(url);
-  return { design: designs[0]?.name || '', localIndex: localIdx >= 0 ? localIdx : safeIdx };
-}
-
-function getModalCartItem() {
-  if (!currentProduct) return null;
-  return getCartItem(currentProduct.id, selectedSize, selectedDesign);
-}
-
-function renderVariantPickers() {
-  const designBlock = document.getElementById('m-design-block');
-  const sizeBlock = document.getElementById('m-size-block');
-  const designOpts = document.getElementById('m-design-options');
-  const sizeOpts = document.getElementById('m-size-options');
-  const designs = currentProduct?.designs || [];
-  const sizes = currentProduct?.sizes || [];
-
-  if (designBlock && designOpts) {
-    if (designs.length) {
-      designBlock.style.display = '';
-      designOpts.innerHTML = designs.map(d => {
-        const sel = d.name === selectedDesign ? ' selected' : '';
-        return `<button type="button" class="variant-chip${sel}" data-design="${escapeAttr(d.name)}">${escapeHtml(d.name)}</button>`;
-      }).join('');
-      designOpts.querySelectorAll('.variant-chip').forEach(btn => {
-        btn.addEventListener('click', () => selectDesign(btn.dataset.design));
-      });
-    } else {
-      designBlock.style.display = 'none';
-      designOpts.innerHTML = '';
-    }
-  }
-
-  if (sizeBlock && sizeOpts) {
-    if (sizes.length) {
-      sizeBlock.style.display = '';
-      sizeOpts.innerHTML = sizes.map(s => {
-        const sel = s === selectedSize ? ' selected' : '';
-        return `<button type="button" class="variant-chip${sel}" data-size="${escapeAttr(s)}">${escapeHtml(s)}</button>`;
-      }).join('');
-      sizeOpts.querySelectorAll('.variant-chip').forEach(btn => {
-        btn.addEventListener('click', () => selectSize(btn.dataset.size));
-      });
-    } else {
-      sizeBlock.style.display = 'none';
-      sizeOpts.innerHTML = '';
-    }
-  }
-}
-
-function selectDesign(name) {
-  if (!currentProduct || selectedDesign === name) return;
-  selectedDesign = name;
-  modalPhotos = getModalPhotos(currentProduct, selectedDesign);
-  buildCarousel(modalPhotos, 0);
-  renderVariantPickers();
-  const existing = getModalCartItem();
-  if (existing) modalQty = existing.quantity;
-  else modalQty = 1;
-  document.getElementById('m-qty').textContent = modalQty;
-  updateModalAddBtn();
-}
-
-function selectSize(name) {
-  if (!currentProduct || selectedSize === name) return;
-  selectedSize = name;
-  renderVariantPickers();
-  const existing = getModalCartItem();
-  if (existing) modalQty = existing.quantity;
-  else modalQty = 1;
-  document.getElementById('m-qty').textContent = modalQty;
-  updateModalAddBtn();
-}
-
-function setupModalVariants(options = {}) {
-  const designs = currentProduct?.designs || [];
-  const sizes = currentProduct?.sizes || [];
-  selectedDesign = designs.length ? (options.design || designs[0].name) : '';
-  selectedSize = sizes.length ? (options.size || sizes[0]) : '';
-  modalPhotos = getModalPhotos(currentProduct, selectedDesign);
-  renderVariantPickers();
 }
 
 // ─── CAROUSEL ───────────────────────────────────────────────
@@ -5143,16 +4924,11 @@ function openModal(id, source = 'products', options = {}) {
   }
   currentProduct._isCustom = source === 'custom';
 
-  let variantOpts = {};
-  if (options.photoIndex != null) {
-    const resolved = resolvePhotoDeepLink(currentProduct, options.photoIndex);
-    variantOpts = { design: resolved.design, size: currentProduct.sizes?.[0] || '' };
-    setupModalVariants(variantOpts);
-    buildCarousel(modalPhotos, resolved.localIndex);
-  } else {
-    setupModalVariants(variantOpts);
-    buildCarousel(modalPhotos, 0);
-  }
+  const photos = currentProduct.photos || [];
+  const startIdx = options.photoIndex != null
+    ? Math.min(Math.max(0, options.photoIndex), Math.max(0, photos.length - 1))
+    : 0;
+  buildCarousel(photos, startIdx);
 
   const discount = !currentProduct.contractPrice && currentProduct.oldPrice && currentProduct.price < currentProduct.oldPrice
     ? Math.round((1 - currentProduct.price / currentProduct.oldPrice) * 100) : 0;
@@ -5213,7 +4989,7 @@ function openModal(id, source = 'products', options = {}) {
   updateModalLayoutForMode();
 
     if (!modalGiftPreview) {
-    const existingInCart = getModalCartItem();
+    const existingInCart = getCartItem(currentProduct.id);
     modalQty = existingInCart ? existingInCart.quantity : 1;
     document.getElementById('m-qty').textContent = modalQty;
   }
@@ -5337,7 +5113,7 @@ function initModalSwipe() {
 
   // Обробник для початку дотику. Якщо користувач торкнувся поза межами каруселі, ми фіксуємо початкову позицію по Y для подальшого визначення напрямку свайпа.
   m.addEventListener('touchstart', e => {
-    if (e.target.closest('.carousel-wrap, .carousel-slide, .modal-close, .modal-share-btn, .filament-block, .filament-swatch, .variant-block, .variant-chip, button, input, textarea')) {
+    if (e.target.closest('.carousel-wrap, .carousel-slide, .modal-close, .modal-share-btn, .filament-block, .filament-swatch, button, input, textarea')) {
       modalSwipeStartY = null;
       return;
     }
@@ -5369,7 +5145,7 @@ function initModalSwipe() {
     let mouseDown = false;
 
   m.addEventListener('mousedown', e => {
-    if (e.target.closest('.modal-close, .modal-share-btn, .filament-block, .filament-swatch, .variant-block, .variant-chip, button, input, textarea')) {
+    if (e.target.closest('.modal-close, .modal-share-btn, .filament-block, .filament-swatch, button, input, textarea')) {
       modalSwipeStartY = null;
       return;
     }
@@ -5451,8 +5227,6 @@ async function submitOrderOnce() {
       customValue:  i.customValue || '',
       filament_id: i.fromCustom ? '' : (i.filamentId || ''),
       filament_name: i.fromCustom ? '' : (i.filamentName || ''),
-      size: i.size || '',
-      design: i.design || '',
       comment:      comment,
     })),
     total_price:  total,
