@@ -2697,7 +2697,8 @@ let cart = [];
 let isSubmitting = false;
 let pendingIdempotencyKey = null;
 let submitOrderPromise = null;
-const MIN_LOADING_MS = 600;
+const MIN_LOADING_MS = 2200;
+const LOADING_STEP_MS = 1500;
 const ORDER_LOADING_STEPS = [
   'Перевіряємо товари…',
   'Застосовуємо знижки…',
@@ -2751,7 +2752,7 @@ function startLoadingStepRotation() {
   loadingStepTimer = setInterval(() => {
     loadingStepIndex = (loadingStepIndex + 1) % ORDER_LOADING_STEPS.length;
     stepEl.textContent = ORDER_LOADING_STEPS[loadingStepIndex];
-  }, 500);
+  }, LOADING_STEP_MS);
 }
 
 function stopLoadingStepRotation() {
