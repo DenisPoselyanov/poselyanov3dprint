@@ -100,6 +100,22 @@ def _row_to_product(row: dict) -> dict:
         p["luminousFilamentChoice"] = bool(row.get("luminous_filament_choice", row.get("luminousFilamentChoice")))
     if custom_fields:
         p["custom_fields"] = custom_fields
+    sizes = row.get("sizes") or []
+    if isinstance(sizes, str):
+        try:
+            sizes = json.loads(sizes)
+        except json.JSONDecodeError:
+            sizes = []
+    if sizes:
+        p["sizes"] = sizes
+    designs = row.get("designs") or []
+    if isinstance(designs, str):
+        try:
+            designs = json.loads(designs)
+        except json.JSONDecodeError:
+            designs = []
+    if designs:
+        p["designs"] = designs
     return p
 
 
@@ -175,6 +191,8 @@ def init_catalog_tables(conn) -> None:
     conn.execute(
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false"
     )
+    conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes JSONB DEFAULT '[]'")
+    conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS designs JSONB DEFAULT '[]'")
     sync_products_id_sequence(conn)
 
 
@@ -403,8 +421,8 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
         """
         INSERT INTO products (
             category_id, name, emoji, mat, price, old_price, photos, custom_fields,
-            hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, active
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
+            hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, sizes, designs, active
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, true)
         RETURNING id
         """,
         (
@@ -424,6 +442,8 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
             product.get("stlLink", ""),
             bool(product.get("contractPrice")),
             is_custom,
+            json.dumps(product.get("sizes") or []),
+            json.dumps(product.get("designs") or []),
         ),
     )
     new_id = cur.fetchone()[0]
@@ -468,6 +488,8 @@ def add_product(data: dict):
             product["filamentChoice"] = data.get("filamentChoice", True)
             if product["filamentChoice"] and data.get("luminousFilamentChoice"):
                 product["luminousFilamentChoice"] = True
+        product["sizes"] = data.get("sizes") or []
+        product["designs"] = data.get("designs") or []
 
         if use_catalog_db():
             new_id = _insert_product_db(product, is_custom)
@@ -510,6 +532,10 @@ def update_product(product_id: int, data: dict):
             "stlLink": data.get("stlLink", product.get("stlLink", "")),
             "cat": next_category,
         })
+        if "sizes" in data:
+            product["sizes"] = data.get("sizes") or []
+        if "designs" in data:
+            product["designs"] = data.get("designs") or []
 
         contract_price = bool(data.get("contractPrice"))
         if contract_price:
@@ -563,7 +589,8 @@ def update_product(product_id: int, data: dict):
                 UPDATE products SET
                     category_id = %s, name = %s, emoji = %s, mat = %s, price = %s, old_price = %s,
                     photos = %s::jsonb, custom_fields = %s, hot = %s, gift = %s, filament_choice = %s,
-                    luminous_filament_choice = %s, pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s
+                    luminous_filament_choice = %s, pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s,
+                    sizes = %s::jsonb, designs = %s::jsonb
                 WHERE id = %s
                 """,
                 (
@@ -575,8 +602,12 @@ def update_product(product_id: int, data: dict):
                     bool(product.get("filamentChoice", True)),
                     bool(product.get("luminousFilamentChoice")),
                     bool(product.get("pinned")),
-                    product.get("stlLink", ""), bool(product.get("contractPrice")),
-                    is_next_custom, product_id,
+                    product.get("stlLink", ""),
+                    bool(product.get("contractPrice")),
+                    is_next_custom,
+                    json.dumps(product.get("sizes") or []),
+                    json.dumps(product.get("designs") or []),
+                    product_id,
                 ),
             )
             conn.commit()

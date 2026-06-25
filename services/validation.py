@@ -67,6 +67,30 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                     return False, "Цей колір недоступний для обраного товару"
                 filament_name = str(meta.get("name") or "").strip()
 
+        size = str(raw.get("size") or "").strip()
+        design = str(raw.get("design") or "").strip()
+        if product and not raw.get("fromCustom"):
+            product_sizes = product.get("sizes") or []
+            product_designs = product.get("designs") or []
+            if product_sizes:
+                if not size:
+                    return False, f"Оберіть розмір для «{product.get('name', '')}»"
+                if size not in product_sizes:
+                    return False, f"Невідомий розмір «{size}» для товару «{product.get('name', '')}»"
+            else:
+                size = ""
+            if product_designs:
+                design_names = [d.get("name") for d in product_designs if d.get("name")]
+                if not design:
+                    return False, f"Оберіть дизайн для «{product.get('name', '')}»"
+                if design not in design_names:
+                    return False, f"Невідомий дизайн «{design}» для товару «{product.get('name', '')}»"
+            else:
+                design = ""
+        else:
+            size = ""
+            design = ""
+
         if not is_contract:
             subtotal += price * qty
         normalized.append(
@@ -79,6 +103,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                 "fromCustom": bool(raw.get("fromCustom")),
                 "filament_id": filament_id,
                 "filament_name": filament_name,
+                "size": size,
+                "design": design,
                 "is_contract_price": is_contract,
                 "comment": (raw.get("comment") or "").strip(),
             }

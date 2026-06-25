@@ -265,6 +265,10 @@ def _client_item_line(item: dict) -> str:
     line = f"{name} × {qty}"
     if item.get("filament_name"):
         line += f" · 🎨 {escape(item['filament_name'])}"
+    if item.get("size"):
+        line += f" · 📏 {escape(item['size'])}"
+    if item.get("design"):
+        line += f" · 🎭 {escape(item['design'])}"
     if item.get("is_contract_price"):
         line += " · договірна ціна"
     return f"<li>{line}</li>"
@@ -344,6 +348,12 @@ def _admin_item_line(item: dict, *, linked: bool = True) -> str:
     filament = (item.get("filament_name") or item.get("filament") or "").strip()
     if filament:
         line += f" · 🎨 {escape(filament)}"
+    size = (item.get("size") or "").strip()
+    if size:
+        line += f" · 📏 {escape(size)}"
+    design = (item.get("design") or "").strip()
+    if design:
+        line += f" · 🎭 {escape(design)}"
     custom = item.get("customValue")
     if custom:
         line += f" <i>{escape(custom)}</i>"
@@ -525,6 +535,12 @@ def build_client_price_quote(order_id: int, total_price: int, items: list[dict])
         fl = (item.get("filament") or "").strip()
         if fl:
             line += f" · 🎨 {escape(fl)}"
+        sz = (item.get("size") or "").strip()
+        if sz:
+            line += f" · 📏 {escape(sz)}"
+        dg = (item.get("design") or "").strip()
+        if dg:
+            line += f" · 🎭 {escape(dg)}"
         if price > 0:
             line += f" — {price * qty} ₴"
         parts.append(f"<li>{line}</li>")
@@ -571,6 +587,12 @@ def build_order_history(orders: list[dict], items_by_order: dict[int, list], fir
                 subtotal = price * qty
                 qty_str = f" × {qty}" if qty > 1 else ""
                 fl_str = f" · 🎨 {escape(fl)}" if fl else ""
+                sz = (item.get("size") or "").strip()
+                dg = (item.get("design") or "").strip()
+                if sz:
+                    fl_str += f" · 📏 {escape(sz)}"
+                if dg:
+                    fl_str += f" · 🎭 {escape(dg)}"
                 parts.append(f"<li>{escape(name)}{qty_str} — {subtotal} ₴{fl_str}</li>")
 
         parts.append("</ul>")
