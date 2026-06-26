@@ -36,8 +36,8 @@ def init_db() -> None:
                 id BIGINT PRIMARY KEY,
                 name TEXT,
                 username TEXT,
-                blocked INTEGER DEFAULT 0,
-                joined_at TIMESTAMPTZ DEFAULT NOW()
+                blocked INTEGER NOT NULL DEFAULT 0,
+                joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
         conn.execute("""
@@ -49,10 +49,10 @@ def init_db() -> None:
                 total_price INTEGER,
                 comment TEXT,
                 gift_product_name TEXT,
-                status TEXT DEFAULT 'new',
+                status TEXT NOT NULL DEFAULT 'new',
                 coupon_code TEXT,
-                discount_amount INTEGER DEFAULT 0,
-                ordered_at TIMESTAMPTZ DEFAULT NOW()
+                discount_amount INTEGER NOT NULL DEFAULT 0,
+                ordered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
         conn.execute("""
@@ -62,8 +62,8 @@ def init_db() -> None:
                 product_id BIGINT,
                 product_name TEXT,
                 price INTEGER,
-                quantity INTEGER DEFAULT 1,
-                filament TEXT DEFAULT ''
+                quantity INTEGER NOT NULL DEFAULT 1,
+                filament TEXT NOT NULL DEFAULT ''
             )
         """)
         conn.execute("""
@@ -71,11 +71,11 @@ def init_db() -> None:
                 code TEXT PRIMARY KEY,
                 type TEXT NOT NULL,
                 value INTEGER NOT NULL,
-                min_order INTEGER DEFAULT 0,
-                uses_max INTEGER DEFAULT 0,
-                uses_count INTEGER DEFAULT 0,
-                one_per_user INTEGER DEFAULT 0,
-                active INTEGER DEFAULT 1,
+                min_order INTEGER NOT NULL DEFAULT 0,
+                uses_max INTEGER NOT NULL DEFAULT 0,
+                uses_count INTEGER NOT NULL DEFAULT 0,
+                one_per_user INTEGER NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 1,
                 expires_at TIMESTAMPTZ,
                 personal_user_id BIGINT
             )
@@ -86,7 +86,7 @@ def init_db() -> None:
                 code TEXT NOT NULL,
                 user_id BIGINT NOT NULL,
                 order_id BIGINT,
-                used_at TIMESTAMPTZ DEFAULT NOW()
+                used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
         conn.execute("""
@@ -103,7 +103,7 @@ def init_db() -> None:
                 idempotency_key TEXT NOT NULL,
                 order_id BIGINT NOT NULL,
                 is_new INTEGER NOT NULL DEFAULT 1,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 UNIQUE (user_id, idempotency_key)
             )
         """)
@@ -114,7 +114,9 @@ def init_db() -> None:
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_pending INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS channel_message_id BIGINT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_code ON coupon_uses(code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked)")
         init_catalog_tables(conn)
     else:

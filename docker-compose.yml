@@ -5,16 +5,23 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - .:/app
+      - ./data:/app/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('localhost', 8080), 2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   ngrok:
     image: ngrok/ngrok:latest
-    command: http --domain=gargle-postal-everglade.ngrok-free.dev http://bot:8080 --log=stdout
+    command: http --domain=${NGROK_DOMAIN} http://bot:8080 --log=stdout
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
     ports:
       - "4040:4040"
     depends_on:
-      - bot
+      bot:
+        condition: service_healthy
     restart: unless-stopped

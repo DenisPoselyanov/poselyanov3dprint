@@ -9,7 +9,7 @@ Group=poselyanov
 WorkingDirectory=/opt/poselyanov3dprint
 EnvironmentFile=/etc/poselyanov3dprint/.env
 ExecStart=/opt/poselyanov3dprint/.venv/bin/python bot.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 
 [Install]

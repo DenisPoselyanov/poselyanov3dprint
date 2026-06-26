@@ -2510,8 +2510,8 @@
             menu.innerHTML = `
                 <button class="filter-option ${currentFilter === '' ? 'active' : ''}" data-value="" data-label="📦 Всі категорії" type="button" onclick="selectCategory('')"><span>📦 Всі категорії</span><span class="filter-check">✓</span></button>
                 ${allCategories.map(cat => `
-                    <button class="filter-option ${currentFilter === cat.id ? 'active' : ''}" data-value="${cat.id}" data-label="${cat.emoji} ${cat.name}" type="button" onclick="selectCategory('${cat.id}')">
-                        <span>${cat.emoji} ${cat.name}</span><span class="filter-check">✓</span>
+                    <button class="filter-option ${currentFilter === cat.id ? 'active' : ''}" data-value="${escapeAttr(cat.id)}" data-label="${escapeAttr(cat.emoji + ' ' + cat.name)}" type="button" onclick="selectCategory('${escapeAttr(cat.id)}')">
+                        <span>${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}</span><span class="filter-check">✓</span>
                     </button>
                 `).join('')}
             `;
@@ -2520,7 +2520,7 @@
         function renderCategorySelectOptions() {
             const select = document.getElementById('productCategorySelect');
             const currentValue = select.value;
-            select.innerHTML = '<option value="">Вибрати категорію...</option>' + allCategories.map(cat => `<option value="${cat.id}">${cat.emoji} ${cat.name}</option>`).join('');
+            select.innerHTML = '<option value="">Вибрати категорію...</option>' + allCategories.map(cat => `<option value="${escapeAttr(cat.id)}">${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}</option>`).join('');
             if (allCategories.some(cat => cat.id === currentValue)) {
                 select.value = currentValue;
             }
@@ -2688,18 +2688,18 @@
             host.innerHTML = quickCategories.map((cat, idx) => `
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--bg-card);">
                     <div style="display:flex; flex-direction:column; gap:6px; min-width:0; flex:1;">
-                        <div style="font-weight:600;">${idx + 1}. ${cat.emoji} ${cat.name}</div>
+                        <div style="font-weight:600;">${idx + 1}. ${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}</div>
                         <select onchange="setQuickCategory(${idx}, this.value)" style="padding:8px 10px; border:1px solid var(--border-alt); border-radius:8px; font-size:13px; background:var(--bg-input); color:var(--text-main);">
                             ${eligibleCategories.map(option => `
-                                <option value="${option.id}" ${option.id === cat.id ? 'selected' : ''}>
-                                    ${option.emoji} ${option.name}
+                                <option value="${escapeAttr(option.id)}" ${option.id === cat.id ? 'selected' : ''}>
+                                    ${escapeHtml(option.emoji)} ${escapeHtml(option.name)}
                                 </option>
                             `).join('')}
                         </select>
                     </div>
                     <div style="display:flex; gap:6px;">
-                        <button class="btn btn-secondary" type="button" onclick="moveQuickCategory('${cat.id}', -1)" style="padding:6px 10px;" ${idx === 0 ? 'disabled' : ''}>↑</button>
-                        <button class="btn btn-secondary" type="button" onclick="moveQuickCategory('${cat.id}', 1)" style="padding:6px 10px;" ${idx === quickCategories.length - 1 ? 'disabled' : ''}>↓</button>
+                        <button class="btn btn-secondary" type="button" onclick="moveQuickCategory('${escapeAttr(cat.id)}', -1)" style="padding:6px 10px;" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                        <button class="btn btn-secondary" type="button" onclick="moveQuickCategory('${escapeAttr(cat.id)}', 1)" style="padding:6px 10px;" ${idx === quickCategories.length - 1 ? 'disabled' : ''}>↓</button>
                     </div>
                 </div>
             `).join('');
@@ -2838,6 +2838,10 @@
             }
         }
 
+        function safeHexColor(hex) {
+            return /^#[0-9a-fA-F]{3,6}$/.test(String(hex || '')) ? hex : '#ccc';
+        }
+
         function renderFilamentsManager() {
             const list = document.getElementById('filamentsList');
             if (!allFilaments.length) {
@@ -2852,14 +2856,16 @@
                 return String(a.name || '').localeCompare(String(b.name || ''), 'uk');
             });
 
-            list.innerHTML = sortedFilaments.map(f => `
-                <div data-filament-id="${f.id}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${f.available ? '#d1fae5' : 'var(--border)'}; border-radius:12px; padding:14px 16px; background:${f.available ? 'var(--bg-card)' : 'var(--bg-surface-alt)'}; opacity:${f.available ? '1' : '0.7'};">
+            list.innerHTML = sortedFilaments.map(f => {
+                const safeHex = safeHexColor(f.hex);
+                return `
+                <div data-filament-id="${escapeAttr(f.id)}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${f.available ? '#d1fae5' : 'var(--border)'}; border-radius:12px; padding:14px 16px; background:${f.available ? 'var(--bg-card)' : 'var(--bg-surface-alt)'}; opacity:${f.available ? '1' : '0.7'};">
                     <div style="display:flex; align-items:center; gap:12px;">
-                        <span style="display:inline-block; width:20px; height:20px; border-radius:50%; border:1px solid var(--border-input); background:${f.hex || '#ccc'}; box-shadow:${f.available ? '0 0 0 2px rgba(16,185,129,0.18)' : 'none'};"></span>
+                        <span style="display:inline-block; width:20px; height:20px; border-radius:50%; border:1px solid var(--border-input); background:${safeHex}; box-shadow:${f.available ? '0 0 0 2px rgba(16,185,129,0.18)' : 'none'};"></span>
                         <div>
-                            <div style="font-weight:700;">${f.name}</div>
+                            <div style="font-weight:700;">${escapeHtml(f.name)}</div>
                             <div style="font-size:12px; color:var(--text-muted);">
-                                ID: ${f.id} · ${f.hex}
+                                ID: ${escapeHtml(f.id)} · ${escapeHtml(safeHex)}
                                 ${String(f.id || '').startsWith('luminous') ? ' · 🌙 Світиться вночі' : ''}
                             </div>
                         </div>
@@ -2868,10 +2874,11 @@
                         <span style="font-size:12px; font-weight:700; padding:6px 10px; border-radius:999px; background:${f.available ? '#d1fae5' : 'var(--border)'}; color:${f.available ? '#065f46' : 'var(--text-toggle)'};">
                             ${f.available ? 'В наявності' : 'Відсутній'}
                         </span>
-                    <button class="btn btn-secondary" type="button" onclick="openFilamentModal('${f.id}')" style="padding:8px 12px;">✏️ Редагувати</button>
+                    <button class="btn btn-secondary" type="button" onclick="openFilamentModal('${escapeAttr(f.id)}')" style="padding:8px 12px;">✏️ Редагувати</button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
 
         async function loadFilaments() {
@@ -3670,7 +3677,7 @@
             const preview = document.getElementById('photoPreview');
             preview.innerHTML = uploadedPhotos.map((url, i) => `
                 <div class="preview-item" draggable="true" data-index="${i}">
-                    <img src="${url}" alt="фото">
+                    <img src="${escapeAttr(url)}" alt="фото">
                     <button type="button" class="remove" onclick="removePhoto(${i})">×</button>
                 </div>
             `).join('');

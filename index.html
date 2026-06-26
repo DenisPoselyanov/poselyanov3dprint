@@ -2563,7 +2563,13 @@ const API_BASE = (window.SharedApp && window.SharedApp.resolveApiBase()) || (() 
   const h = location.hostname;
   if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8080';
   if (h.includes('ngrok-free.dev') || h.includes('ngrok-free.app')) return location.origin;
-  return window.__API_BASE__ || 'https://api.yourdomain.ua';
+  if (window.__API_BASE__) return String(window.__API_BASE__).replace(/\/$/, '');
+  if (h.includes('github.io')) {
+    const msg = 'API URL не налаштовано: підключіть api-config.js з window.__API_BASE__';
+    console.error('[poselyanov3dprint]', msg);
+    throw new Error(msg);
+  }
+  return location.origin;
 })();
 
 function apiHeaders() {
@@ -2597,20 +2603,8 @@ async function apiPost(path, body) {
   return data;
 }
 
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function escapeAttr(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;');
-}
+const escapeHtml = (str) => (window.SharedApp ? window.SharedApp.escapeHtml(str) : String(str ?? ''));
+const escapeAttr = (str) => (window.SharedApp ? window.SharedApp.escapeAttr(str) : String(str ?? ''));
 
 function setGridHtml(grid, html) {
   const tpl = document.createElement('template');
@@ -3102,8 +3096,8 @@ function buildCard(p, i, isCustom, pageSource) {
   return `
     <div class="card" data-id="${p.id}" style="${_firstRender ? 'animation-delay:' + Math.min(i * 0.05, 0.3) + 's' : 'animation:none'}" onclick="openModal(${p.id}, '${source}')">
       <div class="card-img">
-        ${hasPhotos ? `<img src="${photo(p.photos[0])}" alt="${escapeHtml(p.name)}" loading="lazy" decoding="async" crossorigin="anonymous">` : ''}
-        <span style="position:relative;z-index:1">${hasPhotos ? '' : p.emoji}</span>
+        ${hasPhotos ? `<img src="${escapeAttr(photo(p.photos[0]))}" alt="${escapeAttr(p.name)}" loading="lazy" decoding="async" crossorigin="anonymous">` : ''}
+        <span style="position:relative;z-index:1">${hasPhotos ? '' : escapeHtml(p.emoji)}</span>
         ${topBadges ? `<div class="card-top-badges">${topBadges}</div>` : ''}
         ${discount ? `<div class="card-sale-badge">−${discount}%</div>` : ''}
         ${isCustom ? '<div class="card-custom-badge">✏️ Індив.</div>' : ''}
@@ -3232,8 +3226,8 @@ function openGiftModal() {
       <div class="gift-option${selectedGift?.id === p.id ? ' selected' : ''}" onclick="selectGift(${p.id})">
             <div class="gift-option-emoji" onclick="event.stopPropagation(); previewGift(${p.id})" style="cursor:pointer;position:relative;width:36px;height:36px;flex-shrink:0;" title="Переглянути товар">
         ${p.photos && p.photos.length > 0
-          ? `<img src="${photo(p.photos[0], { w: 120 })}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${escapeHtml(p.name)}" decoding="async" loading="lazy" crossorigin="anonymous">`
-          : p.emoji}
+          ? `<img src="${escapeAttr(photo(p.photos[0], { w: 120 }))}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${escapeAttr(p.name)}" decoding="async" loading="lazy" crossorigin="anonymous">`
+          : escapeHtml(p.emoji)}
       </div>
       <div class="gift-option-info">
         <div class="gift-option-name">${escapeHtml(p.name)}</div>
@@ -3423,8 +3417,8 @@ function renderCart() {
     <div class="cart-item" id="cart-item-${item.id}">
       <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}')">
         ${item.photos && item.photos.length > 0
-          ? `<img src="${photo(item.photos[0], { w: 160 })}" alt="${item.name}" decoding="async" loading="lazy" crossorigin="anonymous">`
-          : item.emoji}
+          ? `<img src="${escapeAttr(photo(item.photos[0], { w: 160 }))}" alt="${escapeAttr(item.name)}" decoding="async" loading="lazy" crossorigin="anonymous">`
+          : escapeHtml(item.emoji)}
       </div>
       <div class="cart-item-info">
         <div class="cart-item-top">
@@ -3475,7 +3469,7 @@ function buildUndoBar(item, endsAt) {
   div.className = 'cart-undo-bar';
   div.id = `undo-${item.id}`;
   div.innerHTML = `
-    <span style="font-size:28px">${item.emoji}</span>
+    <span style="font-size:28px">${escapeHtml(item.emoji)}</span>
     <div style="flex:1">
       <div class="cart-undo-text">Повернути «${escapeHtml(item.name)}»</div>
       <div class="cart-undo-hint">Натисни щоб скасувати</div>
@@ -4068,9 +4062,9 @@ function buildCategoryRoundButtons() {
   const host = document.getElementById('categories-circles');
   if (!host) return;
   setGridHtml(host, MAIN_CATEGORIES.map(cat => `
-    <button class="category-circle-btn" type="button" onclick="selectCategory('${cat}')">
-      <div class="category-circle-icon">${CAT_ICONS[cat] || '📦'}</div>
-      <div class="category-circle-name">${(CAT_LABELS[cat] || cat).replace(/^[^\s]+\s/, '')}</div>
+    <button class="category-circle-btn" type="button" onclick="selectCategory('${escapeAttr(cat)}')">
+      <div class="category-circle-icon">${escapeHtml(CAT_ICONS[cat] || '📦')}</div>
+      <div class="category-circle-name">${escapeHtml((CAT_LABELS[cat] || cat).replace(/^[^\s]+\s/, ''))}</div>
     </button>
   `).join(''));
 }
@@ -4095,12 +4089,12 @@ function buildCategoriesOverlay() {
     const theme = CAT_COLORS[cat] || { iconBg: '#dbe5f5', badgeBg: '#4f6ea1' };
     const name = (CAT_LABELS[cat] || cat).replace(/^[^\s]+\s/, '');
     return `
-      <button class="category-rect-card" type="button" onclick="selectCategory('${cat}')">
+      <button class="category-rect-card" type="button" onclick="selectCategory('${escapeAttr(cat)}')">
         <span class="category-rect-top">
-          <span class="category-rect-icon" style="background:${theme.iconBg};">${CAT_ICONS[cat] || '📦'}</span>
+          <span class="category-rect-icon" style="background:${theme.iconBg};">${escapeHtml(CAT_ICONS[cat] || '📦')}</span>
           <span class="category-rect-badge" style="background:${theme.badgeBg};">${count}</span>
         </span>
-        <span class="category-rect-name">${name}</span>
+        <span class="category-rect-name">${escapeHtml(name)}</span>
       </button>
     `;
   }).join(''));
@@ -4157,8 +4151,8 @@ function renderSearchFiltersOverlay() {
     const isActive = searchFilterDraftCats.includes(cat);
     const name = (CAT_LABELS[cat] || cat).replace(/^[^\s]+\s/, '');
     return `
-      <button class="search-filter-cat${isActive ? ' active' : ''}" type="button" onclick="toggleSearchFilterCategory('${cat}')">
-        <span>${CAT_ICONS[cat] || '📦'}</span><span>${name}</span>
+      <button class="search-filter-cat${isActive ? ' active' : ''}" type="button" onclick="toggleSearchFilterCategory('${escapeAttr(cat)}')">
+        <span>${escapeHtml(CAT_ICONS[cat] || '📦')}</span><span>${escapeHtml(name)}</span>
       </button>
     `;
   }).join('');
@@ -4430,7 +4424,7 @@ function renderPinnedProducts() {
   setGridHtml(track, pinned.map(p => `
     <div class="pinned-card" onclick="openModal(${p.id}, 'products')">
       <div class="pinned-thumb">
-        ${p.photos?.length ? `<img src="${photo(p.photos[0])}" alt="${escapeAttr(p.name)}" crossorigin="anonymous">` : escapeHtml(p.emoji || '📦')}
+        ${p.photos?.length ? `<img src="${escapeAttr(photo(p.photos[0]))}" alt="${escapeAttr(p.name)}" crossorigin="anonymous">` : escapeHtml(p.emoji || '📦')}
         ${p.contractPrice ? '<div class="card-contract-badge">🤝 Договірна</div>' : ''}
       </div>
       <div>
@@ -4529,7 +4523,7 @@ function buildCarousel(photos, startIndex = 0) {
 
   track.innerHTML = modalPhotos.map((url, i) => `
     <div class="carousel-slide" onclick="openLightbox(${i})">
-      <img src="${photo(url, { w: 1000 })}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async" crossorigin="anonymous">
+      <img src="${escapeAttr(photo(url, { w: 1000 }))}" alt="фото ${i+1}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async" crossorigin="anonymous">
       ${isAnimatedPhoto(url) ? '<div class="gif-badge">Анім.</div>' : ''}
     </div>
   `).join('');
@@ -4701,7 +4695,7 @@ function openLightbox(startIndex) {
   const dots  = document.getElementById('lb-dots');
 
   track.innerHTML = photos.map((url, i) =>
-    `<div class="lightbox-slide"><img src="${photo(url, { w: 1400 })}" alt="фото ${i+1}" loading="lazy" decoding="async" crossorigin="anonymous"></div>`
+    `<div class="lightbox-slide"><img src="${escapeAttr(photo(url, { w: 1400 }))}" alt="фото ${i+1}" loading="lazy" decoding="async" crossorigin="anonymous"></div>`
   ).join('');
 
   dots.innerHTML = photos.map((_, i) =>

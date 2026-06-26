@@ -23,31 +23,41 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
 
     subtotal = 0
     normalized = []
+    seen_line_keys: set[tuple] = set()
 
     for raw in items:
         pid = int(raw.get("product_id") or raw.get("id") or 0)
-        qty = max(1, min(99, int(raw.get("quantity", 1))))
+        try:
+            qty = int(raw.get("quantity", 1))
+        except (TypeError, ValueError):
+            return False, "Невірна кількість товару"
+        if qty < 1 or qty > 99:
+            return False, "Кількість товару має бути від 1 до 99"
+
         product = products_by_id.get(pid)
         is_contract = False
 
-        if product:
-            if is_contract_product(product):
-                price = 0
-                is_contract = True
-            else:
-                price = int(product["price"])
-            name = product["name"]
-        elif raw.get("fromCustom"):
-            price = int(raw.get("price", 0))
-            name = raw.get("product_name") or "—"
-            if price <= 0:
-                return False, f"Невідомий індивідуальний товар (id {pid})"
-        else:
+        if not product:
             return False, f"Невідомий товар (id {pid})"
+
+        if is_contract_product(product):
+            price = 0
+            is_contract = True
+        else:
+            price = int(product["price"])
+            if price <= 0:
+                return False, f"Невалідна ціна товару «{product.get('name', pid)}»"
+        name = product["name"]
 
         filament_id = str(raw.get("filament_id") or raw.get("filamentId") or "").strip()
         filament_name = ""
-        if raw.get("fromCustom"):
+        is_custom_product = bool(
+            product.get("is_custom")
+            or product.get("isCustom")
+            or product.get("cat") == "custom"
+            or raw.get("fromCustom")
+        )
+        if is_custom_product:
             filament_id = ""
             filament_name = ""
         else:
@@ -67,6 +77,12 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                     return False, "Цей колір недоступний для обраного товару"
                 filament_name = str(meta.get("name") or "").strip()
 
+        custom_value = (raw.get("customValue") or "").strip()
+        line_key = (pid, filament_id, custom_value)
+        if line_key in seen_line_keys:
+            return False, f"Дублікат товару в кошику (id {pid})"
+        seen_line_keys.add(line_key)
+
         if not is_contract:
             subtotal += price * qty
         normalized.append(
@@ -75,8 +91,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                 "product_name": name,
                 "price": price,
                 "quantity": qty,
-                "customValue": raw.get("customValue") or "",
-                "fromCustom": bool(raw.get("fromCustom")),
+                "customValue": custom_value,
+                "fromCustom": is_custom_product,
                 "filament_id": filament_id,
                 "filament_name": filament_name,
                 "is_contract_price": is_contract,

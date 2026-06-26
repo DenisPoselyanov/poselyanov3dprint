@@ -12,6 +12,7 @@ TABLES_IN_ORDER = [
     "coupons",
     "coupon_uses",
     "filament_colors",
+    "order_idempotency",
 ]
 
 
@@ -28,7 +29,7 @@ def rows_from_sqlite(sqlite_path: str, table_name: str):
 def truncate_tables(pg_conn):
     with pg_conn.cursor() as cur:
         cur.execute(
-            "TRUNCATE TABLE coupon_uses, order_items, orders, coupons, filament_colors, users RESTART IDENTITY CASCADE"
+            "TRUNCATE TABLE order_idempotency, coupon_uses, order_items, orders, coupons, filament_colors, users RESTART IDENTITY CASCADE"
         )
 
 

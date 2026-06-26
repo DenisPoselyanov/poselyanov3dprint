@@ -29,10 +29,7 @@ def load_json(name: str):
 
 def migrate(database_url: str, truncate: bool = False) -> None:
     config.DATABASE_URL = database_url
-    object.__setattr__(config, "DB_BACKEND", "postgres") if hasattr(config, "__dict__") else None
-    import os
-    os.environ["DB_BACKEND"] = "postgres"
-    os.environ["DATABASE_URL"] = database_url
+    config.DB_BACKEND = "postgres"
 
     conn = db_connect()
     init_catalog_tables(conn)

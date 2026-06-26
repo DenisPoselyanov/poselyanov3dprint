@@ -12,9 +12,14 @@ from telegram.ext import (
     filters,
 )
 
+from handlers.errors import telegram_error_handler
+
+TELEGRAM_ALLOWED_UPDATES = ["message", "callback_query"]
+
 
 def register_telegram_handlers(app: Application, handlers) -> None:
     """Attach Telegram command, message, and callback handlers."""
+    app.add_error_handler(telegram_error_handler)
     app.add_handler(TypeHandler(Update, handlers.auto_register_user), group=-1)
 
     app.add_handler(CommandHandler("catalog", handlers.catalog))

@@ -122,13 +122,16 @@ CREATE TABLE IF NOT EXISTS filament_colors (
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id);
+CREATE INDEX IF NOT EXISTS idx_coupon_uses_code ON coupon_uses(code);
 CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked);
 
 -- RLS: service role (bot) bypasses; anon read-only for catalog if needed
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE filaments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE filament_colors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;

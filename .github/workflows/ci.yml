@@ -14,7 +14,9 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements-dev.txt
-      - run: python -m py_compile bot.py config.py auth.py catalog_store.py app_state.py services/*.py handlers/*.py routes/*.py
+      - run: >-
+          python -m py_compile bot.py config.py auth.py catalog_store.py app_state.py rich_messages.py
+          services/*.py handlers/*.py routes/*.py scripts/*.py tests/*.py
       - run: python -m pytest tests/ -q
 
   deploy:
@@ -31,6 +33,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd /opt/poselyanov3dprint
-            git pull
+            git pull || exit 1
             .venv/bin/pip install -r requirements.txt
+            sudo systemctl daemon-reload
             sudo systemctl restart poselyanov3dprint

@@ -5,10 +5,12 @@ Denis 3D Print — Telegram Bot
 from datetime import datetime, timedelta, timezone
 from aiohttp import web
 import asyncio
+import concurrent.futures
 import html
 import json
 import logging
 import os
+import signal
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -100,6 +102,7 @@ from db_core import db_connect, is_postgres as _is_postgres, run_db, sql as _sql
 from security_utils import is_safe_http_url, is_static_file_allowed
 import app_state
 from services.coupons import (
+    CouponConsumptionError,
     check_coupon,
     check_promotion as _check_promotion_service,
     create_coupon,
@@ -133,7 +136,12 @@ from services.stats import get_stats
 from services.users import get_all_users, is_user_blocked, save_user, save_user_id, set_blocked
 from services.validation import validate_order_payload
 from services.notifications import notify_coupon_created
-from handlers.register import configure_bot_commands, register_telegram_handlers
+from handlers.register import (
+    TELEGRAM_ALLOWED_UPDATES,
+    configure_bot_commands,
+    register_telegram_handlers,
+)
+from handlers.rate_limit import command_cooldown
 from routes.setup import register_http_routes
 
 BOT_TOKEN = config.BOT_TOKEN
@@ -144,6 +152,7 @@ DB_FILE = config.DB_FILE
 VALIDATE_INIT_DATA = config.VALIDATE_INIT_DATA
 PROMOTION_ENABLED = config.PROMOTION_ENABLED
 MAX_UPLOAD_BYTES = config.MAX_UPLOAD_BYTES
+CLOUDINARY_UPLOAD_TIMEOUT = 60
 
 if not all([config.CLOUDINARY_CLOUD_NAME, config.CLOUDINARY_API_KEY, config.CLOUDINARY_API_SECRET]):
     logger_pre = logging.getLogger(__name__)
@@ -376,6 +385,12 @@ def fetch_image_bytes_from_url(url: str, max_bytes: int = MAX_UPLOAD_BYTES) -> t
         return b"".join(chunks), content_type
 
 
+def _cloudinary_upload_with_timeout(file_data: bytes, upload_opts: dict):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(cloudinary.uploader.upload, file_data, **upload_opts)
+        return future.result(timeout=CLOUDINARY_UPLOAD_TIMEOUT)
+
+
 def upload_photo_to_cloudinary_sync(file_data: bytes, filename: str = "product_photo", content_type: str = ""):
     """Завантажити фото на Cloudinary з оптимізацією (синхронно, для asyncio.to_thread)."""
     try:
@@ -408,11 +423,16 @@ def upload_photo_to_cloudinary_sync(file_data: bytes, filename: str = "product_p
             upload_opts["flags"] = "lossy"
 
         try:
-            result = cloudinary.uploader.upload(file_data, **upload_opts)
+            result = _cloudinary_upload_with_timeout(file_data, upload_opts)
+        except concurrent.futures.TimeoutError:
+            return {"ok": False, "error": "Час очікування завантаження на Cloudinary вичерпано"}
         except Exception as first_error:
             if is_animated and "Megapixels" in str(first_error):
                 file_data = prepare_animated_for_upload(original_data, content_type, max_megapixels=30.0)
-                result = cloudinary.uploader.upload(file_data, **upload_opts)
+                try:
+                    result = _cloudinary_upload_with_timeout(file_data, upload_opts)
+                except concurrent.futures.TimeoutError:
+                    return {"ok": False, "error": "Час очікування завантаження на Cloudinary вичерпано"}
             else:
                 raise first_error
         return {
@@ -460,6 +480,7 @@ async def auto_register_user(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await run_db(save_user, user)
 
 
+@command_cooldown(config.COMMAND_COOLDOWN_SEC)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from telegram import ReplyKeyboardRemove
     # Видаляємо стару нижню клавіатуру, якщо вона була
@@ -1703,6 +1724,12 @@ async def handle_order(request):
 
     idempotency_key = (data.get("idempotency_key") or "").strip() or None
     uid = int(user_id or 0)
+    if uid > 0 and not idempotency_key:
+        return web.json_response(
+            {"ok": False, "error": "idempotency_key обов'язковий"},
+            status=400,
+            headers=cors_headers(request),
+        )
 
     if idempotency_key and uid > 0:
         cached = await run_db(get_idempotent_order, uid, idempotency_key)
@@ -1719,11 +1746,25 @@ async def handle_order(request):
             if cached:
                 return _order_ok_response(request, int(cached["order_id"]), duplicate=True)
 
-        order_id, is_new = await run_db(
-            save_order,
-            user_id or 0, username, first_name, items, total_price, comment,
-            gift, coupon_code, total_discount, price_pending,
-        )
+        try:
+            order_id, is_new = await run_db(
+                save_order,
+                user_id or 0, username, first_name, items, total_price, comment,
+                gift, coupon_code, total_discount, price_pending,
+            )
+        except CouponConsumptionError as e:
+            return web.json_response(
+                {"ok": False, "error": e.message},
+                status=400,
+                headers=cors_headers(request),
+            )
+        except Exception:
+            logger.exception("save_order failed for user=%s", uid)
+            return web.json_response(
+                {"ok": False, "error": "Не вдалось зберегти замовлення"},
+                status=500,
+                headers=cors_headers(request),
+            )
 
         if idempotency_key and uid > 0:
             try:
@@ -1843,6 +1884,13 @@ async def handle_get_products(request: web.Request):
 async def handle_get_categories(request: web.Request):
     """Отримати список категорій"""
     include_inactive = request.query.get("includeInactive", "false").lower() in ("1", "true", "yes")
+    if include_inactive:
+        auth, err = resolve_request_user(request, {})
+        if err:
+            return err
+        denied = require_admin(request, auth)
+        if denied:
+            return denied
     categories = get_all_categories(active_only=not include_inactive)
     return web.json_response(categories, headers=cors_headers(request))
 
@@ -2343,6 +2391,8 @@ async def handle_upload_photo_url(request: web.Request):
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
             return web.json_response({"ok": False, "error": "❌ Дозволені лише http/https посилання"}, status=400, headers=cors_headers(request))
+        if not is_safe_http_url(url):
+            return web.json_response({"ok": False, "error": "❌ Небезпечне посилання"}, status=400, headers=cors_headers(request))
 
         try:
             file_data, content_type = await asyncio.to_thread(fetch_image_bytes_from_url, url)
@@ -2588,6 +2638,7 @@ def main():
 
     app_state.bot_app = Application.builder().token(BOT_TOKEN).build()
     bot_app = app_state.bot_app
+    bot_app.bot_data["owner_id"] = OWNER_ID
 
     register_telegram_handlers(bot_app, sys.modules[__name__])
 
@@ -2600,16 +2651,37 @@ def main():
         await site.start()
         logger.info("🌐 HTTP сервер запущено  →  порт 8080")
 
+        stop_event = asyncio.Event()
+
+        def _request_shutdown() -> None:
+            if not stop_event.is_set():
+                logger.info("Отримано сигнал зупинки, graceful shutdown...")
+                stop_event.set()
+
+        if sys.platform == "win32":
+            signal.signal(signal.SIGINT, lambda _s, _f: _request_shutdown())
+            signal.signal(signal.SIGTERM, lambda _s, _f: _request_shutdown())
+        else:
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, _request_shutdown)
+
+        drop_pending = config.DROP_PENDING_UPDATES
+        if drop_pending:
+            logger.warning(
+                "DROP_PENDING_UPDATES=true — updates під час рестарту будуть відкинуті"
+            )
+
         async with bot_app:
             await bot_app.initialize()
             await bot_app.start()
             # Якщо раніше був увімкнений webhook — скидаємо перед polling.
-            await bot_app.bot.delete_webhook(drop_pending_updates=True)
+            await bot_app.bot.delete_webhook(drop_pending_updates=drop_pending)
             # Критично для Render: короткий timeout зменшує "хвіст" старого процесу
             # під час rolling deploy, щоб не ловити довгі Conflict.
             await bot_app.updater.start_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,
+                allowed_updates=TELEGRAM_ALLOWED_UPDATES,
+                drop_pending_updates=drop_pending,
                 timeout=10,
                 poll_interval=0.5,
             )
@@ -2623,7 +2695,13 @@ def main():
                 ("contact", "📬 Контакти"),
             ]
             await configure_bot_commands(bot_app, owner_id=OWNER_ID, user_commands=user_commands)
-            await asyncio.Event().wait()
+            await stop_event.wait()
+
+            logger.info("Зупиняю Telegram polling...")
+            await bot_app.updater.stop()
+
+        await runner.cleanup()
+        logger.info("Graceful shutdown завершено")
 
     asyncio.run(run())
 

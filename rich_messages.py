@@ -101,7 +101,7 @@ def format_date(date_raw: str | None) -> str:
         dt = datetime.strptime(date_raw[:10], "%Y-%m-%d")
         return f"{dt.day} {MONTHS_UA[dt.month - 1]} {dt.year}"
     except Exception:
-        return date_raw[:10]
+        return escape(date_raw[:10])
 
 
 def product_link(name: str, product_id: int | None, *, linked: bool = True) -> str:

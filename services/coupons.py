@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 import config
 from db_core import db_connect, is_postgres, sql as _sql
 from services.db_utils import row_to_dict
+
+logger = logging.getLogger(__name__)
+
+_DB_ERROR_MESSAGE = "Помилка бази даних. Спробуйте пізніше."
+
+
+class CouponConsumptionError(Exception):
+    """Coupon could not be consumed atomically during order save."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
 
 
 def _parse_expires_at(value) -> datetime | None:
@@ -19,6 +32,146 @@ def _parse_expires_at(value) -> datetime | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _coupon_row_to_dict(row) -> dict:
+    if row is None:
+        return {}
+    if isinstance(row, dict):
+        return dict(row)
+    return {
+        "code": row[0],
+        "type": row[1],
+        "value": row[2],
+        "min_order": row[3],
+        "uses_max": row[4],
+        "uses_count": row[5],
+        "one_per_user": row[6],
+        "active": row[7],
+        "expires_at": row[8],
+        "personal_user_id": row[9],
+    }
+
+
+def _validate_coupon_row(c: dict, user_id: int, *, check_min_order: int | None = None) -> str | None:
+    if not c:
+        return "Купон не знайдено ❌"
+    if not c.get("active"):
+        return "Купон вже не активний ❌"
+
+    expires = _parse_expires_at(c.get("expires_at"))
+    if expires and datetime.now(timezone.utc) > expires:
+        return "Термін купону закінчився ❌"
+
+    if check_min_order is not None and c.get("min_order") and check_min_order < c["min_order"]:
+        return f"Мінімальна сума замовлення: {c['min_order']} ₴ ❌"
+
+    if c.get("uses_max") and c.get("uses_count", 0) >= c["uses_max"]:
+        return "Купон вичерпано ❌"
+
+    if c.get("personal_user_id") and user_id and int(c["personal_user_id"]) != int(user_id):
+        return "Цей купон призначений іншому користувачу ❌"
+
+    return None
+
+
+def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
+    """Atomically reserve coupon use inside an open DB transaction."""
+    code = code.upper()
+    uid = int(user_id or 0)
+
+    if is_postgres():
+        row = conn.execute(
+            """
+            SELECT code, type, value, min_order, uses_max, uses_count, one_per_user,
+                   active, expires_at, personal_user_id
+            FROM coupons WHERE code = %s FOR UPDATE
+            """,
+            (code,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            _sql(
+                "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, "
+                "active, expires_at, personal_user_id FROM coupons WHERE code = ?"
+            ),
+            (code,),
+        ).fetchone()
+
+    c = _coupon_row_to_dict(row)
+    err = _validate_coupon_row(c, uid)
+    if err:
+        raise CouponConsumptionError(err)
+
+    if c.get("one_per_user") and uid:
+        used = conn.execute(
+            _sql("SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ?"),
+            (code, uid),
+        ).fetchone()
+        if used:
+            raise CouponConsumptionError("Ти вже використовував цей купон ❌")
+
+    if is_postgres():
+        updated = conn.execute(
+            """
+            UPDATE coupons
+            SET uses_count = uses_count + 1
+            WHERE code = %s AND (uses_max = 0 OR uses_count < uses_max)
+            RETURNING uses_count
+            """,
+            (code,),
+        ).fetchone()
+        if not updated:
+            raise CouponConsumptionError("Купон вичерпано ❌")
+    else:
+        cur = conn.execute(
+            _sql(
+                """
+                UPDATE coupons
+                SET uses_count = uses_count + 1
+                WHERE code = ? AND (uses_max = 0 OR uses_count < uses_max)
+                """
+            ),
+            (code,),
+        )
+        if cur.rowcount == 0:
+            raise CouponConsumptionError("Купон вичерпано ❌")
+
+    if c.get("one_per_user") and uid:
+        if is_postgres():
+            inserted = conn.execute(
+                """
+                INSERT INTO coupon_uses (code, user_id, order_id)
+                SELECT %s, %s, %s
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM coupon_uses WHERE code = %s AND user_id = %s
+                )
+                RETURNING id
+                """,
+                (code, uid, order_id, code, uid),
+            ).fetchone()
+            if not inserted:
+                raise CouponConsumptionError("Ти вже використовував цей купон ❌")
+        else:
+            cur = conn.execute(
+                _sql(
+                    """
+                    INSERT INTO coupon_uses (code, user_id, order_id)
+                    SELECT ?, ?, ?
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ?
+                    )
+                    """
+                ),
+                (code, uid, order_id, code, uid),
+            )
+            if cur.rowcount == 0:
+                raise CouponConsumptionError("Ти вже використовував цей купон ❌")
+    else:
+        conn.execute(
+            _sql("INSERT INTO coupon_uses (code, user_id, order_id) VALUES (?, ?, ?)"),
+            (code, uid, order_id),
+        )
 
 
 def check_coupon(code: str, user_id: int, cart_total: int):
@@ -199,8 +352,9 @@ def create_coupon(data: dict) -> dict:
             ),
         )
         conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    except Exception:
+        logger.exception("create_coupon failed for code=%s", payload.get("code"))
+        return {"ok": False, "error": _DB_ERROR_MESSAGE}
     finally:
         conn.close()
 
@@ -239,8 +393,9 @@ def update_coupon(code: str, data: dict) -> dict:
             ),
         )
         conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    except Exception:
+        logger.exception("update_coupon failed for code=%s", code)
+        return {"ok": False, "error": _DB_ERROR_MESSAGE}
     finally:
         conn.close()
 
@@ -297,8 +452,9 @@ def replace_coupon(data: dict) -> dict:
             )
             created = True
         conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    except Exception:
+        logger.exception("replace_coupon failed for code=%s", payload.get("code"))
+        return {"ok": False, "error": _DB_ERROR_MESSAGE}
     finally:
         conn.close()
 
@@ -314,8 +470,9 @@ def set_coupon_active(code: str, active: bool) -> dict:
     try:
         conn.execute(_sql("UPDATE coupons SET active = ? WHERE code = ?"), (1 if active else 0, code))
         conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    except Exception:
+        logger.exception("set_coupon_active failed for code=%s", code)
+        return {"ok": False, "error": _DB_ERROR_MESSAGE}
     finally:
         conn.close()
     return {"ok": True, "coupon": get_coupon(code)}
@@ -330,8 +487,9 @@ def delete_coupon(code: str) -> dict:
         conn.execute(_sql("DELETE FROM coupon_uses WHERE code = ?"), (code,))
         conn.execute(_sql("DELETE FROM coupons WHERE code = ?"), (code,))
         conn.commit()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    except Exception:
+        logger.exception("delete_coupon failed for code=%s", code)
+        return {"ok": False, "error": _DB_ERROR_MESSAGE}
     finally:
         conn.close()
     return {"ok": True}

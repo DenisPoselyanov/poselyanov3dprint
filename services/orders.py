@@ -6,6 +6,7 @@ import asyncio
 
 from catalog_store import CUSTOM_PRODUCTS_CACHE, PRODUCTS_CACHE
 from db_core import db_connect, is_postgres as _is_postgres, sql as _sql
+from services.coupons import CouponConsumptionError, consume_coupon
 from services.db_utils import row_to_dict
 
 _user_order_locks: dict[int, asyncio.Lock] = {}
@@ -163,14 +164,12 @@ def save_order(
         )
 
     if coupon_code:
-        conn.execute(
-            _sql("UPDATE coupons SET uses_count = uses_count + 1 WHERE code = ?"),
-            (coupon_code.upper(),),
-        )
-        conn.execute(
-            _sql("INSERT INTO coupon_uses (code, user_id, order_id) VALUES (?, ?, ?)"),
-            (coupon_code.upper(), user_id, order_id),
-        )
+        try:
+            consume_coupon(conn, coupon_code, user_id, order_id)
+        except CouponConsumptionError:
+            conn.rollback()
+            conn.close()
+            raise
     conn.commit()
     conn.close()
     return order_id, True

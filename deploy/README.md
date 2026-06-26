@@ -37,7 +37,9 @@ sudo systemctl enable --now poselyanov3dprint
 ## GitHub Pages + VPS split
 
 - Storefront: `index.html` on GitHub Pages
-- Set `window.__API_BASE__ = 'https://api.yourdomain.ua'` in `index.html` or inject before app scripts
+- Copy `api-config.example.js` → `api-config.js`, set `window.__API_BASE__ = 'https://api.yourdomain.ua'`
+- Commit `api-config.js` **only on the GitHub Pages branch** (repo root for Pages), not in the main backend repo (файл у `.gitignore` тут)
+- `API_PUBLIC_URL` у `/etc/poselyanov3dprint/.env` має збігатися з `window.__API_BASE__`
 - Admin: `ADMIN_WEBAPP_URL=https://api.yourdomain.ua/admin/panel`
 
 ## Supabase catalog (optional)

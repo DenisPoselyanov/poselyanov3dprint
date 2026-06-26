@@ -7,7 +7,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = int(os.environ.get("OWNER_ID", "718746623"))
+_owner_id_raw = os.environ.get("OWNER_ID", "").strip()
+OWNER_ID = int(_owner_id_raw) if _owner_id_raw else 0
 ORDERS_CHAT_ID = int(os.environ.get("ORDERS_CHAT_ID", str(OWNER_ID)))
 WEBAPP_URL = os.environ.get(
     "WEBAPP_URL", "https://denisposelyanov.github.io/poselyanov3dprint/"
@@ -35,13 +36,15 @@ ADMIN_BYPASS_TOKEN: str = os.environ.get("ADMIN_BYPASS_TOKEN") or secrets.token_
 
 PROMOTION_ENABLED = os.environ.get("PROMOTION_ENABLED", "true").lower() in ("1", "true", "yes")
 
+_default_cors = (
+    "https://denisposelyanov.github.io,http://localhost:8080,http://127.0.0.1:8080,"
+    "http://localhost:5500,http://127.0.0.1:5500"
+    if LOCAL_DEV_MODE
+    else "https://denisposelyanov.github.io"
+)
 CORS_ORIGINS = [
     o.strip()
-    for o in os.environ.get(
-        "CORS_ORIGINS",
-        "https://denisposelyanov.github.io,http://localhost:8080,http://127.0.0.1:8080,"
-        "http://localhost:5500,http://127.0.0.1:5500",
-    ).split(",")
+    for o in os.environ.get("CORS_ORIGINS", _default_cors).split(",")
     if o.strip()
 ]
 
@@ -63,6 +66,14 @@ STATIC_ALLOWED_FILES = frozenset(
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 BROADCAST_DELAY_SEC = float(os.environ.get("BROADCAST_DELAY_SEC", "0.05"))
+# False у продакшні — не втрачати updates під час рестарту. True лише для debug/першого деплою.
+DROP_PENDING_UPDATES = os.environ.get("DROP_PENDING_UPDATES", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+# Мінімальний інтервал між повторними /start від одного користувача (секунди).
+COMMAND_COOLDOWN_SEC = float(os.environ.get("COMMAND_COOLDOWN_SEC", "2.0"))
 
 
 def validate_startup_config() -> None:
@@ -79,6 +90,21 @@ def validate_startup_config() -> None:
         errors.append(
             "VALIDATE_INIT_DATA=false is only allowed with LOCAL_DEV_MODE=true "
             "(localhost development). Set VALIDATE_INIT_DATA=true for production."
+        )
+
+    if not os.environ.get("OWNER_ID", "").strip():
+        errors.append("OWNER_ID must be set explicitly in environment")
+
+    if ALLOW_LOCAL_NETWORK and not LOCAL_DEV_MODE:
+        errors.append(
+            "ALLOW_LOCAL_NETWORK=true is only safe for local development "
+            "(set LOCAL_DEV_MODE=true). Disable for production."
+        )
+
+    if not LOCAL_DEV_MODE and not API_PUBLIC_URL:
+        errors.append(
+            "API_PUBLIC_URL is required in production (GitHub Pages storefront needs a public API URL). "
+            "Must match window.__API_BASE__ in api-config.js on GitHub Pages."
         )
 
     if errors:

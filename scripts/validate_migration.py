@@ -4,7 +4,7 @@ import sqlite3
 import psycopg
 
 
-TABLES = ["users", "orders", "order_items", "coupons", "coupon_uses", "filament_colors"]
+TABLES = ["users", "orders", "order_items", "coupons", "coupon_uses", "filament_colors", "order_idempotency"]
 
 
 def sqlite_count(sqlite_path: str, table: str) -> int:
