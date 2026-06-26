@@ -6,7 +6,6 @@ start-ngrok.bat
 
 # Середовище
 .env
-api-config.js
 
 # SQLite Browser
 *.sqbpro
