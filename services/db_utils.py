@@ -90,6 +90,13 @@ def init_db() -> None:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS coupon_allowed_users (
+                code    TEXT NOT NULL,
+                user_id BIGINT NOT NULL,
+                PRIMARY KEY (code, user_id)
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS filament_colors (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -117,7 +124,14 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_code ON coupon_uses(code)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked)")
+        conn.execute("""
+            INSERT INTO coupon_allowed_users (code, user_id)
+            SELECT code, personal_user_id FROM coupons
+            WHERE personal_user_id IS NOT NULL
+            ON CONFLICT DO NOTHING
+        """)
         init_catalog_tables(conn)
     else:
         conn.execute("""
@@ -181,6 +195,13 @@ def init_db() -> None:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS coupon_allowed_users (
+                code    TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                PRIMARY KEY (code, user_id)
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS filament_colors (
                 id         TEXT PRIMARY KEY,
                 name       TEXT NOT NULL,
@@ -210,6 +231,13 @@ def init_db() -> None:
             conn.execute("ALTER TABLE orders ADD COLUMN price_pending INTEGER DEFAULT 0")
         if "channel_message_id" not in o_cols:
             conn.execute("ALTER TABLE orders ADD COLUMN channel_message_id INTEGER")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code)"
+        )
+        conn.execute("""
+            INSERT OR IGNORE INTO coupon_allowed_users (code, user_id)
+            SELECT code, personal_user_id FROM coupons WHERE personal_user_id IS NOT NULL
+        """)
 
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)

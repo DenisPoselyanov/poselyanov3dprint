@@ -652,6 +652,7 @@ def build_admin_coupon_created_notification(
     one_per_user: int = 0,
     expires_at: str | None = None,
     personal_user_id: int | None = None,
+    allowed_user_ids: list[int] | None = None,
     source: str = "admin_panel",
 ) -> str:
     """Rich HTML — підтвердження адміну про створення купона."""
@@ -675,7 +676,12 @@ def build_admin_coupon_created_notification(
         conditions.append("<li>Одноразовий для кожного користувача ⚡</li>")
     if expires_at:
         conditions.append(f"<li>Діє до: {format_date(expires_at)}</li>")
-    if personal_user_id:
+    if allowed_user_ids:
+        ids_preview = ", ".join(f"<code>{uid}</code>" for uid in allowed_user_ids[:10])
+        if len(allowed_user_ids) > 10:
+            ids_preview += f" … (+{len(allowed_user_ids) - 10})"
+        conditions.append(f"<li>Обмежений: {len(allowed_user_ids)} користувач(ів): {ids_preview}</li>")
+    elif personal_user_id:
         conditions.append(f"<li>Персональний для user_id: <code>{personal_user_id}</code></li>")
     if conditions:
         parts.append("<ul>")

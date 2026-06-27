@@ -2260,8 +2260,9 @@
                     <input type="date" name="expires_at">
                 </div>
                 <div class="form-group">
-                    <label>Telegram user ID (персональний купон)</label>
-                    <input type="number" name="personal_user_id" min="1" step="1" placeholder="Опційно">
+                    <label>Telegram user ID (whitelist)</label>
+                    <textarea name="allowed_user_ids" rows="4" placeholder="Один ID на рядок або через кому&#10;Напр.: 123456789&#10;987654321"></textarea>
+                    <small style="color:var(--text-muted); display:block; margin-top:6px;">Залиште порожнім для публічного купона. Лише ці користувачі зможуть застосувати код.</small>
                 </div>
                 <div class="form-group">
                     <div class="toggle-row">
@@ -2275,6 +2276,25 @@
                 <div class="form-buttons">
                     <button type="button" class="btn btn-secondary" onclick="closeCouponModal()">Скасувати</button>
                     <button type="submit" class="btn btn-primary" id="couponSubmitBtn">✅ Зберегти купон</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="addCouponUserModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <span id="addCouponUserModalTitle">➕ Додати учня до купона</span>
+                <button class="btn btn-secondary" onclick="closeAddCouponUserModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+            </div>
+            <form id="addCouponUserForm">
+                <div class="form-group required">
+                    <label>Telegram user ID</label>
+                    <input type="number" name="user_id" min="1" step="1" required placeholder="123456789">
+                </div>
+                <div class="form-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddCouponUserModal()">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" id="addCouponUserSubmitBtn">✅ Додати</button>
                 </div>
             </form>
         </div>
@@ -2309,6 +2329,7 @@
         let currentCategoryId = null;
         let currentFilamentId = null;
         let currentCouponCode = null;
+        let addCouponUserTargetCode = null;
         let currentPage = 'products';
         let uploadedPhotos = [];
         let productFormSnapshot = null;
@@ -2945,13 +2966,38 @@
             return raw.includes('T') ? raw.split('T')[0] : raw.slice(0, 10);
         }
 
+        function parseAllowedUserIdsInput(raw) {
+            if (!raw || !String(raw).trim()) return [];
+            const parts = String(raw).split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+            const ids = [];
+            const seen = new Set();
+            for (const part of parts) {
+                const uid = parseInt(part, 10);
+                if (uid > 0 && !seen.has(uid)) {
+                    seen.add(uid);
+                    ids.push(uid);
+                }
+            }
+            return ids;
+        }
+
+        function formatAllowedUserIdsForInput(ids) {
+            if (!Array.isArray(ids) || !ids.length) return '';
+            return ids.join('\n');
+        }
+
         function formatCouponMeta(coupon) {
             const parts = [];
             if (coupon.min_order) parts.push(`мін. ${coupon.min_order} ₴`);
             const exp = formatCouponExpires(coupon.expires_at);
             if (exp) parts.push(`до ${exp}`);
             if (coupon.one_per_user) parts.push('одноразовий');
-            if (coupon.personal_user_id) parts.push(`персональний: ${coupon.personal_user_id}`);
+            const allowed = coupon.allowed_user_ids || [];
+            if (allowed.length) {
+                parts.push(`обмежений: ${allowed.length} користувач(ів)`);
+            } else if (coupon.personal_user_id) {
+                parts.push(`персональний: ${coupon.personal_user_id}`);
+            }
             return parts.join(' · ');
         }
 
@@ -3000,6 +3046,7 @@
                             <input type="checkbox" ${active ? 'checked' : ''} onchange="toggleCouponActive('${escapeAttr(c.code)}', this.checked)">
                             <span class="switch-slider"></span>
                         </label>
+                        <button class="btn btn-secondary" type="button" onclick="openAddCouponUserModal('${escapeAttr(c.code)}')" style="padding:8px 12px;" title="Додати Telegram ID">➕</button>
                         <button class="btn btn-secondary" type="button" onclick="openCouponModal('${escapeAttr(c.code)}')" style="padding:8px 12px;">✏️</button>
                         <button class="btn btn-danger" type="button" onclick="deleteCoupon('${escapeAttr(c.code)}')" style="padding:8px 12px;">🗑️</button>
                     </div>
@@ -3046,7 +3093,9 @@
                 form.uses_max.value = coupon.uses_max || 0;
                 form.one_per_user.checked = !!coupon.one_per_user;
                 form.expires_at.value = formatCouponExpires(coupon.expires_at);
-                form.personal_user_id.value = coupon.personal_user_id || '';
+                form.allowed_user_ids.value = formatAllowedUserIdsForInput(
+                    coupon.allowed_user_ids || (coupon.personal_user_id ? [coupon.personal_user_id] : [])
+                );
                 form.active.checked = !!coupon.active;
             } else {
                 document.getElementById('couponModalTitle').textContent = '➕ Додати купон';
@@ -3061,6 +3110,47 @@
             currentCouponCode = null;
             const form = document.getElementById('couponForm');
             form.code.readOnly = false;
+        }
+
+        function openAddCouponUserModal(code) {
+            addCouponUserTargetCode = code;
+            const form = document.getElementById('addCouponUserForm');
+            form.reset();
+            document.getElementById('addCouponUserModalTitle').textContent = `➕ Додати учня до ${code}`;
+            document.getElementById('addCouponUserModal').classList.add('active');
+        }
+
+        function closeAddCouponUserModal() {
+            document.getElementById('addCouponUserModal').classList.remove('active');
+            addCouponUserTargetCode = null;
+        }
+
+        async function addCouponUserSubmit(userId) {
+            if (!addCouponUserTargetCode) return;
+            const res = await fetch(
+                API_BASE + `/coupons/${encodeURIComponent(addCouponUserTargetCode)}/allowed-users`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData,
+                    },
+                    body: JSON.stringify({ user_ids: [userId] }),
+                }
+            );
+            const result = await res.json();
+            if (!res.ok || !result.ok) {
+                throw new Error(result.error || 'Не вдалося додати користувача');
+            }
+            let msg = `ID ${userId} додано до купона ✅`;
+            const n = result.notifications || {};
+            const notified = n.users_notified || [];
+            const failed = n.users_failed || [];
+            if (notified.length) msg += ' · повідомлення надіслано';
+            if (failed.length) msg += ' · повідомлення не доставлено';
+            showToast(msg, 'success');
+            closeAddCouponUserModal();
+            await loadCoupons();
         }
 
         async function toggleCouponActive(code, active) {
@@ -3107,8 +3197,12 @@
             let msg = 'Купон створено ✅';
             const n = result.notifications || {};
             if (n.admin_sent) msg += ' · повідомлення надіслано в бот';
-            if (n.user_sent === true) msg += ' · користувачу надіслано';
-            if (n.user_sent === false) msg += ' · користувачу не доставлено';
+            const notified = n.users_notified || [];
+            const failed = n.users_failed || [];
+            if (notified.length === 1) msg += ' · користувачу надіслано';
+            else if (notified.length > 1) msg += ` · ${notified.length} користувачам надіслано`;
+            else if (failed.length || n.user_sent === false) msg += ' · користувачу не доставлено';
+            else if (n.user_sent === true) msg += ' · користувачу надіслано';
             return msg;
         }
 
@@ -4056,7 +4150,7 @@
                 uses_max: parseInt(form.uses_max.value || '0', 10),
                 one_per_user: form.one_per_user.checked,
                 expires_at: form.expires_at.value || null,
-                personal_user_id: form.personal_user_id.value ? parseInt(form.personal_user_id.value, 10) : null,
+                allowed_user_ids: parseAllowedUserIdsInput(form.allowed_user_ids.value),
                 active: form.active.checked,
             };
 
@@ -4521,6 +4615,12 @@
             const couponModal = document.getElementById('couponModal');
             if (couponModal.classList.contains('active')) {
                 closeCouponModal();
+                return;
+            }
+
+            const addCouponUserModal = document.getElementById('addCouponUserModal');
+            if (addCouponUserModal.classList.contains('active')) {
+                closeAddCouponUserModal();
             }
         });
 
@@ -4552,6 +4652,33 @@
         document.getElementById('couponModal').addEventListener('click', (e) => {
             if (e.target.id === 'couponModal') {
                 closeCouponModal();
+            }
+        });
+
+        document.getElementById('addCouponUserModal').addEventListener('click', (e) => {
+            if (e.target.id === 'addCouponUserModal') {
+                closeAddCouponUserModal();
+            }
+        });
+
+        document.getElementById('addCouponUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const submitBtn = document.getElementById('addCouponUserSubmitBtn');
+            const userId = parseInt(form.user_id.value, 10);
+            if (!userId || userId <= 0) {
+                showToast('Вкажіть коректний Telegram user ID', 'error');
+                return;
+            }
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '⏳ Додавання...';
+                await addCouponUserSubmit(userId);
+            } catch (err) {
+                showToast(err.message || 'Помилка додавання користувача', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Додати';
             }
         });
 

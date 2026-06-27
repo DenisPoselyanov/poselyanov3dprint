@@ -35,6 +35,10 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_post("/api/coupons", handlers.handle_create_coupon)
     http_app.router.add_put("/api/coupons/{code}", handlers.handle_update_coupon)
     http_app.router.add_delete("/api/coupons/{code}", handlers.handle_delete_coupon)
+    http_app.router.add_post("/api/coupons/{code}/allowed-users", handlers.handle_add_coupon_users)
+    http_app.router.add_delete(
+        "/api/coupons/{code}/allowed-users/{user_id}", handlers.handle_remove_coupon_user
+    )
     http_app.router.add_post("/api/upload-photo", handlers.handle_upload_photo)
     http_app.router.add_post("/api/upload-photo-url", handlers.handle_upload_photo_url)
 

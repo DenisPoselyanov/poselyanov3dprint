@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 import config
@@ -34,6 +35,119 @@ def _parse_expires_at(value) -> datetime | None:
     return dt
 
 
+def _parse_allowed_user_ids(value) -> list[int]:
+    """Parse allowed_user_ids from list, comma/newline-separated string, or None."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        raw_items = value
+    else:
+        raw_items = re.split(r"[\s,;]+", str(value).strip())
+    result: list[int] = []
+    seen: set[int] = set()
+    for item in raw_items:
+        if item in ("", None):
+            continue
+        try:
+            uid = int(item)
+        except (TypeError, ValueError):
+            continue
+        if uid > 0 and uid not in seen:
+            seen.add(uid)
+            result.append(uid)
+    return result
+
+
+def _get_allowed_user_ids(conn, code: str) -> list[int]:
+    rows = conn.execute(
+        _sql("SELECT user_id FROM coupon_allowed_users WHERE code = ? ORDER BY user_id ASC"),
+        (code.upper(),),
+    ).fetchall()
+    ids: list[int] = []
+    for row in rows:
+        if isinstance(row, dict):
+            ids.append(int(row["user_id"]))
+        else:
+            ids.append(int(row[0]))
+    return ids
+
+
+def _coupon_has_whitelist(conn, code: str) -> bool:
+    row = conn.execute(
+        _sql("SELECT 1 FROM coupon_allowed_users WHERE code = ? LIMIT 1"),
+        (code.upper(),),
+    ).fetchone()
+    return bool(row)
+
+
+def _coupon_has_restrictions(conn, code: str, c: dict) -> bool:
+    if c.get("personal_user_id"):
+        return True
+    return _coupon_has_whitelist(conn, code)
+
+
+def _is_user_allowed(conn, code: str, c: dict, user_id: int) -> bool:
+    uid = int(user_id or 0)
+    if not uid:
+        return not _coupon_has_restrictions(conn, code, c)
+
+    if c.get("personal_user_id"):
+        return int(c["personal_user_id"]) == uid
+
+    if _coupon_has_whitelist(conn, code):
+        row = conn.execute(
+            _sql("SELECT 1 FROM coupon_allowed_users WHERE code = ? AND user_id = ?"),
+            (code.upper(), uid),
+        ).fetchone()
+        return bool(row)
+
+    return True
+
+
+def _user_access_error(conn, code: str, c: dict, user_id: int) -> str | None:
+    if _is_user_allowed(conn, code, c, user_id):
+        return None
+    return "Цей купон призначений іншому користувачу ❌"
+
+
+def _sync_allowed_users(conn, code: str, allowed_user_ids: list[int]) -> None:
+    code = code.upper()
+    existing = set(_get_allowed_user_ids(conn, code))
+    desired = set(allowed_user_ids)
+    for uid in existing - desired:
+        conn.execute(
+            _sql("DELETE FROM coupon_allowed_users WHERE code = ? AND user_id = ?"),
+            (code, uid),
+        )
+    for uid in desired - existing:
+        if is_postgres():
+            conn.execute(
+                _sql(
+                    "INSERT INTO coupon_allowed_users (code, user_id) VALUES (?, ?) "
+                    "ON CONFLICT DO NOTHING"
+                ),
+                (code, uid),
+            )
+        else:
+            conn.execute(
+                _sql("INSERT OR IGNORE INTO coupon_allowed_users (code, user_id) VALUES (?, ?)"),
+                (code, uid),
+            )
+
+
+def _attach_allowed_users(conn, coupons: list[dict] | dict | None) -> None:
+    if not coupons:
+        return
+    single = isinstance(coupons, dict)
+    items = [coupons] if single else coupons
+    for item in items:
+        code = item.get("code")
+        if code:
+            item["allowed_user_ids"] = _get_allowed_user_ids(conn, code)
+    if single and items:
+        coupons.update(items[0])
+
+
 def _coupon_row_to_dict(row) -> dict:
     if row is None:
         return {}
@@ -53,7 +167,14 @@ def _coupon_row_to_dict(row) -> dict:
     }
 
 
-def _validate_coupon_row(c: dict, user_id: int, *, check_min_order: int | None = None) -> str | None:
+def _validate_coupon_row(
+    c: dict,
+    user_id: int,
+    *,
+    check_min_order: int | None = None,
+    conn=None,
+    code: str | None = None,
+) -> str | None:
     if not c:
         return "Купон не знайдено ❌"
     if not c.get("active"):
@@ -69,7 +190,12 @@ def _validate_coupon_row(c: dict, user_id: int, *, check_min_order: int | None =
     if c.get("uses_max") and c.get("uses_count", 0) >= c["uses_max"]:
         return "Купон вичерпано ❌"
 
-    if c.get("personal_user_id") and user_id and int(c["personal_user_id"]) != int(user_id):
+    coupon_code = code or c.get("code") or ""
+    if conn is not None and coupon_code:
+        err = _user_access_error(conn, coupon_code, c, user_id)
+        if err:
+            return err
+    elif c.get("personal_user_id") and user_id and int(c["personal_user_id"]) != int(user_id):
         return "Цей купон призначений іншому користувачу ❌"
 
     return None
@@ -99,7 +225,7 @@ def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
         ).fetchone()
 
     c = _coupon_row_to_dict(row)
-    err = _validate_coupon_row(c, uid)
+    err = _validate_coupon_row(c, uid, conn=conn, code=code)
     if err:
         raise CouponConsumptionError(err)
 
@@ -176,12 +302,13 @@ def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
 
 def check_coupon(code: str, user_id: int, cart_total: int):
     conn = db_connect(dict_rows=True)
+    code = code.upper()
     row = conn.execute(
         _sql(
             "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, "
             "active, expires_at, personal_user_id FROM coupons WHERE code = ?"
         ),
-        (code.upper(),),
+        (code,),
     ).fetchone()
 
     if not row:
@@ -216,9 +343,10 @@ def check_coupon(code: str, user_id: int, cart_total: int):
             conn.close()
             return {"valid": False, "message": "Ти вже використовував цей купон ❌"}
 
-    if c.get("personal_user_id") and user_id and int(c["personal_user_id"]) != int(user_id):
+    err = _user_access_error(conn, code, c, user_id)
+    if err:
         conn.close()
-        return {"valid": False, "message": "Цей купон призначений іншому користувачу ❌"}
+        return {"valid": False, "message": err}
 
     conn.close()
 
@@ -277,6 +405,8 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
     if expires_at is not None:
         expires_at = str(expires_at).strip() or None
 
+    allowed_user_ids = _parse_allowed_user_ids(data.get("allowed_user_ids"))
+
     personal_user_id = data.get("personal_user_id")
     if personal_user_id in ("", None):
         personal_user_id = None
@@ -285,6 +415,11 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
             personal_user_id = int(personal_user_id)
         except (TypeError, ValueError):
             return None, "personal_user_id має бути числом"
+
+    if allowed_user_ids:
+        personal_user_id = None
+    elif personal_user_id:
+        allowed_user_ids = [personal_user_id]
 
     return {
         "code": code,
@@ -296,6 +431,7 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
         "active": active,
         "expires_at": expires_at,
         "personal_user_id": personal_user_id,
+        "allowed_user_ids": allowed_user_ids,
     }, None
 
 
@@ -308,8 +444,13 @@ def get_coupon(code: str) -> dict | None:
         ),
         (code.upper(),),
     ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    coupon = row_to_dict(row)
+    _attach_allowed_users(conn, coupon)
     conn.close()
-    return row_to_dict(row) if row else None
+    return coupon
 
 
 def list_coupons() -> list[dict]:
@@ -320,8 +461,10 @@ def list_coupons() -> list[dict]:
             "expires_at, personal_user_id FROM coupons ORDER BY active DESC, code ASC"
         )
     ).fetchall()
+    coupons = [row_to_dict(r) for r in rows]
+    _attach_allowed_users(conn, coupons)
     conn.close()
-    return [row_to_dict(r) for r in rows]
+    return coupons
 
 
 def create_coupon(data: dict) -> dict:
@@ -330,6 +473,8 @@ def create_coupon(data: dict) -> dict:
         return {"ok": False, "error": err}
     if get_coupon(payload["code"]):
         return {"ok": False, "error": "Купон з таким кодом вже існує"}
+
+    allowed_user_ids = payload.pop("allowed_user_ids", [])
 
     conn = db_connect()
     try:
@@ -351,6 +496,7 @@ def create_coupon(data: dict) -> dict:
                 payload["personal_user_id"],
             ),
         )
+        _sync_allowed_users(conn, payload["code"], allowed_user_ids)
         conn.commit()
     except Exception:
         logger.exception("create_coupon failed for code=%s", payload.get("code"))
@@ -359,7 +505,7 @@ def create_coupon(data: dict) -> dict:
         conn.close()
 
     coupon = get_coupon(payload["code"])
-    return {"ok": True, "created": True, "coupon": coupon}
+    return {"ok": True, "created": True, "coupon": coupon, "added_user_ids": allowed_user_ids}
 
 
 def update_coupon(code: str, data: dict) -> dict:
@@ -370,6 +516,10 @@ def update_coupon(code: str, data: dict) -> dict:
     payload, err = _normalize_coupon_payload(data, code_override=code)
     if err:
         return {"ok": False, "error": err}
+
+    allowed_user_ids = payload.pop("allowed_user_ids", [])
+    previous_ids = set(existing.get("allowed_user_ids") or [])
+    new_ids = set(allowed_user_ids)
 
     conn = db_connect()
     try:
@@ -392,6 +542,7 @@ def update_coupon(code: str, data: dict) -> dict:
                 payload["code"],
             ),
         )
+        _sync_allowed_users(conn, payload["code"], allowed_user_ids)
         conn.commit()
     except Exception:
         logger.exception("update_coupon failed for code=%s", code)
@@ -399,7 +550,9 @@ def update_coupon(code: str, data: dict) -> dict:
     finally:
         conn.close()
 
-    return {"ok": True, "created": False, "coupon": get_coupon(payload["code"])}
+    coupon = get_coupon(payload["code"])
+    added_user_ids = sorted(new_ids - previous_ids)
+    return {"ok": True, "created": False, "coupon": coupon, "added_user_ids": added_user_ids}
 
 
 def replace_coupon(data: dict) -> dict:
@@ -407,7 +560,10 @@ def replace_coupon(data: dict) -> dict:
     if err:
         return {"ok": False, "error": err}
 
+    allowed_user_ids = payload.pop("allowed_user_ids", [])
     existing = get_coupon(payload["code"])
+    previous_ids = set((existing or {}).get("allowed_user_ids") or [])
+
     conn = db_connect()
     try:
         if existing:
@@ -451,6 +607,7 @@ def replace_coupon(data: dict) -> dict:
                 ),
             )
             created = True
+        _sync_allowed_users(conn, payload["code"], allowed_user_ids)
         conn.commit()
     except Exception:
         logger.exception("replace_coupon failed for code=%s", payload.get("code"))
@@ -459,7 +616,76 @@ def replace_coupon(data: dict) -> dict:
         conn.close()
 
     coupon = get_coupon(payload["code"])
-    return {"ok": True, "created": created, "coupon": coupon}
+    added_user_ids = sorted(set(allowed_user_ids) - previous_ids) if not created else allowed_user_ids
+    return {"ok": True, "created": created, "coupon": coupon, "added_user_ids": added_user_ids}
+
+
+def add_coupon_users(code: str, user_ids: list[int] | str) -> dict:
+    code = code.upper()
+    coupon = get_coupon(code)
+    if not coupon:
+        return {"ok": False, "error": "Не знайдено"}
+
+    new_ids = _parse_allowed_user_ids(user_ids)
+    if not new_ids:
+        return {"ok": False, "error": "Потрібен хоча б один Telegram user ID"}
+
+    existing = set(coupon.get("allowed_user_ids") or [])
+    to_add = [uid for uid in new_ids if uid not in existing]
+
+    conn = db_connect()
+    try:
+        if to_add:
+            conn.execute(
+                _sql("UPDATE coupons SET personal_user_id = NULL WHERE code = ?"),
+                (code,),
+            )
+        for uid in to_add:
+            if is_postgres():
+                conn.execute(
+                    _sql(
+                        "INSERT INTO coupon_allowed_users (code, user_id) VALUES (?, ?) "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    (code, uid),
+                )
+            else:
+                conn.execute(
+                    _sql("INSERT OR IGNORE INTO coupon_allowed_users (code, user_id) VALUES (?, ?)"),
+                    (code, uid),
+                )
+        conn.commit()
+    except Exception:
+        logger.exception("add_coupon_users failed for code=%s", code)
+        return {"ok": False, "error": _DB_ERROR_MESSAGE}
+    finally:
+        conn.close()
+
+    updated = get_coupon(code)
+    return {"ok": True, "coupon": updated, "added_user_ids": to_add}
+
+
+def remove_coupon_user(code: str, user_id: int) -> dict:
+    code = code.upper()
+    coupon = get_coupon(code)
+    if not coupon:
+        return {"ok": False, "error": "Не знайдено"}
+
+    uid = int(user_id)
+    conn = db_connect()
+    try:
+        conn.execute(
+            _sql("DELETE FROM coupon_allowed_users WHERE code = ? AND user_id = ?"),
+            (code, uid),
+        )
+        conn.commit()
+    except Exception:
+        logger.exception("remove_coupon_user failed for code=%s user=%s", code, uid)
+        return {"ok": False, "error": _DB_ERROR_MESSAGE}
+    finally:
+        conn.close()
+
+    return {"ok": True, "coupon": get_coupon(code), "removed_user_id": uid}
 
 
 def set_coupon_active(code: str, active: bool) -> dict:
@@ -484,6 +710,7 @@ def delete_coupon(code: str) -> dict:
         return {"ok": False, "error": "Не знайдено"}
     conn = db_connect()
     try:
+        conn.execute(_sql("DELETE FROM coupon_allowed_users WHERE code = ?"), (code,))
         conn.execute(_sql("DELETE FROM coupon_uses WHERE code = ?"), (code,))
         conn.execute(_sql("DELETE FROM coupons WHERE code = ?"), (code,))
         conn.commit()
@@ -496,7 +723,7 @@ def delete_coupon(code: str) -> dict:
 
 
 def get_my_coupons(user_id: int):
-    """Купони, доступні користувачу (персональні та публічні)."""
+    """Купони, доступні користувачу (персональні, whitelist та публічні)."""
     conn = db_connect()
     date_expr = "NOW()" if is_postgres() else "datetime('now')"
     rows = conn.execute(
@@ -517,12 +744,28 @@ def get_my_coupons(user_id: int):
                 ) AS used_by_user
             FROM coupons c
             WHERE c.active = 1
-              AND (c.personal_user_id IS NULL OR c.personal_user_id = ?)
+              AND (
+                    (
+                        c.personal_user_id IS NULL
+                        AND NOT EXISTS (
+                            SELECT 1 FROM coupon_allowed_users cau WHERE cau.code = c.code
+                        )
+                    )
+                    OR c.personal_user_id = ?
+                    OR EXISTS (
+                        SELECT 1 FROM coupon_allowed_users cau
+                        WHERE cau.code = c.code AND cau.user_id = ?
+                    )
+              )
               AND (c.expires_at IS NULL OR c.expires_at > {date_expr})
               AND (c.uses_max = 0 OR c.uses_count < c.uses_max)
-            ORDER BY c.personal_user_id DESC, c.code ASC
+            ORDER BY
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM coupon_allowed_users cau WHERE cau.code = c.code
+                ) OR c.personal_user_id IS NOT NULL THEN 0 ELSE 1 END,
+                c.code ASC
         """),
-        (user_id, user_id),
+        (user_id, user_id, user_id),
     ).fetchall()
     conn.close()
     return rows

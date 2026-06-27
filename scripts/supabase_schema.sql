@@ -105,6 +105,12 @@ CREATE TABLE IF NOT EXISTS coupon_uses (
     used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS coupon_allowed_users (
+    code TEXT NOT NULL,
+    user_id BIGINT NOT NULL,
+    PRIMARY KEY (code, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS order_idempotency (
     user_id BIGINT NOT NULL,
     idempotency_key TEXT NOT NULL,
@@ -125,7 +131,13 @@ CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_code ON coupon_uses(code);
+CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code);
 CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked);
+
+INSERT INTO coupon_allowed_users (code, user_id)
+SELECT code, personal_user_id FROM coupons
+WHERE personal_user_id IS NOT NULL
+ON CONFLICT DO NOTHING;
 
 -- RLS: service role (bot) bypasses; anon read-only for catalog if needed
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
@@ -137,6 +149,7 @@ ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE coupons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE coupon_uses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupon_allowed_users ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS catalog_categories_read ON categories;
 CREATE POLICY catalog_categories_read ON categories FOR SELECT TO anon, authenticated USING (active = true);

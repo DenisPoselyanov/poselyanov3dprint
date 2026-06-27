@@ -208,6 +208,116 @@ def test_check_promotion_at_threshold(coupon_db):
     assert coupons.check_promotion(500) == 50
 
 
+def _insert_allowed_users(conn, code, user_ids):
+    for uid in user_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO coupon_allowed_users (code, user_id) VALUES (?, ?)",
+            (code, uid),
+        )
+    conn.commit()
+
+
+def test_check_coupon_whitelist_allowed(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="STUDENTS")
+    _insert_allowed_users(conn, "STUDENTS", [42, 43])
+    conn.close()
+
+    result = coupons.check_coupon("STUDENTS", 42, 500)
+    assert result["valid"] is True
+
+
+def test_check_coupon_whitelist_denied(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="STUDENTS")
+    _insert_allowed_users(conn, "STUDENTS", [42, 43])
+    conn.close()
+
+    result = coupons.check_coupon("STUDENTS", 99, 500)
+    assert result["valid"] is False
+    assert "іншому користувачу" in result["message"]
+
+
+def test_create_coupon_with_allowed_user_ids(coupon_db):
+    coupons, _ = coupon_db
+
+    result = coupons.create_coupon(
+        {
+            "code": "GROUP",
+            "type": "percent",
+            "value": 15,
+            "allowed_user_ids": [111, 222],
+        }
+    )
+    assert result["ok"] is True
+    coupon = result["coupon"]
+    assert sorted(coupon["allowed_user_ids"]) == [111, 222]
+    assert coupon["personal_user_id"] is None
+
+
+def test_add_coupon_users_incremental(coupon_db):
+    coupons, _ = coupon_db
+
+    coupons.create_coupon({"code": "CLASS", "type": "fixed", "value": 50, "allowed_user_ids": [1]})
+    result = coupons.add_coupon_users("CLASS", [2, 3])
+    assert result["ok"] is True
+    assert result["added_user_ids"] == [2, 3]
+    assert sorted(result["coupon"]["allowed_user_ids"]) == [1, 2, 3]
+
+    again = coupons.add_coupon_users("CLASS", [2])
+    assert again["ok"] is True
+    assert again["added_user_ids"] == []
+
+
+def test_get_my_coupons_whitelist_visibility(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="PUBLIC")
+    _insert_coupon(conn, code="PRIVATE")
+    _insert_allowed_users(conn, "PRIVATE", [42])
+    conn.close()
+
+    rows = coupons.get_my_coupons(42)
+    codes = {row[0] if not isinstance(row, dict) else row["code"] for row in rows}
+    assert "PUBLIC" in codes
+    assert "PRIVATE" in codes
+
+    rows_other = coupons.get_my_coupons(99)
+    codes_other = {row[0] if not isinstance(row, dict) else row["code"] for row in rows_other}
+    assert "PUBLIC" in codes_other
+    assert "PRIVATE" not in codes_other
+
+
+def test_delete_coupon_removes_whitelist(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    coupons.create_coupon(
+        {"code": "TEMP", "type": "percent", "value": 10, "allowed_user_ids": [5, 6]}
+    )
+    assert coupons.delete_coupon("TEMP")["ok"] is True
+
+    conn = db_connect()
+    count = conn.execute(
+        "SELECT COUNT(*) FROM coupon_allowed_users WHERE code = ?", ("TEMP",)
+    ).fetchone()[0]
+    conn.close()
+    assert count == 0
+
+
+def test_parse_allowed_user_ids_from_string(coupon_db):
+    coupons, _ = coupon_db
+    assert coupons._parse_allowed_user_ids("111, 222\n333") == [111, 222, 333]
+
+
 def test_check_promotion_below_threshold(coupon_db):
     coupons, _ = coupon_db
     assert coupons.check_promotion(499) == 0

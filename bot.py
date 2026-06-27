@@ -103,6 +103,7 @@ from security_utils import is_safe_http_url, is_static_file_allowed
 import app_state
 from services.coupons import (
     CouponConsumptionError,
+    add_coupon_users,
     check_coupon,
     check_promotion as _check_promotion_service,
     create_coupon,
@@ -110,6 +111,7 @@ from services.coupons import (
     get_coupon,
     get_my_coupons,
     list_coupons,
+    remove_coupon_user,
     replace_coupon,
     set_coupon_active,
     update_coupon,
@@ -819,12 +821,15 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• <code>max=10</code> — максимум використань\n"
             "• <code>once</code> — одноразовий (один юзер — один раз)\n"
             "• <code>expires=2025-12-31</code> — термін дії\n"
-            "• <code>user=123456789</code> — персональний (тільки для цього юзера)\n\n"
+            "• <code>user=123456789</code> — один користувач (legacy)\n"
+            "• <code>users=111,222,333</code> — whitelist (кілька ID)\n\n"
             "<b>Приклади:</b>\n"
             "<code>/coupon add ЛІТО percent 15 min=300 expires=2026-08-31</code>\n"
+            "<code>/coupon add УЧНІ percent 10 expires=2027-05-31 users=111,222</code>\n"
             "<code>/coupon add VIP fixed 100 once user=718746623</code>\n\n"
             "<b>Інші команди:</b>\n"
             "<code>/coupon list</code> — всі купони\n"
+            "<code>/coupon adduser КОД 123456789</code> — додати ID до купона\n"
             "<code>/coupon disable КОД</code> — вимкнути\n"
             "<code>/coupon enable КОД</code> — увімкнути\n"
             "<code>/coupon delete КОД</code> — видалити",
@@ -843,7 +848,9 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text("❌ Значення має бути числом")
             return
 
-        min_order = 0; uses_max = 0; one_per_user = 0; expires_at = None; personal_user_id = None
+        min_order = 0; uses_max = 0; one_per_user = 0; expires_at = None
+        personal_user_id = None
+        allowed_user_ids = None
         for opt in args[4:]:
             if opt.startswith('min='):
                 min_order = int(opt[4:])
@@ -853,10 +860,12 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 one_per_user = 1
             elif opt.startswith('expires='):
                 expires_at = opt[8:]
+            elif opt.startswith('users='):
+                allowed_user_ids = opt[6:]
             elif opt.startswith('user='):
                 personal_user_id = int(opt[5:])
 
-        result = replace_coupon({
+        payload = {
             "code": code,
             "type": ctype,
             "value": value,
@@ -866,27 +875,81 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "active": 1,
             "expires_at": expires_at,
             "personal_user_id": personal_user_id,
-        })
+        }
+        if allowed_user_ids is not None:
+            payload["allowed_user_ids"] = allowed_user_ids
+
+        result = replace_coupon(payload)
         if not result.get("ok"):
             await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
             return
 
         coupon = result.get("coupon") or {}
         label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
-        user_str = f" для юзера `{personal_user_id}`" if personal_user_id else ""
+        allowed_count = len(coupon.get("allowed_user_ids") or [])
+        if allowed_count:
+            user_str = f" · обмежений: {allowed_count} юзер(ів)"
+        elif personal_user_id:
+            user_str = f" для юзера `{personal_user_id}`"
+        else:
+            user_str = ""
         reply_lines = [f"✅ Купон `{code}` створено! Знижка {label}{user_str}"]
 
         if result.get("created"):
-            notifications = await notify_coupon_created(coupon, source="coupon_cmd")
-            if personal_user_id:
-                if notifications.get("user_sent"):
-                    reply_lines.append(f"📨 Повідомлення надіслано юзеру `{personal_user_id}`")
-                elif notifications.get("user_sent") is False:
-                    reply_lines.append(
-                        "⚠️ Купон створено, але повідомлення не доставлено "
-                        "(юзер не писав боту або заблокував)"
-                    )
+            notifications = await notify_coupon_created(
+                coupon,
+                source="coupon_cmd",
+                notify_user_ids=result.get("added_user_ids"),
+            )
+            notified = notifications.get("users_notified") or []
+            failed = notifications.get("users_failed") or []
+            if notified:
+                if len(notified) == 1:
+                    reply_lines.append(f"📨 Повідомлення надіслано юзеру `{notified[0]}`")
+                else:
+                    reply_lines.append(f"📨 Повідомлення надіслано {len(notified)} юзерам")
+            elif failed:
+                reply_lines.append(
+                    "⚠️ Купон створено, але повідомлення не доставлено "
+                    "(юзер не писав боту або заблокував)"
+                )
+            elif personal_user_id and notifications.get("user_sent") is False:
+                reply_lines.append(
+                    "⚠️ Купон створено, але повідомлення не доставлено "
+                    "(юзер не писав боту або заблокував)"
+                )
 
+        await message.reply_text("\n".join(reply_lines), parse_mode='Markdown')
+
+    elif sub == 'adduser' and len(args) >= 3:
+        code = args[1].upper()
+        try:
+            new_user_id = int(args[2])
+        except ValueError:
+            await message.reply_text("❌ Telegram user ID має бути числом")
+            return
+
+        result = add_coupon_users(code, [new_user_id])
+        if not result.get("ok"):
+            await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
+            return
+
+        coupon = result.get("coupon") or {}
+        added = result.get("added_user_ids") or []
+        if not added:
+            await message.reply_text(f"ℹ️ Юзер `{new_user_id}` вже є у whitelist купона `{code}`", parse_mode='Markdown')
+            return
+
+        notifications = await notify_coupon_created(
+            coupon,
+            source="coupon_cmd",
+            notify_user_ids=added,
+        )
+        reply_lines = [f"✅ Додано `{new_user_id}` до купона `{code}`"]
+        if notifications.get("users_notified"):
+            reply_lines.append(f"📨 Повідомлення надіслано юзеру `{new_user_id}`")
+        elif notifications.get("users_failed"):
+            reply_lines.append("⚠️ ID додано, але повідомлення не доставлено")
         await message.reply_text("\n".join(reply_lines), parse_mode='Markdown')
 
     elif sub == 'list':
@@ -902,7 +965,11 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             uses_max = int(c.get('uses_max') or 0)
             uses_str = f"{uses_count}/{uses_max}" if uses_max else f"{uses_count}/∞"
             exp = f" · до {c.get('expires_at')}" if c.get('expires_at') else ""
-            lines.append(f"{status} `{c['code']}` — {label} · {uses_str}{exp}")
+            allowed = c.get("allowed_user_ids") or []
+            restrict = f" · обмежений: {len(allowed)}" if allowed else (
+                f" · персональний: {c.get('personal_user_id')}" if c.get("personal_user_id") else ""
+            )
+            lines.append(f"{status} `{c['code']}` — {label} · {uses_str}{exp}{restrict}")
         await message.reply_text("\n".join(lines), parse_mode='Markdown')
 
     elif sub in ('disable', 'enable') and len(args) >= 2:
@@ -2326,7 +2393,11 @@ async def handle_create_coupon(request: web.Request):
         if not result.get("ok"):
             return web.json_response(result, status=400, headers=cors_headers(request))
 
-        notifications = await notify_coupon_created(result.get("coupon") or {}, source="admin_panel")
+        notifications = await notify_coupon_created(
+            result.get("coupon") or {},
+            source="admin_panel",
+            notify_user_ids=result.get("added_user_ids"),
+        )
         result["notifications"] = notifications
         return web.json_response(result, status=201, headers=cors_headers(request))
     except Exception as e:
@@ -2351,6 +2422,70 @@ async def handle_update_coupon(request: web.Request):
         else:
             result = await run_db(update_coupon, code, data)
 
+        if result.get("ok") and result.get("added_user_ids"):
+            notifications = await notify_coupon_created(
+                result.get("coupon") or {},
+                source="admin_panel",
+                notify_user_ids=result.get("added_user_ids"),
+            )
+            result["notifications"] = notifications
+
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_add_coupon_users(request: web.Request):
+    """Додати Telegram ID до whitelist купона."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        code = request.match_info.get("code", "")
+        data = await request.json()
+        user_ids = data.get("user_ids") or data.get("user_id")
+        if user_ids is None:
+            return web.json_response(
+                {"ok": False, "error": "Потрібен user_ids або user_id"},
+                status=400,
+                headers=cors_headers(request),
+            )
+
+        result = await run_db(add_coupon_users, code, user_ids)
+        if not result.get("ok"):
+            return web.json_response(result, status=400, headers=cors_headers(request))
+
+        if result.get("added_user_ids"):
+            notifications = await notify_coupon_created(
+                result.get("coupon") or {},
+                source="admin_panel",
+                notify_user_ids=result.get("added_user_ids"),
+            )
+            result["notifications"] = notifications
+
+        return web.json_response(result, status=200, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_remove_coupon_user(request: web.Request):
+    """Прибрати Telegram ID з whitelist купона."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        code = request.match_info.get("code", "")
+        user_id = int(request.match_info.get("user_id", 0))
+        result = await run_db(remove_coupon_user, code, user_id)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
