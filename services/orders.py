@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 
 from catalog_store import CUSTOM_PRODUCTS_CACHE, PRODUCTS_CACHE
 from db_core import db_connect, is_postgres as _is_postgres, sql as _sql
@@ -282,15 +283,20 @@ def tg_username_from_order(order: dict) -> str | None:
     return None
 
 
+_TG_USERNAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{4,31}$")
+
+
 def _normalize_tg_handle(username: str | None) -> str | None:
+    """Повертає handle лише для справжнього @username (не ім'я клієнта)."""
     raw = (username or "").strip()
-    if raw.startswith("@"):
-        handle = raw[1:].strip()
-    else:
-        handle = raw
-    if handle and handle not in ("невідомо", "—"):
-        return handle
-    return None
+    if not raw.startswith("@"):
+        return None
+    handle = raw[1:].strip()
+    if not handle or handle in ("невідомо", "—"):
+        return None
+    if not _TG_USERNAME_RE.match(handle):
+        return None
+    return handle
 
 
 def tg_contact_url(user_id: int | None, username: str | None = None) -> str | None:
@@ -302,11 +308,8 @@ def tg_contact_url(user_id: int | None, username: str | None = None) -> str | No
 
 
 def tg_contact_keyboard_url(user_id: int | None, username: str | None = None) -> str | None:
-    """URL для InlineKeyboardButton. tg://user?id= блокується Telegram (privacy)."""
-    handle = _normalize_tg_handle(username)
-    if handle:
-        return f"https://t.me/{handle}"
-    return None
+    """URL для InlineKeyboardButton «Написати»."""
+    return tg_contact_url(user_id, username)
 
 
 def tg_contact_url_from_order(order: dict) -> str | None:

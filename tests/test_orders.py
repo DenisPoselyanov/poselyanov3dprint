@@ -8,7 +8,12 @@ def test_tg_contact_url_with_username():
 
 
 def test_tg_contact_url_with_handle_without_at():
-    assert tg_contact_url(123, "MihoDmitriev") == "https://t.me/MihoDmitriev"
+    assert tg_contact_url(123, "MihoDmitriev") == "tg://user?id=123"
+
+
+def test_tg_contact_url_first_name_not_handle():
+    assert tg_contact_url(987654321, "Саня") == "tg://user?id=987654321"
+    assert tg_contact_url(987654321, "Николай") == "tg://user?id=987654321"
 
 
 def test_tg_contact_url_fallback_to_user_id():
@@ -27,8 +32,10 @@ def test_tg_contact_keyboard_url_with_username():
 
 
 def test_tg_contact_keyboard_url_skips_user_id_links():
-    assert tg_contact_keyboard_url(987654321, "невідомо") is None
-    assert tg_contact_keyboard_url(987654321, None) is None
+    assert tg_contact_keyboard_url(987654321, "невідомо") == "tg://user?id=987654321"
+    assert tg_contact_keyboard_url(987654321, "Саня") == "tg://user?id=987654321"
+    assert tg_contact_keyboard_url(987654321, None) == "tg://user?id=987654321"
+    assert tg_contact_keyboard_url(None, None) is None
 
 
 def test_tg_contact_url_from_order():
