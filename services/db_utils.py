@@ -5,9 +5,63 @@ from __future__ import annotations
 from datetime import datetime
 
 from catalog_store import init_catalog_tables, load_filaments_file, sync_filament_colors_table
-from db_core import db_connect, is_postgres as _is_postgres
+from db_core import db_connect, is_postgres as _is_postgres, sql as _sql
 
 import config
+
+
+def _migrate_coupon_uses_status(conn) -> None:
+    """Add coupon_uses.status and fix uses_count for pending reservations."""
+    if _is_postgres():
+        conn.execute(
+            "ALTER TABLE coupon_uses ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'confirmed'"
+        )
+    else:
+        cu_cols = [row[1] for row in conn.execute("PRAGMA table_info(coupon_uses)").fetchall()]
+        if "status" not in cu_cols:
+            conn.execute(
+                "ALTER TABLE coupon_uses ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'"
+            )
+        else:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_coupon_uses_code_status ON coupon_uses(code, status)"
+            )
+            return
+
+    if _is_postgres():
+        conn.execute("""
+            UPDATE coupon_uses
+            SET status = 'pending'
+            WHERE order_id IN (
+                SELECT id FROM orders WHERE status IN ('new', 'draft')
+            )
+              AND status = 'confirmed'
+        """)
+    else:
+        conn.execute(
+            _sql("""
+                UPDATE coupon_uses
+                SET status = 'pending'
+                WHERE order_id IN (
+                    SELECT id FROM orders WHERE status IN ('new', 'draft')
+                )
+                  AND status = 'confirmed'
+            """)
+        )
+
+    reconcile_sql = """
+        UPDATE coupons
+        SET uses_count = (
+            SELECT COUNT(*) FROM coupon_uses cu
+            WHERE cu.code = coupons.code AND cu.status = 'confirmed'
+        )
+        WHERE code IN (SELECT DISTINCT code FROM coupon_uses)
+    """
+    conn.execute(reconcile_sql)
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_coupon_uses_code_status ON coupon_uses(code, status)"
+    )
 
 
 def row_to_dict(row) -> dict:
@@ -86,7 +140,8 @@ def init_db() -> None:
                 code TEXT NOT NULL,
                 user_id BIGINT NOT NULL,
                 order_id BIGINT,
-                used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                status TEXT NOT NULL DEFAULT 'confirmed'
             )
         """)
         conn.execute("""
@@ -126,6 +181,7 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_code ON coupon_uses(code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked)")
+        _migrate_coupon_uses_status(conn)
         conn.execute("""
             INSERT INTO coupon_allowed_users (code, user_id)
             SELECT code, personal_user_id FROM coupons
@@ -191,7 +247,8 @@ def init_db() -> None:
                 code      TEXT NOT NULL,
                 user_id   INTEGER NOT NULL,
                 order_id  INTEGER,
-                used_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                used_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status    TEXT NOT NULL DEFAULT 'confirmed'
             )
         """)
         conn.execute("""
@@ -234,6 +291,7 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code)"
         )
+        _migrate_coupon_uses_status(conn)
         conn.execute("""
             INSERT OR IGNORE INTO coupon_allowed_users (code, user_id)
             SELECT code, personal_user_id FROM coupons WHERE personal_user_id IS NOT NULL

@@ -7,7 +7,12 @@ import re
 
 from catalog_store import CUSTOM_PRODUCTS_CACHE, PRODUCTS_CACHE
 from db_core import db_connect, is_postgres as _is_postgres, sql as _sql
-from services.coupons import CouponConsumptionError, consume_coupon
+from services.coupons import (
+    CouponConsumptionError,
+    confirm_coupon_for_order,
+    release_coupon_for_order,
+    reserve_coupon,
+)
 from services.db_utils import row_to_dict
 
 _user_order_locks: dict[int, asyncio.Lock] = {}
@@ -166,7 +171,7 @@ def save_order(
 
     if coupon_code:
         try:
-            consume_coupon(conn, coupon_code, user_id, order_id)
+            reserve_coupon(conn, coupon_code, user_id, order_id)
         except CouponConsumptionError:
             conn.rollback()
             conn.close()
@@ -226,8 +231,23 @@ def save_idempotent_order(user_id: int, idempotency_key: str, order_id: int, is_
 
 
 def update_order_status(order_id: int, status: str) -> None:
-    conn = db_connect()
+    conn = db_connect(dict_rows=True)
+    row = conn.execute(
+        _sql("SELECT status FROM orders WHERE id = ?"),
+        (order_id,),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return
+
+    old_status = row["status"] if isinstance(row, dict) else row[0]
     conn.execute(_sql("UPDATE orders SET status = ? WHERE id = ?"), (status, order_id))
+
+    if status == "confirmed" and old_status != "confirmed":
+        confirm_coupon_for_order(conn, order_id)
+    elif status == "cancelled" and old_status in ("new", "draft"):
+        release_coupon_for_order(conn, order_id)
+
     conn.commit()
     conn.close()
 
@@ -409,6 +429,7 @@ def delete_order(order_id: int):
     if not row:
         conn.close()
         return {"ok": False, "error": "Замовлення не знайдено"}
+    release_coupon_for_order(conn, order_id)
     conn.execute(_sql("DELETE FROM order_items WHERE order_id = ?"), (order_id,))
     conn.execute(_sql("DELETE FROM orders WHERE id = ?"), (order_id,))
     conn.commit()

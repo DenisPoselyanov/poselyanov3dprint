@@ -167,6 +167,39 @@ def _coupon_row_to_dict(row) -> dict:
     }
 
 
+def _pending_uses_count(conn, code: str) -> int:
+    row = conn.execute(
+        _sql("SELECT COUNT(*) FROM coupon_uses WHERE code = ? AND status = 'pending'"),
+        (code.upper(),),
+    ).fetchone()
+    if row is None:
+        return 0
+    if isinstance(row, dict):
+        return int(next(iter(row.values())))
+    return int(row[0])
+
+
+def _user_has_coupon_hold(conn, code: str, user_id: int) -> bool:
+    uid = int(user_id or 0)
+    if not uid:
+        return False
+    row = conn.execute(
+        _sql(
+            "SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ? "
+            "AND status IN ('pending', 'confirmed')"
+        ),
+        (code.upper(), uid),
+    ).fetchone()
+    return bool(row)
+
+
+def _coupon_uses_exhausted(c: dict, pending_count: int) -> bool:
+    uses_max = int(c.get("uses_max") or 0)
+    if not uses_max:
+        return False
+    return int(c.get("uses_count", 0)) + pending_count >= uses_max
+
+
 def _validate_coupon_row(
     c: dict,
     user_id: int,
@@ -187,10 +220,11 @@ def _validate_coupon_row(
     if check_min_order is not None and c.get("min_order") and check_min_order < c["min_order"]:
         return f"Мінімальна сума замовлення: {c['min_order']} ₴ ❌"
 
-    if c.get("uses_max") and c.get("uses_count", 0) >= c["uses_max"]:
+    coupon_code = code or c.get("code") or ""
+    pending_count = _pending_uses_count(conn, coupon_code) if conn is not None and coupon_code else 0
+    if _coupon_uses_exhausted(c, pending_count):
         return "Купон вичерпано ❌"
 
-    coupon_code = code or c.get("code") or ""
     if conn is not None and coupon_code:
         err = _user_access_error(conn, coupon_code, c, user_id)
         if err:
@@ -201,7 +235,7 @@ def _validate_coupon_row(
     return None
 
 
-def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
+def reserve_coupon(conn, code: str, user_id: int, order_id: int) -> None:
     """Atomically reserve coupon use inside an open DB transaction."""
     code = code.upper()
     uid = int(user_id or 0)
@@ -229,48 +263,22 @@ def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
     if err:
         raise CouponConsumptionError(err)
 
-    if c.get("one_per_user") and uid:
-        used = conn.execute(
-            _sql("SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ?"),
-            (code, uid),
-        ).fetchone()
-        if used:
-            raise CouponConsumptionError("Ти вже використовував цей купон ❌")
+    if c.get("one_per_user") and uid and _user_has_coupon_hold(conn, code, uid):
+        raise CouponConsumptionError("Ти вже використовував цей купон ❌")
 
-    if is_postgres():
-        updated = conn.execute(
-            """
-            UPDATE coupons
-            SET uses_count = uses_count + 1
-            WHERE code = %s AND (uses_max = 0 OR uses_count < uses_max)
-            RETURNING uses_count
-            """,
-            (code,),
-        ).fetchone()
-        if not updated:
-            raise CouponConsumptionError("Купон вичерпано ❌")
-    else:
-        cur = conn.execute(
-            _sql(
-                """
-                UPDATE coupons
-                SET uses_count = uses_count + 1
-                WHERE code = ? AND (uses_max = 0 OR uses_count < uses_max)
-                """
-            ),
-            (code,),
-        )
-        if cur.rowcount == 0:
-            raise CouponConsumptionError("Купон вичерпано ❌")
+    pending_count = _pending_uses_count(conn, code)
+    if _coupon_uses_exhausted(c, pending_count):
+        raise CouponConsumptionError("Купон вичерпано ❌")
 
     if c.get("one_per_user") and uid:
         if is_postgres():
             inserted = conn.execute(
                 """
-                INSERT INTO coupon_uses (code, user_id, order_id)
-                SELECT %s, %s, %s
+                INSERT INTO coupon_uses (code, user_id, order_id, status)
+                SELECT %s, %s, %s, 'pending'
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM coupon_uses WHERE code = %s AND user_id = %s
+                    SELECT 1 FROM coupon_uses
+                    WHERE code = %s AND user_id = %s AND status IN ('pending', 'confirmed')
                 )
                 RETURNING id
                 """,
@@ -282,10 +290,11 @@ def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
             cur = conn.execute(
                 _sql(
                     """
-                    INSERT INTO coupon_uses (code, user_id, order_id)
-                    SELECT ?, ?, ?
+                    INSERT INTO coupon_uses (code, user_id, order_id, status)
+                    SELECT ?, ?, ?, 'pending'
                     WHERE NOT EXISTS (
-                        SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ?
+                        SELECT 1 FROM coupon_uses
+                        WHERE code = ? AND user_id = ? AND status IN ('pending', 'confirmed')
                     )
                     """
                 ),
@@ -295,9 +304,62 @@ def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
                 raise CouponConsumptionError("Ти вже використовував цей купон ❌")
     else:
         conn.execute(
-            _sql("INSERT INTO coupon_uses (code, user_id, order_id) VALUES (?, ?, ?)"),
+            _sql(
+                "INSERT INTO coupon_uses (code, user_id, order_id, status) VALUES (?, ?, ?, 'pending')"
+            ),
             (code, uid, order_id),
         )
+
+
+def confirm_coupon_for_order(conn, order_id: int) -> None:
+    """Finalize a pending coupon reservation when an order is confirmed."""
+    row = conn.execute(
+        _sql("SELECT id, code, user_id, status FROM coupon_uses WHERE order_id = ? LIMIT 1"),
+        (order_id,),
+    ).fetchone()
+    if not row:
+        return
+
+    if isinstance(row, dict):
+        cu_id = int(row["id"])
+        code = str(row["code"]).upper()
+        status = row.get("status") or "confirmed"
+    else:
+        cu_id = int(row[0])
+        code = str(row[1]).upper()
+        status = row[3] if len(row) > 3 else "confirmed"
+
+    if status == "confirmed":
+        return
+    if status != "pending":
+        return
+
+    if is_postgres():
+        conn.execute(
+            "SELECT code FROM coupons WHERE code = %s FOR UPDATE",
+            (code,),
+        )
+    else:
+        conn.execute(_sql("SELECT code FROM coupons WHERE code = ?"), (code,))
+
+    conn.execute(_sql("UPDATE coupons SET uses_count = uses_count + 1 WHERE code = ?"), (code,))
+    conn.execute(
+        _sql("UPDATE coupon_uses SET status = 'confirmed' WHERE id = ?"),
+        (cu_id,),
+    )
+
+
+def release_coupon_for_order(conn, order_id: int) -> None:
+    """Release a pending coupon reservation (e.g. on order cancellation)."""
+    conn.execute(
+        _sql("DELETE FROM coupon_uses WHERE order_id = ? AND status = 'pending'"),
+        (order_id,),
+    )
+
+
+def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
+    """Backward-compatible alias: reserve only (final use happens on order confirm)."""
+    reserve_coupon(conn, code, user_id, order_id)
 
 
 def check_coupon(code: str, user_id: int, cart_total: int):
@@ -330,18 +392,14 @@ def check_coupon(code: str, user_id: int, cart_total: int):
         conn.close()
         return {"valid": False, "message": f"Мінімальна сума замовлення: {c['min_order']} ₴ ❌"}
 
-    if c["uses_max"] and c["uses_count"] >= c["uses_max"]:
+    pending_count = _pending_uses_count(conn, c["code"])
+    if _coupon_uses_exhausted(c, pending_count):
         conn.close()
         return {"valid": False, "message": "Купон вичерпано ❌"}
 
-    if c["one_per_user"] and user_id:
-        used = conn.execute(
-            _sql("SELECT 1 FROM coupon_uses WHERE code = ? AND user_id = ?"),
-            (c["code"], user_id),
-        ).fetchone()
-        if used:
-            conn.close()
-            return {"valid": False, "message": "Ти вже використовував цей купон ❌"}
+    if c["one_per_user"] and user_id and _user_has_coupon_hold(conn, c["code"], user_id):
+        conn.close()
+        return {"valid": False, "message": "Ти вже використовував цей купон ❌"}
 
     err = _user_access_error(conn, code, c, user_id)
     if err:
@@ -740,7 +798,7 @@ def get_my_coupons(user_id: int):
                 EXISTS(
                     SELECT 1
                     FROM coupon_uses cu
-                    WHERE cu.code = c.code AND cu.user_id = ?
+                    WHERE cu.code = c.code AND cu.user_id = ? AND cu.status = 'confirmed'
                 ) AS used_by_user
             FROM coupons c
             WHERE c.active = 1
@@ -758,7 +816,13 @@ def get_my_coupons(user_id: int):
                     )
               )
               AND (c.expires_at IS NULL OR c.expires_at > {date_expr})
-              AND (c.uses_max = 0 OR c.uses_count < c.uses_max)
+              AND (
+                    c.uses_max = 0
+                    OR c.uses_count + (
+                        SELECT COUNT(*) FROM coupon_uses cu2
+                        WHERE cu2.code = c.code AND cu2.status = 'pending'
+                    ) < c.uses_max
+              )
             ORDER BY
                 CASE WHEN EXISTS (
                     SELECT 1 FROM coupon_allowed_users cau WHERE cau.code = c.code

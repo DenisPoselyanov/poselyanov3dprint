@@ -152,6 +152,17 @@ def test_check_coupon_personal_user_mismatch(coupon_db):
     assert "іншому користувачу" in result["message"]
 
 
+def _insert_order(conn, order_id=1, user_id=1, status="new", coupon_code=None):
+    conn.execute(
+        """
+        INSERT INTO orders (id, user_id, username, first_name, total_price, status, coupon_code)
+        VALUES (?, ?, 'user', 'Test', 100, ?, ?)
+        """,
+        (order_id, user_id, status, coupon_code),
+    )
+    conn.commit()
+
+
 def test_check_coupon_one_per_user_already_used(coupon_db):
     coupons, _ = coupon_db
     from db_core import db_connect
@@ -159,8 +170,8 @@ def test_check_coupon_one_per_user_already_used(coupon_db):
     conn = db_connect()
     _insert_coupon(conn, code="ONCE", one_per_user=1)
     conn.execute(
-        "INSERT INTO coupon_uses (code, user_id, order_id) VALUES (?, ?, ?)",
-        ("ONCE", 7, 1),
+        "INSERT INTO coupon_uses (code, user_id, order_id, status) VALUES (?, ?, ?, ?)",
+        ("ONCE", 7, 1, "confirmed"),
     )
     conn.commit()
     conn.close()
@@ -170,29 +181,152 @@ def test_check_coupon_one_per_user_already_used(coupon_db):
     assert "вже використовував" in result["message"]
 
 
-def test_consume_coupon_increments_uses_count(coupon_db):
+def test_reserve_coupon_does_not_increment_uses_count(coupon_db):
     coupons, _ = coupon_db
     from db_core import db_connect
 
     conn = db_connect()
     _insert_coupon(conn, code="USEME", uses_max=5, uses_count=0)
-    coupons.consume_coupon(conn, "USEME", 1, 10)
+    _insert_order(conn, order_id=10)
+    coupons.reserve_coupon(conn, "USEME", 1, 10)
     row = conn.execute("SELECT uses_count FROM coupons WHERE code = ?", ("USEME",)).fetchone()
+    pending = conn.execute(
+        "SELECT status FROM coupon_uses WHERE order_id = ?", (10,)
+    ).fetchone()
     conn.close()
 
-    assert row[0] == 1
+    assert row[0] == 0
+    assert pending[0] == "pending"
 
 
-def test_consume_coupon_raises_when_exhausted(coupon_db):
+def test_confirm_coupon_for_order_increments_uses_count(coupon_db):
     coupons, _ = coupon_db
     from db_core import db_connect
 
     conn = db_connect()
-    _insert_coupon(conn, code="GONE", uses_max=1, uses_count=1)
+    _insert_coupon(conn, code="USEME", uses_max=5, uses_count=0)
+    _insert_order(conn, order_id=10)
+    coupons.reserve_coupon(conn, "USEME", 1, 10)
+    conn.commit()
 
-    with pytest.raises(coupons.CouponConsumptionError, match="вичерпано"):
-        coupons.consume_coupon(conn, "GONE", 1, 10)
+    coupons.confirm_coupon_for_order(conn, 10)
+    conn.commit()
+
+    row = conn.execute("SELECT uses_count FROM coupons WHERE code = ?", ("USEME",)).fetchone()
+    status = conn.execute(
+        "SELECT status FROM coupon_uses WHERE order_id = ?", (10,)
+    ).fetchone()
     conn.close()
+
+    assert row[0] == 1
+    assert status[0] == "confirmed"
+
+
+def test_release_coupon_for_order_removes_pending(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="USEME", uses_max=5, uses_count=0)
+    _insert_order(conn, order_id=10)
+    coupons.reserve_coupon(conn, "USEME", 1, 10)
+    conn.commit()
+
+    coupons.release_coupon_for_order(conn, 10)
+    conn.commit()
+
+    count = conn.execute("SELECT COUNT(*) FROM coupon_uses WHERE order_id = ?", (10,)).fetchone()
+    uses_count = conn.execute("SELECT uses_count FROM coupons WHERE code = ?", ("USEME",)).fetchone()
+    conn.close()
+
+    assert count[0] == 0
+    assert uses_count[0] == 0
+
+
+def test_reserve_coupon_raises_when_exhausted(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="GONE", uses_max=1, uses_count=0)
+    _insert_order(conn, order_id=10)
+    coupons.reserve_coupon(conn, "GONE", 1, 10)
+    conn.commit()
+    conn.close()
+
+    conn = db_connect()
+    _insert_order(conn, order_id=11, user_id=2)
+    with pytest.raises(coupons.CouponConsumptionError, match="вичерпано"):
+        coupons.reserve_coupon(conn, "GONE", 2, 11)
+    conn.close()
+
+
+def test_check_coupon_blocks_pending_hold_for_one_per_user(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="ONCE", one_per_user=1)
+    _insert_order(conn, order_id=10, user_id=7)
+    coupons.reserve_coupon(conn, "ONCE", 7, 10)
+    conn.commit()
+    conn.close()
+
+    result = coupons.check_coupon("ONCE", 7, 500)
+    assert result["valid"] is False
+    assert "вже використовував" in result["message"]
+
+
+def test_get_my_coupons_pending_not_marked_used(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="PENDING", one_per_user=1)
+    _insert_order(conn, order_id=10, user_id=42)
+    coupons.reserve_coupon(conn, "PENDING", 42, 10)
+    conn.commit()
+    conn.close()
+
+    rows = coupons.get_my_coupons(42)
+    row = next(r for r in rows if (r[0] if not isinstance(r, dict) else r["code"]) == "PENDING")
+    used = row[-1] if not isinstance(row, dict) else row["used_by_user"]
+    assert not used
+
+
+def test_reserve_then_release_allows_reuse(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="REUSE", one_per_user=1)
+    _insert_order(conn, order_id=10, user_id=7)
+    coupons.reserve_coupon(conn, "REUSE", 7, 10)
+    conn.commit()
+    coupons.release_coupon_for_order(conn, 10)
+    conn.commit()
+    conn.close()
+
+    result = coupons.check_coupon("REUSE", 7, 500)
+    assert result["valid"] is True
+
+
+def test_confirm_coupon_is_idempotent(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="IDEM", uses_max=5)
+    _insert_order(conn, order_id=10)
+    coupons.reserve_coupon(conn, "IDEM", 1, 10)
+    conn.commit()
+    coupons.confirm_coupon_for_order(conn, 10)
+    coupons.confirm_coupon_for_order(conn, 10)
+    conn.commit()
+
+    row = conn.execute("SELECT uses_count FROM coupons WHERE code = ?", ("IDEM",)).fetchone()
+    conn.close()
+    assert row[0] == 1
 
 
 def test_check_promotion_disabled(monkeypatch, coupon_db):

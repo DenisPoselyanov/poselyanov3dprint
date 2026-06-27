@@ -102,7 +102,8 @@ CREATE TABLE IF NOT EXISTS coupon_uses (
     code TEXT NOT NULL,
     user_id BIGINT NOT NULL,
     order_id BIGINT,
-    used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status TEXT NOT NULL DEFAULT 'confirmed'
 );
 
 CREATE TABLE IF NOT EXISTS coupon_allowed_users (
@@ -131,6 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_code ON coupon_uses(code);
+CREATE INDEX IF NOT EXISTS idx_coupon_uses_code_status ON coupon_uses(code, status);
 CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code);
 CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked);
 
