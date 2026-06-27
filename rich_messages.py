@@ -680,9 +680,13 @@ def build_admin_coupon_created_notification(
         ids_preview = ", ".join(f"<code>{uid}</code>" for uid in allowed_user_ids[:10])
         if len(allowed_user_ids) > 10:
             ids_preview += f" … (+{len(allowed_user_ids) - 10})"
-        conditions.append(f"<li>Обмежений: {len(allowed_user_ids)} користувач(ів): {ids_preview}</li>")
+        if len(allowed_user_ids) == 1:
+            access_label = "Доступ лише для 1 користувача"
+        else:
+            access_label = f"Доступ лише для {len(allowed_user_ids)} користувачів"
+        conditions.append(f"<li>{access_label}: {ids_preview}</li>")
     elif personal_user_id:
-        conditions.append(f"<li>Персональний для user_id: <code>{personal_user_id}</code></li>")
+        conditions.append(f"<li>Доступ лише для user_id: <code>{personal_user_id}</code></li>")
     if conditions:
         parts.append("<ul>")
         parts.extend(conditions)

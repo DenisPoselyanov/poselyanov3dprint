@@ -2260,9 +2260,9 @@
                     <input type="date" name="expires_at">
                 </div>
                 <div class="form-group">
-                    <label>Telegram user ID (whitelist)</label>
+                    <label>Telegram ID (доступ лише для цих користувачів)</label>
                     <textarea name="allowed_user_ids" rows="4" placeholder="Один ID на рядок або через кому&#10;Напр.: 123456789&#10;987654321"></textarea>
-                    <small style="color:var(--text-muted); display:block; margin-top:6px;">Залиште порожнім для публічного купона. Лише ці користувачі зможуть застосувати код.</small>
+                    <small style="color:var(--text-muted); display:block; margin-top:6px;">Залиште порожнім для публічного купона. Код зможуть застосувати лише вказані Telegram ID.</small>
                 </div>
                 <div class="form-group">
                     <div class="toggle-row">
@@ -2993,10 +2993,12 @@
             if (exp) parts.push(`до ${exp}`);
             if (coupon.one_per_user) parts.push('одноразовий');
             const allowed = coupon.allowed_user_ids || [];
-            if (allowed.length) {
-                parts.push(`обмежений: ${allowed.length} користувач(ів)`);
+            if (allowed.length === 1) {
+                parts.push('доступ лише для: 1 користувача');
+            } else if (allowed.length) {
+                parts.push(`доступ лише для: ${allowed.length} користувачів`);
             } else if (coupon.personal_user_id) {
-                parts.push(`персональний: ${coupon.personal_user_id}`);
+                parts.push(`доступ лише для ID ${coupon.personal_user_id}`);
             }
             return parts.join(' · ');
         }

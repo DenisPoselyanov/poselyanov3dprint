@@ -845,7 +845,7 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• <code>once</code> — одноразовий (один юзер — один раз)\n"
             "• <code>expires=2025-12-31</code> — термін дії\n"
             "• <code>user=123456789</code> — один користувач (legacy)\n"
-            "• <code>users=111,222,333</code> — whitelist (кілька ID)\n\n"
+            "• <code>users=111,222,333</code> — доступ лише для цих Telegram ID\n\n"
             "<b>Приклади:</b>\n"
             "<code>/coupon add ЛІТО percent 15 min=300 expires=2026-08-31</code>\n"
             "<code>/coupon add УЧНІ percent 10 expires=2027-05-31 users=111,222</code>\n"
@@ -910,10 +910,12 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         coupon = result.get("coupon") or {}
         label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
         allowed_count = len(coupon.get("allowed_user_ids") or [])
-        if allowed_count:
-            user_str = f" · обмежений: {allowed_count} юзер(ів)"
+        if allowed_count == 1:
+            user_str = " · доступ лише для: 1 користувача"
+        elif allowed_count:
+            user_str = f" · доступ лише для: {allowed_count} користувачів"
         elif personal_user_id:
-            user_str = f" для юзера `{personal_user_id}`"
+            user_str = f" · доступ лише для ID `{personal_user_id}`"
         else:
             user_str = ""
         reply_lines = [f"✅ Купон `{code}` створено! Знижка {label}{user_str}"]
@@ -960,7 +962,10 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         coupon = result.get("coupon") or {}
         added = result.get("added_user_ids") or []
         if not added:
-            await message.reply_text(f"ℹ️ Юзер `{new_user_id}` вже є у whitelist купона `{code}`", parse_mode='Markdown')
+            await message.reply_text(
+                f"ℹ️ Юзер `{new_user_id}` вже має доступ до купона `{code}`",
+                parse_mode='Markdown',
+            )
             return
 
         notifications = await notify_coupon_created(
@@ -989,9 +994,14 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             uses_str = f"{uses_count}/{uses_max}" if uses_max else f"{uses_count}/∞"
             exp = f" · до {c.get('expires_at')}" if c.get('expires_at') else ""
             allowed = c.get("allowed_user_ids") or []
-            restrict = f" · обмежений: {len(allowed)}" if allowed else (
-                f" · персональний: {c.get('personal_user_id')}" if c.get("personal_user_id") else ""
-            )
+            if len(allowed) == 1:
+                restrict = " · доступ лише для: 1 користувача"
+            elif allowed:
+                restrict = f" · доступ лише для: {len(allowed)} користувачів"
+            else:
+                restrict = (
+                    f" · доступ лише для ID {c.get('personal_user_id')}" if c.get("personal_user_id") else ""
+                )
             lines.append(f"{status} `{c['code']}` — {label} · {uses_str}{exp}{restrict}")
         await message.reply_text("\n".join(lines), parse_mode='Markdown')
 
