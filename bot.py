@@ -41,7 +41,6 @@ from rich_messages import (
     build_admin_orders_batch,
     build_broadcast_report,
     build_client_order_confirmation,
-    build_client_price_quote,
     build_admin_coupon_created_notification,
     build_personal_coupon_notification,
     build_order_history,
@@ -972,6 +971,55 @@ def _client_block_from_db(order: dict, db_items: list[dict]) -> dict:
         "comment": order.get("comment"),
         "price_pending": bool(order.get("price_pending")),
     }
+
+
+async def _refresh_client_confirmation_after_pricing(uid_int: int, order_id: int) -> int:
+    """Видаляє старе підтвердження клієнту та надсилає оновлене з актуальною ціною."""
+    bot = app_state.bot_app.bot
+    existing = confirmation_messages.get(uid_int)
+
+    order_ids = [order_id]
+    if existing and len(existing.get("orders", [])) > 1:
+        admin_batch = admin_channel_messages.get(uid_int)
+        batch_ids = (admin_batch or {}).get("order_ids")
+        if batch_ids and order_id in batch_ids:
+            order_ids = list(batch_ids)
+
+    orders_batch: list[dict] = []
+    for oid in order_ids:
+        o, db_items = await run_db(get_order_with_items, oid)
+        if not o:
+            continue
+        if o.get("status") not in ("new", "draft"):
+            continue
+        orders_batch.append(_client_block_from_db(o, db_items))
+
+    if not orders_batch:
+        o, db_items = await run_db(get_order_with_items, order_id)
+        if not o:
+            raise ValueError("Замовлення не знайдено")
+        orders_batch = [_client_block_from_db(o, db_items)]
+
+    confirm_html = build_client_order_confirmation(orders_batch)
+
+    if existing:
+        try:
+            await bot.delete_message(chat_id=uid_int, message_id=existing["message_id"])
+        except Exception as e:
+            logger.warning(
+                "Не вдалось видалити старе підтвердження %s для %s: %s",
+                existing["message_id"], uid_int, e,
+            )
+
+    msg_id = await send_rich_message(bot, uid_int, confirm_html)
+    confirmation_messages[uid_int] = {
+        "message_id": msg_id,
+        "orders": orders_batch,
+        "html": confirm_html,
+        "time": datetime.now(),
+        "format": "rich",
+    }
+    return msg_id
 
 
 def _build_single_order_channel_markup(
@@ -2102,28 +2150,35 @@ async def handle_update_order_pricing(request: web.Request):
 
         user_id_from_result = result.get("user_id")
 
-        if data.get("notify_client") and user_id_from_result:
-            uid_int = int(user_id_from_result)
-            order, items = await run_db(get_order_with_items, order_id)
-            if order and items:
-                quote_html = build_client_price_quote(order_id, int(order.get("total_price") or 0), items)
-                existing_confirm = confirmation_messages.get(uid_int)
-                edited = False
-                if existing_confirm:
-                    try:
-                        await edit_rich_message(
-                            bot_app.bot, uid_int, existing_confirm["message_id"], quote_html
-                        )
-                        confirmation_messages.pop(uid_int, None)
-                        edited = True
-                    except Exception as e:
-                        logger.warning(f"Не вдалось відредагувати підтвердження клієнту, надсилаємо нове: {e}")
-                if not edited:
-                    try:
-                        await send_rich_message(bot_app.bot, uid_int, quote_html)
-                        confirmation_messages.pop(uid_int, None)
-                    except Exception as e:
-                        logger.error(f"Помилка повідомлення клієнту про ціну: {e}")
+        if data.get("notify_client"):
+            uid_int = int(user_id_from_result or 0)
+            if uid_int <= 0:
+                result["client_notified"] = False
+                result["notify_error"] = "У замовлення немає Telegram ID клієнта"
+                logger.warning(
+                    "Не можу надіслати ціну клієнту для #%s: user_id відсутній", order_id
+                )
+            elif not app_state.bot_app:
+                result["client_notified"] = False
+                result["notify_error"] = "Бот не ініціалізовано"
+                logger.error("bot_app не ініціалізовано — не можу надіслати ціну клієнту")
+            else:
+                try:
+                    await _refresh_client_confirmation_after_pricing(uid_int, order_id)
+                    result["client_notified"] = True
+                    logger.info(
+                        "✅ Оновлено підтвердження клієнту %s після ціни замовлення #%s",
+                        uid_int, order_id,
+                    )
+                except Exception as e:
+                    result["client_notified"] = False
+                    result["notify_error"] = str(e)
+                    logger.error(
+                        "Помилка повідомлення клієнту %s про ціну #%s: %s",
+                        uid_int, order_id, e,
+                    )
+                    if "blocked" in str(e).lower() or "Forbidden" in str(e):
+                        await run_db(set_blocked, uid_int, True)
 
         # Оновлюємо повідомлення в адмін-каналі — прибираємо «договірна» та ставимо актуальну суму
         if user_id_from_result:

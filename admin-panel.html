@@ -4417,7 +4417,16 @@
                 });
                 const result = await res.json();
                 if (!res.ok || !result.ok) throw new Error(result.error || 'Помилка збереження');
-                showToast('Ціну збережено ✅', 'success');
+                let toastMsg = 'Ціну збережено ✅';
+                if (notifyClient) {
+                    if (result.client_notified) {
+                        toastMsg += ' · повідомлення надіслано клієнту';
+                    } else {
+                        toastMsg += ' · повідомлення не доставлено';
+                        if (result.notify_error) toastMsg += `: ${result.notify_error}`;
+                    }
+                }
+                showToast(toastMsg, result.client_notified === false && notifyClient ? 'error' : 'success');
                 await loadOrders();
                 expandedOrderId = orderId;
                 renderOrderDetails(orderId);
