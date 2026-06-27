@@ -129,7 +129,7 @@ from services.orders import (
     save_order,
     set_order_channel_message_id,
     set_orders_channel_message_ids,
-    tg_username_from_order as _tg_username_from_order,
+    tg_contact_url as _tg_contact_url,
     update_order_pricing,
     update_order_status,
     user_order_lock as _user_order_lock,
@@ -542,12 +542,35 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💰 Зароблено: *{earned} ₴*\n",
         f"🕐 Останні користувачі:",
     ]
-    for name, username in recent:
+    for uid, name, username in recent:
         safe_name = escape_markdown(str(name or ""), version=1)
-        safe_username = escape_markdown(str(username or ""), version=1)
-        lines.append(f"• {safe_name} {safe_username}")
+        raw_username = str(username or "").strip()
+        has_handle = raw_username.startswith("@") and raw_username[1:].strip() not in ("", "невідомо", "—")
+        if has_handle:
+            safe_username = escape_markdown(raw_username, version=1)
+            lines.append(f"• {safe_name} {safe_username}")
+        else:
+            safe_id = escape_markdown(str(uid), version=1)
+            lines.append(f"• {safe_name} — ID: `{safe_id}`")
 
-    # Виводимо топ-5 найпопулярніших товарів серед підтверджених замовлень    
+    contact_buttons = []
+    for uid, name, username in recent:
+        raw_username = str(username or "").strip()
+        has_handle = raw_username.startswith("@") and raw_username[1:].strip() not in ("", "невідомо", "—")
+        if has_handle:
+            continue
+        contact_url = _tg_contact_url(uid, username)
+        if not contact_url:
+            continue
+        label = (str(name or "").strip() or f"ID {uid}")[:32]
+        contact_buttons.append(InlineKeyboardButton(f"💬 {label}", url=contact_url))
+
+    reply_markup = None
+    if contact_buttons:
+        rows = [contact_buttons[i:i + 2] for i in range(0, len(contact_buttons), 2)]
+        reply_markup = InlineKeyboardMarkup(rows)
+
+    # Виводимо топ-5 найпопулярніших товарів серед підтверджених замовлень
     if top_products:
         lines.append(f"\n🏆 *Топ товари:*")
         for name, cnt in top_products:
@@ -561,7 +584,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"• `{safe_code}` — {uses} раз, -{disc} ₴")
         lines.append(f"💸 Всього знижок: *{total_discount} ₴*")
 
-    await update.message.reply_text("\n".join(lines), parse_mode='Markdown')
+    await update.message.reply_text("\n".join(lines), parse_mode='Markdown', reply_markup=reply_markup)
 
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1092,7 +1115,8 @@ async def _refresh_client_confirmation_after_pricing(uid_int: int, order_id: int
 def _build_single_order_channel_markup(
     order_id: int,
     price_pending: bool,
-    tg_username: str | None,
+    user_id,
+    username: str,
     first_name: str,
 ) -> InlineKeyboardMarkup:
     status_buttons = [
@@ -1105,8 +1129,9 @@ def _build_single_order_channel_markup(
     if admin_url:
         channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
     channel_rows.append(status_buttons)
-    if tg_username:
-        channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+    contact_url = _tg_contact_url(user_id, username)
+    if contact_url:
+        channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
     return InlineKeyboardMarkup(channel_rows)
 
 
@@ -1115,14 +1140,16 @@ def _build_order_status_channel_markup(
     status: str,
     *,
     price_pending: bool,
-    tg_username: str | None,
+    user_id,
+    username: str,
     first_name: str,
 ) -> InlineKeyboardMarkup | None:
+    contact_url = _tg_contact_url(user_id, username)
     write_button = None
-    if tg_username:
+    if contact_url:
         write_button = InlineKeyboardButton(
             f"💬 Написати {first_name or 'клієнт'}",
-            url=f"https://t.me/{tg_username}",
+            url=contact_url,
         )
 
     if status == "confirmed":
@@ -1142,7 +1169,7 @@ def _build_order_status_channel_markup(
         if write_button:
             rows.append([write_button])
         return InlineKeyboardMarkup(rows)
-    return _build_single_order_channel_markup(order_id, price_pending, tg_username, first_name)
+    return _build_single_order_channel_markup(order_id, price_pending, user_id, username, first_name)
 
 
 async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
@@ -1168,14 +1195,13 @@ async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
 
     channel_message_id = order.get("channel_message_id")
     batch_order_ids = get_orders_sharing_channel_message(order_id)
-    tg_username = _tg_username_from_order(order)
     first_name = order.get("first_name") or ""
 
     if len(batch_order_ids) > 1 and channel_message_id:
         batch_html, batch_markup = _build_admin_batch(
             batch_order_ids,
             order.get("username") or "невідомо",
-            tg_username,
+            order.get("user_id"),
             first_name,
         )
         try:
@@ -1223,7 +1249,8 @@ async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
         order_id,
         status_map[action],
         price_pending=bool(order.get("price_pending")),
-        tg_username=tg_username,
+        user_id=order.get("user_id"),
+        username=order.get("username") or "невідомо",
         first_name=first_name,
     )
 
@@ -1290,7 +1317,7 @@ def _build_admin_batch_section_data(order_id: int, order: dict | None = None, it
 def _build_admin_batch(
     order_ids: list[int],
     username: str,
-    tg_username: str | None,
+    user_id,
     first_name: str,
 ) -> tuple:
     """Повертає (html, markup) для батч-повідомлення адмін-каналу."""
@@ -1321,8 +1348,9 @@ def _build_admin_batch(
             InlineKeyboardButton(f"❓ #{oid}", callback_data=f"draft_{oid}"),
             InlineKeyboardButton(f"❌ #{oid}", callback_data=f"cancel_{oid}"),
         ])
-    if tg_username:
-        rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+    contact_url = _tg_contact_url(user_id, username)
+    if contact_url:
+        rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
     markup = InlineKeyboardMarkup(rows) if rows else None
     return batch_html, markup
 
@@ -1334,7 +1362,7 @@ _admin_edit_tasks: dict[int, asyncio.Task] = {}
 def _build_single_admin_order_payload(
     order_id: int,
     username: str,
-    tg_username: str | None,
+    user_id,
     first_name: str,
 ) -> tuple[str, InlineKeyboardMarkup] | None:
     order, db_items = get_order_with_items(order_id)
@@ -1362,7 +1390,7 @@ def _build_single_admin_order_payload(
         price_pending=price_pending_db,
     )
     channel_markup = _build_single_order_channel_markup(
-        order_id, price_pending_db, tg_username, first_name,
+        order_id, price_pending_db, user_id, username, first_name,
     )
     return owner_html, channel_markup
 
@@ -1456,12 +1484,11 @@ def _schedule_admin_single_order_edit(
     user_id: int,
     order_id: int,
     username: str,
-    tg_username: str | None,
     first_name: str,
 ) -> None:
     async def _flush() -> None:
         payload = _build_single_admin_order_payload(
-            order_id, username, tg_username, first_name,
+            order_id, username, user_id, first_name,
         )
         if not payload:
             return
@@ -1472,7 +1499,7 @@ def _schedule_admin_single_order_edit(
             channel_markup=channel_markup,
             order_ids=[order_id],
             username=username,
-            tg_username=tg_username,
+            tg_username=None,
             first_name=first_name,
             fallback_html=owner_html,
             fallback_markup=channel_markup,
@@ -1495,7 +1522,7 @@ def _schedule_admin_batch_order_edit(
         batch_html, batch_markup = _build_admin_batch(
             order_ids,
             admin_batch.get("username") or "невідомо",
-            admin_batch.get("tg_username"),
+            user_id,
             admin_batch.get("first_name") or "",
         )
         await _apply_admin_channel_edit(
@@ -1504,7 +1531,7 @@ def _schedule_admin_batch_order_edit(
             channel_markup=batch_markup,
             order_ids=order_ids,
             username=admin_batch.get("username") or "невідомо",
-            tg_username=admin_batch.get("tg_username"),
+            tg_username=None,
             first_name=admin_batch.get("first_name") or "",
             fallback_html=fallback_html,
             fallback_markup=fallback_markup,
@@ -1592,11 +1619,11 @@ async def _deliver_order_notifications(
 
             if admin_batch and uid_for_batch:
                 _schedule_admin_single_order_edit(
-                    uid_for_batch, order_id, username, tg_username, first_name,
+                    uid_for_batch, order_id, username, first_name,
                 )
             elif not admin_batch and uid_for_batch:
                 payload = _build_single_admin_order_payload(
-                    order_id, username, tg_username, first_name,
+                    order_id, username, uid_for_batch, first_name,
                 )
                 if payload:
                     owner_html, channel_markup = payload
@@ -1726,16 +1753,17 @@ async def _deliver_order_notifications(
         if admin_url:
             channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
         channel_rows.append(status_buttons)
-        if tg_username:
-            channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+        contact_url = _tg_contact_url(user_id, username)
+        if contact_url:
+            channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
         channel_markup = InlineKeyboardMarkup(channel_rows)
 
         owner_rows = []
         if admin_url:
             owner_rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
         owner_rows.append(status_buttons)
-        if tg_username:
-            owner_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=f"https://t.me/{tg_username}")])
+        if contact_url:
+            owner_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
         owner_markup = InlineKeyboardMarkup(owner_rows)
 
         now_admin = datetime.now()
@@ -2277,7 +2305,8 @@ async def handle_update_order_pricing(request: web.Request):
                             new_markup = _build_single_order_channel_markup(
                                 order_ids[0],
                                 bool(upd_order.get("price_pending")),
-                                admin_batch.get("tg_username"),
+                                uid,
+                                admin_batch.get("username") or upd_order.get("username") or "невідомо",
                                 admin_batch.get("first_name") or "",
                             )
                             await edit_rich_message(
@@ -2291,7 +2320,7 @@ async def handle_update_order_pricing(request: web.Request):
                         batch_html, batch_markup = _build_admin_batch(
                             order_ids,
                             admin_batch.get("username") or "",
-                            admin_batch.get("tg_username"),
+                            uid,
                             admin_batch.get("first_name") or "",
                         )
                         await edit_rich_message(
@@ -2657,7 +2686,7 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.message.reply_markup:
         for row in query.message.reply_markup.inline_keyboard:
             for btn in row:
-                if btn.url and "t.me/" in btn.url:
+                if btn.url and ("t.me/" in btn.url or btn.url.startswith("tg://user?id=")):
                     write_button = btn
 
     if action == "confirm":
@@ -2689,7 +2718,7 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         batch_html, batch_markup = _build_admin_batch(
             full_ids,
             admin_batch.get("username") or order.get("username") or "невідомо",
-            admin_batch.get("tg_username"),
+            uid_for_admin_batch,
             admin_batch.get("first_name") or "",
         )
         if action in ("confirm", "cancel"):

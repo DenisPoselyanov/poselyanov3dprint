@@ -282,6 +282,22 @@ def tg_username_from_order(order: dict) -> str | None:
     return None
 
 
+def tg_contact_url(user_id: int | None, username: str | None = None) -> str | None:
+    raw = (username or "").strip()
+    if raw.startswith("@"):
+        handle = raw[1:].strip()
+    else:
+        handle = raw
+    if handle and handle not in ("невідомо", "—"):
+        return f"https://t.me/{handle}"
+    uid = int(user_id or 0)
+    return f"tg://user?id={uid}" if uid > 0 else None
+
+
+def tg_contact_url_from_order(order: dict) -> str | None:
+    return tg_contact_url(order.get("user_id"), order.get("username"))
+
+
 def get_order_with_items(order_id: int):
     conn = db_connect(dict_rows=True)
     order = conn.execute(

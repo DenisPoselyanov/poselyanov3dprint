@@ -4273,9 +4273,39 @@
             const username = String(order?.username || '').trim();
             if (username.startsWith('@')) {
                 const handle = username.slice(1).trim();
-                if (handle && handle !== 'невідомо') return handle;
+                if (handle && handle !== 'невідомо' && handle !== '—') return handle;
             }
             return '';
+        }
+
+        function getOrderContactUrl(order) {
+            const handle = getOrderTgHandle(order);
+            if (handle) return `https://t.me/${handle}`;
+            const uid = parseInt(order?.user_id, 10);
+            return uid > 0 ? `tg://user?id=${uid}` : null;
+        }
+
+        function openTelegramContact(url, event) {
+            event?.preventDefault();
+            const tg = window.Telegram?.WebApp;
+            if (tg?.openTelegramLink) tg.openTelegramLink(url);
+            else window.location.href = url;
+        }
+
+        function renderOrderUserLine(order) {
+            const contactUrl = getOrderContactUrl(order);
+            const name = String(order?.first_name || '').trim();
+            const handle = getOrderTgHandle(order);
+            if (!contactUrl) {
+                return escapeHtml(name || order?.username || 'невідомо');
+            }
+            const onclick = `openTelegramContact('${escapeAttr(contactUrl)}', event)`;
+            if (handle) {
+                return `<a href="${escapeAttr(contactUrl)}" onclick="${onclick}; return false;" rel="noopener">${escapeHtml(name || handle)} · @${escapeHtml(handle)}</a>`;
+            }
+            const uid = parseInt(order?.user_id, 10);
+            const label = name || `ID ${uid}`;
+            return `<a href="${escapeAttr(contactUrl)}" onclick="${onclick}; return false;" rel="noopener">${escapeHtml(label)} <span style="color:var(--text-muted)">(без @username)</span></a>`;
         }
 
         function renderOrderStatusBadge(status) {
@@ -4321,10 +4351,7 @@
             empty.style.display = 'none';
             list.innerHTML = allOrders.map(o => {
                 const status = o.status || 'new';
-                const tgHandle = getOrderTgHandle(o);
-                const userLine = tgHandle
-                    ? `<a href="https://t.me/${escapeAttr(tgHandle)}" target="_blank" rel="noopener">${escapeHtml(o.first_name || '')} · @${escapeHtml(tgHandle)}</a>`
-                    : escapeHtml(o.first_name || o.username || 'невідомо');
+                const userLine = renderOrderUserLine(o);
                 const totalHtml = o.price_pending
                     ? '<div class="order-card-total pending">⚠️ Ціна не вказана</div>'
                     : `<div class="order-card-total">${o.total_price} ₴</div>`;
@@ -4425,10 +4452,7 @@
                 const items = allItems.filter(i => !String(i.product_name || '').startsWith('🎁'));
                 const giftItems = allItems.filter(i => String(i.product_name || '').startsWith('🎁'));
                 const hasContractItems = items.some(i => i.is_contract_price);
-                const tgHandle = getOrderTgHandle(order);
-                const userLine = tgHandle
-                    ? `<a href="https://t.me/${escapeAttr(tgHandle)}" target="_blank" rel="noopener">@${escapeHtml(tgHandle)}</a>`
-                    : escapeHtml(order.username || 'невідомо');
+                const userLine = renderOrderUserLine(order);
 
                 const discount = Number(order.discount_amount || 0);
                 const summaryRows = [];

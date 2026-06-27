@@ -19,7 +19,7 @@ def get_stats():
     """).fetchone()
     user_count, order_count, order_confirmed, order_draft, order_cancelled, earned, total_discount = row
     recent = conn.execute(
-        "SELECT name, username FROM users ORDER BY joined_at DESC LIMIT 10"
+        "SELECT id, name, username FROM users ORDER BY joined_at DESC LIMIT 10"
     ).fetchall()
     top_products = conn.execute("""
         SELECT oi.product_name, SUM(oi.quantity) as cnt
