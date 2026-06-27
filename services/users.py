@@ -54,6 +54,17 @@ def set_blocked(user_id, blocked: bool) -> None:
     conn.close()
 
 
+def get_user_display_name(user_id: int) -> str:
+    if not user_id or int(user_id) <= 0:
+        return "клієнт"
+    conn = db_connect()
+    row = conn.execute(_sql("SELECT name FROM users WHERE id = ?"), (int(user_id),)).fetchone()
+    conn.close()
+    if row and row[0]:
+        return str(row[0]).strip()
+    return f"ID {int(user_id)}"
+
+
 def get_all_users():
     conn = db_connect()
     users = conn.execute("SELECT id FROM users WHERE blocked = 0").fetchall()

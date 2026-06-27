@@ -339,6 +339,17 @@ def tg_contact_keyboard_url(user_id: int | None, username: str | None = None) ->
     return None
 
 
+def contact_button_target(user_id: int | None, username: str | None = None) -> tuple[str, str] | None:
+    """('url', https://t.me/...) або ('callback', user_id) для кнопки «Написати»."""
+    handle = _normalize_tg_handle(username)
+    if handle:
+        return ("url", f"https://t.me/{handle}")
+    uid = int(user_id or 0)
+    if uid > 0:
+        return ("callback", str(uid))
+    return None
+
+
 def tg_contact_url_from_order(order: dict) -> str | None:
     return tg_contact_url(order.get("user_id"), order.get("username"))
 

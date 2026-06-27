@@ -105,7 +105,12 @@ def test_update_order_status_cancel_releases_coupon(order_db):
     assert uses_count == 0
 
 
-from services.orders import tg_contact_url, tg_contact_keyboard_url, tg_contact_url_from_order
+from services.orders import (
+    contact_button_target,
+    tg_contact_keyboard_url,
+    tg_contact_url,
+    tg_contact_url_from_order,
+)
 
 
 def test_tg_contact_url_with_username():
@@ -141,6 +146,15 @@ def test_tg_contact_keyboard_url_skips_user_id_links():
     assert tg_contact_keyboard_url(987654321, "Саня") is None
     assert tg_contact_keyboard_url(987654321, None) is None
     assert tg_contact_keyboard_url(None, None) is None
+
+
+def test_contact_button_target_callback_without_username():
+    assert contact_button_target(987654321, "Саня") == ("callback", "987654321")
+    assert contact_button_target(987654321, "невідомо") == ("callback", "987654321")
+
+
+def test_contact_button_target_url_with_username():
+    assert contact_button_target(123, "@MihoDmitriev") == ("url", "https://t.me/MihoDmitriev")
 
 
 def test_tg_contact_url_from_order():

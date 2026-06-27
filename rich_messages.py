@@ -94,6 +94,30 @@ def escape(text: str | None) -> str:
     return html.escape(str(text or ""))
 
 
+def admin_customer_html_line(
+    username: str,
+    *,
+    user_id: int | None = None,
+    first_name: str | None = None,
+) -> str:
+    from services.orders import _normalize_tg_handle, tg_contact_url
+
+    handle = _normalize_tg_handle(username)
+    if handle:
+        return f'<a href="https://t.me/{escape(handle)}">@{escape(handle)}</a>'
+    display = (first_name or username or "невідомо").strip()
+    if display in ("невідомо", "—"):
+        display = first_name or "клієнт"
+    uid = int(user_id or 0)
+    contact_url = tg_contact_url(uid, username)
+    if contact_url and uid > 0:
+        return (
+            f'<a href="{contact_url}">{escape(display)}</a>'
+            f' · ID <code>{uid}</code>'
+        )
+    return f"<b>{escape(display)}</b>"
+
+
 def format_date(date_raw) -> str:
     if not date_raw:
         return "—"
@@ -400,6 +424,8 @@ def build_admin_order_notification(
     items: list[dict],
     total_price: int,
     *,
+    user_id: int | None = None,
+    first_name: str | None = None,
     coupon_code: str | None = None,
     discount_amount: int = 0,
     coupon_discount: int | None = None,
@@ -411,9 +437,12 @@ def build_admin_order_notification(
     linked: bool = True,
     price_pending: bool = False,
 ) -> str:
+    customer = admin_customer_html_line(
+        username, user_id=user_id, first_name=first_name,
+    )
     parts = [
         f"<h2>🔔 НОВЕ ЗАМОВЛЕННЯ #{order_id}</h2>",
-        f"<p>👤 Від: <b>{escape(username)}</b></p>",
+        f"<p>👤 Від: {customer}</p>",
         "<hr/>",
         "<p><b>Товари:</b></p>",
     ]
@@ -447,14 +476,23 @@ def build_admin_order_notification(
     return "\n".join(parts)
 
 
-def build_admin_orders_batch(username: str, sections: list[dict]) -> str:
+def build_admin_orders_batch(
+    username: str,
+    sections: list[dict],
+    *,
+    user_id: int | None = None,
+    first_name: str | None = None,
+) -> str:
     """HTML для адмін-каналу: кілька замовлень одного клієнта в одному повідомленні.
 
     Кожен елемент sections містить ті самі ключі, що й build_admin_order_notification,
     плюс опційний 'status_label' і 'status'.
     """
+    customer = admin_customer_html_line(
+        username, user_id=user_id, first_name=first_name,
+    )
     parts = [
-        f"<h2>🔔 ЗАМОВЛЕННЯ від <b>{escape(username)}</b></h2>",
+        f"<h2>🔔 ЗАМОВЛЕННЯ від {customer}</h2>",
         "<hr/>",
     ]
     for i, s in enumerate(sections):
@@ -498,6 +536,8 @@ def build_admin_order_with_status(
     return build_admin_order_notification(
         order_id=int(order["id"]),
         username=order.get("username") or "невідомо",
+        user_id=order.get("user_id"),
+        first_name=order.get("first_name"),
         items=items,
         total_price=int(order.get("total_price") or 0),
         coupon_code=order.get("coupon_code"),

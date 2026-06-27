@@ -41,6 +41,7 @@ def register_telegram_handlers(app: Application, handlers) -> None:
             handlers.mycoupons,
         )
     )
+    app.add_handler(CallbackQueryHandler(handlers.contact_action, pattern=r"^contact_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.order_action, pattern=r"^(confirm|draft|cancel)_"))
 
 

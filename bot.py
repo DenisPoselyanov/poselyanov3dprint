@@ -129,13 +129,13 @@ from services.orders import (
     save_order,
     set_order_channel_message_id,
     set_orders_channel_message_ids,
-    tg_contact_keyboard_url as _tg_contact_keyboard_url,
+    contact_button_target as _contact_button_target,
     update_order_pricing,
     update_order_status,
     user_order_lock as _user_order_lock,
 )
 from services.stats import get_stats
-from services.users import get_all_users, is_user_blocked, save_user, save_user_id, set_blocked
+from services.users import get_all_users, get_user_display_name, is_user_blocked, save_user, save_user_id, set_blocked
 from services.validation import validate_order_payload
 from services.notifications import notify_coupon_created
 from handlers.register import (
@@ -559,11 +559,15 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         has_handle = raw_username.startswith("@") and raw_username[1:].strip() not in ("", "невідомо", "—")
         if has_handle:
             continue
-        contact_url = _tg_contact_keyboard_url(uid, username)
-        if not contact_url:
+        target = _contact_button_target(uid, username)
+        if not target:
             continue
         label = (str(name or "").strip() or f"ID {uid}")[:32]
-        contact_buttons.append(InlineKeyboardButton(f"💬 {label}", url=contact_url))
+        kind, value = target
+        if kind == "url":
+            contact_buttons.append(InlineKeyboardButton(f"💬 {label}", url=value))
+        else:
+            contact_buttons.append(InlineKeyboardButton(f"💬 {label}", callback_data=f"contact_{value}"))
 
     reply_markup = None
     if contact_buttons:
@@ -1122,6 +1126,17 @@ async def _refresh_client_confirmation_after_pricing(uid_int: int, order_id: int
     return msg_id
 
 
+def _make_contact_button(user_id, username: str, first_name: str) -> InlineKeyboardButton | None:
+    target = _contact_button_target(user_id, username)
+    if not target:
+        return None
+    label = f"💬 Написати {first_name or 'клієнт'}"
+    kind, value = target
+    if kind == "url":
+        return InlineKeyboardButton(label, url=value)
+    return InlineKeyboardButton(label, callback_data=f"contact_{value}")
+
+
 def _build_single_order_channel_markup(
     order_id: int,
     price_pending: bool,
@@ -1139,9 +1154,9 @@ def _build_single_order_channel_markup(
     if admin_url:
         channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
     channel_rows.append(status_buttons)
-    contact_url = _tg_contact_keyboard_url(user_id, username)
-    if contact_url:
-        channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
+    write_btn = _make_contact_button(user_id, username, first_name)
+    if write_btn:
+        channel_rows.append([write_btn])
     return InlineKeyboardMarkup(channel_rows)
 
 
@@ -1154,13 +1169,7 @@ def _build_order_status_channel_markup(
     username: str,
     first_name: str,
 ) -> InlineKeyboardMarkup | None:
-    contact_url = _tg_contact_keyboard_url(user_id, username)
-    write_button = None
-    if contact_url:
-        write_button = InlineKeyboardButton(
-            f"💬 Написати {first_name or 'клієнт'}",
-            url=contact_url,
-        )
+    write_button = _make_contact_button(user_id, username, first_name or "клієнт")
 
     if status == "confirmed":
         return InlineKeyboardMarkup([[write_button]]) if write_button else None
@@ -1244,6 +1253,8 @@ async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
     admin_html = build_admin_order_notification(
         order_id=int(order["id"]),
         username=order.get("username") or "невідомо",
+        user_id=order.get("user_id"),
+        first_name=order.get("first_name"),
         items=admin_items,
         total_price=int(order.get("total_price") or 0),
         coupon_code=order.get("coupon_code"),
@@ -1342,7 +1353,9 @@ def _build_admin_batch(
         if sec is not None:
             sections.append(sec)
 
-    batch_html = build_admin_orders_batch(username, sections)
+    batch_html = build_admin_orders_batch(
+        username, sections, user_id=user_id, first_name=first_name,
+    )
 
     rows = []
     for s in sections:
@@ -1358,9 +1371,9 @@ def _build_admin_batch(
             InlineKeyboardButton(f"❓ #{oid}", callback_data=f"draft_{oid}"),
             InlineKeyboardButton(f"❌ #{oid}", callback_data=f"cancel_{oid}"),
         ])
-    contact_url = _tg_contact_keyboard_url(user_id, username)
-    if contact_url:
-        rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
+    write_btn = _make_contact_button(user_id, username, first_name)
+    if write_btn:
+        rows.append([write_btn])
     markup = InlineKeyboardMarkup(rows) if rows else None
     return batch_html, markup
 
@@ -1388,6 +1401,8 @@ def _build_single_admin_order_payload(
     owner_html = build_admin_order_notification(
         order_id=order_id,
         username=username,
+        user_id=user_id,
+        first_name=first_name,
         items=_admin_items_from_db(db_items),
         total_price=int(order.get("total_price") or 0),
         coupon_code=coupon_code_db,
@@ -1740,6 +1755,8 @@ async def _deliver_order_notifications(
         owner_html = build_admin_order_notification(
             order_id=order_id,
             username=username,
+            user_id=user_id,
+            first_name=first_name,
             items=admin_items,
             total_price=total_price,
             coupon_code=coupon_code,
@@ -1763,17 +1780,15 @@ async def _deliver_order_notifications(
         if admin_url:
             channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
         channel_rows.append(status_buttons)
-        contact_url = _tg_contact_keyboard_url(user_id, username)
-        if contact_url:
-            channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
-        channel_markup = InlineKeyboardMarkup(channel_rows)
+        write_btn = _make_contact_button(user_id, username, first_name)
+        channel_markup = InlineKeyboardMarkup(channel_rows + ([[write_btn]] if write_btn else []))
 
         owner_rows = []
         if admin_url:
             owner_rows.append([InlineKeyboardButton("💰 Встановити ціну", web_app=WebAppInfo(url=admin_url))])
         owner_rows.append(status_buttons)
-        if contact_url:
-            owner_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
+        if write_btn:
+            owner_rows.append([write_btn])
         owner_markup = InlineKeyboardMarkup(owner_rows)
 
         now_admin = datetime.now()
@@ -2300,7 +2315,9 @@ async def handle_update_order_pricing(request: web.Request):
                             cpn = upd_order.get("coupon_code")
                             new_html = build_admin_order_notification(
                                 order_id=order_ids[0],
-                                username=admin_batch.get("username") or "",
+                                username=admin_batch.get("username") or upd_order.get("username") or "",
+                                user_id=uid,
+                                first_name=admin_batch.get("first_name") or upd_order.get("first_name"),
                                 items=_admin_items_from_db(upd_items),
                                 total_price=int(upd_order.get("total_price") or 0),
                                 coupon_code=cpn,
@@ -2679,6 +2696,31 @@ async def reload_products_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"✅ Кеш оновлено: products={len(PRODUCTS_CACHE)}, custom={len(CUSTOM_PRODUCTS_CACHE)}, filaments={len(FILAMENTS_CACHE)}"
     )
 
+async def contact_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Відкрити чат з клієнтом без @username (callback-кнопка в замовленні)."""
+    query = update.callback_query
+    if query.from_user.id != OWNER_ID:
+        await query.answer("❌ Немає доступу", show_alert=True)
+        return
+    try:
+        uid = int(query.data.split("_", 1)[1])
+    except (IndexError, ValueError):
+        await query.answer("❌ Невірний запит", show_alert=True)
+        return
+    name = await run_db(get_user_display_name, uid)
+    safe_name = html.escape(name)
+    contact_html = (
+        f'<p>👤 <a href="tg://user?id={uid}">{safe_name}</a></p>'
+        f"<p>ID: <code>{uid}</code></p>"
+        f"<blockquote><p>Натисніть ім'я, щоб відкрити чат у Telegram.</p></blockquote>"
+    )
+    await query.answer()
+    try:
+        await send_rich_message(context.bot, query.from_user.id, contact_html)
+    except Exception as e:
+        logger.warning("contact_action send failed: %s", e)
+
+
 async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2696,7 +2738,9 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.message.reply_markup:
         for row in query.message.reply_markup.inline_keyboard:
             for btn in row:
-                if btn.url and ("t.me/" in btn.url or btn.url.startswith("tg://user?id=")):
+                if btn.callback_data and btn.callback_data.startswith("contact_"):
+                    write_button = btn
+                elif btn.url and ("t.me/" in btn.url or btn.url.startswith("tg://user?id=")):
                     write_button = btn
 
     if action == "confirm":
@@ -2764,6 +2808,8 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_html = build_admin_order_notification(
         order_id=int(order["id"]),
         username=order.get("username") or "невідомо",
+        user_id=order.get("user_id"),
+        first_name=order.get("first_name"),
         items=admin_items,
         total_price=int(order.get("total_price") or 0),
         coupon_code=order.get("coupon_code"),
