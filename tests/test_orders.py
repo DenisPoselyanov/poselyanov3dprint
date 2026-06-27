@@ -32,9 +32,9 @@ def test_tg_contact_keyboard_url_with_username():
 
 
 def test_tg_contact_keyboard_url_skips_user_id_links():
-    assert tg_contact_keyboard_url(987654321, "невідомо") == "tg://user?id=987654321"
-    assert tg_contact_keyboard_url(987654321, "Саня") == "tg://user?id=987654321"
-    assert tg_contact_keyboard_url(987654321, None) == "tg://user?id=987654321"
+    assert tg_contact_keyboard_url(987654321, "невідомо") is None
+    assert tg_contact_keyboard_url(987654321, "Саня") is None
+    assert tg_contact_keyboard_url(987654321, None) is None
     assert tg_contact_keyboard_url(None, None) is None
 
 

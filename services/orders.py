@@ -308,8 +308,15 @@ def tg_contact_url(user_id: int | None, username: str | None = None) -> str | No
 
 
 def tg_contact_keyboard_url(user_id: int | None, username: str | None = None) -> str | None:
-    """URL для InlineKeyboardButton «Написати»."""
-    return tg_contact_url(user_id, username)
+    """URL для InlineKeyboardButton «Написати».
+
+    Лише https://t.me/handle — tg://user?id= у кнопках дає Button_user_privacy_restricted,
+    якщо у користувача обмеження приватності.
+    """
+    handle = _normalize_tg_handle(username)
+    if handle:
+        return f"https://t.me/{handle}"
+    return None
 
 
 def tg_contact_url_from_order(order: dict) -> str | None:
