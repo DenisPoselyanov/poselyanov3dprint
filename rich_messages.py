@@ -94,14 +94,17 @@ def escape(text: str | None) -> str:
     return html.escape(str(text or ""))
 
 
-def format_date(date_raw: str | None) -> str:
+def format_date(date_raw) -> str:
     if not date_raw:
         return "—"
     try:
-        dt = datetime.strptime(date_raw[:10], "%Y-%m-%d")
+        if isinstance(date_raw, datetime):
+            dt = date_raw
+        else:
+            dt = datetime.strptime(str(date_raw)[:10], "%Y-%m-%d")
         return f"{dt.day} {MONTHS_UA[dt.month - 1]} {dt.year}"
     except Exception:
-        return escape(date_raw[:10])
+        return escape(str(date_raw)[:10])
 
 
 def product_link(name: str, product_id: int | None, *, linked: bool = True) -> str:
