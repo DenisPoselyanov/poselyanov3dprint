@@ -56,6 +56,35 @@ sudo chmod +x /usr/local/bin/poselyanov-backup
 echo "0 3 * * * root /usr/local/bin/poselyanov-backup" | sudo tee /etc/cron.d/poselyanov-backup
 ```
 
+## Оновлення після змін у коді
+
+1. Локально: `git push`
+2. На VPS одна команда:
+
+```bash
+ssh poselyanov@<IP-VPS> "cd /opt/poselyanov3dprint && bash deploy/update.sh"
+```
+
+Скрипт робить `git pull`, оновлює залежності й перезапускає сервіс.
+
+**Один раз на VPS** (щоб `sudo systemctl restart` працював без пароля):
+
+```bash
+sudo visudo
+# додати рядок:
+# poselyanov ALL=(ALL) NOPASSWD: /bin/systemctl restart poselyanov3dprint
+```
+
+**Windows (PowerShell)** — можна зробити alias, щоб не вводити SSH щоразу:
+
+```powershell
+function Update-Vps {
+  ssh poselyanov@<IP-VPS> "cd /opt/poselyanov3dprint && bash deploy/update.sh"
+}
+```
+
+Після `git push` достатньо викликати `Update-Vps`.
+
 ## Health check
 
 `GET https://api.yourdomain.ua/health`
