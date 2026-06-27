@@ -4,6 +4,11 @@ Start.bat
 start-bot.bat
 start-ngrok.bat
 
+# Деплой (містить секрети)
+setup.sh
+deploy_remote.py
+fix_ssl.py
+
 # Середовище
 .env
 

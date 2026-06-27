@@ -429,6 +429,21 @@
             font-size: 16px;
         }
 
+        .flag-chips-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            width: 100%;
+            padding-top: 4px;
+        }
+
+        .products-count {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            min-height: 18px;
+        }
+
         .search-box input {
             flex: 1;
             padding: 10px 16px;
@@ -1593,6 +1608,22 @@
                 padding: 8px 12px;
             }
 
+            .flag-chips-row {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                padding-bottom: 4px;
+            }
+
+            .flag-chips-row::-webkit-scrollbar {
+                display: none;
+            }
+
+            .flag-chips-row .chip {
+                flex-shrink: 0;
+            }
+
             .modal {
                 align-items: flex-end;
                 padding: 0;
@@ -1906,7 +1937,17 @@
                         </div>
                     </div>
                     <input type="hidden" id="categoryFilter" value="">
+                    <div class="flag-chips-row" id="flagChipsRow">
+                        <button class="chip" data-flag="hot" type="button" onclick="toggleFlagFilter('hot')">🔥 Гарячий</button>
+                        <button class="chip" data-flag="pinned" type="button" onclick="toggleFlagFilter('pinned')">📌 Закріплений</button>
+                        <button class="chip" data-flag="gift" type="button" onclick="toggleFlagFilter('gift')">🎁 Подарунок</button>
+                        <button class="chip" data-flag="contractPrice" type="button" onclick="toggleFlagFilter('contractPrice')">💬 Договірна ціна</button>
+                        <button class="chip" data-flag="filamentChoice" type="button" onclick="toggleFlagFilter('filamentChoice')">🎨 Вибір кольору</button>
+                        <button class="chip" data-flag="luminousFilamentChoice" type="button" onclick="toggleFlagFilter('luminousFilamentChoice')">🌙 Нічні кольори</button>
+                    </div>
                 </div>
+
+                <div id="productsCount" class="products-count"></div>
 
                 <div id="loading" class="loading" style="display: none;">
                     <div class="spinner"></div>
@@ -2272,6 +2313,7 @@
         let uploadedPhotos = [];
         let productFormSnapshot = null;
         let allProducts = [];
+        let activeFlags = new Set();
         let allOrders = [];
         let allCoupons = [];
 
@@ -3126,10 +3168,30 @@
             const filtered = allProducts.filter(p => {
                 const matchSearch = !search || p.name.toLowerCase().includes(search);
                 const matchCat = !cat || p.cat === cat;
-                return matchSearch && matchCat;
+                const matchFlags = activeFlags.size === 0
+                    || [...activeFlags].every(flag => p[flag]);
+                return matchSearch && matchCat && matchFlags;
             });
 
+            const counter = document.getElementById('productsCount');
+            if (counter) {
+                counter.textContent = filtered.length < allProducts.length
+                    ? `Показано ${filtered.length} із ${allProducts.length} товарів`
+                    : `Всього товарів: ${allProducts.length}`;
+            }
+
             renderProducts(filtered);
+        }
+
+        function toggleFlagFilter(flag) {
+            if (activeFlags.has(flag)) {
+                activeFlags.delete(flag);
+            } else {
+                activeFlags.add(flag);
+            }
+            document.querySelectorAll(`[data-flag="${flag}"]`)
+                .forEach(el => el.classList.toggle('active', activeFlags.has(flag)));
+            filterProducts();
         }
 
         function toggleCategoryMenu() {
