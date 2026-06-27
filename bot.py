@@ -31,6 +31,7 @@ from telegram import (
 from telegram.ext import (
     Application, ContextTypes,
 )
+from telegram.helpers import escape_markdown
 
 # Завантажуємо змінні середовища з .env файлу, щоб не зберігати конфіденційні дані (як-от токен бота) прямо в коді.
 from dotenv import load_dotenv
@@ -541,18 +542,22 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🕐 Останні користувачі:",
     ]
     for name, username in recent:
-        lines.append(f"• {name} {username}")
+        safe_name = escape_markdown(str(name or ""), version=1)
+        safe_username = escape_markdown(str(username or ""), version=1)
+        lines.append(f"• {safe_name} {safe_username}")
 
     # Виводимо топ-5 найпопулярніших товарів серед підтверджених замовлень    
     if top_products:
         lines.append(f"\n🏆 *Топ товари:*")
         for name, cnt in top_products:
-            lines.append(f"• {name} — {cnt} шт")
+            safe_name = escape_markdown(str(name or ""), version=1)
+            lines.append(f"• {safe_name} — {cnt} шт")
 
     if coupon_stats:
         lines.append(f"\n🎟️ *Купони (топ-3):*")
         for code, uses, disc in coupon_stats:
-            lines.append(f"• `{code}` — {uses} раз, -{disc} ₴")
+            safe_code = escape_markdown(str(code or ""), version=1)
+            lines.append(f"• `{safe_code}` — {uses} раз, -{disc} ₴")
         lines.append(f"💸 Всього знижок: *{total_discount} ₴*")
 
     await update.message.reply_text("\n".join(lines), parse_mode='Markdown')
