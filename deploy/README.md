@@ -56,34 +56,57 @@ sudo chmod +x /usr/local/bin/poselyanov-backup
 echo "0 3 * * * root /usr/local/bin/poselyanov-backup" | sudo tee /etc/cron.d/poselyanov-backup
 ```
 
-## Оновлення після змін у коді
+## Автодеплой (push → VPS)
 
-1. Локально: `git push`
-2. На VPS одна команда:
+Після `git push` у `main` GitHub Actions запускає тести, потім SSH на VPS і `deploy/update.sh`.
+
+### Одноразове налаштування
+
+**1. SSH-ключ для GitHub Actions** (на VPS під `poselyanov`):
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/github_actions_deploy -N ""
+cat ~/.ssh/github_actions_deploy.pub >> ~/.ssh/authorized_keys
+cat ~/.ssh/github_actions_deploy   # скопіювати приватний ключ у секрет VPS_SSH_KEY
+```
+
+**2. Секрети в GitHub** — репозиторій → Settings → Secrets and variables → Actions:
+
+| Секрет | Значення |
+|--------|----------|
+| `VPS_SSH_HOST` | IP або домен VPS |
+| `VPS_SSH_USER` | `poselyanov` |
+| `VPS_SSH_KEY` | весь вміст `~/.ssh/github_actions_deploy` (приватний ключ) |
+
+**3. `git pull` без пароля** — репозиторій на VPS має тягнутися без інтерактиву. Найпростіше:
+
+```bash
+cd /opt/poselyanov3dprint
+git remote -v   # переконайтесь, що origin — публічний або з deploy key / token
+git pull        # має пройти без запиту логіна
+```
+
+**4. sudo без пароля** для рестарту:
+
+```bash
+sudo visudo
+# додати:
+# poselyanov ALL=(ALL) NOPASSWD: /bin/systemctl restart poselyanov3dprint
+```
+
+**5. Перший раз підтягніть `deploy/update.sh`:**
+
+```bash
+cd /opt/poselyanov3dprint && git pull && chmod +x deploy/update.sh
+```
+
+Після цього достатньо **`git push`** — VPS оновиться сам.
+
+### Ручне оновлення (запасний варіант)
 
 ```bash
 ssh poselyanov@<IP-VPS> "cd /opt/poselyanov3dprint && bash deploy/update.sh"
 ```
-
-Скрипт робить `git pull`, оновлює залежності й перезапускає сервіс.
-
-**Один раз на VPS** (щоб `sudo systemctl restart` працював без пароля):
-
-```bash
-sudo visudo
-# додати рядок:
-# poselyanov ALL=(ALL) NOPASSWD: /bin/systemctl restart poselyanov3dprint
-```
-
-**Windows (PowerShell)** — можна зробити alias, щоб не вводити SSH щоразу:
-
-```powershell
-function Update-Vps {
-  ssh poselyanov@<IP-VPS> "cd /opt/poselyanov3dprint && bash deploy/update.sh"
-}
-```
-
-Після `git push` достатньо викликати `Update-Vps`.
 
 ## Health check
 
