@@ -129,7 +129,7 @@ from services.orders import (
     save_order,
     set_order_channel_message_id,
     set_orders_channel_message_ids,
-    tg_contact_url as _tg_contact_url,
+    tg_contact_keyboard_url as _tg_contact_keyboard_url,
     update_order_pricing,
     update_order_status,
     user_order_lock as _user_order_lock,
@@ -559,7 +559,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         has_handle = raw_username.startswith("@") and raw_username[1:].strip() not in ("", "невідомо", "—")
         if has_handle:
             continue
-        contact_url = _tg_contact_url(uid, username)
+        contact_url = _tg_contact_keyboard_url(uid, username)
         if not contact_url:
             continue
         label = (str(name or "").strip() or f"ID {uid}")[:32]
@@ -1139,7 +1139,7 @@ def _build_single_order_channel_markup(
     if admin_url:
         channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
     channel_rows.append(status_buttons)
-    contact_url = _tg_contact_url(user_id, username)
+    contact_url = _tg_contact_keyboard_url(user_id, username)
     if contact_url:
         channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
     return InlineKeyboardMarkup(channel_rows)
@@ -1154,7 +1154,7 @@ def _build_order_status_channel_markup(
     username: str,
     first_name: str,
 ) -> InlineKeyboardMarkup | None:
-    contact_url = _tg_contact_url(user_id, username)
+    contact_url = _tg_contact_keyboard_url(user_id, username)
     write_button = None
     if contact_url:
         write_button = InlineKeyboardButton(
@@ -1358,7 +1358,7 @@ def _build_admin_batch(
             InlineKeyboardButton(f"❓ #{oid}", callback_data=f"draft_{oid}"),
             InlineKeyboardButton(f"❌ #{oid}", callback_data=f"cancel_{oid}"),
         ])
-    contact_url = _tg_contact_url(user_id, username)
+    contact_url = _tg_contact_keyboard_url(user_id, username)
     if contact_url:
         rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
     markup = InlineKeyboardMarkup(rows) if rows else None
@@ -1763,7 +1763,7 @@ async def _deliver_order_notifications(
         if admin_url:
             channel_rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
         channel_rows.append(status_buttons)
-        contact_url = _tg_contact_url(user_id, username)
+        contact_url = _tg_contact_keyboard_url(user_id, username)
         if contact_url:
             channel_rows.append([InlineKeyboardButton(f"💬 Написати {first_name}", url=contact_url)])
         channel_markup = InlineKeyboardMarkup(channel_rows)

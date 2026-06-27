@@ -282,20 +282,39 @@ def tg_username_from_order(order: dict) -> str | None:
     return None
 
 
-def tg_contact_url(user_id: int | None, username: str | None = None) -> str | None:
+def _normalize_tg_handle(username: str | None) -> str | None:
     raw = (username or "").strip()
     if raw.startswith("@"):
         handle = raw[1:].strip()
     else:
         handle = raw
     if handle and handle not in ("невідомо", "—"):
+        return handle
+    return None
+
+
+def tg_contact_url(user_id: int | None, username: str | None = None) -> str | None:
+    handle = _normalize_tg_handle(username)
+    if handle:
         return f"https://t.me/{handle}"
     uid = int(user_id or 0)
     return f"tg://user?id={uid}" if uid > 0 else None
 
 
+def tg_contact_keyboard_url(user_id: int | None, username: str | None = None) -> str | None:
+    """URL для InlineKeyboardButton. tg://user?id= блокується Telegram (privacy)."""
+    handle = _normalize_tg_handle(username)
+    if handle:
+        return f"https://t.me/{handle}"
+    return None
+
+
 def tg_contact_url_from_order(order: dict) -> str | None:
     return tg_contact_url(order.get("user_id"), order.get("username"))
+
+
+def tg_contact_keyboard_url_from_order(order: dict) -> str | None:
+    return tg_contact_keyboard_url(order.get("user_id"), order.get("username"))
 
 
 def get_order_with_items(order_id: int):

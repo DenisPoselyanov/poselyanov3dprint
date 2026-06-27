@@ -1,6 +1,6 @@
 """Tests for order contact URL helpers."""
 
-from services.orders import tg_contact_url, tg_contact_url_from_order
+from services.orders import tg_contact_url, tg_contact_keyboard_url, tg_contact_url_from_order
 
 
 def test_tg_contact_url_with_username():
@@ -20,6 +20,15 @@ def test_tg_contact_url_fallback_to_user_id():
 def test_tg_contact_url_no_data():
     assert tg_contact_url(None, None) is None
     assert tg_contact_url(0, "невідомо") is None
+
+
+def test_tg_contact_keyboard_url_with_username():
+    assert tg_contact_keyboard_url(123, "@MihoDmitriev") == "https://t.me/MihoDmitriev"
+
+
+def test_tg_contact_keyboard_url_skips_user_id_links():
+    assert tg_contact_keyboard_url(987654321, "невідомо") is None
+    assert tg_contact_keyboard_url(987654321, None) is None
 
 
 def test_tg_contact_url_from_order():
