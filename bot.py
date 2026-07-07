@@ -154,6 +154,7 @@ DB_FILE = config.DB_FILE
 VALIDATE_INIT_DATA = config.VALIDATE_INIT_DATA
 PROMOTION_ENABLED = config.PROMOTION_ENABLED
 MAX_UPLOAD_BYTES = config.MAX_UPLOAD_BYTES
+MAX_UPLOAD_REQUEST_BYTES = config.MAX_UPLOAD_REQUEST_BYTES
 CLOUDINARY_UPLOAD_TIMEOUT = 60
 
 if not all([config.CLOUDINARY_CLOUD_NAME, config.CLOUDINARY_API_KEY, config.CLOUDINARY_API_SECRET]):
@@ -2923,7 +2924,7 @@ def main():
     register_telegram_handlers(bot_app, sys.modules[__name__])
 
     async def run():
-        http_app = web.Application(client_max_size=MAX_UPLOAD_BYTES)
+        http_app = web.Application(client_max_size=MAX_UPLOAD_REQUEST_BYTES)
         register_http_routes(http_app, sys.modules[__name__])
         runner = web.AppRunner(http_app)
         await runner.setup()

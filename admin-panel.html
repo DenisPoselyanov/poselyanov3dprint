@@ -3733,6 +3733,67 @@
             return sig6 === 'GIF87a' || sig6 === 'GIF89a' || isWebp;
         }
 
+        const MAX_DIRECT_UPLOAD_BYTES = 20 * 1024 * 1024;
+        const IMAGE_MAX_SIDE = 2200;
+        const IMAGE_WEBP_QUALITY = 0.86;
+
+        function canvasToBlob(canvas, type, quality) {
+            return new Promise((resolve, reject) => {
+                canvas.toBlob((blob) => {
+                    if (blob) resolve(blob);
+                    else reject(new Error('Image compression failed'));
+                }, type, quality);
+            });
+        }
+
+        async function compressImageForUpload(file) {
+            if (!['image/jpeg', 'image/png'].includes(file.type) || file.size <= MAX_DIRECT_UPLOAD_BYTES) {
+                return file;
+            }
+
+            const imageUrl = URL.createObjectURL(file);
+            try {
+                const img = new Image();
+                img.decoding = 'async';
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                    img.src = imageUrl;
+                });
+
+                const scale = Math.min(1, IMAGE_MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+                canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                const blob = await canvasToBlob(canvas, 'image/webp', IMAGE_WEBP_QUALITY);
+                if (!blob || blob.size >= file.size) return file;
+
+                const baseName = (file.name || 'image').replace(/\.[^.]+$/, '');
+                return new File([blob], `${baseName}.webp`, { type: 'image/webp' });
+            } finally {
+                URL.revokeObjectURL(imageUrl);
+            }
+        }
+
+        async function readUploadResponse(res) {
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                return await res.json();
+            }
+            const text = await res.text();
+            if (res.status === 413) {
+                return {
+                    ok: false,
+                    error: 'Файл занадто великий. Спробуйте менше фото або завантаження за URL.'
+                };
+            }
+            return { ok: false, error: text || `HTTP ${res.status}` };
+        }
+
         async function uploadPhotoFromUrl() {
             const input = document.getElementById('photoUrlInput');
             const btn = document.getElementById('photoUrlBtn');
@@ -3760,7 +3821,7 @@
                     body: JSON.stringify({ url }),
                     signal: controller.signal
                 });
-                const data = await res.json();
+                const data = await readUploadResponse(res);
 
                 if (data.ok) {
                     uploadedPhotos.push(data.url);
@@ -3790,12 +3851,23 @@
                     continue;
                 }
 
+                const animated = await isLikelyAnimatedFile(file);
+                if (!animated) {
+                    try {
+                        const compressed = await compressImageForUpload(file);
+                        if (compressed.size < file.size) {
+                            file = compressed;
+                        }
+                    } catch (e) {
+                        console.warn('Image compression skipped:', e);
+                    }
+                }
+
                 const formData = new FormData();
                 formData.append('file', file, file.name);
 
                 const dragDropText = document.querySelector('.drag-drop-text');
                 const originalText = dragDropText.textContent;
-                const animated = await isLikelyAnimatedFile(file);
                 dragDropText.textContent = animated
                     ? '🎞️ Обробка анімації (може зайняти до хвилини)...'
                     : '⏳ Завантаження...';
@@ -3810,7 +3882,7 @@
                         body: formData,
                         signal: controller.signal
                     });
-                    const data = await res.json();
+                    const data = await readUploadResponse(res);
 
                     if (data.ok) {
                         uploadedPhotos.push(data.url);

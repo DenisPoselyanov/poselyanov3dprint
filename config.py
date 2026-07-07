@@ -64,7 +64,10 @@ STATIC_ALLOWED_FILES = frozenset(
     if f.strip()
 )
 
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+MAX_UPLOAD_REQUEST_BYTES = int(
+    os.environ.get("MAX_UPLOAD_REQUEST_BYTES", str(MAX_UPLOAD_BYTES + 1024 * 1024))
+)
 BROADCAST_DELAY_SEC = float(os.environ.get("BROADCAST_DELAY_SEC", "0.05"))
 # False у продакшні — не втрачати updates під час рестарту. True лише для debug/першого деплою.
 DROP_PENDING_UPDATES = os.environ.get("DROP_PENDING_UPDATES", "false").lower() in (
