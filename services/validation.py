@@ -11,6 +11,7 @@ from catalog_store import (
     reload_products_cache,
 )
 from services.coupons import check_coupon, check_promotion
+from services.pricing import actual_discount_after_rounding
 
 
 def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
@@ -105,10 +106,13 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         coupon_result = check_coupon(coupon_code, user_id, subtotal)
         if not coupon_result.get("valid"):
             return False, coupon_result.get("message", "Невалідний купон")
-        discount = int(coupon_result.get("discount", 0))
+        discount = actual_discount_after_rounding(subtotal, int(coupon_result.get("discount", 0)))
 
     after_coupon_total = max(0, subtotal - discount)
-    promotion_discount = 0 if coupon_code else check_promotion(after_coupon_total)
+    promotion_discount = 0 if coupon_code else actual_discount_after_rounding(
+        after_coupon_total,
+        check_promotion(after_coupon_total),
+    )
     server_total = max(0, after_coupon_total - promotion_discount)
 
     if server_total != int(client_total):

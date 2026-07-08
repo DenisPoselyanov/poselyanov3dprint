@@ -26,6 +26,8 @@ from services.validation import validate_order_payload  # noqa: E402
 @pytest.fixture
 def catalog(monkeypatch):
     products = [
+        {"id": 3, "name": "Rounded 170", "price": 170, "filamentChoice": False},
+        {"id": 4, "name": "Rounded 510", "price": 510, "filamentChoice": False},
         {"id": 1, "name": "Кубик", "price": 100, "filamentChoice": False},
         {"id": 2, "name": "Фігурка", "price": 200, "filamentChoice": True},
     ]
@@ -63,6 +65,10 @@ def test_check_promotion_disabled(monkeypatch):
 
 def test_check_promotion_at_threshold():
     assert check_promotion(500) == 50
+
+
+def test_check_promotion_rounds_final_price_up():
+    assert check_promotion(510) == 50
 
 
 def test_validate_order_payload_empty():
@@ -132,6 +138,42 @@ def test_validate_order_payload_with_coupon(catalog, monkeypatch):
     assert result["coupon_discount"] == 20
     assert result["total_price"] == 80
     assert result["promotion_discount"] == 0
+
+
+def test_validate_order_payload_coupon_rounds_final_price_up(catalog, monkeypatch):
+    monkeypatch.setattr(
+        "services.validation.check_coupon",
+        lambda code, user_id, subtotal: {
+            "valid": True,
+            "discount": 17,
+            "message": "ok",
+        },
+    )
+    items = [{"product_id": 3, "quantity": 1}]
+    ok, result = validate_order_payload(items, "SAVE10", 1, 160)
+    assert ok is True
+    assert result["subtotal"] == 170
+    assert result["coupon_discount"] == 10
+    assert result["total_price"] == 160
+    assert result["promotion_discount"] == 0
+
+
+def test_validate_order_payload_promotion_rounds_final_price_up(catalog, monkeypatch):
+    monkeypatch.setattr("services.validation.check_promotion", lambda total: 51 if total >= 500 else 0)
+    items = [{"product_id": 4, "quantity": 1}]
+    ok, result = validate_order_payload(items, None, 1, 460)
+    assert ok is True
+    assert result["subtotal"] == 510
+    assert result["promotion_discount"] == 50
+    assert result["total_price"] == 460
+
+
+def test_validate_order_payload_rejects_unrounded_client_total(catalog, monkeypatch):
+    monkeypatch.setattr("services.validation.check_promotion", lambda total: 51 if total >= 500 else 0)
+    items = [{"product_id": 4, "quantity": 1}]
+    ok, result = validate_order_payload(items, None, 1, 459)
+    assert ok is False
+    assert "Сума не збігається" in result
 
 
 def test_validate_order_payload_invalid_coupon(catalog, monkeypatch):

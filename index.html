@@ -3068,6 +3068,43 @@ function getCartFixedTotal() {
   return cart.reduce((s, i) => s + (i.contractPrice ? 0 : i.price * i.quantity), 0);
 }
 
+const PRICE_ROUNDING_STEP = 10;
+
+function roundPriceUp(total, step = PRICE_ROUNDING_STEP) {
+  total = Math.max(0, Math.trunc(Number(total) || 0));
+  step = Math.trunc(Number(step) || 0);
+  if (step <= 1 || total === 0) return total;
+  return Math.ceil(total / step) * step;
+}
+
+function actualDiscountAfterRounding(subtotal, rawDiscount, step = PRICE_ROUNDING_STEP) {
+  subtotal = Math.max(0, Math.trunc(Number(subtotal) || 0));
+  rawDiscount = Math.min(Math.max(0, Math.trunc(Number(rawDiscount) || 0)), subtotal);
+  if (rawDiscount <= 0) return 0;
+  return Math.max(0, subtotal - roundPriceUp(subtotal - rawDiscount, step));
+}
+
+function getPromotionDiscount(rawTotal) {
+  if (rawTotal < 500) return 0;
+  return actualDiscountAfterRounding(rawTotal, Math.floor(rawTotal * 0.1));
+}
+
+function getCartPricing() {
+  const rawTotal = getCartFixedTotal();
+  const couponDiscount = appliedCoupon
+    ? actualDiscountAfterRounding(rawTotal, appliedCoupon.discount)
+    : 0;
+  const promotionDiscount = (!appliedCoupon) ? getPromotionDiscount(rawTotal) : 0;
+  const discount = couponDiscount + promotionDiscount;
+  return {
+    rawTotal,
+    couponDiscount,
+    promotionDiscount,
+    discount,
+    finalTotal: Math.max(0, rawTotal - discount),
+  };
+}
+
 function cartHasContractItems() {
   return cart.some(i => i.contractPrice);
 }
@@ -3310,11 +3347,7 @@ function renderCart() {
 
   // Інакше — показуємо товари та підвал з сумою
   footer.style.display = '';
-  const rawTotal = getCartFixedTotal();
-  const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
-  const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
-  const discount = couponDiscount + promotionDiscount;
-  const finalTotal = rawTotal - discount;
+  const { rawTotal, promotionDiscount, discount, finalTotal } = getCartPricing();
   const totalLabel = formatCartTotalLabel(finalTotal);
   const hasContract = cartHasContractItems();
   const totalHintEl = document.getElementById('cart-total-hint');
@@ -3599,11 +3632,7 @@ function updateCartTotal() {
   const totalEl = document.getElementById('cart-total');
   const footer  = document.getElementById('cart-footer');
   if (!totalEl) return;
-  const rawTotal = getCartFixedTotal();
-  const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
-  const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
-  const discount = couponDiscount + promotionDiscount;
-  const total = rawTotal - discount;
+  const { finalTotal: total } = getCartPricing();
   totalEl.textContent = formatCartTotalLabel(total);
   if (footer) footer.style.display = cart.length || Object.keys(pendingRemovals).length ? '' : 'none';
 }
@@ -5203,11 +5232,7 @@ async function submitOrderOnce() {
   const user = tg?.initDataUnsafe?.user;
 
   // Розрахунок загальної суми замовлення з урахуванням кількості кожного товару та застосованої знижки. Це дозволяє нам отримати точну суму, яку користувач повинен сплатити, враховуючи всі товари в кошику та можливі знижки від купонів.
-  const rawTotal = getCartFixedTotal();
-  const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
-  const promotionDiscount = (!appliedCoupon && rawTotal >= 500) ? Math.floor(rawTotal * 0.1) : 0;
-  const discount = couponDiscount + promotionDiscount;
-  const total = rawTotal - discount;
+  const { discount, finalTotal: total } = getCartPricing();
 
   const payload = {
     action: 'order',

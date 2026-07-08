@@ -99,6 +99,19 @@ def test_check_coupon_percent_discount(coupon_db):
     assert result["discount"] == 20
 
 
+def test_check_coupon_percent_discount_rounds_final_price_up(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="SAVE10", type="percent", value=10)
+    conn.close()
+
+    result = coupons.check_coupon("SAVE10", 1, 170)
+    assert result["valid"] is True
+    assert result["discount"] == 10
+
+
 def test_check_coupon_fixed_discount(coupon_db):
     coupons, _ = coupon_db
     from db_core import db_connect
@@ -110,6 +123,19 @@ def test_check_coupon_fixed_discount(coupon_db):
     result = coupons.check_coupon("FIX50", 1, 200)
     assert result["valid"] is True
     assert result["discount"] == 50
+
+
+def test_check_coupon_fixed_discount_rounds_final_price_up(coupon_db):
+    coupons, _ = coupon_db
+    from db_core import db_connect
+
+    conn = db_connect()
+    _insert_coupon(conn, code="FIX50", type="fixed", value=50)
+    conn.close()
+
+    result = coupons.check_coupon("FIX50", 1, 153)
+    assert result["valid"] is True
+    assert result["discount"] == 43
 
 
 def test_check_coupon_min_order_not_met(coupon_db):
@@ -340,6 +366,11 @@ def test_check_promotion_disabled(monkeypatch, coupon_db):
 def test_check_promotion_at_threshold(coupon_db):
     coupons, _ = coupon_db
     assert coupons.check_promotion(500) == 50
+
+
+def test_check_promotion_rounds_final_price_up(coupon_db):
+    coupons, _ = coupon_db
+    assert coupons.check_promotion(510) == 50
 
 
 def _insert_allowed_users(conn, code, user_ids):

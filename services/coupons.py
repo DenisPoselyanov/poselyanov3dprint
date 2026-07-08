@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import config
 from db_core import db_connect, is_postgres, sql as _sql
 from services.db_utils import row_to_dict
+from services.pricing import actual_discount_after_rounding
 
 logger = logging.getLogger(__name__)
 
@@ -408,8 +409,8 @@ def check_coupon(code: str, user_id: int, cart_total: int):
 
     conn.close()
 
-    discount = c["value"] if c["type"] == "fixed" else round(cart_total * c["value"] / 100)
-    discount = min(discount, cart_total)
+    raw_discount = c["value"] if c["type"] == "fixed" else round(cart_total * c["value"] / 100)
+    discount = actual_discount_after_rounding(cart_total, raw_discount)
 
     label = f"-{c['value']}%" if c["type"] == "percent" else f"-{c['value']} ₴"
     return {
@@ -429,7 +430,8 @@ def check_promotion(cart_total: int):
     promotion_discount_rate = 0.10
 
     if cart_total >= promotion_min_amount:
-        return int(cart_total * promotion_discount_rate)
+        raw_discount = int(cart_total * promotion_discount_rate)
+        return actual_discount_after_rounding(cart_total, raw_discount)
     return 0
 
 
