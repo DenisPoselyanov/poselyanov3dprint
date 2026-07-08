@@ -3628,12 +3628,46 @@ function cartRemoveItem(id) {
   cartQtyChange(id, -1);
 }
 
+function updateCartDiscountSummary(pricing) {
+  const { rawTotal, promotionDiscount, discount, finalTotal } = pricing;
+  const oldPriceEl = document.getElementById('cartOldPrice');
+  if (oldPriceEl) {
+    const oldPriceTextEl = oldPriceEl.querySelector('span');
+    if (discount > 0) {
+      if (oldPriceTextEl) oldPriceTextEl.textContent = `${rawTotal} ₴`;
+      oldPriceEl.classList.add('visible');
+    } else {
+      oldPriceEl.classList.remove('visible');
+      if (oldPriceTextEl) oldPriceTextEl.textContent = '';
+    }
+  }
+
+  const promoItem = document.getElementById('cart-promo-item');
+  const promoDivider = document.querySelector('.cart-promo-divider');
+  if (promotionDiscount > 0) {
+    const promoAmountEl = promoItem?.querySelector('.amount');
+    if (promoAmountEl) {
+      promoAmountEl.textContent = `−${promotionDiscount}`;
+    } else if (document.getElementById('page-cart')?.classList.contains('active')) {
+      renderCart();
+      return;
+    }
+  } else {
+    if (promoItem) promoItem.remove();
+    if (promoDivider) promoDivider.remove();
+  }
+
+  const totalEl = document.getElementById('cart-total');
+  if (totalEl) totalEl.classList.toggle('discounted', finalTotal < rawTotal);
+}
+
 function updateCartTotal() {
   const totalEl = document.getElementById('cart-total');
   const footer  = document.getElementById('cart-footer');
   if (!totalEl) return;
-  const { finalTotal: total } = getCartPricing();
-  totalEl.textContent = formatCartTotalLabel(total);
+  const pricing = getCartPricing();
+  totalEl.textContent = formatCartTotalLabel(pricing.finalTotal);
+  updateCartDiscountSummary(pricing);
   if (footer) footer.style.display = cart.length || Object.keys(pendingRemovals).length ? '' : 'none';
 }
 
