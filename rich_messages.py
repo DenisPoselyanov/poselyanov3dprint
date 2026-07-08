@@ -501,8 +501,6 @@ def build_admin_orders_batch(
         oid = s["order_id"]
         sl = s.get("status_label")
         hdr = f"<b>Замовлення #{oid}</b>"
-        if sl:
-            hdr += f" — {escape(sl)}"
         parts.append(f"<p>{hdr}</p>")
         linked = s.get("linked", True)
         parts.extend(_render_admin_items_with_comments(s.get("items", []), linked=linked))
@@ -522,6 +520,8 @@ def build_admin_orders_batch(
             parts.append(f"<p>🎁 {gift_line} — безкоштовно</p>")
         if s.get("comment") and not _items_have_comments(s.get("items", [])):
             parts.append(f"<blockquote><p>📝 {escape(s['comment'])}</p></blockquote>")
+        if sl:
+            parts.append(f"<p><b>Статус: {escape(sl)}</b></p>")
     return "\n".join(parts)
 
 
