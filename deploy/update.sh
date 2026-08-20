@@ -5,8 +5,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "→ git pull"
-git pull
+echo "→ git fetch + reset --hard (тека деплою — лише код, дані лежать окремо)"
+git fetch origin
+git reset --hard origin/main
 
 echo "→ pip install"
 .venv/bin/pip install -q -r requirements.txt
