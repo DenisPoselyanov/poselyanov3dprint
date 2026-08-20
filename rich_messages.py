@@ -71,6 +71,7 @@ def _edit_lock(chat_id, message_id: int) -> asyncio.Lock:
     return _edit_locks[key]
 
 BOT_LINK_BASE = "https://t.me/poselyanov3dprint_bot?startapp=product_"
+CATEGORY_LINK_BASE = "https://t.me/poselyanov3dprint_bot?startapp=category_"
 DENIS_LINK = "https://t.me/denisposelyanov"
 
 MONTHS_UA = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"]
@@ -813,7 +814,8 @@ def build_sales_list(promotions: list[dict]) -> str:
             category = str(promo.get("category") or "").strip()
             category_label = GIFT_CATEGORY_LABELS.get(category)
             if category_label:
-                cart_line = f"🎁 Додай {min_items}+ товари з категорії «{escape(category_label)}» у кошик"
+                category_link = f'<a href="{CATEGORY_LINK_BASE}{category}">{escape(category_label)}</a>'
+                cart_line = f"🎁 Додай {min_items}+ товари з категорії «{category_link}» у кошик"
             else:
                 cart_line = f"🎁 Додай {min_items}+ товари у кошик"
             parts.append(

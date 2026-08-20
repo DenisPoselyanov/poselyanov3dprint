@@ -14,6 +14,7 @@ os.environ.setdefault("LOCAL_DEV_MODE", "true")
 
 from catalog_store import is_contract_product, validate_product_prices  # noqa: E402
 from rich_messages import (  # noqa: E402
+    CATEGORY_LINK_BASE,
     build_personal_coupon_notification,
     build_sales_list,
 )
@@ -255,5 +256,5 @@ def test_build_sales_list_real_promotions():
     html = build_sales_list(promotions)
     assert "−10%" in html
     assert "Від 500 ₴" in html
-    assert "категорії «Іграшки»" in html
+    assert f'<a href="{CATEGORY_LINK_BASE}toy">Іграшки</a>' in html
     assert "до 100 ₴" in html

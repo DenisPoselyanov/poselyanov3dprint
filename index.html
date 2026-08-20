@@ -4681,6 +4681,23 @@ function parseProductStartParam(startParam) {
   return { id: parseInt(m[1], 10), photoIndex: m[2] != null ? parseInt(m[2], 10) : 0 };
 }
 
+function buildCategoryShareLink(cat) {
+  return `https://t.me/poselyanov3dprint_bot?startapp=category_${cat}`;
+}
+
+function parseCategoryStartParam(startParam) {
+  if (!startParam || !startParam.startsWith('category_')) return null;
+  const cat = startParam.slice('category_'.length).trim();
+  return cat && PRODUCT_CATEGORIES.includes(cat) ? cat : null;
+}
+
+function openCategoryFromDeepLink(cat) {
+  const btn = document.querySelector('.nav-btn[data-page="products"]');
+  if (btn) switchPage('products', btn);
+  clearProductSearch();
+  selectCategory(cat);
+}
+
 // ─── CAROUSEL ───────────────────────────────────────────────
 function isAnimatedPhoto(url) {
   if (!url) return false;
@@ -5666,6 +5683,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const parsed = parseProductStartParam(startParam);
   if (parsed?.id) {
     openModal(parsed.id, 'products', { photoIndex: parsed.photoIndex });
+  } else {
+    const categoryParam = parseCategoryStartParam(startParam);
+    if (categoryParam) {
+      openCategoryFromDeepLink(categoryParam);
+    }
   }
 
   const productSearchInput = document.getElementById('products-search-input');
