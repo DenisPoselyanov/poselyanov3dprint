@@ -14,10 +14,8 @@ os.environ.setdefault("LOCAL_DEV_MODE", "true")
 
 from catalog_store import is_contract_product, validate_product_prices  # noqa: E402
 from rich_messages import (  # noqa: E402
-    BOT_LINK_BASE,
     build_personal_coupon_notification,
     build_sales_list,
-    product_link,
 )
 from services.coupons import check_promotion  # noqa: E402
 from services.validation import validate_order_payload  # noqa: E402
@@ -230,12 +228,31 @@ def test_build_personal_coupon_notification():
     assert "/mycoupons" in html
 
 
-def test_build_sales_list_product_links():
-    items = [
-        {"id": 42, "emoji": "🎁", "name": "Тестовий товар", "price": 80, "oldPrice": 100},
+def test_build_sales_list_real_promotions():
+    promotions = [
+        {
+            "id": "order_10_percent",
+            "type": "order_percent",
+            "title": "−10% на замовлення",
+            "subtitle": "При замовленні від 500 ₴ отримай знижку 10% на всю суму",
+            "emoji": "🔖",
+            "badge": "−10%",
+            "value": 10,
+            "min_order": 500,
+        },
+        {
+            "id": "gift_3_toys",
+            "type": "gift_threshold",
+            "title": "Безкоштовний подарунок",
+            "subtitle": "Додай 3+ іграшки в кошик і обери подарунок на свій смак",
+            "emoji": "🎁",
+            "badge": "",
+            "min_items": 3,
+            "max_gift_price": 100,
+        },
     ]
-    html = build_sales_list(items)
-    assert f'href="{BOT_LINK_BASE}42"' in html
-    assert product_link("🎁 Тестовий товар", 42) in html
-    assert "80 ₴" in html
-    assert "Економія: 20 ₴" in html
+    html = build_sales_list(promotions)
+    assert "−10%" in html
+    assert "Від 500 ₴" in html
+    assert "3+ товарів" in html
+    assert "до 100 ₴" in html

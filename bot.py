@@ -120,6 +120,7 @@ from services.db_utils import init_db, row_to_dict as _row_to_dict
 from services.promotions import (
     create_promotion,
     delete_promotion,
+    get_active_promotions,
     list_promotions,
     public_promotions,
     set_promotion_active,
@@ -731,11 +732,11 @@ async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         build_mycoupons_list(rows),
     )
 
-# /sales — поточні акції з products.json
+# /sales — реальні акції магазину (з адмінки, services/promotions.py)
 async def sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sale_items = [p for p in PRODUCTS_CACHE if p.get('oldPrice')]
+    promotions = get_active_promotions()
 
-    if not sale_items:
+    if not promotions:
         await send_rich_message(
             context.bot,
             update.message.chat_id,
@@ -749,7 +750,7 @@ async def sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_rich_message(
         context.bot,
         update.message.chat_id,
-        build_sales_list(sale_items),
+        build_sales_list(promotions),
         reply_markup=markup,
     )
 

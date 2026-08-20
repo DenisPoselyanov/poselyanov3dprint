@@ -771,27 +771,44 @@ def build_sales_empty() -> str:
     )
 
 
-def build_sales_list(sale_items: list[dict]) -> str:
-    parts = ["<h2>🔥 Поточні акції</h2>", "<hr/>", "<ul>"]
-    for p in sale_items:
-        emoji = p.get("emoji", "📦")
-        name = p.get("name", "—")
-        price = int(p.get("price") or 0)
-        old_price = int(p.get("oldPrice") or 0)
-        product_id = int(p.get("id") or 0) or None
-        discount = old_price - price
-        percent = round(discount / old_price * 100) if old_price else 0
-        linked_name = product_link(f"{emoji} {name}", product_id)
-        parts.append(
-            f"<li>{linked_name}"
-            f"<br/>💸 <s>{old_price} ₴</s> → <b>{price} ₴</b>"
-            f"<br/>🏷️ Економія: {discount} ₴ ({percent}%)</li>"
-        )
-    parts.extend([
-        "</ul>",
-        "<hr/>",
-        "<footer>Натисни на назву товару, щоб відкрити його в каталозі 👇</footer>",
-    ])
+def build_sales_list(promotions: list[dict]) -> str:
+    """Реальні акції магазину (з /api/promotions), а не поштучні знижки товарів."""
+    parts = ["<h2>🔥 Акції магазину</h2>", "<hr/>"]
+    for promo in promotions:
+        emoji = promo.get("emoji") or "🔥"
+        title = escape(promo.get("title") or "Акція")
+        subtitle = escape(promo.get("subtitle") or "")
+        badge = escape(promo.get("badge") or "")
+        ptype = promo.get("type")
+
+        header = f"<p>{emoji} <b>{title}</b>"
+        if badge:
+            header += f" · <code>{badge}</code>"
+        header += "</p>"
+        parts.append(header)
+
+        if ptype in ("order_percent", "order_fixed"):
+            min_order = int(promo.get("min_order") or 0)
+            if promo.get("type") == "order_percent":
+                value_line = f"🏷️ −{int(promo.get('value') or 0)}% на всю суму замовлення"
+            else:
+                value_line = f"🏷️ −{int(promo.get('value') or 0)} ₴ на всю суму замовлення"
+            parts.append(f"<blockquote><p>{value_line}<br/>📦 Від {min_order} ₴ у кошику</p></blockquote>")
+        elif ptype == "gift_threshold":
+            min_items = int(promo.get("min_items") or 0)
+            max_gift_price = int(promo.get("max_gift_price") or 0)
+            parts.append(
+                "<blockquote><p>"
+                f"🎁 Додай {min_items}+ товарів у кошик"
+                f"<br/>✨ Обери подарунок вартістю до {max_gift_price} ₴"
+                "</p></blockquote>"
+            )
+        elif subtitle:
+            parts.append(f"<blockquote><p>{subtitle}</p></blockquote>")
+
+        parts.append("<hr/>")
+
+    parts.append("<footer>Акції діють автоматично при оформленні замовлення в каталозі 👇</footer>")
     return "\n".join(parts)
 
 
