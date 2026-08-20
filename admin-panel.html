@@ -1414,6 +1414,125 @@
             transform: scale(0.9);
         }
 
+        /* ── Користувачі ───────────────────────────── */
+        .users-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-section);
+        }
+
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            min-width: 820px;
+        }
+
+        .users-table th,
+        .users-table td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .users-table tbody tr:last-child td { border-bottom: none; }
+
+        .users-table th {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--text-muted);
+            font-weight: 700;
+            background: var(--bg-tab-idle);
+        }
+
+        .users-table th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .users-table th.sortable:hover { color: var(--text-chip); }
+
+        .users-table th .sort-arrow {
+            font-size: 10px;
+            margin-left: 4px;
+            opacity: 0.35;
+        }
+
+        .users-table th.sorted { color: var(--text-chip); }
+        .users-table th.sorted .sort-arrow { opacity: 1; }
+
+        .users-table tbody tr:hover { background: var(--bg-tab-active); }
+
+        .user-name-cell { white-space: normal; min-width: 170px; }
+
+        .user-id {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .user-starts { font-weight: 800; font-size: 15px; }
+
+        .user-blocked-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            margin-left: 6px;
+        }
+
+        .users-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+
+        .users-page-info {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .users-summary {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .users-summary-card {
+            flex: 1 1 150px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: var(--bg-section);
+            border: 1px solid var(--border);
+        }
+
+        .users-summary-card .label { font-size: 12px; color: var(--text-muted); }
+        .users-summary-card .value { font-size: 20px; font-weight: 800; margin-top: 2px; }
+
+        .user-action-btn {
+            padding: 6px 10px;
+            font-size: 13px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-section);
+            color: inherit;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .user-action-btn:hover { background: var(--bg-tab-active); }
+
         .empty-state {
             text-align: center;
             padding: 80px 20px;
@@ -1921,6 +2040,7 @@
                 <button class="page-tab" type="button" data-page="filaments" onclick="switchPage('filaments')">🎨 Філаменти</button>
                 <button class="page-tab" type="button" data-page="coupons" onclick="switchPage('coupons')">🎟️ Купони</button>
                 <button class="page-tab" type="button" data-page="promotions" onclick="switchPage('promotions')">🔥 Акції</button>
+                <button class="page-tab" type="button" data-page="users" onclick="switchPage('users')">👥 Користувачі</button>
             </div>
 
             <section id="productsPage" class="page-section active">
@@ -1980,6 +2100,60 @@
                 <div id="ordersEmpty" class="empty-state" style="display:none;">
                     <div class="empty-state-icon">📭</div>
                     <p>Замовлень не знайдено</p>
+                </div>
+            </section>
+
+            <section id="usersPage" class="page-section">
+                <div class="orders-toolbar">
+                    <h2>👥 Користувачі <span id="usersCount" class="orders-count"></span></h2>
+                    <div class="orders-toolbar-right">
+                        <div class="search-box">
+                            <input type="text" id="usersSearch" placeholder="🔍 Ім’я, @username або ID..." oninput="onUsersSearchInput()">
+                        </div>
+                        <select id="usersBlockedFilter" onchange="reloadUsersFromStart()" style="padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--bg-section); color:inherit;">
+                            <option value="all">Усі</option>
+                            <option value="active">Активні</option>
+                            <option value="only">Заблоковані</option>
+                        </select>
+                        <button class="btn btn-secondary" type="button" onclick="loadUsers()">🔄 Оновити</button>
+                    </div>
+                </div>
+
+                <div class="users-summary" id="usersSummary"></div>
+
+                <div id="usersLoading" class="loading" style="display:none;">
+                    <div class="spinner"></div>
+                </div>
+
+                <div class="users-table-wrap" id="usersTableWrap">
+                    <table class="users-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" onclick="sortUsersBy('name')" data-sort="name">Користувач<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('starts')" data-sort="starts" title="Скільки разів надсилав /start">🚀 Запусків<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('last_start')" data-sort="last_start">Останній запуск<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('activity')" data-sort="activity" title="Будь-які дії: повідомлення, кнопки, каталог">💬 Дій<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('orders')" data-sort="orders">📦 Замовлень<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('spent')" data-sort="spent" title="Сума підтверджених замовлень">💰 Сума<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('joined')" data-sort="joined">Перший запуск<span class="sort-arrow">▾</span></th>
+                                <th>Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div id="usersEmpty" class="empty-state" style="display:none;">
+                    <div class="empty-state-icon">🕵️</div>
+                    <p>Користувачів не знайдено</p>
+                </div>
+
+                <div class="users-pagination">
+                    <span class="users-page-info" id="usersPageInfo"></span>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary" type="button" id="usersPrevBtn" onclick="changeUsersPage(-1)">← Назад</button>
+                        <button class="btn btn-secondary" type="button" id="usersNextBtn" onclick="changeUsersPage(1)">Далі →</button>
+                    </div>
                 </div>
             </section>
 
@@ -2490,6 +2664,13 @@
         let allPromotions = [];
         let couponStackingEnabled = false;
         let currentPromotionId = null;
+        let allUsers = [];
+        let usersTotal = 0;
+        let usersOffset = 0;
+        const USERS_PAGE_SIZE = 50;
+        let usersSort = 'starts';
+        let usersOrder = 'desc';
+        let usersSearchTimer = null;
 
         // ═══════════════════════════════════════════════════════════
         // Emoji picker
@@ -2710,6 +2891,12 @@
                 return;
             }
 
+            if (currentPage === 'users') {
+                label.textContent = 'Користувачів';
+                value.textContent = String(usersTotal);
+                return;
+            }
+
             label.textContent = 'Всього товарів';
             value.textContent = String(allProducts.length);
         }
@@ -2730,6 +2917,7 @@
             if (page === 'orders') loadOrders();
             if (page === 'coupons') loadCoupons();
             if (page === 'promotions') loadPromotions();
+            if (page === 'users') loadUsers();
         }
 
         function renderCategoryFilterMenu() {
@@ -4958,6 +5146,170 @@
             return `<span class="order-status-badge ${escapeAttr(key)}">${label}</span>`;
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // Користувачі бота
+        // ═══════════════════════════════════════════════════════════
+
+        function onUsersSearchInput() {
+            clearTimeout(usersSearchTimer);
+            usersSearchTimer = setTimeout(reloadUsersFromStart, 300);
+        }
+
+        function reloadUsersFromStart() {
+            usersOffset = 0;
+            loadUsers();
+        }
+
+        function sortUsersBy(field) {
+            if (usersSort === field) {
+                usersOrder = usersOrder === 'desc' ? 'asc' : 'desc';
+            } else {
+                usersSort = field;
+                usersOrder = field === 'name' ? 'asc' : 'desc';
+            }
+            usersOffset = 0;
+            loadUsers();
+        }
+
+        function changeUsersPage(delta) {
+            const next = usersOffset + delta * USERS_PAGE_SIZE;
+            if (next < 0 || next >= usersTotal) return;
+            usersOffset = next;
+            loadUsers();
+        }
+
+        async function loadUsers() {
+            const loading = document.getElementById('usersLoading');
+            const wrap = document.getElementById('usersTableWrap');
+            try {
+                loading.style.display = 'flex';
+                wrap.style.opacity = '0.5';
+                const params = new URLSearchParams({
+                    search: document.getElementById('usersSearch')?.value.trim() || '',
+                    blocked: document.getElementById('usersBlockedFilter')?.value || 'all',
+                    sort: usersSort,
+                    order: usersOrder,
+                    limit: String(USERS_PAGE_SIZE),
+                    offset: String(usersOffset),
+                });
+                const res = await fetch(`${API_BASE}/admin/users?${params.toString()}`);
+                if (!res.ok) throw new Error('Помилка завантаження користувачів');
+                const data = await res.json();
+                allUsers = data.users || [];
+                usersTotal = data.total || 0;
+                renderUsers();
+            } catch (e) {
+                showToast(e.message || 'Помилка завантаження користувачів', 'error');
+            } finally {
+                loading.style.display = 'none';
+                wrap.style.opacity = '1';
+                updateHeaderStat();
+            }
+        }
+
+        function formatUserDate(raw) {
+            if (!raw) return '—';
+            return formatOrderDate(raw);
+        }
+
+        function renderUsersSummary() {
+            const el = document.getElementById('usersSummary');
+            if (!el) return;
+            const pageStarts = allUsers.reduce((acc, u) => acc + (u.start_count || 0), 0);
+            const withOrders = allUsers.filter(u => (u.orders_count || 0) > 0).length;
+            const repeat = allUsers.filter(u => (u.start_count || 0) > 1).length;
+            el.innerHTML = `
+                <div class="users-summary-card">
+                    <div class="label">Всього користувачів</div>
+                    <div class="value">${usersTotal}</div>
+                </div>
+                <div class="users-summary-card">
+                    <div class="label">Запусків (на сторінці)</div>
+                    <div class="value">${pageStarts}</div>
+                </div>
+                <div class="users-summary-card">
+                    <div class="label">Запускали 2+ рази</div>
+                    <div class="value">${repeat}</div>
+                </div>
+                <div class="users-summary-card">
+                    <div class="label">Із замовленнями</div>
+                    <div class="value">${withOrders}</div>
+                </div>
+            `;
+        }
+
+        function renderUsers() {
+            const body = document.getElementById('usersTableBody');
+            const empty = document.getElementById('usersEmpty');
+            const wrap = document.getElementById('usersTableWrap');
+            const countEl = document.getElementById('usersCount');
+
+            document.querySelectorAll('.users-table th.sortable').forEach(th => {
+                const active = th.dataset.sort === usersSort;
+                th.classList.toggle('sorted', active);
+                const arrow = th.querySelector('.sort-arrow');
+                if (arrow) arrow.textContent = active && usersOrder === 'asc' ? '▴' : '▾';
+            });
+
+            if (countEl) countEl.textContent = usersTotal ? `(${usersTotal})` : '';
+            renderUsersSummary();
+
+            if (!allUsers.length) {
+                body.innerHTML = '';
+                wrap.style.display = 'none';
+                empty.style.display = 'block';
+            } else {
+                wrap.style.display = 'block';
+                empty.style.display = 'none';
+                body.innerHTML = allUsers.map(u => {
+                    const handle = String(u.username || '').replace(/^@/, '').trim();
+                    const hasHandle = handle && handle !== '—' && handle !== 'невідомо';
+                    const nameLine = escapeHtml(u.name || 'Без імені');
+                    const handleLine = hasHandle
+                        ? `<a href="https://t.me/${escapeAttr(handle)}" target="_blank" rel="noopener" class="user-id">@${escapeHtml(handle)}</a>`
+                        : '<span class="user-id">без username</span>';
+                    const blockedBadge = u.blocked ? '<span class="user-blocked-badge">заблокував бота</span>' : '';
+                    const writeBtn = hasHandle
+                        ? `<a class="user-action-btn" href="https://t.me/${escapeAttr(handle)}" target="_blank" rel="noopener">💬 Написати</a>`
+                        : `<button class="user-action-btn" type="button" onclick="copyUserId(${u.id})">📋 Копіювати ID</button>`;
+                    return `
+                    <tr>
+                        <td class="user-name-cell">
+                            <div style="font-weight:700;">${nameLine}${blockedBadge}</div>
+                            <div>${handleLine} · <span class="user-id">ID: ${u.id}</span></div>
+                        </td>
+                        <td class="user-starts">${u.start_count || 0}</td>
+                        <td>${formatUserDate(u.last_start_at)}</td>
+                        <td>${u.activity_count || 0}</td>
+                        <td>${u.orders_count || 0}</td>
+                        <td>${u.orders_total || 0} ₴</td>
+                        <td>${formatUserDate(u.joined_at)}</td>
+                        <td>${writeBtn}</td>
+                    </tr>`;
+                }).join('');
+            }
+
+            const info = document.getElementById('usersPageInfo');
+            if (info) {
+                const from = usersTotal ? usersOffset + 1 : 0;
+                const to = Math.min(usersOffset + USERS_PAGE_SIZE, usersTotal);
+                info.textContent = `Показано ${from}–${to} з ${usersTotal}`;
+            }
+            const prev = document.getElementById('usersPrevBtn');
+            const next = document.getElementById('usersNextBtn');
+            if (prev) prev.disabled = usersOffset <= 0;
+            if (next) next.disabled = usersOffset + USERS_PAGE_SIZE >= usersTotal;
+        }
+
+        async function copyUserId(userId) {
+            try {
+                await navigator.clipboard.writeText(String(userId));
+                showToast('ID скопійовано', 'success');
+            } catch (_) {
+                showToast(`ID: ${userId}`, 'success');
+            }
+        }
+
         async function loadOrders() {
             const loading = document.getElementById('ordersLoading');
             const list = document.getElementById('ordersList');
@@ -5037,10 +5389,25 @@
             if (expandedOrderId) renderOrderDetails(expandedOrderId);
         }
 
+        function parseServerDate(raw) {
+            // БД зберігає час у UTC (SQLite CURRENT_TIMESTAMP / Postgres NOW()).
+            // SQLite віддає "YYYY-MM-DD HH:MM:SS" без зони — без підказки JS
+            // трактує це як локальний час, а не UTC, тож дату/час зсуває на
+            // офсет таймзони браузера. Явно позначаємо такі рядки як UTC.
+            let str = String(raw).trim();
+            if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(str) && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(str)) {
+                str = str.replace(' ', 'T') + 'Z';
+            } else if (str.includes(' ') && !str.includes('T')) {
+                str = str.replace(' ', 'T');
+            }
+            const d = new Date(str);
+            return Number.isNaN(d.getTime()) ? null : d;
+        }
+
         function formatOrderDate(raw) {
             if (!raw) return '—';
-            const d = new Date(raw);
-            if (Number.isNaN(d.getTime())) {
+            const d = parseServerDate(raw);
+            if (!d) {
                 return String(raw).slice(0, 16).replace('T', ' ');
             }
             const pad = (n) => String(n).padStart(2, '0');

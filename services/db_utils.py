@@ -10,6 +10,41 @@ from db_core import db_connect, is_postgres as _is_postgres, sql as _sql
 import config
 
 
+def _migrate_user_activity_columns(conn) -> None:
+    """Add per-user launch/activity counters.
+
+    Наявним користувачам ставимо start_count = 1 — вони вже колись запускали бота,
+    просто до цієї міграції лічильника не існувало.
+    """
+    if _is_postgres():
+        existing = {
+            row[0]
+            for row in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+            ).fetchall()
+        }
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS start_count INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_start_at TIMESTAMPTZ")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_count INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ")
+    else:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "start_count" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN start_count INTEGER NOT NULL DEFAULT 0")
+        if "last_start_at" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN last_start_at TIMESTAMP")
+        if "activity_count" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN activity_count INTEGER NOT NULL DEFAULT 0")
+        if "last_seen_at" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMP")
+
+    if "start_count" not in existing:
+        # Разовий бекфіл: усі, хто вже є в базі, зробили щонайменше один запуск.
+        conn.execute("UPDATE users SET start_count = 1, last_start_at = joined_at WHERE start_count = 0")
+    if "activity_count" not in existing:
+        conn.execute("UPDATE users SET activity_count = 1, last_seen_at = joined_at WHERE activity_count = 0")
+
+
 def _migrate_coupon_uses_status(conn) -> None:
     """Add coupon_uses.status and fix uses_count for pending reservations."""
     if _is_postgres():
@@ -95,7 +130,11 @@ def init_db() -> None:
                 name TEXT,
                 username TEXT,
                 blocked INTEGER NOT NULL DEFAULT 0,
-                joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                start_count INTEGER NOT NULL DEFAULT 0,
+                last_start_at TIMESTAMPTZ,
+                activity_count INTEGER NOT NULL DEFAULT 0,
+                last_seen_at TIMESTAMPTZ
             )
         """)
         conn.execute("""
@@ -189,6 +228,7 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_code ON coupon_uses(code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(blocked)")
+        _migrate_user_activity_columns(conn)
         _migrate_coupon_uses_status(conn)
         conn.execute("""
             INSERT INTO coupon_allowed_users (code, user_id)
@@ -206,7 +246,11 @@ def init_db() -> None:
                 name      TEXT,
                 username  TEXT,
                 blocked   INTEGER DEFAULT 0,
-                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                start_count INTEGER NOT NULL DEFAULT 0,
+                last_start_at TIMESTAMP,
+                activity_count INTEGER NOT NULL DEFAULT 0,
+                last_seen_at TIMESTAMP
             )
         """)
         conn.execute("""
@@ -307,6 +351,7 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code)"
         )
+        _migrate_user_activity_columns(conn)
         _migrate_coupon_uses_status(conn)
         conn.execute("""
             INSERT OR IGNORE INTO coupon_allowed_users (code, user_id)

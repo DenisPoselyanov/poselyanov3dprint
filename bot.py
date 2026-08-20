@@ -149,7 +149,17 @@ from services.orders import (
     user_order_lock as _user_order_lock,
 )
 from services.stats import get_stats
-from services.users import get_all_users, get_user_display_name, is_user_blocked, save_user, save_user_id, set_blocked
+from services.users import (
+    get_all_users,
+    get_user_display_name,
+    is_user_blocked,
+    list_users,
+    record_activity,
+    record_start,
+    save_user,
+    save_user_id,
+    set_blocked,
+)
 from services.validation import validate_order_payload
 from services.notifications import notify_coupon_created
 from handlers.register import (
@@ -495,11 +505,17 @@ async def auto_register_user(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = update.effective_user
     if user and not user.is_bot:
         await run_db(save_user, user)
+        await run_db(record_activity, user.id)
 
 
 @command_cooldown(config.COMMAND_COOLDOWN_SEC)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from telegram import ReplyKeyboardRemove
+
+    user = update.effective_user
+    if user and not user.is_bot:
+        await run_db(record_start, user.id, user.first_name or "", (user.username or "").lstrip("@"))
+
     # Видаляємо стару нижню клавіатуру, якщо вона була
     tmp = await update.message.reply_text("⏳", reply_markup=ReplyKeyboardRemove())
     await tmp.delete()
@@ -2606,6 +2622,36 @@ async def handle_get_promotions(request: web.Request):
     if denied:
         return denied
     return web.json_response(await run_db(list_promotions), headers=cors_headers(request))
+
+
+async def handle_get_users(request: web.Request):
+    """Список користувачів бота з лічильниками запусків для адмін-панелі."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    q = request.query
+    try:
+        limit = int(q.get("limit", "50") or 50)
+        offset = int(q.get("offset", "0") or 0)
+    except ValueError:
+        return web.json_response(
+            {"error": "limit/offset мають бути числами"}, status=400, headers=cors_headers(request)
+        )
+
+    result = await run_db(
+        list_users,
+        search=(q.get("search") or "")[:64],
+        sort=q.get("sort") or "starts",
+        order=q.get("order") or "desc",
+        limit=limit,
+        offset=offset,
+        blocked=q.get("blocked") or "all",
+    )
+    return web.json_response(result, headers=cors_headers(request))
 
 
 async def handle_get_settings(request: web.Request):
