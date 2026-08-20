@@ -126,6 +126,11 @@ from services.promotions import (
     set_promotion_active,
     update_promotion,
 )
+from services.settings import (
+    admin_settings,
+    coupon_stacking_enabled,
+    update_admin_settings,
+)
 from services.orders import (
     delete_order,
     find_gift_product_id,
@@ -729,7 +734,7 @@ async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_rich_message(
         context.bot,
         update.message.chat_id,
-        build_mycoupons_list(rows),
+        build_mycoupons_list(rows, stacking_enabled=coupon_stacking_enabled()),
     )
 
 # /sales — реальні акції магазину (з адмінки, services/promotions.py)
@@ -1055,15 +1060,24 @@ def _admin_items_from_db(db_items: list[dict]) -> list[dict]:
     ]
 
 
+def _discount_split(order: dict) -> tuple[int, int]:
+    """(знижка купона, акційна знижка) для замовлення з БД.
+
+    Замовлення, створені до появи сумування, мають лише discount_amount —
+    там знижка цілком належить купону, якщо він був, інакше акції.
+    """
+    total = int(order.get("discount_amount") or 0)
+    promotion = int(order.get("promotion_discount") or 0)
+    if promotion > 0:
+        return max(0, total - promotion), min(promotion, total)
+    if order.get("coupon_code"):
+        return total, 0
+    return 0, total
+
+
 def _client_block_from_db(order: dict, db_items: list[dict]) -> dict:
-    discount_amount = int(order.get("discount_amount") or 0)
     coupon_code = order.get("coupon_code")
-    if coupon_code:
-        coupon_discount = discount_amount
-        promotion_discount = 0
-    else:
-        coupon_discount = 0
-        promotion_discount = discount_amount
+    coupon_discount, promotion_discount = _discount_split(order)
     return {
         "items": [
             {
@@ -1269,6 +1283,8 @@ async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
         total_price=int(order.get("total_price") or 0),
         coupon_code=order.get("coupon_code"),
         discount_amount=int(order.get("discount_amount") or 0),
+        coupon_discount=_discount_split(order)[0] or None,
+        promotion_discount=_discount_split(order)[1] or None,
         gift=order.get("gift_product_name"),
         gift_product_id=gift_product_id,
         comment=order.get("comment"),
@@ -1335,6 +1351,7 @@ def _build_admin_batch_section_data(order_id: int, order: dict | None = None, it
         "items": admin_items,
         "total_price": int(order.get("total_price") or 0),
         "discount_amount": int(order.get("discount_amount") or 0),
+        "promotion_discount": _discount_split(order)[1],
         "coupon_code": order.get("coupon_code"),
         "gift": gift_name,
         "gift_product_id": find_gift_product_id(gift_name),
@@ -1405,8 +1422,7 @@ def _build_single_admin_order_payload(
     gift_product_id = find_gift_product_id(gift_db)
     order_discount = int(order.get("discount_amount") or 0)
     coupon_code_db = order.get("coupon_code")
-    coupon_discount_db = order_discount if coupon_code_db else 0
-    promotion_discount_db = 0 if coupon_code_db else order_discount
+    coupon_discount_db, promotion_discount_db = _discount_split(order)
     price_pending_db = bool(order.get("price_pending"))
     owner_html = build_admin_order_notification(
         order_id=order_id,
@@ -1933,7 +1949,7 @@ async def handle_order(request):
             order_id, is_new = await run_db(
                 save_order,
                 user_id or 0, username, first_name, items, total_price, comment,
-                gift, coupon_code, total_discount, price_pending,
+                gift, coupon_code, total_discount, price_pending, promotion_discount,
             )
         except CouponConsumptionError as e:
             return web.json_response(
@@ -2332,8 +2348,8 @@ async def handle_update_order_pricing(request: web.Request):
                                 total_price=int(upd_order.get("total_price") or 0),
                                 coupon_code=cpn,
                                 discount_amount=disc,
-                                coupon_discount=disc if cpn else None,
-                                promotion_discount=None if cpn else (disc or None),
+                                coupon_discount=_discount_split(upd_order)[0] or None,
+                                promotion_discount=_discount_split(upd_order)[1] or None,
                                 gift=gift_name,
                                 gift_product_id=find_gift_product_id(gift_name),
                                 comment=upd_order.get("comment") or None,
@@ -2590,6 +2606,38 @@ async def handle_get_promotions(request: web.Request):
     if denied:
         return denied
     return web.json_response(await run_db(list_promotions), headers=cors_headers(request))
+
+
+async def handle_get_settings(request: web.Request):
+    """Глобальні налаштування магазину для адмін-панелі."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    return web.json_response(await run_db(admin_settings), headers=cors_headers(request))
+
+
+async def handle_update_settings(request: web.Request):
+    """Змінити глобальні налаштування (наразі — сумування купонів з акціями)."""
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response(
+            {"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request)
+        )
+
+    auth, err = resolve_request_user(request, data)
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    result = await run_db(update_admin_settings, data)
+    status = 200 if result.get("ok") else 400
+    return web.json_response(result, status=status, headers=cors_headers(request))
 
 
 async def handle_create_promotion(request: web.Request):
@@ -2898,6 +2946,8 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_price=int(order.get("total_price") or 0),
         coupon_code=order.get("coupon_code"),
         discount_amount=int(order.get("discount_amount") or 0),
+        coupon_discount=_discount_split(order)[0] or None,
+        promotion_discount=_discount_split(order)[1] or None,
         gift=order.get("gift_product_name"),
         gift_product_id=gift_product_id,
         comment=order.get("comment"),

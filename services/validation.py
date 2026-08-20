@@ -10,8 +10,9 @@ from catalog_store import (
     reload_filaments_cache,
     reload_products_cache,
 )
-from services.coupons import check_coupon, check_promotion
-from services.pricing import actual_discount_after_rounding
+from services.coupons import check_coupon
+from services.pricing import split_discounts
+from services.promotions import compute_order_raw_discount
 
 
 def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
@@ -101,19 +102,20 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
             }
         )
 
-    discount = 0
+    raw_coupon = 0
+    stack = False
     if coupon_code:
         coupon_result = check_coupon(coupon_code, user_id, subtotal)
         if not coupon_result.get("valid"):
             return False, coupon_result.get("message", "Невалідний купон")
-        discount = actual_discount_after_rounding(subtotal, int(coupon_result.get("discount", 0)))
+        raw_coupon = int(coupon_result.get("raw_discount", coupon_result.get("discount", 0)))
+        stack = bool(coupon_result.get("stacks_with_promotion"))
 
-    after_coupon_total = max(0, subtotal - discount)
-    promotion_discount = 0 if coupon_code else actual_discount_after_rounding(
-        after_coupon_total,
-        check_promotion(after_coupon_total),
+    raw_promotion = compute_order_raw_discount(subtotal)
+    discount, promotion_discount = split_discounts(
+        subtotal, raw_coupon, raw_promotion, stack=stack
     )
-    server_total = max(0, after_coupon_total - promotion_discount)
+    server_total = max(0, subtotal - discount - promotion_discount)
 
     if server_total != int(client_total):
         return False, f"Сума не збігається (клієнт {client_total}, сервер {server_total})"

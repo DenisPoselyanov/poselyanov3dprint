@@ -285,8 +285,8 @@ def _raw_discount(promo: dict, subtotal: int) -> int:
     return 0
 
 
-def compute_order_discount(subtotal: int) -> int:
-    """Найвигідніша для клієнта автоматична знижка на суму замовлення."""
+def compute_order_raw_discount(subtotal: int) -> int:
+    """Найвигідніша автоматична знижка до округлення підсумку."""
     subtotal = max(0, int(subtotal or 0))
     if subtotal <= 0:
         return 0
@@ -295,6 +295,12 @@ def compute_order_discount(subtotal: int) -> int:
         if promo["type"] not in DISCOUNT_TYPES:
             continue
         best = max(best, _raw_discount(promo, subtotal))
+    return best
+
+
+def compute_order_discount(subtotal: int) -> int:
+    """Найвигідніша для клієнта автоматична знижка на суму замовлення."""
+    best = compute_order_raw_discount(subtotal)
     if best <= 0:
         return 0
     return actual_discount_after_rounding(subtotal, best)
@@ -309,10 +315,13 @@ def get_gift_rule() -> dict | None:
 
 
 def public_promotions() -> dict:
-    """Payload для вітрини: активні акції + похідні правила."""
+    """Payload для вітрини: активні акції + похідні правила + глобальні перемикачі."""
+    from services.settings import coupon_stacking_enabled
+
     active = get_active_promotions()
     gift = get_gift_rule()
     return {
+        "coupon_stacking_enabled": coupon_stacking_enabled(),
         "promotions": active,
         "gift_rule": (
             {

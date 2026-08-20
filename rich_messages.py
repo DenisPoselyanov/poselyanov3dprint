@@ -840,11 +840,16 @@ def build_mycoupons_empty() -> str:
     )
 
 
-def build_mycoupons_list(rows: list[tuple]) -> str:
+def build_mycoupons_list(rows: list[tuple], *, stacking_enabled: bool = False) -> str:
     parts = ["<h2>🎟️ Твої купони</h2>", "<hr/>", "<ul>"]
-    for code, ctype, value, min_order, uses_max, uses_count, one_per_user, expires_at, used_by_user in rows:
+    for row in rows:
+        code, ctype, value, min_order, uses_max, uses_count, one_per_user, expires_at = row[:8]
+        stackable = bool(row[8]) and stacking_enabled
+        used_by_user = row[9]
         label = f"{value}%" if ctype == "percent" else f"{value} ₴"
         lines = [f"🏷️ <b><code>{escape(code)}</code></b> — знижка {label}"]
+        if stackable:
+            lines.append("🔥 Сумується з акційною знижкою")
         if min_order:
             lines.append(f"Від суми: {min_order} ₴")
         if one_per_user:

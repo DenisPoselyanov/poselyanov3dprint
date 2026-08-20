@@ -73,6 +73,7 @@ def save_order(
     coupon_code=None,
     discount_amount=0,
     price_pending=0,
+    promotion_discount=0,
 ):
     conn = db_connect()
     uid = int(user_id or 0)
@@ -119,8 +120,8 @@ def save_order(
             """
             INSERT INTO orders
             (user_id, username, first_name, total_price, comment, gift_product_name,
-             coupon_code, discount_amount, status, price_pending)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'new', %s)
+             coupon_code, discount_amount, promotion_discount, status, price_pending)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'new', %s)
             RETURNING id
             """,
             (
@@ -132,6 +133,7 @@ def save_order(
                 gift_product_name,
                 coupon_code,
                 discount_amount,
+                int(promotion_discount or 0),
                 int(price_pending or 0),
             ),
         )
@@ -141,8 +143,8 @@ def save_order(
             """
             INSERT INTO orders
             (user_id, username, first_name, total_price, comment, gift_product_name,
-             coupon_code, discount_amount, status, price_pending)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
+             coupon_code, discount_amount, promotion_discount, status, price_pending)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)
             """,
             (
                 user_id,
@@ -153,6 +155,7 @@ def save_order(
                 gift_product_name,
                 coupon_code,
                 discount_amount,
+                int(promotion_discount or 0),
                 int(price_pending or 0),
             ),
         )
@@ -363,8 +366,8 @@ def get_order_with_items(order_id: int):
     order = conn.execute(
         _sql("""
             SELECT id, user_id, username, first_name, total_price, comment,
-                   gift_product_name, coupon_code, discount_amount, status, ordered_at,
-                   price_pending, channel_message_id
+                   gift_product_name, coupon_code, discount_amount, promotion_discount,
+                   status, ordered_at, price_pending, channel_message_id
             FROM orders WHERE id = ?
         """),
         (order_id,),
@@ -401,8 +404,8 @@ def get_orders_with_items_batch(order_ids: list[int]) -> dict[int, tuple[dict, l
     orders = conn.execute(
         _sql(f"""
             SELECT id, user_id, username, first_name, total_price, comment,
-                   gift_product_name, coupon_code, discount_amount, status, ordered_at,
-                   price_pending, channel_message_id
+                   gift_product_name, coupon_code, discount_amount, promotion_discount,
+                   status, ordered_at, price_pending, channel_message_id
             FROM orders WHERE id IN ({placeholders})
         """),
         tuple(unique_ids),
@@ -452,7 +455,8 @@ def list_orders(*, pending_price_only: bool = False, limit: int = 50):
     conn = db_connect(dict_rows=True)
     sql = """
         SELECT id, user_id, username, first_name, total_price, comment,
-               gift_product_name, coupon_code, discount_amount, status, ordered_at, price_pending
+               gift_product_name, coupon_code, discount_amount, promotion_discount,
+               status, ordered_at, price_pending
         FROM orders
     """
     params: list = []

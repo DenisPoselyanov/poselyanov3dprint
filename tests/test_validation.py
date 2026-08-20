@@ -116,7 +116,7 @@ def test_validate_order_payload_total_mismatch(catalog):
 
 
 def test_validate_order_payload_success_without_promotion(catalog, monkeypatch):
-    monkeypatch.setattr("services.validation.check_promotion", lambda total: 0)
+    monkeypatch.setattr("services.validation.compute_order_raw_discount", lambda total: 0)
     items = [{"product_id": 1, "quantity": 2}]
     ok, result = validate_order_payload(items, None, 1, 200)
     assert ok is True
@@ -126,7 +126,7 @@ def test_validate_order_payload_success_without_promotion(catalog, monkeypatch):
 
 
 def test_validate_order_payload_success_with_promotion(catalog, monkeypatch):
-    monkeypatch.setattr("services.validation.check_promotion", lambda total: 50 if total >= 500 else 0)
+    monkeypatch.setattr("services.validation.compute_order_raw_discount", lambda total: 50 if total >= 500 else 0)
     items = [{"product_id": 1, "quantity": 5}]
     ok, result = validate_order_payload(items, None, 1, 450)
     assert ok is True
@@ -171,7 +171,7 @@ def test_validate_order_payload_coupon_rounds_final_price_up(catalog, monkeypatc
 
 
 def test_validate_order_payload_promotion_rounds_final_price_up(catalog, monkeypatch):
-    monkeypatch.setattr("services.validation.check_promotion", lambda total: 51 if total >= 500 else 0)
+    monkeypatch.setattr("services.validation.compute_order_raw_discount", lambda total: 51 if total >= 500 else 0)
     items = [{"product_id": 4, "quantity": 1}]
     ok, result = validate_order_payload(items, None, 1, 460)
     assert ok is True
@@ -181,7 +181,7 @@ def test_validate_order_payload_promotion_rounds_final_price_up(catalog, monkeyp
 
 
 def test_validate_order_payload_rejects_unrounded_client_total(catalog, monkeypatch):
-    monkeypatch.setattr("services.validation.check_promotion", lambda total: 51 if total >= 500 else 0)
+    monkeypatch.setattr("services.validation.compute_order_raw_discount", lambda total: 51 if total >= 500 else 0)
     items = [{"product_id": 4, "quantity": 1}]
     ok, result = validate_order_payload(items, None, 1, 459)
     assert ok is False
@@ -258,3 +258,68 @@ def test_build_sales_list_real_promotions():
     assert "Від 500 ₴" in html
     assert f'<a href="{CATEGORY_LINK_BASE}toy">Іграшки</a>' in html
     assert "до 100 ₴" in html
+
+
+def _fake_coupon(raw, *, stacks):
+    return lambda code, user_id, subtotal: {
+        "valid": True,
+        "discount": raw,
+        "raw_discount": raw,
+        "stackable": stacks,
+        "stacks_with_promotion": stacks,
+        "message": "ok",
+    }
+
+
+def test_validate_order_payload_coupon_replaces_promotion(catalog, monkeypatch):
+    """Без галочки «сумувати» купон, як і раніше, скасовує акційну знижку."""
+    monkeypatch.setattr(
+        "services.validation.compute_order_raw_discount", lambda total: 50 if total >= 500 else 0
+    )
+    monkeypatch.setattr("services.validation.check_coupon", _fake_coupon(100, stacks=False))
+    items = [{"product_id": 1, "quantity": 5}]
+    ok, result = validate_order_payload(items, "SAVE100", 1, 400)
+    assert ok is True
+    assert result["coupon_discount"] == 100
+    assert result["promotion_discount"] == 0
+    assert result["total_price"] == 400
+
+
+def test_validate_order_payload_coupon_stacks_with_promotion(catalog, monkeypatch):
+    """З галочкою знижки додаються: обидві рахуються від суми кошика."""
+    monkeypatch.setattr(
+        "services.validation.compute_order_raw_discount", lambda total: 50 if total >= 500 else 0
+    )
+    monkeypatch.setattr("services.validation.check_coupon", _fake_coupon(100, stacks=True))
+    items = [{"product_id": 1, "quantity": 5}]
+    ok, result = validate_order_payload(items, "SAVE100", 1, 350)
+    assert ok is True
+    assert result["subtotal"] == 500
+    assert result["coupon_discount"] == 100
+    assert result["promotion_discount"] == 50
+    assert result["total_price"] == 350
+
+
+def test_validate_order_payload_stacked_discount_rounds_final_price_up(catalog, monkeypatch):
+    """Округлення підсумку з'їдає залишок з акції, купон лишається номінальним."""
+    monkeypatch.setattr(
+        "services.validation.compute_order_raw_discount", lambda total: 51 if total >= 500 else 0
+    )
+    monkeypatch.setattr("services.validation.check_coupon", _fake_coupon(20, stacks=True))
+    items = [{"product_id": 4, "quantity": 1}]
+    ok, result = validate_order_payload(items, "SAVE20", 1, 440)
+    assert ok is True
+    assert result["subtotal"] == 510
+    assert result["coupon_discount"] == 20
+    assert result["promotion_discount"] == 50
+    assert result["total_price"] == 440
+
+
+def test_validate_order_payload_stacked_discount_capped_at_subtotal(catalog, monkeypatch):
+    monkeypatch.setattr("services.validation.compute_order_raw_discount", lambda total: total)
+    monkeypatch.setattr("services.validation.check_coupon", _fake_coupon(500, stacks=True))
+    items = [{"product_id": 1, "quantity": 1}]
+    ok, result = validate_order_payload(items, "FREE", 1, 0)
+    assert ok is True
+    assert result["coupon_discount"] + result["promotion_discount"] == 100
+    assert result["total_price"] == 0

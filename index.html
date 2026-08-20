@@ -1727,6 +1727,27 @@
   .cart-item-promo .cart-item-bottom {
     justify-content: flex-end;
   }
+  .cart-item-coupon {
+    box-shadow: 0 0 0 1px rgba(22,163,74,.10), 0 0 24px rgba(22,163,74,.14);
+  }
+  .cart-item-coupon .cart-item-code {
+    font-family: 'Inter', monospace;
+    letter-spacing: 1.5px;
+  }
+  .cart-discount-stack-note {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin: 2px 6px 0;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+    color: #16a34a; background: #dcfce7;
+  }
+  body.dark .cart-discount-stack-note { background: rgba(22,163,74,.18); }
+  .coupon-hint {
+    font-size: 12px; color: var(--muted);
+    margin-top: 6px; line-height: 1.35;
+  }
+  .coupon-hint:empty { display: none; }
   .cart-promo-divider {
     margin: 8px 6px 12px;
     border: none;
@@ -2363,7 +2384,7 @@
                 onkeydown="if(event.key==='Enter') applyCoupon()">
           <button class="coupon-btn" id="couponBtn" onclick="applyCoupon()">Застосувати</button>
         </div>
-        
+        <div class="coupon-hint" id="couponHint"></div>
       </div>
 
       <div class="cart-total-row">
@@ -3100,6 +3121,8 @@ function actualDiscountAfterRounding(subtotal, rawDiscount, step = PRICE_ROUNDIN
 // Дефолти дублюють базові акції — якщо API недоступне, вітрина працює як раніше.
 let PROMOTIONS = [];
 let GIFT_RULE = { category: 'key', min_items: 3, max_gift_price: 100 };
+// Глобальний перемикач з адмінки: чи взагалі дозволено сумувати купон з акцією
+let COUPON_STACKING_ENABLED = false;
 
 function getDiscountPromotions() {
   return PROMOTIONS.filter(p => p.type === 'order_percent' || p.type === 'order_fixed');
@@ -3123,29 +3146,53 @@ function getBestPromotion(rawTotal) {
   return best ? { promo: best, raw: bestRaw } : null;
 }
 
-function getPromotionDiscount(rawTotal) {
-  const best = getBestPromotion(rawTotal);
-  if (!best) return 0;
-  return actualDiscountAfterRounding(rawTotal, best.raw);
-}
-
 // Найменший поріг серед знижкових акцій — щоб знати, коли перемальовувати кошик
 function getLowestPromotionThreshold() {
   const thresholds = getDiscountPromotions().map(p => p.min_order || 0);
   return thresholds.length ? Math.min(...thresholds) : Infinity;
 }
 
+// Знижка купона до округлення — рахуємо щоразу від актуальної суми кошика,
+// щоб відсотковий купон не «застигав» на сумі, яка була в момент застосування.
+function couponRawDiscount(coupon, rawTotal) {
+  if (!coupon) return 0;
+  const value = Number(coupon.value) || 0;
+  if (coupon.type === 'fixed') return Math.min(value, rawTotal);
+  return Math.floor(rawTotal * value / 100);
+}
+
+// Чи додається купон до акційної знижки (галочка на купоні + глобальний перемикач)
+function couponStacks(coupon) {
+  return !!(coupon && coupon.stackable && COUPON_STACKING_ENABLED);
+}
+
+// Дзеркало services/pricing.py:split_discounts — обидві знижки від суми кошика,
+// одне округлення в кінці, залишок від округлення знімаємо з акції.
+function splitDiscounts(rawTotal, rawCoupon, rawPromotion, stack) {
+  rawCoupon = Math.max(0, Math.trunc(rawCoupon || 0));
+  rawPromotion = Math.max(0, Math.trunc(rawPromotion || 0));
+  if (rawCoupon > 0 && !stack) rawPromotion = 0;
+  const total = actualDiscountAfterRounding(rawTotal, Math.min(rawTotal, rawCoupon + rawPromotion));
+  if (total <= 0) return { couponDiscount: 0, promotionDiscount: 0 };
+  const couponDiscount = Math.min(rawCoupon, total);
+  return { couponDiscount, promotionDiscount: total - couponDiscount };
+}
+
 function getCartPricing() {
   const rawTotal = getCartFixedTotal();
-  const couponDiscount = appliedCoupon
-    ? actualDiscountAfterRounding(rawTotal, appliedCoupon.discount)
-    : 0;
-  const promotionDiscount = (!appliedCoupon) ? getPromotionDiscount(rawTotal) : 0;
+  const stack = couponStacks(appliedCoupon);
+  const { couponDiscount, promotionDiscount } = splitDiscounts(
+    rawTotal,
+    couponRawDiscount(appliedCoupon, rawTotal),
+    getBestPromotion(rawTotal)?.raw || 0,
+    stack,
+  );
   const discount = couponDiscount + promotionDiscount;
   return {
     rawTotal,
     couponDiscount,
     promotionDiscount,
+    stacked: stack && couponDiscount > 0 && promotionDiscount > 0,
     discount,
     finalTotal: Math.max(0, rawTotal - discount),
   };
@@ -3403,7 +3450,8 @@ function renderCart() {
 
   // Інакше — показуємо товари та підвал з сумою
   footer.style.display = '';
-  const { rawTotal, promotionDiscount, discount, finalTotal } = getCartPricing();
+  const pricing = getCartPricing();
+  const { rawTotal, promotionDiscount, discount, finalTotal } = pricing;
   const totalLabel = formatCartTotalLabel(finalTotal);
   const hasContract = cartHasContractItems();
   const totalHintEl = document.getElementById('cart-total-hint');
@@ -3486,21 +3534,7 @@ function renderCart() {
     selectedGift = null;
   }
 
-  const activePromo = getBestPromotion(rawTotal)?.promo || null;
-  const promoBlock = promotionDiscount > 0 ? `
-    <div class="cart-item cart-item-promo" id="cart-promo-item">
-      <div class="cart-item-emoji">${escapeHtml(activePromo?.emoji || '🎁')}</div>
-      <div class="cart-item-info">
-        <div class="cart-item-top">
-          <div class="cart-item-name">${escapeHtml(activePromo?.title || 'Акція')}</div>
-        </div>
-        <div class="cart-item-sub">${escapeHtml(activePromo?.subtitle || 'Автоматична знижка на замовлення')}</div>
-        <div class="cart-item-bottom">
-          <div class="cart-item-total discount"><span class="amount">−${promotionDiscount}</span> <span class="currency">₴</span></div>
-        </div>
-      </div>
-    </div>
-  ` : '';
+  const promoBlock = buildDiscountBlocks(pricing);
 
   // Спочатку рендеримо товарні позиції, потім — якщо потрібно — блок з подарунком, а потім — плашки "Повернути" для товарів що очікують видалення
   list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => `
@@ -3550,6 +3584,53 @@ function renderCart() {
     list.insertAdjacentHTML('beforeend', '<hr class="cart-promo-divider" aria-hidden="true">');
     list.insertAdjacentHTML('beforeend', promoBlock);
   }
+}
+
+// Рядки знижок під товарами: акція і купон показуються окремо, щоб було видно,
+// з чого складається підсумкова знижка, коли вони сумуються.
+function buildDiscountBlocks(pricing) {
+  const { rawTotal, couponDiscount, promotionDiscount, stacked } = pricing;
+  const blocks = [];
+
+  if (promotionDiscount > 0) {
+    const activePromo = getBestPromotion(rawTotal)?.promo || null;
+    blocks.push(`
+    <div class="cart-item cart-item-promo" id="cart-promo-item">
+      <div class="cart-item-emoji">${escapeHtml(activePromo?.emoji || '🎁')}</div>
+      <div class="cart-item-info">
+        <div class="cart-item-top">
+          <div class="cart-item-name">${escapeHtml(activePromo?.title || 'Акція')}</div>
+        </div>
+        <div class="cart-item-sub">${escapeHtml(activePromo?.subtitle || 'Автоматична знижка на замовлення')}</div>
+        <div class="cart-item-bottom">
+          <div class="cart-item-total discount"><span class="amount">−${promotionDiscount}</span> <span class="currency">₴</span></div>
+        </div>
+      </div>
+    </div>`);
+  }
+
+  if (appliedCoupon && couponDiscount > 0) {
+    blocks.push(`
+    <div class="cart-item cart-item-promo cart-item-coupon" id="cart-coupon-item">
+      <div class="cart-item-emoji">🏷️</div>
+      <div class="cart-item-info">
+        <div class="cart-item-top">
+          <div class="cart-item-name">Промокод <span class="cart-item-code">${escapeHtml(appliedCoupon.code)}</span></div>
+        </div>
+        <div class="cart-item-sub">${appliedCoupon.type === 'percent'
+          ? `Знижка ${Number(appliedCoupon.value) || 0}% на замовлення`
+          : 'Фіксована знижка на замовлення'}</div>
+        <div class="cart-item-bottom">
+          <div class="cart-item-total discount"><span class="amount">−${couponDiscount}</span> <span class="currency">₴</span></div>
+        </div>
+      </div>
+    </div>`);
+  }
+
+  if (stacked) {
+    blocks.push('<div class="cart-discount-stack-note">🔥 Акція + промокод сумуються</div>');
+  }
+  return blocks.join('');
 }
 
 // Створює плашку "Повернути" для видаленого товару з прогрес-баром, що показує час до остаточного видалення
@@ -3659,8 +3740,9 @@ function cartQtyChange(id, delta) {
   saveCart();
   updateCartBadge();
 
-  // Якщо сума перетинає поріг будь-якої акції (і немає купону) — перемальовуємо кошик
-  if (!appliedCoupon) {
+  // Якщо сума перетинає поріг будь-якої акції — перемальовуємо кошик.
+  // Купон блокує акцію лише тоді, коли він з нею не сумується.
+  if (!appliedCoupon || couponStacks(appliedCoupon)) {
     const promoThreshold = getLowestPromotionThreshold();
     const rawTotalAfter = getCartFixedTotal();
     const wasPromo = (rawTotalAfter - (item.contractPrice ? 0 : item.price * delta)) >= promoThreshold;
@@ -3687,7 +3769,7 @@ function cartRemoveItem(id) {
 }
 
 function updateCartDiscountSummary(pricing) {
-  const { rawTotal, promotionDiscount, discount, finalTotal } = pricing;
+  const { rawTotal, couponDiscount, promotionDiscount, stacked, discount, finalTotal } = pricing;
   const oldPriceEl = document.getElementById('cartOldPrice');
   if (oldPriceEl) {
     const oldPriceTextEl = oldPriceEl.querySelector('span');
@@ -3701,18 +3783,34 @@ function updateCartDiscountSummary(pricing) {
   }
 
   const promoItem = document.getElementById('cart-promo-item');
-  const promoDivider = document.querySelector('.cart-promo-divider');
-  if (promotionDiscount > 0) {
-    const promoAmountEl = promoItem?.querySelector('.amount');
-    if (promoAmountEl) {
-      promoAmountEl.textContent = `−${promotionDiscount}`;
-    } else if (document.getElementById('page-cart')?.classList.contains('active')) {
+  const couponItem = document.getElementById('cart-coupon-item');
+  const stackNote = document.querySelector('.cart-discount-stack-note');
+  const needPromo = promotionDiscount > 0;
+  const needCoupon = !!appliedCoupon && couponDiscount > 0;
+
+  // Поява нового рядка знижки (або плашки сумування) змінює структуру списку —
+  // тут дешевше перемалювати кошик, ніж вставляти блоки в правильному порядку.
+  const structureChanged =
+    (needPromo && !promoItem) || (needCoupon && !couponItem) || (stacked !== !!stackNote);
+  if (structureChanged) {
+    if (document.getElementById('page-cart')?.classList.contains('active')) {
       renderCart();
       return;
     }
-  } else {
-    if (promoItem) promoItem.remove();
-    if (promoDivider) promoDivider.remove();
+  }
+
+  const setAmount = (el, value) => {
+    const amountEl = el?.querySelector('.amount');
+    if (amountEl) amountEl.textContent = `−${value}`;
+  };
+  if (needPromo) setAmount(promoItem, promotionDiscount);
+  else if (promoItem) promoItem.remove();
+  if (needCoupon) setAmount(couponItem, couponDiscount);
+  else if (couponItem) couponItem.remove();
+  if (!stacked && stackNote) stackNote.remove();
+
+  if (!needPromo && !needCoupon) {
+    document.querySelector('.cart-promo-divider')?.remove();
   }
 
   const totalEl = document.getElementById('cart-total');
@@ -3726,6 +3824,7 @@ function updateCartTotal() {
   const pricing = getCartPricing();
   totalEl.textContent = formatCartTotalLabel(pricing.finalTotal);
   updateCartDiscountSummary(pricing);
+  updateCouponHint();
   if (footer) footer.style.display = cart.length || Object.keys(pendingRemovals).length ? '' : 'none';
 }
 
@@ -3869,10 +3968,12 @@ async function loadPromotions() {
     const data = await apiGet('/api/promotions');
     PROMOTIONS = Array.isArray(data?.promotions) ? data.promotions : [];
     GIFT_RULE = data?.gift_rule || null;
+    COUPON_STACKING_ENABLED = !!data?.coupon_stacking_enabled;
   } catch (e) {
     console.error('Помилка завантаження акцій:', e);
     PROMOTIONS = [];
     GIFT_RULE = null;
+    COUPON_STACKING_ENABLED = false;
   }
   renderPromoCards();
 }
@@ -5450,6 +5551,7 @@ async function submitOrderOnce() {
     pendingIdempotencyKey = null;
     cart = [];
     appliedCoupon = null;
+    resetCouponField();
     renderCart();
     selectedGift = null;
     saveCart();
@@ -5749,7 +5851,40 @@ document.addEventListener('keydown', e => {
 });
 
 /// ─── КУПОНИ ───────────────────────────────────────────────
-let appliedCoupon = null; // { code, type, value, discount }
+let appliedCoupon = null; // { code, type, value, discount, stackable }
+
+// Повертає поле промокоду в початковий стан (після оформлення замовлення).
+function resetCouponField() {
+  const input = document.getElementById('couponInput');
+  const btn = document.getElementById('couponBtn');
+  const statusEl = document.getElementById('couponStatus');
+  if (input) { input.value = ''; input.disabled = false; }
+  if (btn) { btn.textContent = 'Застосувати'; btn.disabled = false; }
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'coupon-status'; }
+  updateCouponHint();
+}
+
+// Пояснення під полем промокоду: сумується він з акцією чи замінює її.
+function updateCouponHint() {
+  const hintEl = document.getElementById('couponHint');
+  if (!hintEl) return;
+  if (!appliedCoupon) {
+    hintEl.textContent = '';
+    return;
+  }
+  const rawTotal = getCartFixedTotal();
+  const promoRaw = getBestPromotion(rawTotal)?.raw || 0;
+  if (couponStacks(appliedCoupon)) {
+    hintEl.textContent = promoRaw > 0
+      ? '🔥 Цей промокод додається до акційної знижки — рахуємо обидві.'
+      : '🔥 Цей промокод сумується з акційною знижкою, якщо акція діятиме.';
+    return;
+  }
+  const { promotionDiscount } = splitDiscounts(rawTotal, 0, promoRaw, false);
+  hintEl.textContent = promotionDiscount > 0
+    ? `Промокод застосовано замість акційної знижки −${promotionDiscount} ₴.`
+    : '';
+}
 
 // Логіка для показу/приховування поля вводу купона. Це дозволяє користувачам легко отримати доступ до поля для введення купона, коли вони хочуть його застосувати, та приховати його, коли воно не потрібно, зберігаючи інтерфейс чистим.
 function toggleCoupon() {
@@ -5780,6 +5915,7 @@ async function applyCoupon() {
     btn.disabled = false;
     statusEl.textContent = '';
     statusEl.className = 'coupon-status';
+    updateCouponHint();
     renderCart(); // оновити суму
     return;
   }
@@ -5796,12 +5932,19 @@ async function applyCoupon() {
     const data = await apiPost('/check_coupon', { code, user_id: userId, cart_total: cartTotal });
 
     if (data.valid) {
-      appliedCoupon = { code, type: data.type, value: data.value, discount: data.discount };
+      appliedCoupon = {
+        code,
+        type: data.type,
+        value: data.value,
+        discount: data.discount,
+        stackable: !!data.stacks_with_promotion,
+      };
       statusEl.textContent = data.message;
       statusEl.className = 'coupon-status success';
       input.disabled = true;
       btn.textContent = 'Скасувати';
       btn.disabled = false;
+      updateCouponHint();
       renderCart(); // оновити суму із знижкою
     } else {
       statusEl.textContent = data.message;

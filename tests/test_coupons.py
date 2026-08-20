@@ -55,13 +55,15 @@ def _insert_coupon(conn, **kwargs):
         "active": 1,
         "expires_at": None,
         "personal_user_id": None,
+        "stackable": 0,
     }
     defaults.update(kwargs)
     conn.execute(
         """
         INSERT INTO coupons
-        (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at,
+         personal_user_id, stackable)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             defaults["code"],
@@ -74,6 +76,7 @@ def _insert_coupon(conn, **kwargs):
             defaults["active"],
             defaults["expires_at"],
             defaults["personal_user_id"],
+            defaults["stackable"],
         ),
     )
     conn.commit()
@@ -486,3 +489,57 @@ def test_parse_allowed_user_ids_from_string(coupon_db):
 def test_check_promotion_below_threshold(coupon_db):
     coupons, _ = coupon_db
     assert coupons.check_promotion(499) == 0
+
+
+def _set_stacking(coupons, monkeypatch, enabled):
+    import services.settings as settings
+
+    monkeypatch.setattr(settings, "coupon_stacking_enabled", lambda: enabled)
+
+
+def test_check_coupon_not_stackable_by_default(coupon_db):
+    coupons, db_path = coupon_db
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    _insert_coupon(conn, code="PLAIN", type="fixed", value=50)
+    conn.close()
+
+    result = coupons.check_coupon("PLAIN", 1, 500)
+    assert result["valid"] is True
+    assert result["stackable"] is False
+    assert result["stacks_with_promotion"] is False
+
+
+def test_check_coupon_stackable_requires_global_switch(coupon_db, monkeypatch):
+    coupons, db_path = coupon_db
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    _insert_coupon(conn, code="PLUS", type="fixed", value=50, stackable=1)
+    conn.close()
+
+    _set_stacking(coupons, monkeypatch, False)
+    off = coupons.check_coupon("PLUS", 1, 500)
+    assert off["stackable"] is True
+    assert off["stacks_with_promotion"] is False
+
+    _set_stacking(coupons, monkeypatch, True)
+    on = coupons.check_coupon("PLUS", 1, 500)
+    assert on["stacks_with_promotion"] is True
+    assert "сумується" in on["message"]
+
+
+def test_coupon_crud_keeps_stackable_flag(coupon_db):
+    coupons, _ = coupon_db
+    created = coupons.create_coupon(
+        {"code": "STACK", "type": "percent", "value": 10, "stackable": True}
+    )
+    assert created["ok"] is True
+    assert created["coupon"]["stackable"] == 1
+
+    updated = coupons.update_coupon(
+        "STACK", {"code": "STACK", "type": "percent", "value": 10, "stackable": False}
+    )
+    assert updated["ok"] is True
+    assert updated["coupon"]["stackable"] == 0

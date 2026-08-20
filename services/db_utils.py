@@ -85,6 +85,7 @@ def row_to_dict(row) -> dict:
 def init_db() -> None:
     # Локальний імпорт, щоб уникнути циклічної залежності services.promotions -> db_utils.
     from services.promotions import init_promotions_table
+    from services.settings import init_settings_table
 
     conn = db_connect()
     if _is_postgres():
@@ -109,6 +110,7 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'new',
                 coupon_code TEXT,
                 discount_amount INTEGER NOT NULL DEFAULT 0,
+                promotion_discount INTEGER NOT NULL DEFAULT 0,
                 ordered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
@@ -134,7 +136,8 @@ def init_db() -> None:
                 one_per_user INTEGER NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 1,
                 expires_at TIMESTAMPTZ,
-                personal_user_id BIGINT
+                personal_user_id BIGINT,
+                stackable INTEGER NOT NULL DEFAULT 0
             )
         """)
         conn.execute("""
@@ -173,6 +176,8 @@ def init_db() -> None:
             )
         """)
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS personal_user_id BIGINT")
+        conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS stackable INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS promotion_discount INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT ''")
@@ -193,6 +198,7 @@ def init_db() -> None:
         """)
         init_catalog_tables(conn)
         init_promotions_table(conn)
+        init_settings_table(conn)
     else:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -215,6 +221,7 @@ def init_db() -> None:
                 status            TEXT DEFAULT 'new',
                 coupon_code       TEXT,
                 discount_amount   INTEGER DEFAULT 0,
+                promotion_discount INTEGER DEFAULT 0,
                 ordered_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -239,12 +246,15 @@ def init_db() -> None:
                 one_per_user INTEGER DEFAULT 0,
                 active       INTEGER DEFAULT 1,
                 expires_at   TIMESTAMP,
-                personal_user_id INTEGER
+                personal_user_id INTEGER,
+                stackable    INTEGER DEFAULT 0
             )
         """)
         c_cols = [row[1] for row in conn.execute("PRAGMA table_info(coupons)").fetchall()]
         if "personal_user_id" not in c_cols:
             conn.execute("ALTER TABLE coupons ADD COLUMN personal_user_id INTEGER")
+        if "stackable" not in c_cols:
+            conn.execute("ALTER TABLE coupons ADD COLUMN stackable INTEGER DEFAULT 0")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS coupon_uses (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,6 +302,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE orders ADD COLUMN price_pending INTEGER DEFAULT 0")
         if "channel_message_id" not in o_cols:
             conn.execute("ALTER TABLE orders ADD COLUMN channel_message_id INTEGER")
+        if "promotion_discount" not in o_cols:
+            conn.execute("ALTER TABLE orders ADD COLUMN promotion_discount INTEGER DEFAULT 0")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code)"
         )
@@ -301,6 +313,7 @@ def init_db() -> None:
             SELECT code, personal_user_id FROM coupons WHERE personal_user_id IS NOT NULL
         """)
         init_promotions_table(conn)
+        init_settings_table(conn)
 
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)

@@ -165,6 +165,7 @@ def _coupon_row_to_dict(row) -> dict:
         "active": row[7],
         "expires_at": row[8],
         "personal_user_id": row[9],
+        "stackable": row[10] if len(row) > 10 else 0,
     }
 
 
@@ -245,7 +246,7 @@ def reserve_coupon(conn, code: str, user_id: int, order_id: int) -> None:
         row = conn.execute(
             """
             SELECT code, type, value, min_order, uses_max, uses_count, one_per_user,
-                   active, expires_at, personal_user_id
+                   active, expires_at, personal_user_id, stackable
             FROM coupons WHERE code = %s FOR UPDATE
             """,
             (code,),
@@ -254,7 +255,7 @@ def reserve_coupon(conn, code: str, user_id: int, order_id: int) -> None:
         row = conn.execute(
             _sql(
                 "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, "
-                "active, expires_at, personal_user_id FROM coupons WHERE code = ?"
+                "active, expires_at, personal_user_id, stackable FROM coupons WHERE code = ?"
             ),
             (code,),
         ).fetchone()
@@ -363,13 +364,30 @@ def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
     reserve_coupon(conn, code, user_id, order_id)
 
 
+def coupon_raw_discount(coupon: dict, subtotal: int) -> int:
+    """Знижка купона до округлення підсумку — рахується від суми кошика."""
+    subtotal = max(0, int(subtotal or 0))
+    value = int(coupon.get("value") or 0)
+    if coupon.get("type") == "fixed":
+        return min(value, subtotal)
+    # Округлення вниз — так само, як в акціях і на вітрині (index.html).
+    return subtotal * value // 100
+
+
+def coupon_stacks_with_promotion(coupon: dict) -> bool:
+    """Чи додається цей купон до акційної знижки (галочка + глобальний перемикач)."""
+    from services.settings import coupon_stacking_enabled
+
+    return bool(coupon.get("stackable")) and coupon_stacking_enabled()
+
+
 def check_coupon(code: str, user_id: int, cart_total: int):
     conn = db_connect(dict_rows=True)
     code = code.upper()
     row = conn.execute(
         _sql(
             "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, "
-            "active, expires_at, personal_user_id FROM coupons WHERE code = ?"
+            "active, expires_at, personal_user_id, stackable FROM coupons WHERE code = ?"
         ),
         (code,),
     ).fetchone()
@@ -409,16 +427,23 @@ def check_coupon(code: str, user_id: int, cart_total: int):
 
     conn.close()
 
-    raw_discount = c["value"] if c["type"] == "fixed" else round(cart_total * c["value"] / 100)
+    raw_discount = coupon_raw_discount(c, cart_total)
     discount = actual_discount_after_rounding(cart_total, raw_discount)
+    stacks = coupon_stacks_with_promotion(c)
 
     label = f"-{c['value']}%" if c["type"] == "percent" else f"-{c['value']} ₴"
+    message = f"Купон застосовано! Знижка {label} ✅"
+    if stacks:
+        message = f"Купон застосовано! Знижка {label} — сумується з акцією 🔥"
     return {
         "valid": True,
         "type": c["type"],
         "value": c["value"],
         "discount": discount,
-        "message": f"Купон застосовано! Знижка {label} ✅",
+        "raw_discount": raw_discount,
+        "stackable": bool(c.get("stackable")),
+        "stacks_with_promotion": stacks,
+        "message": message,
     }
 
 
@@ -455,6 +480,7 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
         uses_max = max(0, int(data.get("uses_max") or 0))
         one_per_user = 1 if data.get("one_per_user") in (1, True, "1", "true") else 0
         active = 1 if data.get("active", 1) in (1, True, "1", "true") else 0
+        stackable = 1 if data.get("stackable") in (1, True, "1", "true", "on") else 0
     except (TypeError, ValueError):
         return None, "Невірні числові параметри купона"
 
@@ -488,6 +514,7 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
         "active": active,
         "expires_at": expires_at,
         "personal_user_id": personal_user_id,
+        "stackable": stackable,
         "allowed_user_ids": allowed_user_ids,
     }, None
 
@@ -497,7 +524,7 @@ def get_coupon(code: str) -> dict | None:
     row = conn.execute(
         _sql(
             "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, "
-            "expires_at, personal_user_id FROM coupons WHERE code = ?"
+            "expires_at, personal_user_id, stackable FROM coupons WHERE code = ?"
         ),
         (code.upper(),),
     ).fetchone()
@@ -515,7 +542,7 @@ def list_coupons() -> list[dict]:
     rows = conn.execute(
         _sql(
             "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, "
-            "expires_at, personal_user_id FROM coupons ORDER BY active DESC, code ASC"
+            "expires_at, personal_user_id, stackable FROM coupons ORDER BY active DESC, code ASC"
         )
     ).fetchall()
     coupons = [row_to_dict(r) for r in rows]
@@ -538,8 +565,8 @@ def create_coupon(data: dict) -> dict:
         conn.execute(
             _sql("""
                 INSERT INTO coupons
-                (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id, stackable)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
             """),
             (
                 payload["code"],
@@ -551,6 +578,7 @@ def create_coupon(data: dict) -> dict:
                 payload["active"],
                 payload["expires_at"],
                 payload["personal_user_id"],
+                payload["stackable"],
             ),
         )
         _sync_allowed_users(conn, payload["code"], allowed_user_ids)
@@ -584,7 +612,8 @@ def update_coupon(code: str, data: dict) -> dict:
             _sql("""
                 UPDATE coupons SET
                     type = ?, value = ?, min_order = ?, uses_max = ?,
-                    one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?
+                    one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?,
+                    stackable = ?
                 WHERE code = ?
             """),
             (
@@ -596,6 +625,7 @@ def update_coupon(code: str, data: dict) -> dict:
                 payload["active"],
                 payload["expires_at"],
                 payload["personal_user_id"],
+                payload["stackable"],
                 payload["code"],
             ),
         )
@@ -628,7 +658,8 @@ def replace_coupon(data: dict) -> dict:
                 _sql("""
                     UPDATE coupons SET
                         type = ?, value = ?, min_order = ?, uses_max = ?,
-                        one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?
+                        one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?,
+                        stackable = ?
                     WHERE code = ?
                 """),
                 (
@@ -640,6 +671,7 @@ def replace_coupon(data: dict) -> dict:
                     payload["active"],
                     payload["expires_at"],
                     payload["personal_user_id"],
+                    payload["stackable"],
                     payload["code"],
                 ),
             )
@@ -648,8 +680,8 @@ def replace_coupon(data: dict) -> dict:
             conn.execute(
                 _sql("""
                     INSERT INTO coupons
-                    (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id)
-                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                    (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id, stackable)
+                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
                 """),
                 (
                     payload["code"],
@@ -661,6 +693,7 @@ def replace_coupon(data: dict) -> dict:
                     payload["active"],
                     payload["expires_at"],
                     payload["personal_user_id"],
+                    payload["stackable"],
                 ),
             )
             created = True
@@ -794,6 +827,7 @@ def get_my_coupons(user_id: int):
                 c.uses_count,
                 c.one_per_user,
                 c.expires_at,
+                c.stackable,
                 EXISTS(
                     SELECT 1
                     FROM coupon_uses cu

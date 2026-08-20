@@ -2035,7 +2035,21 @@
                 </div>
                 <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
                     Перемикач вмикає/вимикає акцію одразу — і в каталозі, і при розрахунку суми замовлення.
-                    Якщо активних знижкових акцій кілька, застосовується найвигідніша для клієнта. Купон скасовує автоматичну знижку.
+                    Якщо активних знижкових акцій кілька, застосовується найвигідніша для клієнта.
+                </div>
+                <div style="border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:16px; background:var(--bg-surface-alt);">
+                    <div class="toggle-row">
+                        <span class="toggle-row-label">🔥 + 🏷️ Дозволити сумування купонів з акціями</span>
+                        <label class="switch" title="Глобальний перемикач сумування">
+                            <input type="checkbox" id="couponStackingToggle" onchange="saveCouponStacking(this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+                        Вимкнено — промокод, як і раніше, <b>замінює</b> акційну знижку.
+                        Увімкнено — знижки <b>додаються</b>, але лише для тих купонів, де стоїть галочка
+                        «Сумувати з акційною знижкою». Обидві знижки рахуються від суми кошика.
+                    </div>
                 </div>
                 <div id="promotionsLoading" class="loading" style="display:none;">
                     <div class="spinner"></div>
@@ -2280,6 +2294,15 @@
                     </label>
                 </div>
                 <div class="form-group">
+                    <label class="checkbox-group" style="display:block;">
+                        <label><input type="checkbox" name="stackable" id="couponStackable"> 🔥 Сумувати з акційною знижкою</label>
+                    </label>
+                    <small id="couponStackableHint" style="color:var(--text-muted); display:block; margin-top:6px;">
+                        За замовчуванням промокод <b>замінює</b> автоматичну акційну знижку.
+                        З галочкою знижки <b>додаються</b>: обидві рахуються від суми кошика.
+                    </small>
+                </div>
+                <div class="form-group">
                     <label>Термін дії</label>
                     <input type="date" name="expires_at">
                 </div>
@@ -2465,6 +2488,7 @@
         let allOrders = [];
         let allCoupons = [];
         let allPromotions = [];
+        let couponStackingEnabled = false;
         let currentPromotionId = null;
 
         // ═══════════════════════════════════════════════════════════
@@ -3179,6 +3203,7 @@
                                 ${active ? 'Активний' : 'Вимкнено'}
                             </span>
                             <span style="font-size:13px; font-weight:700;">${escapeHtml(formatCouponDiscount(c))}</span>
+                            ${c.stackable ? `<span style="font-size:11px; font-weight:700; padding:5px 9px; border-radius:999px; background:${couponStackingEnabled ? '#ffedd5' : 'var(--border)'}; color:${couponStackingEnabled ? '#c2410c' : 'var(--text-toggle)'};" title="${couponStackingEnabled ? 'Знижка купона додається до акційної' : 'Сумування вимкнене глобально — на вкладці «Акції»'}">🔥 + акція${couponStackingEnabled ? '' : ' (вимк.)'}</span>` : ''}
                         </div>
                         <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
                             Використань: ${usesStr}${meta ? ` · ${escapeHtml(meta)}` : ''}
@@ -3204,6 +3229,7 @@
                 const res = await fetch(API_BASE + '/coupons');
                 if (!res.ok) throw new Error(`Помилка купонів (${res.status})`);
                 allCoupons = await res.json();
+                await loadSettings();
                 renderCouponsManager();
             } catch (e) {
                 console.error('loadCoupons error:', e);
@@ -3220,6 +3246,7 @@
             form.active.checked = true;
             form.min_order.value = '0';
             form.uses_max.value = '0';
+            renderCouponStackingToggle();
 
             if (code) {
                 const coupon = allCoupons.find(c => c.code === code);
@@ -3235,6 +3262,7 @@
                 form.min_order.value = coupon.min_order || 0;
                 form.uses_max.value = coupon.uses_max || 0;
                 form.one_per_user.checked = !!coupon.one_per_user;
+                form.stackable.checked = !!coupon.stackable;
                 form.expires_at.value = formatCouponExpires(coupon.expires_at);
                 form.allowed_user_ids.value = formatAllowedUserIdsForInput(
                     coupon.allowed_user_ids || (coupon.personal_user_id ? [coupon.personal_user_id] : [])
@@ -4479,6 +4507,64 @@
             }).join('');
         }
 
+        function renderCouponStackingToggle() {
+            const toggle = document.getElementById('couponStackingToggle');
+            if (toggle) toggle.checked = couponStackingEnabled;
+            const hint = document.getElementById('couponStackableHint');
+            if (hint) {
+                hint.querySelector('.stacking-off-warning')?.remove();
+                if (!couponStackingEnabled) {
+                    hint.insertAdjacentHTML('beforeend',
+                        '<span class="stacking-off-warning" style="display:block; margin-top:6px; color:#c2410c;">'
+                        + '⚠️ Сумування зараз вимкнене глобально — увімкни його на вкладці «🔥 Акції», '
+                        + 'інакше галочка не діятиме.</span>');
+                }
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const res = await fetch(API_BASE + '/admin/settings', {
+                    headers: { 'X-Telegram-Init-Data': tgInitData },
+                });
+                if (!res.ok) throw new Error(`Помилка налаштувань (${res.status})`);
+                const data = await res.json();
+                couponStackingEnabled = !!data.coupon_stacking_enabled;
+            } catch (e) {
+                console.error('loadSettings error:', e);
+            }
+            renderCouponStackingToggle();
+        }
+
+        async function saveCouponStacking(enabled) {
+            const toggle = document.getElementById('couponStackingToggle');
+            const previous = couponStackingEnabled;
+            if (toggle) toggle.disabled = true;
+            try {
+                const res = await fetch(API_BASE + '/admin/settings', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData,
+                    },
+                    body: JSON.stringify({ coupon_stacking_enabled: !!enabled }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти');
+                couponStackingEnabled = !!result.settings?.coupon_stacking_enabled;
+                showToast(couponStackingEnabled
+                    ? 'Сумування купонів з акціями увімкнено ✅'
+                    : 'Сумування купонів з акціями вимкнено', 'success');
+                if (allCoupons.length) renderCouponsManager();
+            } catch (e) {
+                couponStackingEnabled = previous;
+                showToast(e.message || 'Помилка збереження налаштування', 'error');
+            } finally {
+                if (toggle) toggle.disabled = false;
+                renderCouponStackingToggle();
+            }
+        }
+
         async function loadPromotions() {
             const loading = document.getElementById('promotionsLoading');
             try {
@@ -4488,6 +4574,7 @@
                 });
                 if (!res.ok) throw new Error(`Помилка акцій (${res.status})`);
                 allPromotions = await res.json();
+                await loadSettings();
                 renderPromotionsManager();
             } catch (e) {
                 console.error('loadPromotions error:', e);
@@ -4705,6 +4792,7 @@
                 min_order: parseInt(form.min_order.value || '0', 10),
                 uses_max: parseInt(form.uses_max.value || '0', 10),
                 one_per_user: form.one_per_user.checked,
+                stackable: form.stackable.checked,
                 expires_at: form.expires_at.value || null,
                 allowed_user_ids: parseAllowedUserIdsInput(form.allowed_user_ids.value),
                 active: form.active.checked,
@@ -5011,10 +5099,19 @@
                 const userLine = renderOrderUserLine(order);
 
                 const discount = Number(order.discount_amount || 0);
+                // promotion_discount заповнюється з моменту появи сумування; у старих
+                // замовленнях уся знижка належить купону, якщо він був.
+                const promoDiscount = Math.min(Number(order.promotion_discount || 0), discount);
+                const couponDiscount = promoDiscount > 0
+                    ? discount - promoDiscount
+                    : (order.coupon_code ? discount : 0);
                 const summaryRows = [];
-                if (order.coupon_code && discount > 0) {
-                    summaryRows.push(`<div class="order-summary-row"><span>🎟️ Купон ${escapeHtml(order.coupon_code)}</span><span>−${discount} ₴</span></div>`);
-                } else if (discount > 0) {
+                if (order.coupon_code && couponDiscount > 0) {
+                    summaryRows.push(`<div class="order-summary-row"><span>🎟️ Купон ${escapeHtml(order.coupon_code)}</span><span>−${couponDiscount} ₴</span></div>`);
+                }
+                if (promoDiscount > 0) {
+                    summaryRows.push(`<div class="order-summary-row"><span>🔥 Акція</span><span>−${promoDiscount} ₴</span></div>`);
+                } else if (discount > 0 && couponDiscount <= 0) {
                     summaryRows.push(`<div class="order-summary-row"><span>Знижка</span><span>−${discount} ₴</span></div>`);
                 }
                 if (!order.price_pending) {
