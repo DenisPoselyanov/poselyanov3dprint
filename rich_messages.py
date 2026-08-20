@@ -771,6 +771,19 @@ def build_sales_empty() -> str:
     )
 
 
+GIFT_CATEGORY_LABELS = {
+    "toy": "іграшки",
+    "anti": "антистрес-іграшки",
+    "key": "брелки",
+    "gifts": "подарунки та декор",
+    "home": "товари для дому",
+    "gadget": "аксесуари для гаджетів",
+    "tool": "інструменти та приладдя",
+    "custom": "індивідуальні товари",
+    "individual": "індивідуальні товари",
+}
+
+
 def build_sales_list(promotions: list[dict]) -> str:
     """Реальні акції магазину (з /api/promotions), а не поштучні знижки товарів."""
     parts = ["<h2>🔥 Акції магазину</h2>", "<hr/>"]
@@ -797,9 +810,11 @@ def build_sales_list(promotions: list[dict]) -> str:
         elif ptype == "gift_threshold":
             min_items = int(promo.get("min_items") or 0)
             max_gift_price = int(promo.get("max_gift_price") or 0)
+            category = str(promo.get("category") or "").strip()
+            category_label = GIFT_CATEGORY_LABELS.get(category, "товари")
             parts.append(
                 "<blockquote><p>"
-                f"🎁 Додай {min_items}+ товарів у кошик"
+                f"🎁 Додай {min_items}+ {escape(category_label)} у кошик"
                 f"<br/>✨ Обери подарунок вартістю до {max_gift_price} ₴"
                 "</p></blockquote>"
             )

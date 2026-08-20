@@ -249,10 +249,11 @@ def test_build_sales_list_real_promotions():
             "badge": "",
             "min_items": 3,
             "max_gift_price": 100,
+            "category": "toy",
         },
     ]
     html = build_sales_list(promotions)
     assert "−10%" in html
     assert "Від 500 ₴" in html
-    assert "3+ товарів" in html
+    assert "3+ іграшки" in html
     assert "до 100 ₴" in html
