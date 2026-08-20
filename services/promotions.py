@@ -37,14 +37,14 @@ DEFAULT_PROMOTIONS: list[dict] = [
         "id": "gift_3_toys",
         "type": "gift_threshold",
         "title": "Безкоштовний подарунок",
-        "subtitle": "Додай 3+ іграшки в кошик і обери подарунок на свій смак",
+        "subtitle": "Додай 3+ брелки в кошик і обери подарунок на свій смак",
         "emoji": "🎁",
         "badge": "",
         "active": 1,
         "priority": 10,
         "value": 0,
         "min_order": 0,
-        "category": "toy",
+        "category": "key",
         "min_items": 3,
         "max_gift_price": 100,
         "starts_at": None,
@@ -132,7 +132,22 @@ def init_promotions_table(conn) -> None:
     if count == 0:
         for promo in DEFAULT_PROMOTIONS:
             _insert_promotion(conn, promo)
+    else:
+        _migrate_gift_category_toy_to_key(conn)
     _invalidate_cache()
+
+
+def _migrate_gift_category_toy_to_key(conn) -> None:
+    """Одноразова міграція: акція-подарунок 'gift_3_toys' була на категорії
+    'toy', тепер працює на 'key' (брелки). Чіпає рядок лише якщо він досі
+    незмінений з дефолтного 'toy' — щоб не затерти ручні правки з адмінки."""
+    conn.execute(
+        _sql("""
+            UPDATE promotions
+            SET category = 'key', subtitle = 'Додай 3+ брелки в кошик і обери подарунок на свій смак'
+            WHERE id = 'gift_3_toys' AND category = 'toy'
+        """)
+    )
 
 
 def _insert_promotion(conn, promo: dict) -> None:

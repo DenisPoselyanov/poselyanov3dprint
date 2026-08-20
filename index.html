@@ -3099,7 +3099,7 @@ function actualDiscountAfterRounding(subtotal, rawDiscount, step = PRICE_ROUNDIN
 // ─── АКЦІЇ (керуються з адмін-панелі) ───────────────────────
 // Дефолти дублюють базові акції — якщо API недоступне, вітрина працює як раніше.
 let PROMOTIONS = [];
-let GIFT_RULE = { category: 'toy', min_items: 3, max_gift_price: 100 };
+let GIFT_RULE = { category: 'key', min_items: 3, max_gift_price: 100 };
 
 function getDiscountPromotions() {
   return PROMOTIONS.filter(p => p.type === 'order_percent' || p.type === 'order_fixed');
@@ -4234,7 +4234,7 @@ function goToToyCategoryFromGiftPromo() {
   const btn = document.querySelector('.nav-btn[data-page="products"]');
   if (btn) switchPage('products', btn);
   clearProductSearch();
-  selectCategory(GIFT_RULE?.category || 'toy');
+  selectCategory(GIFT_RULE?.category || 'key');
 }
 
 function buildCategoryRoundButtons() {

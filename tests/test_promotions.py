@@ -51,6 +51,37 @@ def test_defaults_are_seeded(promo_db):
     assert ids == {"gift_3_toys", "order_10_percent"}
 
 
+def test_legacy_toy_category_migrates_to_key(promo_db):
+    """Існуючі БД, засіяні до зміни акції, мають самі перейти з 'toy' на 'key'."""
+    from db_core import db_connect
+
+    conn = db_connect()
+    conn.execute("UPDATE promotions SET category = 'toy' WHERE id = 'gift_3_toys'")
+    conn.commit()
+    conn.close()
+
+    conn = db_connect()
+    promo_db.init_promotions_table(conn)
+    conn.commit()
+    conn.close()
+    rule = promo_db.get_gift_rule()
+    assert rule["category"] == "key"
+
+
+def test_legacy_toy_migration_skips_manually_edited_row(promo_db):
+    """Якщо адмін уже сам переналаштував категорію — міграція її не чіпає."""
+    assert promo_db.update_promotion("gift_3_toys", {"category": "gadget"})["ok"]
+
+    from db_core import db_connect
+
+    conn = db_connect()
+    promo_db.init_promotions_table(conn)
+    conn.commit()
+    conn.close()
+    rule = promo_db.get_gift_rule()
+    assert rule["category"] == "gadget"
+
+
 def test_default_discount_matches_legacy_behaviour(promo_db):
     assert promo_db.compute_order_discount(499) == 0
     assert promo_db.compute_order_discount(500) == 50
@@ -102,7 +133,7 @@ def test_fixed_discount(promo_db):
 
 def test_gift_rule_from_admin(promo_db):
     rule = promo_db.get_gift_rule()
-    assert rule["category"] == "toy"
+    assert rule["category"] == "key"
     assert rule["min_items"] == 3
     assert rule["max_gift_price"] == 100
 
@@ -156,7 +187,7 @@ def test_delete_promotion(promo_db):
 def test_public_payload(promo_db):
     payload = promo_db.public_promotions()
     assert [p["id"] for p in payload["promotions"]] == ["gift_3_toys", "order_10_percent"]
-    assert payload["gift_rule"] == {"category": "toy", "min_items": 3, "max_gift_price": 100}
+    assert payload["gift_rule"] == {"category": "key", "min_items": 3, "max_gift_price": 100}
 
 
 def test_info_promotion_has_no_discount(promo_db):
