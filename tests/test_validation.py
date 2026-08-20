@@ -255,5 +255,5 @@ def test_build_sales_list_real_promotions():
     html = build_sales_list(promotions)
     assert "−10%" in html
     assert "Від 500 ₴" in html
-    assert "3+ іграшки" in html
+    assert "категорії «Іграшки»" in html
     assert "до 100 ₴" in html

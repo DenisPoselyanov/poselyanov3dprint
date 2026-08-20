@@ -772,15 +772,15 @@ def build_sales_empty() -> str:
 
 
 GIFT_CATEGORY_LABELS = {
-    "toy": "іграшки",
-    "anti": "антистрес-іграшки",
-    "key": "брелки",
-    "gifts": "подарунки та декор",
-    "home": "товари для дому",
-    "gadget": "аксесуари для гаджетів",
-    "tool": "інструменти та приладдя",
-    "custom": "індивідуальні товари",
-    "individual": "індивідуальні товари",
+    "toy": "Іграшки",
+    "anti": "Антистрес",
+    "key": "Брелки",
+    "gifts": "Подарунки та декор",
+    "home": "Дім та побут",
+    "gadget": "Для гаджетів",
+    "tool": "Інструменти та приладдя",
+    "custom": "Індивідуальне",
+    "individual": "Індивідуальне",
 }
 
 
@@ -811,10 +811,14 @@ def build_sales_list(promotions: list[dict]) -> str:
             min_items = int(promo.get("min_items") or 0)
             max_gift_price = int(promo.get("max_gift_price") or 0)
             category = str(promo.get("category") or "").strip()
-            category_label = GIFT_CATEGORY_LABELS.get(category, "товари")
+            category_label = GIFT_CATEGORY_LABELS.get(category)
+            if category_label:
+                cart_line = f"🎁 Додай {min_items}+ товари з категорії «{escape(category_label)}» у кошик"
+            else:
+                cart_line = f"🎁 Додай {min_items}+ товари у кошик"
             parts.append(
                 "<blockquote><p>"
-                f"🎁 Додай {min_items}+ {escape(category_label)} у кошик"
+                f"{cart_line}"
                 f"<br/>✨ Обери подарунок вартістю до {max_gift_price} ₴"
                 "</p></blockquote>"
             )
