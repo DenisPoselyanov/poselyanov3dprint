@@ -319,6 +319,11 @@
     font-size: 22px; background: var(--card-bg); border: 1px solid var(--border);
   }
   .category-circle-name { font-size: 12px; color: var(--muted); font-weight: 700; line-height: 1.25; text-align: center; }
+  .category-circle-icon.skeleton-circle, .category-circle-name.skeleton-line-sm {
+    background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+    background-size: 200% 100%; animation: shimmer 1.2s infinite;
+  }
+  .category-circle-name.skeleton-line-sm { width: 70%; height: 11px; border-radius: 6px; margin: 0 auto; }
 
   .state-view.hidden { display: none; }
   .state-title-row { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; margin: 10px 0 6px; gap: 10px; }
@@ -5602,6 +5607,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="skeleton-line price"></div>
     </div>
   `).join('');
+  const categoriesSkeletonHost = document.getElementById('categories-circles');
+  if (categoriesSkeletonHost) {
+    categoriesSkeletonHost.innerHTML = Array(4).fill(`
+      <div class="category-circle-btn">
+        <div class="category-circle-icon skeleton-circle"></div>
+        <div class="category-circle-name skeleton-line-sm"></div>
+      </div>
+    `).join('');
+  }
   const pinnedSkeletonSection = document.getElementById('pinned-section');
   const pinnedSkeletonTrack = document.getElementById('pinned-track');
   if (pinnedSkeletonSection && pinnedSkeletonTrack) {
