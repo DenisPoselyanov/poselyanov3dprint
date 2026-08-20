@@ -423,16 +423,13 @@ def check_coupon(code: str, user_id: int, cart_total: int):
 
 
 def check_promotion(cart_total: int):
+    """Автоматична знижка від активних акцій (налаштовуються в адмін-панелі)."""
     if not config.PROMOTION_ENABLED:
         return 0
 
-    promotion_min_amount = 500
-    promotion_discount_rate = 0.10
+    from services.promotions import compute_order_discount
 
-    if cart_total >= promotion_min_amount:
-        raw_discount = int(cart_total * promotion_discount_rate)
-        return actual_discount_after_rounding(cart_total, raw_discount)
-    return 0
+    return compute_order_discount(cart_total)
 
 
 def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -> tuple[dict | None, str | None]:

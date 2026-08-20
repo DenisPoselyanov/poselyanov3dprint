@@ -117,6 +117,14 @@ from services.coupons import (
     update_coupon,
 )
 from services.db_utils import init_db, row_to_dict as _row_to_dict
+from services.promotions import (
+    create_promotion,
+    delete_promotion,
+    list_promotions,
+    public_promotions,
+    set_promotion_active,
+    update_promotion,
+)
 from services.orders import (
     delete_order,
     find_gift_product_id,
@@ -2561,6 +2569,80 @@ async def handle_delete_coupon(request: web.Request):
     try:
         code = request.match_info.get("code", "")
         result = await run_db(delete_coupon, code)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_get_public_promotions(request: web.Request):
+    """Активні акції для вітрини (без авторизації)."""
+    return web.json_response(await run_db(public_promotions), headers=cors_headers(request))
+
+
+async def handle_get_promotions(request: web.Request):
+    """Повний список акцій для адмін-панелі."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    return web.json_response(await run_db(list_promotions), headers=cors_headers(request))
+
+
+async def handle_create_promotion(request: web.Request):
+    """Створити акцію."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        data = await request.json()
+        result = await run_db(create_promotion, data)
+        status = 201 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_update_promotion(request: web.Request):
+    """Оновити акцію або лише перемкнути її активність."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        promo_id = request.match_info.get("id", "")
+        data = await request.json()
+        if "active" in data and len(data) == 1:
+            result = await run_db(set_promotion_active, promo_id, bool(data.get("active")))
+        else:
+            result = await run_db(update_promotion, promo_id, data)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_delete_promotion(request: web.Request):
+    """Видалити акцію."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        promo_id = request.match_info.get("id", "")
+        result = await run_db(delete_promotion, promo_id)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:

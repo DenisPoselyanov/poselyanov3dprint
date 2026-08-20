@@ -317,7 +317,7 @@ def _client_order_block(order: dict) -> str:
         if coupon_discount > 0 and coupon_code:
             parts.append(f"<p>🏷️ <b>Купон {escape(coupon_code)}:</b> −{coupon_discount} ₴</p>")
         if promotion_discount > 0:
-            parts.append(f"<p>🔥 <b>Акція -10%:</b> −{promotion_discount} ₴</p>")
+            parts.append(f"<p>🔥 <b>Акція:</b> −{promotion_discount} ₴</p>")
         if has_contract and price_pending:
             parts.append(
                 f"<p>💰 <b>Разом:</b> <s>{original_price} ₴</s> → <b>{total_price} ₴</b> + договірна</p>"

@@ -83,6 +83,9 @@ def row_to_dict(row) -> dict:
 
 
 def init_db() -> None:
+    # Локальний імпорт, щоб уникнути циклічної залежності services.promotions -> db_utils.
+    from services.promotions import init_promotions_table
+
     conn = db_connect()
     if _is_postgres():
         conn.execute("""
@@ -189,6 +192,7 @@ def init_db() -> None:
             ON CONFLICT DO NOTHING
         """)
         init_catalog_tables(conn)
+        init_promotions_table(conn)
     else:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -296,6 +300,7 @@ def init_db() -> None:
             INSERT OR IGNORE INTO coupon_allowed_users (code, user_id)
             SELECT code, personal_user_id FROM coupons WHERE personal_user_id IS NOT NULL
         """)
+        init_promotions_table(conn)
 
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)

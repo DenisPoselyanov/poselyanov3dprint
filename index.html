@@ -2004,6 +2004,26 @@
     background: linear-gradient(135deg, #e8f5e9, #f1f8e9);
     border: 1.5px solid #81C784;
   }
+  .promo-card.info {
+    background: linear-gradient(135deg, #e3f2fd, #f1f8ff);
+    border: 1.5px solid #64B5F6;
+  }
+  .promo-card.info .promo-card-badge {
+    background: #64B5F6; color: #0D47A1;
+  }
+  body.dark .promo-card.info {
+    background: linear-gradient(135deg, #001a2e, #001424);
+    border-color: #21618C;
+  }
+  .promo-empty {
+    padding: 18px 16px;
+    border-radius: var(--radius);
+    border: 1.5px dashed var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+  }
   .promo-card-icon { font-size: 36px; flex-shrink: 0; }
   .promo-card-info { flex: 1; min-width: 0; }
   .promo-card-title {
@@ -2295,28 +2315,9 @@
   <!-- Блок з акціями, який можна скролити вліво-вправо -->
   <div class="promo-wrap">
     <div class="promo-scroll" id="promo-scroll">
-      <div class="promo-track" id="promo-track">
-        <div class="promo-card gift" role="button" tabindex="0" onclick="goToToyCategoryFromGiftPromo()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goToToyCategoryFromGiftPromo();}">
-          <div class="promo-card-icon">🎁</div>
-          <div class="promo-card-info">
-            <div class="promo-card-title">Безкоштовний подарунок</div>
-            <div class="promo-card-sub">Додай 3+ іграшки в кошик і обери подарунок на свій смак</div>
-          </div>
-        </div>
-        <div class="promo-card discount">
-          <div class="promo-card-icon">🔖</div>
-          <div class="promo-card-info">
-            <div class="promo-card-title">−10% на замовлення</div>
-            <div class="promo-card-sub">При замовленні від 500 ₴ отримай знижку 10% на всю суму</div>
-          </div>
-          <div class="promo-card-badge">−10%</div>
-        </div>
-      </div>
+      <div class="promo-track" id="promo-track"></div>
     </div>
-    <div class="promo-dots" id="promo-dots">
-      <div class="promo-dot active"></div>
-      <div class="promo-dot"></div>
-    </div>
+    <div class="promo-dots" id="promo-dots"></div>
   </div>
 
   <div class="section-label" style="padding-top:12px;">Товари зі знижкою</div>
@@ -3027,7 +3028,8 @@ function addToCartFromModal() {
   saveCart();
   updateCartBadge();
   updateModalAddBtn();
-  if (getGiftEligibleToyLineCount() >= 3 && prevGiftLineCount < 3) showGiftToast();
+  const giftMinItems = getGiftMinItems();
+  if (giftMinItems && getGiftEligibleToyLineCount() >= giftMinItems && prevGiftLineCount < giftMinItems) showGiftToast();
   if (document.getElementById('page-cart')?.classList.contains('active')) renderCart();
   setTimeout(closeModal, 300);
 }
@@ -3084,9 +3086,43 @@ function actualDiscountAfterRounding(subtotal, rawDiscount, step = PRICE_ROUNDIN
   return Math.max(0, subtotal - roundPriceUp(subtotal - rawDiscount, step));
 }
 
+// ─── АКЦІЇ (керуються з адмін-панелі) ───────────────────────
+// Дефолти дублюють базові акції — якщо API недоступне, вітрина працює як раніше.
+let PROMOTIONS = [];
+let GIFT_RULE = { category: 'toy', min_items: 3, max_gift_price: 100 };
+
+function getDiscountPromotions() {
+  return PROMOTIONS.filter(p => p.type === 'order_percent' || p.type === 'order_fixed');
+}
+
+function promotionRawDiscount(promo, rawTotal) {
+  if (rawTotal < (promo.min_order || 0)) return 0;
+  if (promo.type === 'order_percent') return Math.floor(rawTotal * (promo.value || 0) / 100);
+  if (promo.type === 'order_fixed') return Math.min(promo.value || 0, rawTotal);
+  return 0;
+}
+
+// Найвигідніша для клієнта автоматична знижка (той самий алгоритм, що й на сервері)
+function getBestPromotion(rawTotal) {
+  let best = null;
+  let bestRaw = 0;
+  for (const promo of getDiscountPromotions()) {
+    const raw = promotionRawDiscount(promo, rawTotal);
+    if (raw > bestRaw) { bestRaw = raw; best = promo; }
+  }
+  return best ? { promo: best, raw: bestRaw } : null;
+}
+
 function getPromotionDiscount(rawTotal) {
-  if (rawTotal < 500) return 0;
-  return actualDiscountAfterRounding(rawTotal, Math.floor(rawTotal * 0.1));
+  const best = getBestPromotion(rawTotal);
+  if (!best) return 0;
+  return actualDiscountAfterRounding(rawTotal, best.raw);
+}
+
+// Найменший поріг серед знижкових акцій — щоб знати, коли перемальовувати кошик
+function getLowestPromotionThreshold() {
+  const thresholds = getDiscountPromotions().map(p => p.min_order || 0);
+  return thresholds.length ? Math.min(...thresholds) : Infinity;
 }
 
 function getCartPricing() {
@@ -3211,23 +3247,33 @@ const pendingRemovals = {};
 // ─── ПОДАРУНОК ──────────────────────────────────────────────
 // Повертає список товарів, що можуть бути подарунком (gift:true, price<=100)
 function getGiftCandidates() {
-  return PRODUCTS.filter(p => p.gift === true && p.price <= 100);
+  if (!GIFT_RULE) return [];
+  const maxPrice = GIFT_RULE.max_gift_price || 0;
+  return PRODUCTS.filter(p => p.gift === true && (!maxPrice || p.price <= maxPrice));
 }
 
-// Перевіряє, чи позиція кошика підходить під акцію подарунку: іграшки з основного каталогу (не «Індивідуальне»)
+// Перевіряє, чи позиція кошика підходить під акцію подарунку (категорія з налаштувань акції)
 function isGiftEligibleToyItem(item) {
+  if (!GIFT_RULE) return false;
   if (!item || item.contractPrice || item.fromCustom || item.addedFrom === 'custom') return false;
+  if (!GIFT_RULE.category) return true;
   const itemCat = item.cat || PRODUCTS.find(p => p.id === item.id)?.cat;
-  return itemCat === 'toy';
+  return itemCat === GIFT_RULE.category;
 }
 
 function getGiftEligibleToyLineCount() {
   return cart.filter(isGiftEligibleToyItem).length;
 }
 
-// Перевіряє право на подарунок: 3+ різні іграшки (окремі позиції в кошику)
+function getGiftMinItems() {
+  return GIFT_RULE ? (GIFT_RULE.min_items || 0) : 0;
+}
+
+// Перевіряє право на подарунок: N+ різних товарів (окремі позиції в кошику)
 function shouldShowGift() {
-  return getGiftEligibleToyLineCount() >= 3;
+  const minItems = getGiftMinItems();
+  if (!minItems) return false;
+  return getGiftEligibleToyLineCount() >= minItems;
 }
 
 // Поточний обраний подарунок (об'єкт товару або null)
@@ -3430,14 +3476,15 @@ function renderCart() {
     selectedGift = null;
   }
 
+  const activePromo = getBestPromotion(rawTotal)?.promo || null;
   const promoBlock = promotionDiscount > 0 ? `
     <div class="cart-item cart-item-promo" id="cart-promo-item">
-      <div class="cart-item-emoji">🎁</div>
+      <div class="cart-item-emoji">${escapeHtml(activePromo?.emoji || '🎁')}</div>
       <div class="cart-item-info">
         <div class="cart-item-top">
-          <div class="cart-item-name">Акція -10%</div>
+          <div class="cart-item-name">${escapeHtml(activePromo?.title || 'Акція')}</div>
         </div>
-        <div class="cart-item-sub">Автоматична знижка на замовлення від 500 ₴</div>
+        <div class="cart-item-sub">${escapeHtml(activePromo?.subtitle || 'Автоматична знижка на замовлення')}</div>
         <div class="cart-item-bottom">
           <div class="cart-item-total discount"><span class="amount">−${promotionDiscount}</span> <span class="currency">₴</span></div>
         </div>
@@ -3602,11 +3649,12 @@ function cartQtyChange(id, delta) {
   saveCart();
   updateCartBadge();
 
-  // Якщо може бути акція -10% (немає купону і сума може перетнути 500 грн або вже більше 500 грн, коли сума змінюється) - просто перемальовуємо кошик
+  // Якщо сума перетинає поріг будь-якої акції (і немає купону) — перемальовуємо кошик
   if (!appliedCoupon) {
+    const promoThreshold = getLowestPromotionThreshold();
     const rawTotalAfter = getCartFixedTotal();
-    const wasPromo = (rawTotalAfter - (item.contractPrice ? 0 : item.price * delta)) >= 500;
-    const isPromo = rawTotalAfter >= 500;
+    const wasPromo = (rawTotalAfter - (item.contractPrice ? 0 : item.price * delta)) >= promoThreshold;
+    const isPromo = rawTotalAfter >= promoThreshold;
     if (wasPromo || isPromo) {
       renderCart();
       return;
@@ -3803,6 +3851,64 @@ async function loadProducts() {
     console.error('Помилка завантаження товарів:', e);
     document.getElementById('grid').innerHTML =
       '<div class="empty"><div class="empty-ico">😕</div>Не вдалось завантажити товари. Спробуй пізніше.</div>';
+  }
+}
+
+async function loadPromotions() {
+  try {
+    const data = await apiGet('/api/promotions');
+    PROMOTIONS = Array.isArray(data?.promotions) ? data.promotions : [];
+    GIFT_RULE = data?.gift_rule || null;
+  } catch (e) {
+    console.error('Помилка завантаження акцій:', e);
+    PROMOTIONS = [];
+    GIFT_RULE = null;
+  }
+  renderPromoCards();
+}
+
+// Малює картки акцій на сторінці «Акції» за даними з адмін-панелі
+function renderPromoCards() {
+  const track = document.getElementById('promo-track');
+  const dots = document.getElementById('promo-dots');
+  if (!track) return;
+
+  if (!PROMOTIONS.length) {
+    track.innerHTML = '<div class="promo-empty">Зараз активних акцій немає — але знижені товари нижче нікуди не поділись 😉</div>';
+    if (dots) dots.innerHTML = '';
+    window.PromoCarousel?.refresh();
+    return;
+  }
+
+  track.innerHTML = PROMOTIONS.map(p => {
+    const cls = p.type === 'gift_threshold' ? 'gift' : (p.type === 'info' ? 'info' : 'discount');
+    const badge = p.badge ? `<div class="promo-card-badge">${escapeHtml(p.badge)}</div>` : '';
+    return `
+      <div class="promo-card ${cls}" role="button" tabindex="0"
+           onclick="onPromoCardClick('${escapeAttr(p.id)}')"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();onPromoCardClick('${escapeAttr(p.id)}');}">
+        <div class="promo-card-icon">${escapeHtml(p.emoji || '🔥')}</div>
+        <div class="promo-card-info">
+          <div class="promo-card-title">${escapeHtml(p.title || '')}</div>
+          <div class="promo-card-sub">${escapeHtml(p.subtitle || '')}</div>
+        </div>
+        ${badge}
+      </div>`;
+  }).join('');
+
+  if (dots) {
+    dots.innerHTML = PROMOTIONS.map((_, i) => `<div class="promo-dot${i === 0 ? ' active' : ''}"></div>`).join('');
+  }
+  window.PromoCarousel?.refresh();
+}
+
+function onPromoCardClick(promoId) {
+  const promo = PROMOTIONS.find(p => p.id === promoId);
+  const btn = document.querySelector('.nav-btn[data-page="products"]');
+  if (btn) switchPage('products', btn);
+  clearProductSearch();
+  if (promo && promo.type === 'gift_threshold' && promo.category) {
+    selectCategory(promo.category);
   }
 }
 
@@ -4118,7 +4224,7 @@ function goToToyCategoryFromGiftPromo() {
   const btn = document.querySelector('.nav-btn[data-page="products"]');
   if (btn) switchPage('products', btn);
   clearProductSearch();
-  selectCategory('toy');
+  selectCategory(GIFT_RULE?.category || 'toy');
 }
 
 function buildCategoryRoundButtons() {
@@ -5478,7 +5584,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   `).join('');
   
   // Завантажуємо товари та рендеримо першу категорію
-  await Promise.all([loadProducts(), loadFilaments(), loadCategories()]);
+  await Promise.all([loadProducts(), loadFilaments(), loadCategories(), loadPromotions()]);
 
   resetHeaderScrollState('products');
   const mainScrollEl = getMainScrollEl();
@@ -5646,17 +5752,26 @@ async function applyCoupon() {
   let promoSwipeX = null;
 
   // Ініціалізація промо-каруселі. Визначаємо кількість слайдів та налаштовуємо автоматичну навігацію. Якщо слайдів менше або рівно одному, приховуємо навігаційні точки, оскільки вони не потрібні.
+  let promoSwipeBound = false;
+
   function initPromo() {
     const track = document.getElementById('promo-track');
     const dots  = document.getElementById('promo-dots');
     if (!track) return;
-    promoTotal = track.children.length;
+    promoIndex = 0;
+    promoTotal = track.querySelectorAll('.promo-card').length;
     if (promoTotal <= 1) {
+      stopPromoTimer();
       if (dots) dots.style.display = 'none';
+      track.style.transform = 'translateX(0)';
       return;
     }
+    if (dots) dots.style.display = '';
     updatePromo();
     startPromoTimer();
+
+    if (promoSwipeBound) return;
+    promoSwipeBound = true;
 
     // Ініціалізація свайпів для промо-каруселі. Це дозволяє користувачам навігувати між слайдами, свайпаючи їх вліво або вправо, що є інтуїтивним жестом на мобільних пристроях.
     const scroll = document.getElementById('promo-scroll');
@@ -5703,6 +5818,9 @@ async function applyCoupon() {
   function stopPromoTimer() {
     clearInterval(promoTimer);
   }
+
+  // Перебудова після оновлення карток акцій з API
+  window.PromoCarousel = { refresh: initPromo };
 
   // Запускаємо після завантаження
   document.addEventListener('DOMContentLoaded', initPromo);

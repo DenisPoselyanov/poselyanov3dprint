@@ -23,6 +23,19 @@ from services.coupons import check_promotion  # noqa: E402
 from services.validation import validate_order_payload  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def default_promotions(monkeypatch):
+    """Базові акції без БД — щоб тести не залежали від стану бази."""
+    import services.promotions as promotions
+
+    monkeypatch.setattr(promotions, "_cache", {"ts": 0.0, "rows": None})
+    monkeypatch.setattr(
+        promotions,
+        "_fetch_all",
+        lambda: [promotions._normalize_row(dict(p)) for p in promotions.DEFAULT_PROMOTIONS],
+    )
+
+
 @pytest.fixture
 def catalog(monkeypatch):
     products = [
