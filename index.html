@@ -4627,6 +4627,15 @@ function renderPinnedProducts() {
       pinnedTouchStartX = null;
       startPinnedTimer(pinned.length);
     }, { passive: true });
+
+    // Навігація блоком "Рекомендуємо" колесом миші — аналогічно до блоку "Акції"
+    scroll.addEventListener('wheel', e => {
+      e.preventDefault();
+      stopPinnedTimer();
+      pinnedIndex = (pinnedIndex + (e.deltaY > 0 ? 1 : -1) + pinned.length) % pinned.length;
+      updatePinnedSlider();
+      startPinnedTimer(pinned.length);
+    }, { passive: false });
   }
 }
 
@@ -4798,6 +4807,8 @@ function getActiveSlide() {
 // Ініціалізація свайпів для каруселі: один палець — навігація, два пальці — зум
 function initCarouselSwipe() {
   const w = document.getElementById('carousel-wrap');
+  if (w.dataset.bound) return;
+  w.dataset.bound = '1';
 
   w.addEventListener('touchstart', e => {
     if (e.touches.length === 1) {
@@ -4846,11 +4857,15 @@ function initCarouselSwipe() {
     carSwipeX = null;
   }, { passive: true });
 
+  let carWheelLock = false;
   w.addEventListener('wheel', e => {
     if (e.ctrlKey) return;
     if (zoomScale > 1) return;
     e.preventDefault();
+    if (carWheelLock) return;
+    carWheelLock = true;
     carouselNav(e.deltaY > 0 ? 1 : -1);
+    setTimeout(() => { carWheelLock = false; }, 350);
   }, { passive: false });
 }
 
