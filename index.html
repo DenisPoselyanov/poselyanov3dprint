@@ -1491,6 +1491,11 @@
   }
   .skeleton-line.short { width: 60%; height: 9px; margin-top: 3px; }
   .skeleton-line.price { width: 40%; height: 13px; margin-top: 8px; }
+  .pinned-skeleton-thumb {
+    border-radius: 12px; height: 100px;
+    background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+    background-size: 200% 100%; animation: shimmer 1.2s infinite;
+  }
   @keyframes shimmer {
     0%   { background-position: 200% 0; }
     100% { background-position: -200% 0; }
@@ -5597,6 +5602,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="skeleton-line price"></div>
     </div>
   `).join('');
+  const pinnedSkeletonSection = document.getElementById('pinned-section');
+  const pinnedSkeletonTrack = document.getElementById('pinned-track');
+  if (pinnedSkeletonSection && pinnedSkeletonTrack) {
+    pinnedSkeletonSection.style.display = '';
+    pinnedSkeletonTrack.innerHTML = `
+      <div class="pinned-card">
+        <div class="pinned-skeleton-thumb"></div>
+        <div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line price"></div>
+        </div>
+      </div>
+    `;
+  }
   
   // Завантажуємо товари та рендеримо першу категорію
   await Promise.all([loadProducts(), loadFilaments(), loadCategories(), loadPromotions()]);
