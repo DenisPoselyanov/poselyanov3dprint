@@ -3734,8 +3734,13 @@
         }
 
         const MAX_DIRECT_UPLOAD_BYTES = 3 * 1024 * 1024;
-        const IMAGE_MAX_SIDE = 2200;
-        const IMAGE_WEBP_QUALITY = 0.86;
+        const COMPRESSED_TARGET_BYTES = 2.5 * 1024 * 1024;
+        const COMPRESS_STEPS = [
+            { maxSide: 2200, quality: 0.86 },
+            { maxSide: 1600, quality: 0.75 },
+            { maxSide: 1200, quality: 0.65 },
+            { maxSide: 900, quality: 0.6 },
+        ];
 
         function canvasToBlob(canvas, type, quality) {
             return new Promise((resolve, reject) => {
@@ -3747,7 +3752,7 @@
         }
 
         async function compressImageForUpload(file) {
-            if (!['image/jpeg', 'image/png'].includes(file.type) || file.size <= MAX_DIRECT_UPLOAD_BYTES) {
+            if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.size <= MAX_DIRECT_UPLOAD_BYTES) {
                 return file;
             }
 
@@ -3761,19 +3766,29 @@
                     img.src = imageUrl;
                 });
 
-                const scale = Math.min(1, IMAGE_MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
-                const canvas = document.createElement('canvas');
-                canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-                canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+                let best = null;
+                for (const step of COMPRESS_STEPS) {
+                    const scale = Math.min(1, step.maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+                    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
 
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-                const blob = await canvasToBlob(canvas, 'image/webp', IMAGE_WEBP_QUALITY);
-                if (!blob || blob.size >= file.size) return file;
+                    const blob = await canvasToBlob(canvas, 'image/webp', step.quality);
+                    if (!blob) continue;
+                    if (!best || blob.size < best.size) best = blob;
+                    if (blob.size <= COMPRESSED_TARGET_BYTES) break;
+                }
+
+                if (!best || best.size >= file.size) return file;
 
                 const baseName = (file.name || 'image').replace(/\.[^.]+$/, '');
-                return new File([blob], `${baseName}.webp`, { type: 'image/webp' });
+                return new File([best], `${baseName}.webp`, { type: 'image/webp' });
+            } catch (e) {
+                console.warn('Image compression skipped:', e);
+                return file;
             } finally {
                 URL.revokeObjectURL(imageUrl);
             }
