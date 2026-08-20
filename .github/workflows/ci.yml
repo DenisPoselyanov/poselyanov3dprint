@@ -33,4 +33,6 @@ jobs:
           script_stop: true
           script: |
             cd /opt/poselyanov3dprint
+            git fetch origin
+            git reset --hard origin/main
             bash deploy/update.sh
