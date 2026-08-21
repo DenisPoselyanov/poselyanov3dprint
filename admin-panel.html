@@ -2059,6 +2059,7 @@
                     </div>
                     <input type="hidden" id="categoryFilter" value="">
                     <div class="flag-chips-row" id="flagChipsRow">
+                        <button class="chip" data-flag="sale" type="button" onclick="toggleFlagFilter('sale')">🏷️ Акційні</button>
                         <button class="chip" data-flag="hot" type="button" onclick="toggleFlagFilter('hot')">🔥 Гарячий</button>
                         <button class="chip" data-flag="pinned" type="button" onclick="toggleFlagFilter('pinned')">📌 Закріплений</button>
                         <button class="chip" data-flag="gift" type="button" onclick="toggleFlagFilter('gift')">🎁 Подарунок</button>
@@ -3622,7 +3623,9 @@
                 const matchSearch = !search || p.name.toLowerCase().includes(search);
                 const matchCat = !cat || p.cat === cat;
                 const matchFlags = activeFlags.size === 0
-                    || [...activeFlags].every(flag => p[flag]);
+                    || [...activeFlags].every(flag => flag === 'sale'
+                        ? (!p.contractPrice && p.oldPrice && p.oldPrice > p.price)
+                        : p[flag]);
                 return matchSearch && matchCat && matchFlags;
             });
 
