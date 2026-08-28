@@ -57,14 +57,15 @@ def _insert_coupon(conn, **kwargs):
         "personal_user_id": None,
         "stackable": 0,
         "require_channel_sub": 0,
+        "sub_channel_id": None,
     }
     defaults.update(kwargs)
     conn.execute(
         """
         INSERT INTO coupons
         (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at,
-         personal_user_id, stackable, require_channel_sub)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         personal_user_id, stackable, require_channel_sub, sub_channel_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             defaults["code"],
@@ -79,6 +80,7 @@ def _insert_coupon(conn, **kwargs):
             defaults["personal_user_id"],
             defaults["stackable"],
             defaults["require_channel_sub"],
+            defaults["sub_channel_id"],
         ),
     )
     conn.commit()
@@ -532,47 +534,64 @@ def test_check_coupon_stackable_requires_global_switch(coupon_db, monkeypatch):
     assert "сумується" in on["message"]
 
 
-def test_coupon_requires_channel_sub_flag(coupon_db):
+def test_coupon_channel_gate(coupon_db):
     coupons, _ = coupon_db
     from db_core import db_connect
 
     conn = db_connect()
     _insert_coupon(conn, code="SUBS", require_channel_sub=1)
+    _insert_coupon(conn, code="OWNCHAN", require_channel_sub=1, sub_channel_id="@mychan")
     _insert_coupon(conn, code="OPEN", require_channel_sub=0)
     conn.close()
 
-    assert coupons.coupon_requires_channel_sub("SUBS") is True
-    assert coupons.coupon_requires_channel_sub("subs") is True
-    assert coupons.coupon_requires_channel_sub("OPEN") is False
-    assert coupons.coupon_requires_channel_sub("MISSING") is False
+    assert coupons.coupon_channel_gate("SUBS") == (True, None)
+    assert coupons.coupon_channel_gate("subs") == (True, None)
+    assert coupons.coupon_channel_gate("OWNCHAN") == (True, "@mychan")
+    assert coupons.coupon_channel_gate("OPEN") == (False, None)
+    assert coupons.coupon_channel_gate("MISSING") == (False, None)
 
 
-def test_channel_gated_codes(coupon_db):
+def test_channel_gated_coupons(coupon_db):
     coupons, _ = coupon_db
     from db_core import db_connect
 
     conn = db_connect()
     _insert_coupon(conn, code="SUBS", require_channel_sub=1)
+    _insert_coupon(conn, code="OWNCHAN", require_channel_sub=1, sub_channel_id="-100999")
     _insert_coupon(conn, code="OPEN", require_channel_sub=0)
     conn.close()
 
-    assert coupons.channel_gated_codes(["subs", "open", "missing"]) == {"SUBS"}
-    assert coupons.channel_gated_codes([]) == set()
+    assert coupons.channel_gated_coupons(["subs", "ownchan", "open", "missing"]) == {
+        "SUBS": None,
+        "OWNCHAN": "-100999",
+    }
+    assert coupons.channel_gated_coupons([]) == {}
 
 
-def test_coupon_crud_keeps_require_channel_sub_flag(coupon_db):
+def test_coupon_crud_keeps_channel_sub_fields(coupon_db):
     coupons, _ = coupon_db
     created = coupons.create_coupon(
-        {"code": "CHAN", "type": "percent", "value": 10, "require_channel_sub": True}
+        {
+            "code": "CHAN",
+            "type": "percent",
+            "value": 10,
+            "require_channel_sub": True,
+            "sub_channel_id": "@promo_chan",
+        }
     )
     assert created["ok"] is True
     assert created["coupon"]["require_channel_sub"] == 1
+    assert created["coupon"]["sub_channel_id"] == "@promo_chan"
 
+    # знявши галочку — обнуляємо і канал
     updated = coupons.update_coupon(
-        "CHAN", {"code": "CHAN", "type": "percent", "value": 10, "require_channel_sub": False}
+        "CHAN",
+        {"code": "CHAN", "type": "percent", "value": 10, "require_channel_sub": False,
+         "sub_channel_id": "@promo_chan"},
     )
     assert updated["ok"] is True
     assert updated["coupon"]["require_channel_sub"] == 0
+    assert updated["coupon"]["sub_channel_id"] is None
 
 
 def test_coupon_crud_keeps_stackable_flag(coupon_db):

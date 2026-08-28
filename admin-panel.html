@@ -2481,9 +2481,10 @@
                     <label class="checkbox-group" style="display:block;">
                         <label><input type="checkbox" name="require_channel_sub"> 📢 Лише для підписників каналу</label>
                     </label>
+                    <input type="text" name="sub_channel_id" placeholder="@channel або -1001589686948 (порожнє = канал за замовчуванням)" style="margin-top:8px;">
                     <small style="color:var(--text-muted); display:block; margin-top:6px;">
-                        Код побачать у «Мої купони» та зможуть застосувати лише підписники каналу.
-                        Потрібно вказати <code>SUBSCRIPTION_CHANNEL</code> у налаштуваннях бота, і бот має бути в каналі.
+                        Код побачать у «Мої купони» та зможуть застосувати лише підписники цього каналу/групи.
+                        Порожнє поле — діє канал із <code>SUBSCRIPTION_CHANNEL</code> (ENV). Бот має бути учасником/адміном каналу.
                     </small>
                 </div>
                 <div class="form-group">
@@ -3363,7 +3364,11 @@
             } else if (coupon.personal_user_id) {
                 parts.push(`доступ лише для ID ${coupon.personal_user_id}`);
             }
-            if (coupon.require_channel_sub) parts.push('📢 лише підписники каналу');
+            if (coupon.require_channel_sub) {
+                parts.push(coupon.sub_channel_id
+                    ? `📢 підписники ${coupon.sub_channel_id}`
+                    : '📢 лише підписники каналу');
+            }
             return parts.join(' · ');
         }
 
@@ -3463,6 +3468,7 @@
                 form.one_per_user.checked = !!coupon.one_per_user;
                 form.stackable.checked = !!coupon.stackable;
                 form.require_channel_sub.checked = !!coupon.require_channel_sub;
+                form.sub_channel_id.value = coupon.sub_channel_id || '';
                 form.expires_at.value = formatCouponExpires(coupon.expires_at);
                 form.allowed_user_ids.value = formatAllowedUserIdsForInput(
                     coupon.allowed_user_ids || (coupon.personal_user_id ? [coupon.personal_user_id] : [])
@@ -4996,6 +5002,7 @@
                 one_per_user: form.one_per_user.checked,
                 stackable: form.stackable.checked,
                 require_channel_sub: form.require_channel_sub.checked,
+                sub_channel_id: form.sub_channel_id.value.trim() || null,
                 expires_at: form.expires_at.value || null,
                 allowed_user_ids: parseAllowedUserIdsInput(form.allowed_user_ids.value),
                 active: form.active.checked,

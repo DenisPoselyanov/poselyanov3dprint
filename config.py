@@ -44,8 +44,12 @@ SUBSCRIPTION_CHANNEL = os.environ.get("SUBSCRIPTION_CHANNEL", "").strip()
 SUBSCRIPTION_CHANNEL_URL = os.environ.get("SUBSCRIPTION_CHANNEL_URL", "").strip()
 
 
-def _subscription_channel_chat_id():
-    raw = SUBSCRIPTION_CHANNEL
+def normalize_channel_id(raw):
+    """`@username` / `-100…` / `username` → значення, придатне для bot.get_chat_member.
+
+    Порожнє → None.
+    """
+    raw = (str(raw) if raw is not None else "").strip()
     if not raw:
         return None
     if raw.lstrip("-").isdigit():
@@ -53,17 +57,20 @@ def _subscription_channel_chat_id():
     return raw if raw.startswith("@") else "@" + raw
 
 
-def subscription_channel_link() -> str:
-    """Посилання на канал для тексту користувачу, якщо його можна побудувати."""
-    if SUBSCRIPTION_CHANNEL_URL:
-        return SUBSCRIPTION_CHANNEL_URL
-    raw = SUBSCRIPTION_CHANNEL
+def channel_link_for(raw: str) -> str:
+    """t.me-посилання з `@username` каналу; для числового chat_id — порожньо."""
+    raw = (raw or "").strip()
     if raw and not raw.lstrip("-").isdigit():
         return "https://t.me/" + raw.lstrip("@")
     return ""
 
 
-SUBSCRIPTION_CHANNEL_CHAT_ID = _subscription_channel_chat_id()
+def subscription_channel_link() -> str:
+    """Посилання на канал за замовчуванням для тексту користувачу."""
+    return SUBSCRIPTION_CHANNEL_URL or channel_link_for(SUBSCRIPTION_CHANNEL)
+
+
+SUBSCRIPTION_CHANNEL_CHAT_ID = normalize_channel_id(SUBSCRIPTION_CHANNEL)
 
 _default_cors = (
     "https://denisposelyanov.github.io,http://localhost:8080,http://127.0.0.1:8080,"

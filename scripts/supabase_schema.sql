@@ -96,10 +96,12 @@ CREATE TABLE IF NOT EXISTS coupons (
     expires_at TIMESTAMPTZ,
     personal_user_id BIGINT,
     stackable INTEGER NOT NULL DEFAULT 0,
-    require_channel_sub INTEGER NOT NULL DEFAULT 0
+    require_channel_sub INTEGER NOT NULL DEFAULT 0,
+    sub_channel_id TEXT
 );
 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS stackable INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE coupons ADD COLUMN IF NOT EXISTS require_channel_sub INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS sub_channel_id TEXT;
 
 CREATE TABLE IF NOT EXISTS coupon_uses (
     id BIGSERIAL PRIMARY KEY,
