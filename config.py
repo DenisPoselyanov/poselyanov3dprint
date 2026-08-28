@@ -36,6 +36,35 @@ ADMIN_BYPASS_TOKEN: str = os.environ.get("ADMIN_BYPASS_TOKEN") or secrets.token_
 
 PROMOTION_ENABLED = os.environ.get("PROMOTION_ENABLED", "true").lower() in ("1", "true", "yes")
 
+# Канал, підписка на який потрібна для промокодів з галочкою «Лише для підписників».
+# Приймається @username каналу або числовий chat_id (напр. -1001234567890).
+# Бот має бути учасником/адміністратором каналу, інакше getChatMember не спрацює.
+SUBSCRIPTION_CHANNEL = os.environ.get("SUBSCRIPTION_CHANNEL", "").strip()
+# Публічне посилання на канал для повідомлення користувачу («Підпишись: …»).
+SUBSCRIPTION_CHANNEL_URL = os.environ.get("SUBSCRIPTION_CHANNEL_URL", "").strip()
+
+
+def _subscription_channel_chat_id():
+    raw = SUBSCRIPTION_CHANNEL
+    if not raw:
+        return None
+    if raw.lstrip("-").isdigit():
+        return int(raw)
+    return raw if raw.startswith("@") else "@" + raw
+
+
+def subscription_channel_link() -> str:
+    """Посилання на канал для тексту користувачу, якщо його можна побудувати."""
+    if SUBSCRIPTION_CHANNEL_URL:
+        return SUBSCRIPTION_CHANNEL_URL
+    raw = SUBSCRIPTION_CHANNEL
+    if raw and not raw.lstrip("-").isdigit():
+        return "https://t.me/" + raw.lstrip("@")
+    return ""
+
+
+SUBSCRIPTION_CHANNEL_CHAT_ID = _subscription_channel_chat_id()
+
 _default_cors = (
     "https://denisposelyanov.github.io,http://localhost:8080,http://127.0.0.1:8080,"
     "http://localhost:5500,http://127.0.0.1:5500"

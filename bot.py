@@ -12,6 +12,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 try:
@@ -104,8 +105,10 @@ import app_state
 from services.coupons import (
     CouponConsumptionError,
     add_coupon_users,
+    channel_gated_codes,
     check_coupon,
     check_promotion as _check_promotion_service,
+    coupon_requires_channel_sub,
     create_coupon,
     delete_coupon,
     get_coupon,
@@ -734,10 +737,70 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+# --- Промокоди «лише для підписників каналу» -------------------------------------
+
+_CHANNEL_SUB_CACHE: dict[int, tuple[float, bool]] = {}
+_CHANNEL_SUB_TTL_SEC = 60.0
+_CHANNEL_SUBSCRIBED_STATUSES = {"creator", "owner", "administrator", "member"}
+
+
+async def is_channel_subscriber(user_id: int) -> bool:
+    """Чи підписаний користувач на канал config.SUBSCRIPTION_CHANNEL.
+
+    Якщо канал не налаштований — вважаємо, що обмежень немає (повертаємо True).
+    Помилка getChatMember (бот не в каналі, приватність тощо) → вважаємо не підписаним.
+    """
+    chat_id = config.SUBSCRIPTION_CHANNEL_CHAT_ID
+    if not chat_id:
+        return True
+
+    uid = int(user_id or 0)
+    if uid <= 0:
+        return False
+
+    now = time.monotonic()
+    cached = _CHANNEL_SUB_CACHE.get(uid)
+    if cached and now - cached[0] < _CHANNEL_SUB_TTL_SEC:
+        return cached[1]
+
+    bot = getattr(app_state.bot_app, "bot", None)
+    if bot is None:
+        return False
+
+    try:
+        member = await bot.get_chat_member(chat_id, uid)
+        status = getattr(member, "status", "")
+        ok = status in _CHANNEL_SUBSCRIBED_STATUSES or (
+            status == "restricted" and getattr(member, "is_member", False)
+        )
+    except Exception as e:
+        logger.warning("get_chat_member(%s, %s) failed: %s", chat_id, uid, e)
+        ok = False
+
+    _CHANNEL_SUB_CACHE[uid] = (now, ok)
+    return ok
+
+
+def channel_sub_required_message() -> str:
+    link = config.subscription_channel_link()
+    if link:
+        return f"Цей промокод лише для підписників каналу. Підпишись: {link}"
+    return "Цей промокод доступний лише підписникам каналу ❌"
+
+
 # Команда для перегляду персональних купонів користувача
 async def mycoupons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     rows = await run_db(get_my_coupons, user_id)
+
+    if rows and config.SUBSCRIPTION_CHANNEL_CHAT_ID:
+        codes = [(r["code"] if isinstance(r, dict) else r[0]) for r in rows]
+        gated = await run_db(channel_gated_codes, codes)
+        if gated and not await is_channel_subscriber(user_id):
+            rows = [
+                r for r in rows
+                if (r["code"] if isinstance(r, dict) else r[0]).upper() not in gated
+            ]
 
     if not rows:
         await send_rich_message(
@@ -1918,6 +1981,15 @@ async def handle_order(request):
     gift = data.get("gift")
     coupon_code = (data.get("coupon_code") or "").strip() or None
 
+    if coupon_code and config.SUBSCRIPTION_CHANNEL_CHAT_ID \
+            and await run_db(coupon_requires_channel_sub, coupon_code) \
+            and not await is_channel_subscriber(user_id):
+        return web.json_response(
+            {"ok": False, "error": channel_sub_required_message()},
+            status=400,
+            headers=cors_headers(request),
+        )
+
     ok, result = await run_db(validate_order_payload, items, coupon_code, user_id, client_total)
     if not ok:
         return web.json_response({"ok": False, "error": result}, status=400, headers=cors_headers(request))
@@ -2857,6 +2929,10 @@ async def handle_check_coupon(request):
 
     if not code:
         result = {"valid": False, "message": "Введи код купону"}
+    elif config.SUBSCRIPTION_CHANNEL_CHAT_ID \
+            and await run_db(coupon_requires_channel_sub, code) \
+            and not await is_channel_subscriber(user_id):
+        result = {"valid": False, "message": channel_sub_required_message()}
     else:
         result = await run_db(check_coupon, code, user_id, cart_total)
 

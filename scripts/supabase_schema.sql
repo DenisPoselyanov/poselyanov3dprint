@@ -94,8 +94,12 @@ CREATE TABLE IF NOT EXISTS coupons (
     one_per_user INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
     expires_at TIMESTAMPTZ,
-    personal_user_id BIGINT
+    personal_user_id BIGINT,
+    stackable INTEGER NOT NULL DEFAULT 0,
+    require_channel_sub INTEGER NOT NULL DEFAULT 0
 );
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS stackable INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE coupons ADD COLUMN IF NOT EXISTS require_channel_sub INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS coupon_uses (
     id BIGSERIAL PRIMARY KEY,

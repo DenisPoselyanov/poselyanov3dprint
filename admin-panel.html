@@ -2478,6 +2478,15 @@
                     </small>
                 </div>
                 <div class="form-group">
+                    <label class="checkbox-group" style="display:block;">
+                        <label><input type="checkbox" name="require_channel_sub"> 📢 Лише для підписників каналу</label>
+                    </label>
+                    <small style="color:var(--text-muted); display:block; margin-top:6px;">
+                        Код побачать у «Мої купони» та зможуть застосувати лише підписники каналу.
+                        Потрібно вказати <code>SUBSCRIPTION_CHANNEL</code> у налаштуваннях бота, і бот має бути в каналі.
+                    </small>
+                </div>
+                <div class="form-group">
                     <label>Термін дії</label>
                     <input type="date" name="expires_at">
                 </div>
@@ -3354,6 +3363,7 @@
             } else if (coupon.personal_user_id) {
                 parts.push(`доступ лише для ID ${coupon.personal_user_id}`);
             }
+            if (coupon.require_channel_sub) parts.push('📢 лише підписники каналу');
             return parts.join(' · ');
         }
 
@@ -3452,6 +3462,7 @@
                 form.uses_max.value = coupon.uses_max || 0;
                 form.one_per_user.checked = !!coupon.one_per_user;
                 form.stackable.checked = !!coupon.stackable;
+                form.require_channel_sub.checked = !!coupon.require_channel_sub;
                 form.expires_at.value = formatCouponExpires(coupon.expires_at);
                 form.allowed_user_ids.value = formatAllowedUserIdsForInput(
                     coupon.allowed_user_ids || (coupon.personal_user_id ? [coupon.personal_user_id] : [])
@@ -4984,6 +4995,7 @@
                 uses_max: parseInt(form.uses_max.value || '0', 10),
                 one_per_user: form.one_per_user.checked,
                 stackable: form.stackable.checked,
+                require_channel_sub: form.require_channel_sub.checked,
                 expires_at: form.expires_at.value || null,
                 allowed_user_ids: parseAllowedUserIdsInput(form.allowed_user_ids.value),
                 active: form.active.checked,

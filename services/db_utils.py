@@ -176,7 +176,8 @@ def init_db() -> None:
                 active INTEGER NOT NULL DEFAULT 1,
                 expires_at TIMESTAMPTZ,
                 personal_user_id BIGINT,
-                stackable INTEGER NOT NULL DEFAULT 0
+                stackable INTEGER NOT NULL DEFAULT 0,
+                require_channel_sub INTEGER NOT NULL DEFAULT 0
             )
         """)
         conn.execute("""
@@ -216,6 +217,7 @@ def init_db() -> None:
         """)
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS personal_user_id BIGINT")
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS stackable INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS require_channel_sub INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS promotion_discount INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
@@ -291,7 +293,8 @@ def init_db() -> None:
                 active       INTEGER DEFAULT 1,
                 expires_at   TIMESTAMP,
                 personal_user_id INTEGER,
-                stackable    INTEGER DEFAULT 0
+                stackable    INTEGER DEFAULT 0,
+                require_channel_sub INTEGER DEFAULT 0
             )
         """)
         c_cols = [row[1] for row in conn.execute("PRAGMA table_info(coupons)").fetchall()]
@@ -299,6 +302,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE coupons ADD COLUMN personal_user_id INTEGER")
         if "stackable" not in c_cols:
             conn.execute("ALTER TABLE coupons ADD COLUMN stackable INTEGER DEFAULT 0")
+        if "require_channel_sub" not in c_cols:
+            conn.execute("ALTER TABLE coupons ADD COLUMN require_channel_sub INTEGER DEFAULT 0")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS coupon_uses (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -166,6 +166,7 @@ def _coupon_row_to_dict(row) -> dict:
         "expires_at": row[8],
         "personal_user_id": row[9],
         "stackable": row[10] if len(row) > 10 else 0,
+        "require_channel_sub": row[11] if len(row) > 11 else 0,
     }
 
 
@@ -457,6 +458,42 @@ def check_promotion(cart_total: int):
     return compute_order_discount(cart_total)
 
 
+def coupon_requires_channel_sub(code: str) -> bool:
+    """Чи потрібна цьому купону підписка на канал (перевіряється в bot.py через getChatMember)."""
+    if not code:
+        return False
+    conn = db_connect()
+    row = conn.execute(
+        _sql("SELECT require_channel_sub FROM coupons WHERE code = ?"),
+        (code.upper(),),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return False
+    val = row["require_channel_sub"] if isinstance(row, dict) else row[0]
+    return bool(val)
+
+
+def channel_gated_codes(codes: list[str]) -> set[str]:
+    """З переданого списку кодів повертає ті, що вимагають підписки на канал."""
+    normalized = sorted({c.upper() for c in codes if c})
+    if not normalized:
+        return set()
+    conn = db_connect()
+    placeholders = ", ".join("?" for _ in normalized)
+    rows = conn.execute(
+        _sql(
+            f"SELECT code FROM coupons WHERE require_channel_sub = 1 AND code IN ({placeholders})"
+        ),
+        tuple(normalized),
+    ).fetchall()
+    conn.close()
+    result: set[str] = set()
+    for r in rows:
+        result.add((r["code"] if isinstance(r, dict) else r[0]).upper())
+    return result
+
+
 def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -> tuple[dict | None, str | None]:
     code = (code_override or data.get("code") or "").strip().upper()
     if not code:
@@ -481,6 +518,7 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
         one_per_user = 1 if data.get("one_per_user") in (1, True, "1", "true") else 0
         active = 1 if data.get("active", 1) in (1, True, "1", "true") else 0
         stackable = 1 if data.get("stackable") in (1, True, "1", "true", "on") else 0
+        require_channel_sub = 1 if data.get("require_channel_sub") in (1, True, "1", "true", "on") else 0
     except (TypeError, ValueError):
         return None, "Невірні числові параметри купона"
 
@@ -515,6 +553,7 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
         "expires_at": expires_at,
         "personal_user_id": personal_user_id,
         "stackable": stackable,
+        "require_channel_sub": require_channel_sub,
         "allowed_user_ids": allowed_user_ids,
     }, None
 
@@ -524,7 +563,7 @@ def get_coupon(code: str) -> dict | None:
     row = conn.execute(
         _sql(
             "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, "
-            "expires_at, personal_user_id, stackable FROM coupons WHERE code = ?"
+            "expires_at, personal_user_id, stackable, require_channel_sub FROM coupons WHERE code = ?"
         ),
         (code.upper(),),
     ).fetchone()
@@ -542,7 +581,8 @@ def list_coupons() -> list[dict]:
     rows = conn.execute(
         _sql(
             "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, "
-            "expires_at, personal_user_id, stackable FROM coupons ORDER BY active DESC, code ASC"
+            "expires_at, personal_user_id, stackable, require_channel_sub "
+            "FROM coupons ORDER BY active DESC, code ASC"
         )
     ).fetchall()
     coupons = [row_to_dict(r) for r in rows]
@@ -565,8 +605,8 @@ def create_coupon(data: dict) -> dict:
         conn.execute(
             _sql("""
                 INSERT INTO coupons
-                (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id, stackable)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+                (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id, stackable, require_channel_sub)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
             """),
             (
                 payload["code"],
@@ -579,6 +619,7 @@ def create_coupon(data: dict) -> dict:
                 payload["expires_at"],
                 payload["personal_user_id"],
                 payload["stackable"],
+                payload["require_channel_sub"],
             ),
         )
         _sync_allowed_users(conn, payload["code"], allowed_user_ids)
@@ -613,7 +654,7 @@ def update_coupon(code: str, data: dict) -> dict:
                 UPDATE coupons SET
                     type = ?, value = ?, min_order = ?, uses_max = ?,
                     one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?,
-                    stackable = ?
+                    stackable = ?, require_channel_sub = ?
                 WHERE code = ?
             """),
             (
@@ -626,6 +667,7 @@ def update_coupon(code: str, data: dict) -> dict:
                 payload["expires_at"],
                 payload["personal_user_id"],
                 payload["stackable"],
+                payload["require_channel_sub"],
                 payload["code"],
             ),
         )
@@ -659,7 +701,7 @@ def replace_coupon(data: dict) -> dict:
                     UPDATE coupons SET
                         type = ?, value = ?, min_order = ?, uses_max = ?,
                         one_per_user = ?, active = ?, expires_at = ?, personal_user_id = ?,
-                        stackable = ?
+                        stackable = ?, require_channel_sub = ?
                     WHERE code = ?
                 """),
                 (
@@ -672,6 +714,7 @@ def replace_coupon(data: dict) -> dict:
                     payload["expires_at"],
                     payload["personal_user_id"],
                     payload["stackable"],
+                    payload["require_channel_sub"],
                     payload["code"],
                 ),
             )
@@ -680,8 +723,8 @@ def replace_coupon(data: dict) -> dict:
             conn.execute(
                 _sql("""
                     INSERT INTO coupons
-                    (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id, stackable)
-                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+                    (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id, stackable, require_channel_sub)
+                    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
                 """),
                 (
                     payload["code"],
@@ -694,6 +737,7 @@ def replace_coupon(data: dict) -> dict:
                     payload["expires_at"],
                     payload["personal_user_id"],
                     payload["stackable"],
+                    payload["require_channel_sub"],
                 ),
             )
             created = True
