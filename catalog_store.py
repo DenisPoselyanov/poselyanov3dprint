@@ -65,11 +65,22 @@ def load_categories_file(path: str = config.CATEGORIES_FILE):
     return []
 
 
+def _serialize_custom_fields(value) -> str:
+    """Рядок зберігаємо як є, список — як JSON; порожнє значення — порожній рядок (не '""')."""
+    if not value:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
 def _row_to_product(row: dict) -> dict:
     photos = row.get("photos") or []
     if isinstance(photos, str):
         photos = json.loads(photos)
     custom_fields = row.get("custom_fields")
+    if isinstance(custom_fields, str) and custom_fields.strip() in ('""', "null"):
+        custom_fields = ""
     if isinstance(custom_fields, str) and custom_fields.startswith("["):
         try:
             custom_fields = json.loads(custom_fields)
@@ -175,6 +186,8 @@ def init_catalog_tables(conn) -> None:
     conn.execute(
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false"
     )
+    # Раніше порожнє поле зберігалося як json.dumps("") == '""' і показувалося в адмінці як ✍️ "".
+    conn.execute("UPDATE products SET custom_fields = '' WHERE custom_fields IN ('\"\"', 'null')")
     sync_products_id_sequence(conn)
 
 
@@ -415,7 +428,7 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
             product.get("price", 0),
             product.get("oldPrice"),
             json.dumps(product.get("photos") or []),
-            product.get("custom_fields") if isinstance(product.get("custom_fields"), str) else json.dumps(product.get("custom_fields") or ""),
+            _serialize_custom_fields(product.get("custom_fields")),
             bool(product.get("hot")),
             bool(product.get("gift")),
             bool(product.get("filamentChoice", True)),
@@ -570,7 +583,7 @@ def update_product(product_id: int, data: dict):
                     product.get("cat"), product.get("name"), product.get("emoji"), product.get("mat"),
                     product.get("price"), product.get("oldPrice"),
                     json.dumps(product.get("photos") or []),
-                    product.get("custom_fields") if isinstance(product.get("custom_fields"), str) else json.dumps(product.get("custom_fields") or ""),
+                    _serialize_custom_fields(product.get("custom_fields")),
                     bool(product.get("hot")), bool(product.get("gift")),
                     bool(product.get("filamentChoice", True)),
                     bool(product.get("luminousFilamentChoice")),

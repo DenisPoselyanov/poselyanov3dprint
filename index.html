@@ -620,6 +620,8 @@
   .pinned-mat { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.3; }
   .pinned-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .pinned-price { font-size: 16px; font-weight: 800; color: var(--tg-blue); }
+  .pinned-price.has-discount { color: #ff2f2f; }
+  .pinned-price-old { font-size: 11px; font-weight: 600; color: var(--tg-blue); text-decoration: line-through; }
   .pinned-bottom.no-price { justify-content: flex-end; }
   .pinned-order-btn {
     border: none; background: var(--tg-blue); color: #fff; border-radius: 10px;
@@ -2420,7 +2422,7 @@
     <div class="carousel-dots" id="carousel-dots"></div>
 
     <div class="modal-header">
-      <span class="modal-title">Замовлення</span>
+      <span class="modal-title" id="m-title">Товар</span>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="modal-stl-btn" id="modal-stl-btn" onclick="openStlLink()" title="Відкрити STL файл">📐</button>
         <button class="modal-share-btn" onclick="shareProduct()" title="Поділитись">🔗</button>
@@ -4701,22 +4703,27 @@ function renderPinnedProducts() {
   }
   section.style.display = '';
   pinnedIndex = 0;
-  setGridHtml(track, pinned.map(p => `
+  setGridHtml(track, pinned.map(p => {
+    const discount = !p.contractPrice && p.oldPrice && p.price < p.oldPrice
+      ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
+    return `
     <div class="pinned-card" onclick="openModal(${p.id}, 'products')">
       <div class="pinned-thumb">
         ${p.photos?.length ? `<img src="${escapeAttr(photo(p.photos[0]))}" alt="${escapeAttr(p.name)}" crossorigin="anonymous">` : escapeHtml(p.emoji || '📦')}
         ${p.contractPrice ? '<div class="card-contract-badge">🤝 Договірна</div>' : ''}
+        ${discount ? `<div class="card-sale-badge">−${discount}%</div>` : ''}
       </div>
       <div>
         <div class="pinned-name">${escapeHtml(p.name)}</div>
         <div class="pinned-mat">${escapeHtml(p.mat || '')}</div>
         <div class="pinned-bottom${p.contractPrice ? ' no-price' : ''}">
-          ${p.contractPrice ? '' : `<div class="pinned-price">${p.price} ₴</div>`}
+          ${p.contractPrice ? '' : `<div>${discount ? `<div class="pinned-price-old">${p.oldPrice} ₴</div>` : ''}<div class="pinned-price${discount ? ' has-discount' : ''}">${p.price} ₴</div></div>`}
           <button class="pinned-order-btn" type="button" onclick="event.stopPropagation(); openModal(${p.id}, 'products')">Замовити</button>
         </div>
       </div>
     </div>
-  `).join(''));
+  `;
+  }).join(''));
   setGridHtml(dots, pinned.map((_, i) => `<button class="pinned-dot${i === 0 ? ' active' : ''}" onclick="goPinned(${i})"></button>`).join(''));
   updatePinnedSlider();
   startPinnedTimer(pinned.length);
@@ -5240,6 +5247,8 @@ function openModal(id, source = 'products', options = {}) {
     ? Math.round((1 - currentProduct.price / currentProduct.oldPrice) * 100) : 0;
 
   document.getElementById('m-name').textContent = currentProduct.name;
+  const titleEl = document.getElementById('m-title');
+  if (titleEl) titleEl.textContent = modalGiftPreview ? '🎁 Подарунок' : (CAT_LABELS[currentProduct.cat] || 'Товар');
   document.getElementById('m-mat').textContent = currentProduct.mat || '';
   const priceEl = document.getElementById('m-price');
   const priceHintEl = document.getElementById('m-price-hint');

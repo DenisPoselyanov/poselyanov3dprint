@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>📊 Адмін панель - Poselyanov 3D Print</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -2035,7 +2036,7 @@
         <div class="content">
             <div class="page-nav">
                 <button class="page-tab active" type="button" data-page="products" onclick="switchPage('products')">📦 Товари</button>
-                <button class="page-tab" type="button" data-page="orders" onclick="switchPage('orders')">📦 Замовлення</button>
+                <button class="page-tab" type="button" data-page="orders" onclick="switchPage('orders')">🧾 Замовлення</button>
                 <button class="page-tab" type="button" data-page="categories" onclick="switchPage('categories')">🗂️ Категорії</button>
                 <button class="page-tab" type="button" data-page="filaments" onclick="switchPage('filaments')">🎨 Філаменти</button>
                 <button class="page-tab" type="button" data-page="coupons" onclick="switchPage('coupons')">🎟️ Купони</button>
@@ -2085,7 +2086,7 @@
 
             <section id="ordersPage" class="page-section">
                 <div class="orders-toolbar">
-                    <h2>📦 Замовлення <span id="ordersCount" class="orders-count"></span></h2>
+                    <h2>🧾 Замовлення <span id="ordersCount" class="orders-count"></span></h2>
                     <div class="orders-toolbar-right">
                         <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
                             <input type="checkbox" id="ordersPendingFilter" onchange="loadOrders()">
@@ -2641,7 +2642,15 @@
 
     <script src="/shared.js"></script>
     <script>
+        // Тема: у Telegram — як у Telegram (як і в магазині), у браузері — як у системі.
         (function() {
+            const tg = window.Telegram?.WebApp;
+            if (tg && tg.initData) {
+                const applyTg = () => document.body.classList.toggle('dark', tg.colorScheme === 'dark');
+                applyTg();
+                tg.onEvent?.('themeChanged', applyTg);
+                return;
+            }
             const mq = window.matchMedia('(prefers-color-scheme: dark)');
             const apply = (e) => document.body.classList.toggle('dark', e.matches);
             apply(mq);
@@ -2800,8 +2809,20 @@
         let tgInitData = "";
 
         // Read secure bypass token from URL (e.g. ?bypass=admin&token=XXX sent via Telegram).
+        // Токен одразу прибираємо з адресного рядка, щоб він не лишався в історії/логах.
         const _urlParams = new URLSearchParams(window.location.search);
-        const adminBypassToken = _urlParams.get('token') || '';
+        let adminBypassToken = _urlParams.get('token') || '';
+        try {
+            if (adminBypassToken) {
+                sessionStorage.setItem('adminBypassToken', adminBypassToken);
+                _urlParams.delete('token');
+                _urlParams.delete('bypass');
+                const qs = _urlParams.toString();
+                history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+            } else {
+                adminBypassToken = sessionStorage.getItem('adminBypassToken') || '';
+            }
+        } catch (_) {}
 
         // === ІНІЦІАЛІЗАЦІЯ TELEGRAM WEBAPP ===
         function initTelegramWebApp() {
@@ -4018,7 +4039,7 @@
         // ═══════════════════════════════════════════════════════════
 
         async function deleteProduct(id) {
-            if (!confirm('Ви впевнені? Цей товар буде видалено назавжди!')) return;
+            if (!confirm('Прибрати товар з магазину? Він зникне з каталогу, а наявні замовлення з ним збережуться.')) return;
 
             try {
                 const res = await fetch(API_BASE + `/products/${id}`, {
@@ -4026,7 +4047,7 @@
                     headers: { 'X-Telegram-Init-Data': tgInitData }
                 });
                 if (res.ok) {
-                    showToast('Товар видалено ✅', 'success');
+                    showToast('Товар прибрано з магазину ✅', 'success');
                     loadProducts();
                 } else {
                     showToast('Помилка видалення', 'error');

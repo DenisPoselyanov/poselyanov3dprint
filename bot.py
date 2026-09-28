@@ -2173,9 +2173,23 @@ async def handle_admin_panel(request: web.Request):
         return web.Response(status=404, text="Admin panel file not found", headers=cors_headers(request))
 
 # Хендлер для отримання списку всіх товарів. Він викликає функцію get_all_products, яка повертає список товарів з бази даних або файлу, і повертає його у вигляді JSON відповіді. Він також додає CORS заголовки до відповіді, щоб дозволити доступ з веб-додатку.
+def _is_admin_viewer(request: web.Request) -> bool:
+    """Чи запит від адміна (без 403 для звичайних покупців)."""
+    init_data = request.headers.get("X-Telegram-Init-Data") or ""
+    auth = validate_telegram_init_data(init_data) if init_data else None
+    return is_admin_authorized(request, auth)
+
+
+def _public_product(product: dict) -> dict:
+    """STL-посилання — внутрішня інформація, покупцям не віддаємо."""
+    return {k: v for k, v in product.items() if k != "stlLink"}
+
+
 async def handle_get_products(request: web.Request):
     """Отримати список всіх товарів"""
     products = get_all_products()
+    if not _is_admin_viewer(request):
+        products = [_public_product(p) for p in products]
     return web.json_response(products, headers=cors_headers(request))
 
 
@@ -2205,6 +2219,8 @@ async def handle_get_product(request: web.Request):
     product = get_product_by_id(product_id)
     if not product:
         return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    if not _is_admin_viewer(request):
+        product = _public_product(product)
     return web.json_response(product, headers=cors_headers(request))
 
 
