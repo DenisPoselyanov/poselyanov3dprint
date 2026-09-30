@@ -41,6 +41,28 @@ def command_cooldown(seconds: float) -> Callable[[F], F]:
     return decorator
 
 
+_EVENT_WINDOW_SEC = 60.0
+_EVENT_MAX_PER_WINDOW = 30
+_event_calls: dict[int, list[float]] = {}
+
+
+def allow_event(user_id: int) -> bool:
+    """Не більше _EVENT_MAX_PER_WINDOW подій аналітики на користувача за хвилину."""
+    now = time.monotonic()
+    recent = [t for t in _event_calls.get(user_id, ()) if now - t < _EVENT_WINDOW_SEC]
+    if len(recent) >= _EVENT_MAX_PER_WINDOW:
+        _event_calls[user_id] = recent
+        return False
+    recent.append(now)
+    _event_calls[user_id] = recent
+    if len(_event_calls) > 10_000:
+        # Не даємо словнику рости безмежно: викидаємо тих, хто давно мовчить.
+        for uid in [u for u, ts in _event_calls.items() if not ts or now - ts[-1] >= _EVENT_WINDOW_SEC]:
+            _event_calls.pop(uid, None)
+    return True
+
+
 def reset_rate_limits() -> None:
     """Скидає in-memory cooldown (корисно для тестів)."""
     _last_call.clear()
+    _event_calls.clear()

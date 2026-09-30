@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import config
@@ -111,7 +112,15 @@ def _row_to_product(row: dict) -> dict:
         p["luminousFilamentChoice"] = bool(row.get("luminous_filament_choice", row.get("luminousFilamentChoice")))
     if custom_fields:
         p["custom_fields"] = custom_fields
+    created_at = row.get("created_at") or row.get("createdAt")
+    if created_at:
+        # Для добірки «Новинки» і бейджа «Новинка» на вітрині.
+        p["createdAt"] = created_at.isoformat() if isinstance(created_at, datetime) else str(created_at)
     return p
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _row_to_category(row: dict) -> dict:
@@ -186,6 +195,9 @@ def init_catalog_tables(conn) -> None:
     conn.execute(
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false"
     )
+    # Без DEFAULT у ADD COLUMN: старі товари лишаються без дати, а не стають «новинками» всі разом.
+    conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ")
+    conn.execute("ALTER TABLE products ALTER COLUMN created_at SET DEFAULT NOW()")
     # Раніше порожнє поле зберігалося як json.dumps("") == '""' і показувалося в адмінці як ✍️ "".
     conn.execute("UPDATE products SET custom_fields = '' WHERE custom_fields IN ('\"\"', 'null')")
     sync_products_id_sequence(conn)
@@ -469,6 +481,7 @@ def add_product(data: dict):
             "hot": data.get("hot", False),
             "pinned": data.get("pinned", False),
             "stlLink": data.get("stlLink", ""),
+            "createdAt": _now_iso(),
         }
         if contract_price:
             product["contractPrice"] = True

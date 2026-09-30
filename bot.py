@@ -119,7 +119,10 @@ from services.coupons import (
     set_coupon_active,
     update_coupon,
 )
+from services.collections import public_collections
 from services.db_utils import init_db, row_to_dict as _row_to_dict
+from services.events import EVENT_TYPES, popular_searches, record_search
+from services.hits import top_selling_products
 from services.promotions import (
     create_promotion,
     delete_promotion,
@@ -170,7 +173,7 @@ from handlers.register import (
     configure_bot_commands,
     register_telegram_handlers,
 )
-from handlers.rate_limit import command_cooldown
+from handlers.rate_limit import allow_event, command_cooldown
 from routes.setup import register_http_routes
 
 BOT_TOKEN = config.BOT_TOKEN
@@ -2710,6 +2713,63 @@ async def handle_delete_coupon(request: web.Request):
 async def handle_get_public_promotions(request: web.Request):
     """Активні акції для вітрини (без авторизації)."""
     return web.json_response(await run_db(public_promotions), headers=cors_headers(request))
+
+
+def _query_int(request: web.Request, name: str, default: int) -> int:
+    try:
+        return int(request.query.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+async def handle_get_hits(request: web.Request):
+    """Топ продажів з реальних замовлень: хіти на головній, добірка «Хіти», сортування «Популярні»."""
+    hits = await run_db(
+        top_selling_products, _query_int(request, "days", 90), _query_int(request, "limit", 12)
+    )
+    return web.json_response({"hits": hits}, headers=cors_headers(request))
+
+
+async def handle_get_collections(request: web.Request):
+    """Активні добірки для головної («Стопка»)."""
+    return web.json_response({"collections": await run_db(public_collections)}, headers=cors_headers(request))
+
+
+async def handle_get_popular_searches(request: web.Request):
+    """«Шукають найчастіше» на екрані пошуку."""
+    queries = await run_db(
+        popular_searches, _query_int(request, "days", 30), _query_int(request, "limit", 5)
+    )
+    return web.json_response({"queries": queries}, headers=cors_headers(request))
+
+
+async def handle_post_event(request: web.Request):
+    """Подія аналітики з вітрини. Зараз — лише `search`."""
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    if not isinstance(data, dict) or data.get("type") not in EVENT_TYPES:
+        return web.json_response({"ok": False, "error": "unknown_event"}, status=400, headers=cors_headers(request))
+
+    auth, err = resolve_request_user(request, data)
+    if err:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if not user_id:
+        return web.json_response({"ok": True, "recorded": False}, headers=cors_headers(request))
+    if not allow_event(user_id):
+        return web.json_response({"ok": False, "error": "rate_limited"}, status=429, headers=cors_headers(request))
+
+    try:
+        results = int(data.get("results") or 0)
+    except (TypeError, ValueError):
+        results = 0
+    recorded = await run_db(record_search, user_id, data.get("query"), results)
+    return web.json_response({"ok": True, "recorded": recorded}, headers=cors_headers(request))
 
 
 async def handle_get_promotions(request: web.Request):

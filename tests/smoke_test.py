@@ -157,6 +157,17 @@ def test_health(base: str) -> None:
     _record("GET /health", passed, detail)
 
 
+def test_showcase_endpoints(base: str) -> None:
+    """Вітрина редизайну: хіти, добірки, популярні пошуки; події без initData не пишуться."""
+    section("8.1a ▸ GET /api/hits, /api/collections, /api/search/popular")
+    for path, key in (("/api/hits", "hits"), ("/api/collections", "collections"), ("/api/search/popular", "queries")):
+        status, body = _http("GET", f"{base}{path}")
+        passed = status == 200 and isinstance(body, dict) and isinstance(body.get(key), list)
+        _record(f"GET {path}", passed, f"HTTP {status}, {key}: {len(body.get(key, [])) if isinstance(body, dict) else body}")
+    status, body = _http("POST", f"{base}/api/events", body={"type": "search", "query": "smoke", "results": 1})
+    _record("POST /api/events без initData → 403", status == 403, f"HTTP {status}, тіло: {str(body)[:80]}")
+
+
 def test_order_invalid_init_data(base: str) -> None:
     section("8.2 ▸ POST /order з невалідним initData → 401/403")
     # Варіант 1: без initData взагалі
@@ -445,6 +456,7 @@ def main() -> int:
 
     try:
         test_health(base)
+        test_showcase_endpoints(base)
         test_order_invalid_init_data(base)
         test_order_valid(base, bot_token)
         test_coupon_exhausted(base, bot_token)

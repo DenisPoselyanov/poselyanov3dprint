@@ -40,6 +40,10 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
         "/api/coupons/{code}/allowed-users/{user_id}", handlers.handle_remove_coupon_user
     )
     http_app.router.add_get("/api/promotions", handlers.handle_get_public_promotions)
+    http_app.router.add_get("/api/hits", handlers.handle_get_hits)
+    http_app.router.add_get("/api/collections", handlers.handle_get_collections)
+    http_app.router.add_get("/api/search/popular", handlers.handle_get_popular_searches)
+    http_app.router.add_post("/api/events", handlers.handle_post_event)
     http_app.router.add_get("/api/admin/users", handlers.handle_get_users)
     http_app.router.add_get("/api/admin/settings", handlers.handle_get_settings)
     http_app.router.add_put("/api/admin/settings", handlers.handle_update_settings)
