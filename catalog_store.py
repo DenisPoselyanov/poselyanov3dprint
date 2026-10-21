@@ -67,12 +67,91 @@ def load_categories_file(path: str = config.CATEGORIES_FILE):
 
 
 def _serialize_custom_fields(value) -> str:
-    """Рядок зберігаємо як є, список — як JSON; порожнє значення — порожній рядок (не '""')."""
+    """Рядок зберігаємо як є, список чи обʼєкт — як JSON; порожнє значення — порожній рядок (не '""')."""
     if not value:
         return ""
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False)
+
+
+# Опис і примітка в картці товару (REDESIGN.md, розд. 3.4 — «Згорнутий»)
+DESCRIPTION_MAX = 3000
+NOTE_MAX = 300
+VIDEO_URL_MAX = 500
+# Персоналізація індивідуального товару: підпис поля, ліміт символів, підказка, плейсхолдер, верхній регістр
+PERS_LABEL_MAX = 60
+PERS_TEXT_MAX = 200
+PERS_LIMIT_MAX = 200
+
+
+def clean_text(value, max_len: int) -> str:
+    """Текст з адмінки: без \\r, без пробілів по краях, не довший за max_len. Абзаци зберігаються."""
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    return text[:max_len].rstrip()
+
+
+def clean_video_url(value) -> str:
+    url = str(value or "").strip()
+    if not url:
+        return ""
+    if not url.startswith("https://") or len(url) > VIDEO_URL_MAX or any(ch in url for ch in ' "<>'):
+        raise ValueError("Посилання на відео має бути https:// (mp4)")
+    return url
+
+
+def normalize_custom_fields(value):
+    """Поле персоналізації: рядок (лише підпис — старий формат) або {label, max, hint, placeholder, upper}.
+
+    Без підпису поля немає ("" ). Якщо задано лише підпис — зберігаємо рядком,
+    щоб старий формат лишався зворотно сумісним.
+    """
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw.startswith("{"):
+            return raw[:PERS_LABEL_MAX]
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            return raw[:PERS_LABEL_MAX]
+    if not isinstance(value, dict):
+        return ""
+    label = clean_text(value.get("label"), PERS_LABEL_MAX)
+    if not label:
+        return ""
+    out: dict = {"label": label}
+    try:
+        max_len = int(value.get("max") or 0)
+    except (TypeError, ValueError):
+        max_len = 0
+    if max_len > 0:
+        out["max"] = min(max_len, PERS_LIMIT_MAX)
+    for key in ("hint", "placeholder"):
+        text = clean_text(value.get(key), PERS_TEXT_MAX)
+        if text:
+            out[key] = text
+    if value.get("upper") in (True, 1, "1", "true", "on"):
+        out["upper"] = True
+    return out if len(out) > 1 else label
+
+
+def _apply_product_texts(product: dict, data: dict) -> None:
+    """Опис, примітка й відео: порожнє значення прибирає поле з товару."""
+    for key, max_len in (("description", DESCRIPTION_MAX), ("note", NOTE_MAX)):
+        if key in data:
+            text = clean_text(data.get(key), max_len)
+            if text:
+                product[key] = text
+            else:
+                product.pop(key, None)
+    if "video" in data:
+        url = clean_video_url(data.get("video"))
+        if url:
+            product["video"] = url
+        else:
+            product.pop("video", None)
 
 
 def _row_to_product(row: dict) -> dict:
@@ -82,7 +161,7 @@ def _row_to_product(row: dict) -> dict:
     custom_fields = row.get("custom_fields")
     if isinstance(custom_fields, str) and custom_fields.strip() in ('""', "null"):
         custom_fields = ""
-    if isinstance(custom_fields, str) and custom_fields.startswith("["):
+    if isinstance(custom_fields, str) and custom_fields.startswith(("[", "{")):
         try:
             custom_fields = json.loads(custom_fields)
         except json.JSONDecodeError:
@@ -112,6 +191,10 @@ def _row_to_product(row: dict) -> dict:
         p["luminousFilamentChoice"] = bool(row.get("luminous_filament_choice", row.get("luminousFilamentChoice")))
     if custom_fields:
         p["custom_fields"] = custom_fields
+    for key in ("description", "note", "video"):
+        value = (row.get(key) or "").strip()
+        if value:
+            p[key] = value
     created_at = row.get("created_at") or row.get("createdAt")
     if created_at:
         # Для добірки «Новинки» і бейджа «Новинка» на вітрині.
@@ -178,7 +261,10 @@ def init_catalog_tables(conn) -> None:
             contract_price BOOLEAN DEFAULT false,
             is_custom BOOLEAN DEFAULT false,
             active BOOLEAN DEFAULT true,
-            created_at TIMESTAMPTZ DEFAULT NOW()
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            description TEXT DEFAULT '',
+            note TEXT DEFAULT '',
+            video TEXT DEFAULT ''
         )
     """)
     conn.execute("""
@@ -198,6 +284,9 @@ def init_catalog_tables(conn) -> None:
     # Без DEFAULT у ADD COLUMN: старі товари лишаються без дати, а не стають «новинками» всі разом.
     conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ")
     conn.execute("ALTER TABLE products ALTER COLUMN created_at SET DEFAULT NOW()")
+    # Етап 2 редизайну: опис і примітка в картці товару, відео в галереї
+    for column in ("description", "note", "video"):
+        conn.execute(f"ALTER TABLE products ADD COLUMN IF NOT EXISTS {column} TEXT DEFAULT ''")
     # Раніше порожнє поле зберігалося як json.dumps("") == '""' і показувалося в адмінці як ✍️ "".
     conn.execute("UPDATE products SET custom_fields = '' WHERE custom_fields IN ('\"\"', 'null')")
     sync_products_id_sequence(conn)
@@ -428,8 +517,9 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
         """
         INSERT INTO products (
             category_id, name, emoji, mat, price, old_price, photos, custom_fields,
-            hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, active
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
+            hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, active,
+            description, note, video
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, %s, %s, %s)
         RETURNING id
         """,
         (
@@ -449,6 +539,9 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
             product.get("stlLink", ""),
             bool(product.get("contractPrice")),
             is_custom,
+            product.get("description", ""),
+            product.get("note", ""),
+            product.get("video", ""),
         ),
     )
     new_id = cur.fetchone()[0]
@@ -459,6 +552,7 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
 
 def add_product(data: dict):
     try:
+        clean_video_url(data.get("video"))  # невалідне посилання — помилка ще до змін
         category_id = data.get("cat", "toy")
         if not is_valid_category_id(category_id):
             return {"ok": False, "error": "Невірна або неактивна категорія"}
@@ -483,12 +577,13 @@ def add_product(data: dict):
             "stlLink": data.get("stlLink", ""),
             "createdAt": _now_iso(),
         }
+        _apply_product_texts(product, data)
         if contract_price:
             product["contractPrice"] = True
         elif old_price:
             product["oldPrice"] = int(old_price)
         if is_custom:
-            product["custom_fields"] = data.get("custom_fields", "")
+            product["custom_fields"] = normalize_custom_fields(data.get("custom_fields", ""))
         else:
             product["gift"] = False if contract_price else data.get("gift", False)
             product["filamentChoice"] = data.get("filamentChoice", True)
@@ -514,6 +609,7 @@ def add_product(data: dict):
 
 def update_product(product_id: int, data: dict):
     try:
+        clean_video_url(data.get("video"))  # невалідне посилання — помилка ще до змін у кеші
         product = get_product_by_id(product_id)
         if not product:
             return {"ok": False, "error": "Товар не знайдено"}
@@ -536,6 +632,7 @@ def update_product(product_id: int, data: dict):
             "stlLink": data.get("stlLink", product.get("stlLink", "")),
             "cat": next_category,
         })
+        _apply_product_texts(product, data)
 
         contract_price = bool(data.get("contractPrice"))
         if contract_price:
@@ -577,7 +674,7 @@ def update_product(product_id: int, data: dict):
                     product.pop("luminousFilamentChoice", None)
             product.pop("custom_fields", None)
         else:
-            product["custom_fields"] = data.get("custom_fields", product.get("custom_fields", ""))
+            product["custom_fields"] = normalize_custom_fields(data.get("custom_fields", product.get("custom_fields", "")))
             product.pop("gift", None)
             product.pop("filamentChoice", None)
             product.pop("luminousFilamentChoice", None)
@@ -589,7 +686,8 @@ def update_product(product_id: int, data: dict):
                 UPDATE products SET
                     category_id = %s, name = %s, emoji = %s, mat = %s, price = %s, old_price = %s,
                     photos = %s::jsonb, custom_fields = %s, hot = %s, gift = %s, filament_choice = %s,
-                    luminous_filament_choice = %s, pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s
+                    luminous_filament_choice = %s, pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s,
+                    description = %s, note = %s, video = %s
                 WHERE id = %s
                 """,
                 (
@@ -604,6 +702,9 @@ def update_product(product_id: int, data: dict):
                     product.get("stlLink", ""),
                     bool(product.get("contractPrice")),
                     is_next_custom,
+                    product.get("description", ""),
+                    product.get("note", ""),
+                    product.get("video", ""),
                     product_id,
                 ),
             )

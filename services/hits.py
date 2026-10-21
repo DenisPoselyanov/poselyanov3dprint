@@ -68,3 +68,52 @@ def top_selling_products(days: int = DEFAULT_DAYS, limit: int = 12) -> list[dict
 
 def invalidate_hits_cache() -> None:
     _cache.clear()
+    _together_cache.clear()
+
+
+# ─── «З ЦИМ КУПУЮТЬ» ────────────────────────────────────────
+_together_cache: dict[tuple[int, int], tuple[float, list[int]]] = {}
+
+
+def _fetch_bought_together(product_id: int, limit: int) -> list[int]:
+    placeholders = ", ".join("?" for _ in SOLD_STATUSES)
+    conn = db_connect()
+    try:
+        rows = conn.execute(
+            _sql(f"""
+                SELECT other.product_id, COUNT(DISTINCT other.order_id) AS n
+                FROM order_items mine
+                JOIN orders o ON o.id = mine.order_id
+                JOIN order_items other ON other.order_id = mine.order_id
+                WHERE mine.product_id = ?
+                  AND other.product_id IS NOT NULL AND other.product_id > 0
+                  AND other.product_id <> mine.product_id
+                  AND o.status IN ({placeholders})
+                GROUP BY other.product_id
+                ORDER BY n DESC, other.product_id ASC
+                LIMIT ?
+            """),
+            (int(product_id), *SOLD_STATUSES, limit),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [int(r[0]) for r in rows if r[0] is not None]
+
+
+def bought_together(product_id: int, limit: int = 8) -> list[int]:
+    """ID товарів, які найчастіше були в одному замовленні з `product_id`. Кеш ~10 хв."""
+    limit = max(1, min(int(limit), 20))
+    key = (int(product_id), limit)
+    now = time.monotonic()
+    cached = _together_cache.get(key)
+    if cached and now - cached[0] < _CACHE_TTL_SEC:
+        return cached[1]
+    try:
+        ids = _fetch_bought_together(product_id, limit)
+    except Exception:
+        logger.warning("hits: не вдалось порахувати «З цим купують»", exc_info=True)
+        return []
+    if len(_together_cache) > 500:
+        _together_cache.clear()
+    _together_cache[key] = (now, ids)
+    return ids

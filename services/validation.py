@@ -14,6 +14,8 @@ from services.coupons import check_coupon
 from services.pricing import split_discounts
 from services.promotions import compute_order_raw_discount
 
+CUSTOM_VALUE_MAX = 300
+
 
 def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
     """Перерахунок суми на сервері. Повертає (ok, result_dict|error_message)."""
@@ -79,7 +81,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                     return False, "Цей колір недоступний для обраного товару"
                 filament_name = str(meta.get("name") or "").strip()
 
-        custom_value = (raw.get("customValue") or "").strip()
+        # Персоналізація з картки товару: текст + побажання (до 200) — з запасом на форматування
+        custom_value = str(raw.get("customValue") or "").strip()[:CUSTOM_VALUE_MAX]
         line_key = (pid, filament_id, custom_value)
         if line_key in seen_line_keys:
             return False, f"Дублікат товару в кошику (id {pid})"

@@ -1,8 +1,9 @@
 """Глобальні налаштування магазину (key/value у БД).
 
 Зберігає перемикачі, які власник міняє з адмін-панелі без редеплою.
-Наразі це «сумування купонів з акціями» — глобальний рубильник, без якого
-галочка на окремому купоні не діє.
+«Сумування купонів з акціями» — глобальний рубильник, без якого галочка на
+окремому купоні не діє; поріг показу «N продано» в картці товару; режим
+публікації відгуків.
 """
 
 from __future__ import annotations
@@ -15,11 +16,18 @@ from db_core import db_connect, is_postgres, sql as _sql
 logger = logging.getLogger(__name__)
 
 COUPON_STACKING_KEY = "coupon_stacking_enabled"
+# «N продано» в картці товару показується лише від цього порогу (REDESIGN.md, розд. 5.3)
+SOLD_COUNT_MIN_KEY = "sold_count_min"
+# Публікувати відгуки одразу чи після схвалення (форма відгуку — етап 3)
+REVIEWS_AUTO_PUBLISH_KEY = "reviews_auto_publish"
 
 # Дефолти — стан «як було до появи фічі».
 DEFAULTS: dict[str, str] = {
     COUPON_STACKING_KEY: "0",
+    SOLD_COUNT_MIN_KEY: "5",
+    REVIEWS_AUTO_PUBLISH_KEY: "0",
 }
+SOLD_COUNT_MIN_LIMIT = 10_000
 
 _CACHE_TTL_SEC = 20.0
 _cache: dict = {"ts": 0.0, "rows": None}
@@ -121,22 +129,43 @@ def coupon_stacking_enabled() -> bool:
     return get_bool(COUPON_STACKING_KEY)
 
 
+def sold_count_min() -> int:
+    try:
+        return max(0, min(int(get_setting(SOLD_COUNT_MIN_KEY)), SOLD_COUNT_MIN_LIMIT))
+    except (TypeError, ValueError):
+        return int(DEFAULTS[SOLD_COUNT_MIN_KEY])
+
+
 def public_settings() -> dict:
     """Налаштування, які потрібні вітрині."""
     return {"coupon_stacking_enabled": coupon_stacking_enabled()}
 
 
 def admin_settings() -> dict:
-    return {"coupon_stacking_enabled": coupon_stacking_enabled()}
+    return {
+        "coupon_stacking_enabled": coupon_stacking_enabled(),
+        "sold_count_min": sold_count_min(),
+        "reviews_auto_publish": get_bool(REVIEWS_AUTO_PUBLISH_KEY),
+    }
 
 
 def update_admin_settings(data: dict) -> dict:
-    if "coupon_stacking_enabled" in data:
-        raw = data.get("coupon_stacking_enabled")
-        enabled = raw in (1, True, "1", "true", "on", "yes")
+    updates: dict[str, str] = {}
+    for key in (COUPON_STACKING_KEY, REVIEWS_AUTO_PUBLISH_KEY):
+        if key in data:
+            updates[key] = "1" if data.get(key) in (1, True, "1", "true", "on", "yes") else "0"
+    if SOLD_COUNT_MIN_KEY in data:
         try:
-            set_setting(COUPON_STACKING_KEY, "1" if enabled else "0")
-        except Exception:
-            logger.exception("update_admin_settings failed")
-            return {"ok": False, "error": "Помилка бази даних. Спробуйте пізніше."}
+            threshold = int(data.get(SOLD_COUNT_MIN_KEY))
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "Поріг «продано» має бути числом"}
+        if not 0 <= threshold <= SOLD_COUNT_MIN_LIMIT:
+            return {"ok": False, "error": f"Поріг «продано» — від 0 до {SOLD_COUNT_MIN_LIMIT}"}
+        updates[SOLD_COUNT_MIN_KEY] = str(threshold)
+    try:
+        for key, value in updates.items():
+            set_setting(key, value)
+    except Exception:
+        logger.exception("update_admin_settings failed")
+        return {"ok": False, "error": "Помилка бази даних. Спробуйте пізніше."}
     return {"ok": True, "settings": admin_settings()}

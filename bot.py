@@ -122,7 +122,7 @@ from services.coupons import (
 from services.collections import public_collections
 from services.db_utils import init_db, row_to_dict as _row_to_dict
 from services.events import EVENT_TYPES, popular_searches, record_search
-from services.hits import top_selling_products
+from services.hits import bought_together, top_selling_products
 from services.promotions import (
     create_promotion,
     delete_promotion,
@@ -132,6 +132,7 @@ from services.promotions import (
     set_promotion_active,
     update_promotion,
 )
+from services.reviews import product_reviews, with_stats
 from services.settings import (
     admin_settings,
     coupon_stacking_enabled,
@@ -485,6 +486,27 @@ def upload_photo_to_cloudinary_sync(file_data: bytes, filename: str = "product_p
 
 async def upload_photo_to_cloudinary(file_data: bytes, filename: str = "product_photo", content_type: str = ""):
     return await asyncio.to_thread(upload_photo_to_cloudinary_sync, file_data, filename, content_type)
+
+
+VIDEO_CONTENT_TYPES = ("video/mp4", "video/quicktime", "video/webm")
+
+
+def upload_video_to_cloudinary_sync(file_data: bytes, filename: str = "product_video"):
+    """Відео товару в галерею (етап 2 редизайну). Вітрина бере легкий mp4 через трансформацію Cloudinary."""
+    if len(file_data) > MAX_UPLOAD_BYTES:
+        return {"ok": False, "error": f"Відео занадто велике. Максимум {MAX_UPLOAD_BYTES // 1024 // 1024}MB"}
+    try:
+        result = _cloudinary_upload_with_timeout(file_data, {
+            "folder": "poselyanov3dprint",
+            "resource_type": "video",
+            "public_id": f"{filename}_{int(datetime.now().timestamp())}",
+        })
+    except concurrent.futures.TimeoutError:
+        return {"ok": False, "error": "Час очікування завантаження на Cloudinary вичерпано"}
+    except Exception as e:
+        logger.error(f"❌ Помилка завантаження відео на Cloudinary: {e}")
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "url": result.get("secure_url"), "duration": result.get("duration"), "size": result.get("bytes")}
 
 
 async def handle_options(request: web.Request):
@@ -2189,10 +2211,11 @@ def _public_product(product: dict) -> dict:
 
 
 async def handle_get_products(request: web.Request):
-    """Отримати список всіх товарів"""
+    """Отримати список всіх товарів (з рейтингом і «продано» — REDESIGN.md, розд. 5.3)"""
     products = get_all_products()
     if not _is_admin_viewer(request):
         products = [_public_product(p) for p in products]
+    products = await run_db(with_stats, products)
     return web.json_response(products, headers=cors_headers(request))
 
 
@@ -2224,7 +2247,35 @@ async def handle_get_product(request: web.Request):
         return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
     if not _is_admin_viewer(request):
         product = _public_product(product)
+    product = (await run_db(with_stats, [product]))[0]
     return web.json_response(product, headers=cors_headers(request))
+
+
+def _product_id_param(request: web.Request) -> int:
+    try:
+        return int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def handle_get_product_reviews(request: web.Request):
+    """Схвалені відгуки товару, нові першими (картка товару, блок «Відгуки»)."""
+    product_id = _product_id_param(request)
+    if not product_id:
+        return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    data = await run_db(
+        product_reviews, product_id, _query_int(request, "limit", 10), _query_int(request, "offset", 0)
+    )
+    return web.json_response(data, headers=cors_headers(request))
+
+
+async def handle_get_product_related(request: web.Request):
+    """«З цим купують»: товари, що найчастіше були в одному замовленні з цим."""
+    product_id = _product_id_param(request)
+    if not product_id:
+        return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    ids = await run_db(bought_together, product_id, _query_int(request, "limit", 8))
+    return web.json_response({"product_ids": ids}, headers=cors_headers(request))
 
 
 async def handle_update_filament(request: web.Request):
@@ -2960,6 +3011,36 @@ async def handle_upload_photo(request: web.Request):
             status=400, 
             headers=cors_headers(request)
         )
+
+
+async def handle_upload_video(request: web.Request):
+    """Завантажити відео товару (mp4/mov/webm) на Cloudinary."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    try:
+        form = await request.post()
+    except web.HTTPRequestEntityTooLarge:
+        return web.json_response(
+            {"ok": False, "error": f"❌ Файл занадто великий. Максимум {MAX_UPLOAD_BYTES // 1024 // 1024}MB"},
+            status=413, headers=cors_headers(request),
+        )
+    file_field = form.get("file")
+    if not isinstance(file_field, web.FileField):
+        return web.json_response({"ok": False, "error": "❌ Файл не знайдено"}, status=400, headers=cors_headers(request))
+    content_type = (file_field.content_type or "").lower()
+    if content_type not in VIDEO_CONTENT_TYPES:
+        return web.json_response(
+            {"ok": False, "error": "❌ Потрібне відео mp4, mov або webm"}, status=400, headers=cors_headers(request)
+        )
+    file_data = file_field.file.read()
+    filename = (file_field.filename or "product_video").rsplit(".", 1)[0][:60] or "product_video"
+    result = await asyncio.to_thread(upload_video_to_cloudinary_sync, file_data, filename)
+    status = 200 if result.get("ok") else 400
+    return web.json_response(result, status=status, headers=cors_headers(request))
 
 
 async def handle_upload_photo_url(request: web.Request):

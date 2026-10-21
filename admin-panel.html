@@ -2226,6 +2226,13 @@
                         Увімкнено — знижки <b>додаються</b>, але лише для тих купонів, де стоїть галочка
                         «Сумувати з акційною знижкою». Обидві знижки рахуються від суми кошика.
                     </div>
+                    <div class="toggle-row" style="margin-top:14px;">
+                        <span class="toggle-row-label">📦 Показувати «N продано» в картці товару від</span>
+                        <input type="number" id="soldCountMinInput" min="0" max="10000" step="1" style="width:84px;" onchange="saveSoldCountMin(this.value)">
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+                        Рахуються замовлення, які ти прийняв у роботу (не нові, не «під питанням» і не скасовані).
+                    </div>
                 </div>
                 <div id="promotionsLoading" class="loading" style="display:none;">
                     <div class="spinner"></div>
@@ -2293,9 +2300,21 @@
                 </div>
 
                 <div class="form-group required">
-                    <label>Додатковий опис</label>
-                    <input type="text" name="mat" placeholder="Короткий опис: матеріал, комплектація, особливості..." required>
-                    <div class="form-error">Опис вимагається</div>
+                    <label>Короткий рядок (під назвою)</label>
+                    <input type="text" name="mat" placeholder="Напр.: PLA · колір на вибір" required>
+                    <div class="form-error">Короткий рядок вимагається</div>
+                </div>
+
+                <div class="form-group">
+                    <label>Опис (необовʼязково)</label>
+                    <textarea name="description" rows="4" maxlength="3000" placeholder="Кілька абзаців про товар: як користуватись, розміри, для кого."></textarea>
+                    <div class="form-hint">У магазині довгий опис згортається до 3 рядків з кнопкою «Читати повністю». Абзаци зберігаються.</div>
+                </div>
+
+                <div class="form-group">
+                    <label>Примітка (необовʼязково)</label>
+                    <input type="text" name="note" maxlength="300" placeholder="Напр.: Друкую під замовлення — відтінок може трохи відрізнятися від фото">
+                    <div class="form-hint">Показується помітною жовтою плашкою ⓘ у картці товару.</div>
                 </div>
 
                 <div class="form-group">
@@ -2321,7 +2340,25 @@
                 <div id="customFields" style="display: none;">
                     <div class="form-group">
                         <label>Поле для вводу клієнтом</label>
-                        <input type="text" name="custom_fields" placeholder="Наприклад: Номер автомобіля">
+                        <input type="text" name="custom_fields" maxlength="60" placeholder="Наприклад: Номер автомобіля">
+                        <div class="form-hint">Підпис поля персоналізації. Поки покупець його не заповнить, товар не додається в кошик.</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Максимум символів</label>
+                        <input type="number" name="pers_max" min="1" max="200" step="1" placeholder="40">
+                    </div>
+                    <div class="form-group">
+                        <label>Підказка під полем</label>
+                        <input type="text" name="pers_hint" maxlength="200" placeholder="Напр.: Кирилиця чи латиниця. Перевірю написання перед друком.">
+                    </div>
+                    <div class="form-group">
+                        <label>Приклад у полі</label>
+                        <input type="text" name="pers_placeholder" maxlength="60" placeholder="Напр.: AA 1234 BB">
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" name="pers_upper"> 🔠 Великими літерами (номер авто)</label>
+                        </div>
                     </div>
                 </div>
 
@@ -2337,6 +2374,16 @@
                     </div>
                     <div class="photo-url-hint">Ctrl+V з браузера вставляє лише перший кадр. Для анімації — завантаж файл або встав посилання.</div>
                     <div class="photo-preview" id="photoPreview"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Відео (необовʼязково)</label>
+                    <div class="photo-url-row">
+                        <input type="url" name="video" id="videoUrlInput" placeholder="https://… — або завантаж файл">
+                        <button type="button" id="videoUploadBtn" onclick="document.getElementById('videoFileInput').click()">Завантажити</button>
+                    </div>
+                    <input type="file" id="videoFileInput" accept="video/mp4,video/quicktime,video/webm" style="display: none;" onchange="uploadProductVideo(this.files[0]); this.value = ''">
+                    <div class="photo-url-hint">MP4, MOV або WebM до 25 МБ. У галереї товару — останнім слайдом; магазин віддає легкий mp4.</div>
                 </div>
 
                 <div class="form-buttons">
@@ -3780,7 +3827,7 @@
                             ${p.gift ? '<div class="tag">🎁 Подарунок</div>' : ''}
                             ${p.cat !== 'custom' && p.filamentChoice !== false ? '<div class="tag">🎨 Вибір кольору</div>' : ''}
                             ${p.cat !== 'custom' && p.filamentChoice !== false && p.luminousFilamentChoice ? '<div class="tag">🌙 Світиться вночі</div>' : ''}
-                            ${p.custom_fields ? `<div class="tag">✍️ ${escapeHtml(p.custom_fields)}</div>` : ''}
+                            ${personalizationLabel(p.custom_fields) ? `<div class="tag">✍️ ${escapeHtml(personalizationLabel(p.custom_fields))}</div>` : ''}
                             ${p.contractPrice ? '<div class="tag">🤝 Договірна ціна</div>' : ''}
                         </div>
 
@@ -3833,12 +3880,15 @@
                 price: contractPrice ? 0 : form.price.value,
                 oldPrice,
                 mat: form.mat.value.trim(),
+                description: form.description.value.trim(),
+                note: form.note.value.trim(),
+                video: form.video.value.trim(),
                 stlLink: form.stlLink.value.trim(),
                 photos: [...uploadedPhotos],
             };
 
             if (state.cat === 'custom') {
-                state.custom_fields = form.custom_fields.value.trim();
+                state.custom_fields = readPersonalizationFields(form);
             } else {
                 state.hot = form.hot.checked;
                 state.pinned = form.pinned.checked;
@@ -3848,6 +3898,36 @@
             }
 
             return state;
+        }
+
+        // Персоналізація індивідуального товару: лише підпис — рядок (як раніше), інакше обʼєкт
+        function readPersonalizationFields(form) {
+            const label = form.custom_fields.value.trim();
+            if (!label) return '';
+            const cf = { label };
+            const max = parseInt(form.pers_max.value, 10);
+            if (max > 0) cf.max = Math.min(max, 200);
+            const hint = form.pers_hint.value.trim();
+            if (hint) cf.hint = hint;
+            const placeholder = form.pers_placeholder.value.trim();
+            if (placeholder) cf.placeholder = placeholder;
+            if (form.pers_upper.checked) cf.upper = true;
+            return Object.keys(cf).length > 1 ? cf : label;
+        }
+
+        function fillPersonalizationFields(form, value) {
+            let cf = Array.isArray(value) ? value[0] : value;
+            if (!cf || typeof cf === 'string') cf = { label: cf || '' };
+            form.custom_fields.value = cf.label || '';
+            form.pers_max.value = cf.max || '';
+            form.pers_hint.value = cf.hint || '';
+            form.pers_placeholder.value = cf.placeholder || '';
+            form.pers_upper.checked = !!cf.upper;
+        }
+
+        function personalizationLabel(value) {
+            const cf = Array.isArray(value) ? value[0] : value;
+            return typeof cf === 'string' ? cf : (cf?.label || '');
         }
 
         function captureProductFormSnapshot() {
@@ -4009,11 +4089,14 @@
                 form.price.value = product.price;
                 form.oldPrice.value = product.oldPrice || '';
                 form.mat.value = product.mat;
+                form.description.value = product.description || '';
+                form.note.value = product.note || '';
+                form.video.value = product.video || '';
                 form.stlLink.value = product.stlLink || '';
                 form.contractPrice.checked = !!product.contractPrice;
 
                 if (product.cat === 'custom') {
-                    form.custom_fields.value = product.custom_fields || '';
+                    fillPersonalizationFields(form, product.custom_fields);
                 } else {
                     form.hot.checked = product.hot || false;
                     form.pinned.checked = product.pinned || false;
@@ -4253,6 +4336,48 @@
                 clearTimeout(timeoutId);
                 dragDropText.textContent = originalText;
                 btn.disabled = false;
+            }
+        }
+
+        async function uploadProductVideo(file) {
+            if (!file) return;
+            if (!['video/mp4', 'video/quicktime', 'video/webm'].includes(file.type)) {
+                showToast('Потрібне відео mp4, mov або webm', 'error');
+                return;
+            }
+            if (file.size > 25 * 1024 * 1024) {
+                showToast('Відео більше 25 МБ — обріж або стисни його', 'error');
+                return;
+            }
+            const btn = document.getElementById('videoUploadBtn');
+            const input = document.getElementById('videoUrlInput');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳ Завантаження…';
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 300000);
+            try {
+                const formData = new FormData();
+                formData.append('file', file, file.name);
+                const res = await fetch(API_BASE + '/upload-video', {
+                    method: 'POST',
+                    headers: { 'X-Telegram-Init-Data': tgInitData },
+                    body: formData,
+                    signal: controller.signal
+                });
+                const data = await readUploadResponse(res);
+                if (data.ok) {
+                    input.value = data.url;
+                    showToast('Відео завантажено ✅', 'success');
+                } else {
+                    showToast('Помилка: ' + (data.error || 'Невідома помилка'), 'error');
+                }
+            } catch (e) {
+                showToast(e.name === 'AbortError' ? 'Завантаження занадто довге — спробуй коротше відео' : 'Помилка завантаження відео', 'error');
+            } finally {
+                clearTimeout(timeoutId);
+                btn.disabled = false;
+                btn.textContent = originalText;
             }
         }
 
@@ -4523,12 +4648,20 @@
                 price,
                 oldPrice,
                 mat: form.mat.value.trim(),
+                description: form.description.value.trim(),
+                note: form.note.value.trim(),
+                video: form.video.value.trim(),
                 stlLink: form.stlLink.value.trim(),
                 photos: uploadedPhotos,
             };
 
+            if (data.video && !data.video.startsWith('https://')) {
+                showToast('Посилання на відео має починатися з https://', 'error');
+                return;
+            }
+
             if (data.cat === 'custom') {
-                data.custom_fields = form.custom_fields.value.trim();
+                data.custom_fields = readPersonalizationFields(form);
             } else {
                 data.hot = form.hot.checked;
                 data.pinned = form.pinned.checked;
@@ -4759,10 +4892,33 @@
                 if (!res.ok) throw new Error(`Помилка налаштувань (${res.status})`);
                 const data = await res.json();
                 couponStackingEnabled = !!data.coupon_stacking_enabled;
+                const soldInput = document.getElementById('soldCountMinInput');
+                if (soldInput) soldInput.value = data.sold_count_min ?? 5;
             } catch (e) {
                 console.error('loadSettings error:', e);
             }
             renderCouponStackingToggle();
+        }
+
+        async function saveSoldCountMin(value) {
+            const input = document.getElementById('soldCountMinInput');
+            try {
+                const res = await fetch(API_BASE + '/admin/settings', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData,
+                    },
+                    body: JSON.stringify({ sold_count_min: parseInt(value, 10) }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти');
+                input.value = result.settings.sold_count_min;
+                showToast(`«N продано» показується від ${result.settings.sold_count_min} ✅`, 'success');
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження налаштування', 'error');
+                loadSettings();
+            }
         }
 
         async function saveCouponStacking(enabled) {

@@ -18,7 +18,8 @@
   - `bot.py` — Telegram-бот + HTTP API (`aiohttp`)
   - `routes/setup.py` — реєстрація HTTP-маршрутів
   - `services/` — бізнес-логіка: `orders`, `pricing`, `promotions`, `coupons`, `users`, `settings`, `notifications`, `stats`, `validation`, `db_utils` (схема й міграції),
-    `collections` (добірки на головній), `hits` (топ продажів), `events` (події вітрини, популярні пошуки)
+    `collections` (добірки на головній), `hits` (топ продажів, «З цим купують»), `events` (події вітрини, популярні пошуки),
+    `reviews` (відгуки, рейтинг і «N продано» для картки товару)
   - `handlers/` — реєстрація команд бота, rate limit, обробка помилок
   - `admin-panel.html` — адмінка
   - `config.py` — централізована конфігурація з ENV
@@ -43,12 +44,17 @@ Telegram Mini App для продажу 3D-друкованих товарів.
 
 ## 🧱 Поточна структура та стек
 
-- **Frontend:** один файл `index.html` (HTML/CSS/JS без фреймворків). Після етапу 1 редизайну:
-  - дизайн-система: токени (`--bg`, `--surface`, `--ink`, `--blue`…) + аліаси старих змінних для ще не перероблених картки товару й кошика;
+- **Frontend:** один файл `index.html` (HTML/CSS/JS без фреймворків). Після етапів 1–2 редизайну:
+  - дизайн-система: токени (`--bg`, `--surface`, `--ink`, `--blue`…) + аліаси старих змінних для ще не переробленого кошика;
     тема — `data-theme` на `<html>` за `Telegram.WebApp.colorScheme`, поза Telegram — за системою;
   - модуль «ВІТРИНА» в JS: SVG-іконки (`ICON_PATHS`, `ic()`), картки (`cardHtml`, `controlHtml` — «+»/степпер оновлюються на місці через `data-ctl`),
     головна (`renderHome`), список категорії/добірки (`renderList`, сортування), пошук (`searchProducts` — синоніми + транслітерація),
     Обране (`FAVS`, Telegram CloudStorage `fav_v1` + localStorage), тости (`showToast` замість `alert`), BackButton (`backAction`), HapticFeedback (`haptic`);
+  - картка товару — повноекранний лист `#modal-backdrop` (`openModal(id, source, {giftPreview, photoIndex})`, `closeModal`, `sheetBack` — «Назад»
+    до попереднього товару): галерея з відео (`buildCarousel`, Cloudinary віддає легкий mp4), рейтинг/«продано», опис і примітка «Згорнутий»,
+    персоналізація (`persConfig` — обовʼязкове поле з лімітом, «Побажання»), кольори, прогрес до подарунка, відгуки, «З цим купують»;
+    головна кнопка — Telegram `MainButton` (`updateMainButton`), поза Telegram — власна внизу картки;
+  - сторінка «Акції» (`renderSales`): картка прогресу на кожну активну акцію + товари зі знижкою;
   - нижнє меню: Каталог · Акції · Обране · Кошик (`switchPage(page)`); «Замовлення» з'явиться на етапі 3;
   - localStorage: `cart_v1`, `fav_v1`, `recent_v1` (нещодавно переглянуті), `search_recent_v1`
 - **Backend bot:** `python-telegram-bot` (async)
@@ -151,15 +157,21 @@ MAX_UPLOAD_BYTES=26214400        # 25 MB
 - `id`, `type` (`order_percent`/`order_fixed`/`gift_threshold`/`info`), `title`, `subtitle`, `emoji`, `badge`,
   `active`, `priority`, `value`, `min_order`, `category`, `min_items`, `max_gift_price`, `starts_at`, `ends_at`
 
+### `reviews`
+- `id`, `product_id`, `order_id`, `user_id`, `author_name`, `rating` (1–5), `text`, `photos` (JSON), `status` (`pending`/`approved`/`hidden`),
+  `admin_reply`, `created_at`; унікальна пара (`order_id`, `product_id`)
+- На вітрині лише `approved`; форма відгуку й модерація — етап 3, сторінка «Відгуки» в адмінці — етап 5
+
 ### `app_settings`
-- `key`, `value`, `updated_at` — налаштування з адмінки
+- `key`, `value`, `updated_at` — налаштування з адмінки: `coupon_stacking_enabled`, `sold_count_min` (поріг «N продано», 5),
+  `reviews_auto_publish` (для етапу 3)
 
 ### `filament_colors`
 - `id`, `name`, `hex`, `available`
 
 ### Каталогові таблиці (тільки при `CATALOG_BACKEND=postgres`)
 - `categories` — `id`, `name`, `emoji`, `badge_class`, `sort_order`, `active`, `quick_slot`
-- `products` — повна структура товару з усіма полями
+- `products` — повна структура товару з усіма полями (з етапу 2 — ще `description`, `note`, `video`)
 - `filaments` — `id`, `name`, `hex`, `available`, `sort_order`
 
 ---
@@ -183,8 +195,14 @@ MAX_UPLOAD_BYTES=26214400        # 25 MB
   "filamentChoice": true,
   "luminousFilamentChoice": false,
   "stlLink": "",
-  "custom_fields": [],
-  "createdAt": "2026-09-30T12:00:00+00:00"
+  "custom_fields": "",
+  "description": "Кілька абзаців опису",
+  "note": "Друкую під замовлення — відтінок може відрізнятися",
+  "video": "https://res.cloudinary.com/.../video/upload/....mp4",
+  "createdAt": "2026-09-30T12:00:00+00:00",
+  "rating_avg": 4.8,
+  "rating_count": 4,
+  "sold_count": 7
 }
 ```
 
@@ -193,6 +211,11 @@ MAX_UPLOAD_BYTES=26214400        # 25 MB
 - `filamentChoice` — чи показувати вибір кольору філаменту
 - `luminousFilamentChoice` — чи показувати вибір люмінесцентного філаменту (на вітрині — бейдж «Світиться» і добірка «Світяться вночі»)
 - `createdAt` — коли товар додано (БД: `products.created_at`); бейдж «Новинка» і добірка «Новинки». У старих товарів дати немає
+- `description`, `note` — опис (абзаци зберігаються) і примітка-плашка в картці товару; `video` — https-посилання на відео (останній слайд галереї)
+- `custom_fields` (лише індивідуальні товари) — рядок-підпис поля (старий формат) або `{label, max, hint, placeholder, upper}`
+- `rating_avg`, `rating_count` — лише коли є схвалені відгуки; `sold_count` — лише від порогу `sold_count_min`. Не зберігаються в товарі,
+  додаються у відповідь `GET /api/products` (кеш 10 хв)
+- `stlLink` віддається лише адміну
 
 ---
 
@@ -263,8 +286,10 @@ MAX_UPLOAD_BYTES=26214400        # 25 MB
 
 ### Адмін API (`OWNER_ID`-only при `VALIDATE_INIT_DATA=true`)
 - `GET /admin/panel` — UI адмінки
-- `GET /api/products` — список товарів
+- `GET /api/products` — список товарів (з `rating_avg` / `rating_count` / `sold_count`)
 - `GET /api/products/{id}` — один товар
+- `GET /api/products/{id}/reviews?limit=10&offset=0` — схвалені відгуки, нові першими (`{reviews, total}`; автор — лише імʼя)
+- `GET /api/products/{id}/related?limit=8` — «З цим купують»: ID товарів з тих самих прийнятих замовлень
 - `POST /api/products` — створити товар
 - `PUT /api/products/{id}` — оновити товар
 - `DELETE /api/products/{id}` — видалити товар
@@ -286,6 +311,7 @@ MAX_UPLOAD_BYTES=26214400        # 25 MB
 - `GET/PUT /api/admin/settings` — налаштування
 - `POST /api/upload-photo` — завантажити фото (multipart або base64)
 - `POST /api/upload-photo-url` — завантажити фото з URL
+- `POST /api/upload-video` — відео товару (mp4/mov/webm до 25 МБ) на Cloudinary
 
 ---
 
@@ -336,4 +362,4 @@ MAX_UPLOAD_BYTES=26214400        # 25 MB
 
 Проєкт робочий: замовлення з Mini App зберігаються в БД, купони й акції застосовуються, повідомлення відправляються в окремий чат замовлень і клієнту в бот, адмінка керує товарами/категоріями/філаментами/купонами/акціями через WebApp. Підтримуються два бекенди БД (SQLite / PostgreSQL) та два бекенди каталогу (JSON / DB).
 
-**Далі:** редизайн у 5 етапів за [REDESIGN.md](REDESIGN.md). ✅ Етап 1 (дизайн-система, головна, список, пошук, Обране) — готовий; наступний — етап 2 (картка товару, вкладка «Акції», відгуки). Потрібен ключ API Нової Пошти до етапу 3.
+**Далі:** редизайн у 5 етапів за [REDESIGN.md](REDESIGN.md). ✅ Етап 1 (дизайн-система, головна, список, пошук, Обране) і ✅ етап 2 (картка товару, «Акції», відгуки/рейтинг/«продано» на читання) — готові; наступний — етап 3 (кошик, оформлення, мої замовлення, форма відгуку). Потрібен ключ API Нової Пошти до етапу 3.

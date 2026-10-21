@@ -19,6 +19,8 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_get("/api/categories", handlers.handle_get_categories)
     http_app.router.add_get("/api/filaments", handlers.handle_get_filaments)
     http_app.router.add_get("/api/products/{id}", handlers.handle_get_product)
+    http_app.router.add_get("/api/products/{id}/reviews", handlers.handle_get_product_reviews)
+    http_app.router.add_get("/api/products/{id}/related", handlers.handle_get_product_related)
     http_app.router.add_post("/api/categories", handlers.handle_create_category)
     http_app.router.add_put("/api/categories/{id}", handlers.handle_update_category)
     http_app.router.add_delete("/api/categories/{id}", handlers.handle_delete_category)
@@ -53,6 +55,7 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_delete("/api/admin/promotions/{id}", handlers.handle_delete_promotion)
     http_app.router.add_post("/api/upload-photo", handlers.handle_upload_photo)
     http_app.router.add_post("/api/upload-photo-url", handlers.handle_upload_photo_url)
+    http_app.router.add_post("/api/upload-video", handlers.handle_upload_video)
 
     http_app.router.add_get("/", handlers.handle_index)
     http_app.router.add_get("/{path:.*}", handlers.handle_static)
