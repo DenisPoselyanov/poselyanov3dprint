@@ -47,6 +47,8 @@
     --shadow-lg: 0 20px 60px rgba(20,32,43,.18);
     --r: 16px;
     --r-sm: 11px;
+    --app-w: 480px;  /* ширина «екрана телефона»: на широких вікнах Mini App не розтягується */
+    --app-edge: max(0px, calc((100vw - var(--app-w)) / 2));
     --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     --gx: 16px;
     --sec: 28px;
@@ -111,12 +113,17 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* На широких вікнах (Telegram Web/Desktop у браузері) показуємо колонку-«телефон» по центру */
+  @media (min-width: 560px) {
+    #main-scroll, .s-nav, .psheet, .success-screen { box-shadow: 0 0 0 1px var(--line); }
+  }
+
   /* Контент скролиться в #main-scroll, не в window */
   #main-scroll {
     position: fixed;
     top: 0;
-    left: 0;
-    right: 0;
+    left: var(--app-edge);
+    right: var(--app-edge);
     bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
     box-sizing: border-box;
     overflow-x: hidden;
@@ -216,7 +223,7 @@
 
   /* SUCCESS */
   .success-screen {
-    display: none; position: fixed; inset: 0;
+    display: none; position: fixed; inset: 0 var(--app-edge);
     background: var(--card-bg);
     z-index: 10000; flex-direction: column;
     align-items: center; justify-content: center;
@@ -764,7 +771,7 @@
   .gift-modal {
     background: var(--card-bg);
     border-radius: 24px 24px 0 0;
-    width: 100%;
+    width: 100%; max-width: var(--app-w); margin: 0 auto;
     max-height: 70vh;
     overflow-y: auto;
     animation: slideUp .28s cubic-bezier(.34,1.2,.64,1);
@@ -924,7 +931,7 @@
 
   /* Нижнє меню */
   .s-nav {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    position: fixed; left: var(--app-edge); right: var(--app-edge); bottom: 0; z-index: 50;
     display: grid; grid-template-columns: repeat(5, 1fr);
     min-height: calc(var(--nav-h) + env(safe-area-inset-bottom));
     padding: 6px 4px calc(4px + env(safe-area-inset-bottom));
@@ -1182,7 +1189,7 @@
   .sk-card .sk-l.s { width: 50%; margin-bottom: 14px; }
 
   /* ═════════ КАРТКА ТОВАРУ (REDESIGN.md, розд. 3.4): повноекранний лист поверх каталогу ═════════ */
-  .psheet { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: none; }
+  .psheet { position: fixed; inset: 0 var(--app-edge); z-index: 100; background: var(--bg); display: none; }
   .psheet.open { display: block; animation: sheetIn .28s cubic-bezier(.2,.9,.3,1.1); }
   .psheet.closing { animation: sheetOut .2s ease forwards; pointer-events: none; }
   @keyframes sheetIn { from { transform: translateY(30px); opacity: .4; } }
