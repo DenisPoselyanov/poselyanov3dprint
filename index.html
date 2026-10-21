@@ -239,6 +239,46 @@
   }
   .success-back:active { opacity: .8; }
 
+  .success-check { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: var(--green-soft); color: var(--green); margin-bottom: 16px; animation: pop .4s .1s cubic-bezier(.34,1.56,.64,1) both; }
+  .success-check svg.i { width: 44px; height: 44px; stroke-width: 2.6; }
+  .success-num { font-size: 15px; font-weight: 800; color: var(--blue-ink); margin-bottom: 10px; }
+  .tl { list-style: none; margin: 22px 0 0; padding: 0; text-align: left; display: grid; gap: 0; max-width: 300px; width: 100%; }
+  .tl li { position: relative; padding: 0 0 14px 28px; font-size: 13px; color: var(--ink-2); line-height: 1.35; }
+  .tl li b { display: block; color: var(--ink); font-size: 13.5px; }
+  .tl li::before { content: ''; position: absolute; left: 4px; top: 3px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface-3); }
+  .tl li::after { content: ''; position: absolute; left: 8.5px; top: 16px; bottom: 0; width: 1.5px; background: var(--line-2); }
+  .tl li:last-child::after { display: none; }
+  .tl li.done::before { background: var(--green); }
+  .success-actions { display: grid; gap: 8px; width: 100%; max-width: 300px; margin-top: 18px; }
+  .success-actions .success-back { margin-top: 0; width: 100%; }
+  .success-back.ghost { background: var(--surface-2); color: var(--ink); }
+
+  /* МОЇ ЗАМОВЛЕННЯ (REDESIGN.md, розд. 3.7) */
+  .ord-list { display: grid; gap: 12px; padding: 0 var(--gx) 24px; }
+  .ord-card { background: var(--surface); border-radius: var(--r); box-shadow: 0 0 0 1px var(--line); padding: 14px; display: grid; gap: 12px; }
+  .ord-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .ord-head b { font-size: 15px; font-weight: 800; }
+  .ord-head small { display: block; color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+  .ord-pill { flex: none; font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--blue-soft); color: var(--blue-ink); }
+  .ord-pill.amber { background: var(--amber-soft); color: var(--amber); }
+  .ord-pill.violet { background: var(--violet-soft); color: var(--violet-ink); }
+  .ord-pill.green { background: var(--green-soft); color: var(--green); }
+  .ord-pill.red { background: var(--sale-soft); color: var(--sale); }
+  .ord-items { display: grid; gap: 8px; }
+  .ord-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .ord-item .th { width: 38px; height: 38px; border-radius: 10px; background: var(--surface-2); overflow: hidden; flex: none; display: grid; place-items: center; font-size: 18px; }
+  .ord-item .th img { width: 100%; height: 100%; object-fit: cover; }
+  .ord-item small { display: block; color: var(--ink-3); font-size: 11.5px; }
+  .ord-track { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .ord-track > div { text-align: center; font-size: 10.5px; font-weight: 600; color: var(--ink-3); }
+  .ord-track > div::before { content: ''; display: block; height: 5px; border-radius: 9px; background: var(--surface-3); margin-bottom: 6px; }
+  .ord-track > div.on { color: var(--ink); }
+  .ord-track > div.on::before { background: var(--blue); }
+  .ord-hint { font-size: 12.5px; color: var(--ink-2); }
+  .ord-ttn { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-2); font-size: 13px; }
+  .ord-ttn code { font-weight: 800; letter-spacing: .02em; }
+  .ord-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
   /* ORDER LOADING — absolute всередині #page-cart (fixed ламається в Telegram WebView) */
   .order-loading-screen {
     display: none;
@@ -866,7 +906,7 @@
   /* Нижнє меню */
   .s-nav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: repeat(5, 1fr);
     min-height: calc(var(--nav-h) + env(safe-area-inset-bottom));
     padding: 6px 4px calc(4px + env(safe-area-inset-bottom));
     background: var(--surface); border-top: 1px solid var(--line);
@@ -1301,6 +1341,9 @@
 <!-- PAGE: Обране -->
 <div class="page" id="page-fav"></div>
 
+<!-- PAGE: Мої замовлення -->
+<div class="page" id="page-orders"></div>
+
 <!-- PAGE: Кошик -->
 <div class="page" id="page-cart">
   <div class="order-loading-screen" id="order-loading-screen" aria-hidden="true" aria-busy="false">
@@ -1386,10 +1429,20 @@
 
 <!-- SUCCESS -->
 <div class="success-screen" id="success-screen">
-  <div class="success-emoji">🎉</div>
+  <div class="success-check"><span data-icon="check"></span></div>
   <div class="success-title">Замовлення прийнято!</div>
-  <div class="success-sub">Я отримав твоє замовлення і зв'яжусь найближчим часом для підтвердження та оплати. Якщо в замовленні є товари з договірною ціною — напишу з фінальною сумою.</div>
-  <button class="success-back" onclick="backToCatalog()">← Переглянути ще товари</button>
+  <div class="success-num" id="success-num"></div>
+  <div class="success-sub">Я напишу тобі в Telegram протягом години — підтвердимо деталі й оплату. Якщо в замовленні є товари з договірною ціною — напишу з фінальною сумою.</div>
+  <ul class="tl" aria-label="Що буде далі">
+    <li class="done"><b>Прийнято</b>Замовлення вже в мене</li>
+    <li><b>Підтвердження і оплата</b>Напишу тобі в Telegram</li>
+    <li><b>Друк</b>Зазвичай 1–2 дні</li>
+    <li><b>Відправка</b>ТТН прийде сюди й у бот</li>
+  </ul>
+  <div class="success-actions">
+    <button class="success-back" onclick="openOrdersFromSuccess()">Мої замовлення</button>
+    <button class="success-back ghost" onclick="backToCatalog()">Продовжити покупки</button>
+  </div>
 </div>
 
 <!-- GIFT CHOICE MODAL -->
@@ -1412,6 +1465,7 @@
   <button type="button" data-page="products" aria-current="page"><span data-icon="store"></span>Каталог</button>
   <button type="button" data-page="sales"><span data-icon="flame"></span>Акції</button>
   <button type="button" data-page="fav"><span data-icon="heart"></span>Обране<span class="badge fav-badge" id="fav-badge" hidden>0</span></button>
+  <button type="button" data-page="orders"><span data-icon="box"></span>Замовлення</button>
   <button type="button" data-page="cart"><span data-icon="cart"></span>Кошик<span class="badge" id="cart-badge" hidden>0</span></button>
 </nav>
 <script>
@@ -3841,8 +3895,7 @@ async function submitOrderOnce() {
     updateCartBadge();
     orderedIds.forEach(id => updateCardBadge(id));
     setOrderSubmitting(false);
-    document.getElementById('success-screen').classList.add('open');
-    syncCartMainButton();
+    showSuccess(res);
     haptic('success');
     updateBackButton();
   } catch(e) {
@@ -3854,6 +3907,171 @@ async function submitOrderOnce() {
     isSubmitting = false;
     setOrderSubmitting(false);
   }
+}
+
+// ─── ЕКРАН УСПІХУ ───
+function showSuccess(res) {
+  const id = res?.order_id;
+  const num = document.getElementById('success-num');
+  if (num) {
+    num.textContent = !id ? '' : (res.is_new === false ? `Додано до замовлення №${id}` : `Замовлення №${id}`);
+  }
+  MY_ORDERS = null;  // список «Мої замовлення» перезавантажиться
+  document.getElementById('success-screen').classList.add('open');
+  hydrateIcons(document.getElementById('success-screen'));
+  syncCartMainButton();
+}
+function openOrdersFromSuccess() {
+  document.getElementById('success-screen').classList.remove('open');
+  syncCartMainButton();
+  switchPage('orders');
+  updateBackButton();
+}
+
+// ─── МОЇ ЗАМОВЛЕННЯ (REDESIGN.md, розд. 3.7) ───
+const ORDER_STATUS = {
+  new:       { label: 'Очікує підтвердження', tone: 'amber', hint: 'Скоро напишу для підтвердження' },
+  draft:     { label: 'Під питанням', tone: 'amber', hint: 'Уточнюю деталі — чекай повідомлення' },
+  confirmed: { label: 'Підтверджено', tone: '', hint: 'Скоро почну друкувати' },
+  printing:  { label: 'Друкується', tone: '', hint: 'Орієнтовно буде готове за 1–2 дні' },
+  ready:     { label: 'Готове до відправки', tone: '', hint: 'Відправлю найближчим часом' },
+  shipped:   { label: 'Відправлено', tone: 'violet', hint: 'Відстежуй посилку за ТТН' },
+  delivered: { label: 'Отримано', tone: 'green', hint: '' },
+  cancelled: { label: 'Скасовано', tone: 'red', hint: 'Якщо є питання — напиши мені' },
+};
+const TRACK_STEPS = [['accepted', 'Прийнято'], ['printing', 'Друкується'], ['shipped', 'Відправлено'], ['delivered', 'Отримано']];
+let MY_ORDERS = null;       // null — ще не завантажено
+let MY_ORDERS_ERROR = false;
+
+async function loadMyOrders() {
+  MY_ORDERS_ERROR = false;
+  try {
+    const data = await apiGet('/my/orders');
+    MY_ORDERS = Array.isArray(data?.orders) ? data.orders : [];
+  } catch (_) {
+    MY_ORDERS = [];
+    MY_ORDERS_ERROR = true;
+  }
+}
+function orderItemThumb(it) {
+  const p = it.product_id > 0 ? findAnyProduct(it.product_id) : null;
+  if (p?.photos?.length) return `<img src="${escapeAttr(photo(p.photos[0], { w: 120 }))}" alt="" loading="lazy" decoding="async" crossorigin="anonymous">`;
+  return escapeHtml(p?.emoji || (it.is_gift ? '🎁' : '📦'));
+}
+function orderItemSub(it) {
+  const bits = [];
+  if (it.filament) bits.push(`PLA · ${it.filament}`);
+  if (it.personalization) bits.push(it.personalization + (it.personalization_note ? ` (${it.personalization_note})` : ''));
+  if (it.is_gift) bits.push('Подарунок');
+  return bits.join(' · ');
+}
+function orderCardHtml(o) {
+  const st = ORDER_STATUS[o.status] || { label: o.status, tone: '', hint: '' };
+  const d = parseServerDate(o.ordered_at);
+  const date = Number.isFinite(d) ? new Date(d).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' }) : '';
+  const sum = o.price_pending && !o.total_price ? 'Ціна після узгодження' : money(o.total_price);
+  const idx = TRACK_STEPS.findIndex(([k]) => k === o.step);
+  const track = o.status === 'cancelled' || idx < 0 ? '' :
+    `<div class="ord-track" role="img" aria-label="Статус: ${escapeAttr(st.label)}">${TRACK_STEPS.map(([, l], i) => `<div class="${i <= idx ? 'on' : ''}">${l}</div>`).join('')}</div>`;
+  const items = o.items.map(it => `<div class="ord-item"><div class="th">${orderItemThumb(it)}</div>
+      <div><span>${escapeHtml((it.product_name || '').replace(/^🎁\s*/, ''))}${it.quantity > 1 ? ` × ${it.quantity}` : ''}</span>
+      ${orderItemSub(it) ? `<small>${escapeHtml(orderItemSub(it))}</small>` : ''}</div></div>`).join('');
+  const ttn = o.ttn ? `<div class="ord-ttn"><span>ТТН <code>${escapeHtml(o.ttn)}</code></span>
+      <button type="button" class="link-btn" data-act="order-copy" data-ttn="${escapeAttr(o.ttn)}">${ic('copy')}Копіювати</button></div>` : '';
+  const canRepeat = o.items.some(it => !it.is_gift && it.product_id > 0);
+  const actions = canRepeat && (o.status === 'delivered' || o.status === 'cancelled')
+    ? `<div class="ord-actions"><button type="button" class="btn" data-act="order-repeat" data-id="${o.id}">${ic('refresh')}Повторити</button>${orderReviewButton(o)}</div>` : orderReviewButton(o) ? `<div class="ord-actions">${orderReviewButton(o)}</div>` : '';
+  return `<article class="ord-card" id="order-${o.id}">
+    <div class="ord-head"><div><b>Замовлення №${o.id}</b><small>${escapeHtml(date)} · ${escapeHtml(sum)}</small></div>
+      <span class="ord-pill ${st.tone}">${escapeHtml(st.label)}</span></div>
+    <div class="ord-items">${items}</div>
+    ${track}${st.hint ? `<div class="ord-hint">${escapeHtml(st.hint)}</div>` : ''}${ttn}${actions}
+  </article>`;
+}
+// Кнопка відгуку зʼявляється разом з формою відгуку
+function orderReviewButton(_o) { return ''; }
+
+async function renderOrders() {
+  const page = document.getElementById('page-orders');
+  if (!page) return;
+  const head = '<div class="page-head"><h2>Замовлення</h2></div>';
+  if (MY_ORDERS === null) {
+    page.innerHTML = head + '<div class="ord-list"><div class="ord-card"><div class="sk" style="height:70px"></div></div></div>';
+    await loadMyOrders();
+    if (activePage !== 'orders') return;
+  }
+  if (MY_ORDERS_ERROR) {
+    page.innerHTML = head + emptyHtml({
+      icon: 'alert', title: 'Не вдалось завантажити замовлення',
+      text: 'Перевір зʼєднання й спробуй ще раз.',
+      button: '<button type="button" class="btn primary" data-act="orders-reload">Оновити</button>',
+    });
+    return;
+  }
+  if (!MY_ORDERS.length) {
+    page.innerHTML = head + emptyHtml({
+      icon: 'box', title: 'Замовлень поки немає',
+      text: 'Тут зʼявляться твої замовлення зі статусом і ТТН.',
+      button: '<button type="button" class="btn primary" data-act="page" data-page="products">До каталогу</button>',
+    });
+    return;
+  }
+  page.innerHTML = `${head}<div class="ord-list">${MY_ORDERS.map(orderCardHtml).join('')}</div>`;
+}
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.append(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (_) {}
+    ta.remove();
+    return ok;
+  }
+}
+async function copyTtn(ttn) {
+  const ok = await copyText(ttn);
+  haptic(ok ? 'success' : 'error');
+  showToast({ msg: ok ? `ТТН ${ttn} скопійовано` : 'Не вдалось скопіювати — виділи номер вручну', icon: ok ? 'check' : 'alert' });
+}
+// «Повторити»: ті самі товари в кошик (кольори й імена беремо з замовлення; недоступні пропускаємо)
+function repeatOrder(id) {
+  const o = (MY_ORDERS || []).find(x => x.id === id);
+  if (!o) return;
+  const prevGift = getGiftEligibleToyLineCount();
+  let added = 0, skipped = 0;
+  for (const it of o.items) {
+    if (it.is_gift || !(it.product_id > 0)) continue;
+    const p = findAnyProduct(it.product_id);
+    if (!p) { skipped++; continue; }
+    const av = productWantsFilamentChoice(p) ? availableFilaments(p) : [];
+    const filament = av.find(f => f.name === it.filament) || (av.length ? defaultFilamentFor(p) : null);
+    const row = buildCartRow(p, Math.max(1, it.quantity || 1), filament);
+    if (isCustomProduct(p)) { row.fromCustom = true; row.addedFrom = 'custom'; }
+    if (it.personalization) {
+      row.customValue = it.personalization_note ? `${it.personalization} · побажання: ${it.personalization_note}` : it.personalization;
+      row.persMain = it.personalization;
+      row.persNote = it.personalization_note || '';
+    }
+    stampLine(row);
+    const same = cart.find(c => c.key === row.key);
+    if (same) same.quantity = Math.min(99, same.quantity + row.quantity);
+    else cart.push(row);
+    added++;
+  }
+  if (!added) {
+    showToast({ msg: 'Цих товарів уже немає в каталозі', icon: 'alert' });
+    return;
+  }
+  saveCart();
+  haptic('success');
+  bumpCartBadge();
+  [...new Set(o.items.map(i => i.product_id))].forEach(pid => pid > 0 && refreshProductControls(pid));
+  afterShopCartChange(prevGift);
+  showToast({ msg: `Додано в кошик: ${tovar(added)}${skipped ? ` (без ${skipped} недоступних)` : ''}`, ...toCartAction() });
 }
 
 function backToCatalog() {
@@ -4936,6 +5154,7 @@ function switchPage(page) {
     refreshHero();
   }
   if (page === 'fav') renderFav();
+  if (page === 'orders') { MY_ORDERS = null; renderOrders(); }
   if (page === 'sales') renderSales();
   haptic('select');
   updateBackButton();
@@ -5127,6 +5346,9 @@ function bindShopEvents() {
       case 'search-recent-clear': writeJsonStorage(SEARCH_RECENT_KEY, []); renderSearchBody(); break;
       case 'page': switchPage(el.dataset.page); break;
       case 'fav-all': addFavsToCart(); break;
+      case 'order-copy': copyTtn(el.dataset.ttn); break;
+      case 'order-repeat': repeatOrder(Number(el.dataset.id)); break;
+      case 'orders-reload': MY_ORDERS = null; renderOrders(); break;
       case 'contact-owner': openOwnerChat(); break;
       case 'color': pickSheetColor(el.dataset.fid); break;
       case 'sq': changeSheetQty(Number(el.dataset.d)); break;
