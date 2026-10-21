@@ -189,10 +189,25 @@ def test_np_warehouses_api_error_negative_cache(monkeypatch):
     delivery.clear_cache()
     calls = []
     monkeypatch.setattr(delivery, "_np_call", _fake([], calls, raises=delivery.DeliveryUnavailable("api_error")))
-    for q in ("", "5", "6"):
+    # помилка запиту «5» не блокує інших користувачів з іншим запитом (немає отруєння кешу)
+    for q in ("", "5", "5", "", "6"):
         with pytest.raises(delivery.DeliveryUnavailable):
             asyncio.run(delivery.np_warehouses(REF, "all", q))
-    assert len(calls) == 1  # без повторів і без нових звернень
+    assert len(calls) == 3  # по одному зверненню на кожен різний запит, без повторів
+
+
+def test_search_cache_is_bounded_and_does_not_evict_city_pages(monkeypatch):
+    delivery.clear_cache()
+    monkeypatch.setattr(delivery, "SEARCH_CACHE_MAX", 5)
+    calls = []
+    monkeypatch.setattr(delivery, "_np_call", _fake(_wh(2), calls))
+    asyncio.run(delivery.np_warehouses(REF, "all", ""))  # перша сторінка
+    for i in range(20):
+        asyncio.run(delivery.np_warehouses(REF, "all", f"q{i}"))
+    assert len(delivery._search_cache) == 5
+    n = len(calls)
+    asyncio.run(delivery.np_warehouses(REF, "all", ""))
+    assert len(calls) == n  # перша сторінка лишилась у кеші
 
 
 def test_np_warehouses_rate_limited_retry_then_success(monkeypatch):

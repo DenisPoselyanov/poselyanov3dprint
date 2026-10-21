@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 import logging
 import re
 import time
@@ -29,10 +30,12 @@ WAREHOUSE_ATTEMPTS = 2
 NP_CONCURRENCY = 4
 REQUEST_TIMEOUT_SEC = 8
 CACHE_MAX = 2000
+SEARCH_CACHE_MAX = 500  # окремий кеш пошуку: випадкові запити не витісняють міста й перші сторінки
 
 _REF_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
-_cache: dict[tuple, tuple[float, object]] = {}
+_cache: OrderedDict[tuple, tuple[float, object]] = OrderedDict()
+_search_cache: OrderedDict[tuple, tuple[float, object]] = OrderedDict()
 
 
 class DeliveryUnavailable(Exception):
@@ -53,25 +56,38 @@ def np_lookup_enabled() -> bool:
     return bool(config.NOVAPOSHTA_API_KEY)
 
 
+def _store(key: tuple) -> OrderedDict:
+    # ("np_wh", ref, kind, q) із непорожнім q — окремий обмежений кеш
+    if key and key[0] == "np_wh" and len(key) == 4 and key[3]:
+        return _search_cache
+    return _cache
+
+
 def _cache_get(key: tuple):
-    hit = _cache.get(key)
+    store = _store(key)
+    hit = store.get(key)
     if hit and hit[0] > time.monotonic():
+        store.move_to_end(key)
         return hit[1]
     return None
 
 
 def _cache_put(key: tuple, value, ttl: float) -> None:
-    if len(_cache) >= CACHE_MAX:
+    store = _store(key)
+    limit = SEARCH_CACHE_MAX if store is _search_cache else CACHE_MAX
+    if key not in store and len(store) >= limit:
         now = time.monotonic()
-        for k in [k for k, (exp, _) in _cache.items() if exp <= now]:
-            _cache.pop(k, None)
-        if len(_cache) >= CACHE_MAX:
-            _cache.clear()
-    _cache[key] = (time.monotonic() + ttl, value)
+        for k in [k for k, (exp, _) in store.items() if exp <= now]:
+            store.pop(k, None)
+        while len(store) >= limit:
+            store.popitem(last=False)  # LRU: витісняємо найстаріший, а не чистимо все
+    store[key] = (time.monotonic() + ttl, value)
+    store.move_to_end(key)
 
 
 def clear_cache() -> None:
     _cache.clear()
+    _search_cache.clear()
 
 
 _np_sem: asyncio.Semaphore | None = None
@@ -191,7 +207,7 @@ async def np_warehouses(city_ref: str, kind: str = "all", q: str = "") -> dict:
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    if _cache_get(("np_wh_neg", city_ref)) is not None:
+    if _cache_get(("np_wh_neg", city_ref, q)) is not None:
         raise DeliveryUnavailable("api_error")
     props = {"CityRef": city_ref, "Limit": str(WAREHOUSE_PAGE_SIZE), "Page": "1", "Language": "UA"}
     if q:
@@ -204,7 +220,7 @@ async def np_warehouses(city_ref: str, kind: str = "all", q: str = "") -> dict:
         except DeliveryUnavailable as exc:
             reason = str(exc)
             if reason == "api_error":
-                _cache_put(("np_wh_neg", city_ref), True, WAREHOUSE_NEG_TTL_SEC)
+                _cache_put(("np_wh_neg", city_ref, q), True, WAREHOUSE_NEG_TTL_SEC)
             if reason not in ("rate_limited", "request_failed") or attempt == WAREHOUSE_ATTEMPTS:
                 raise
             await asyncio.sleep(WAREHOUSE_PAGE_DELAY_SEC)
