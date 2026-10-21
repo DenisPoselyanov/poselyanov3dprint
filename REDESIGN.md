@@ -511,7 +511,11 @@ green, teal, pink, red` + «Авто» (колір за типом акції). 
 - `PUT /api/orders/{id}/status` приймає усі 8 статусів, для `shipped` вимагає ТТН, шле клієнту повідомлення (`build_client_status_update`); недоставлене не блокує зміну (`client_notified`).
   Повідомлення в каналі замовлень для `printing…delivered` поки не оновлюється (етап 4).
 - `GET /my/orders` (initData) — замовлення покупця з позиціями й кроком трекера (`step`); без username, нотатки, STL.
-- Лишилось в етапі 3: доставка (НП/УП), `POST /reviews` + запит відгуку через 3 дні, фронт кошика/успіху/«Моїх замовлень», приймання нових полів з `POST /order`.
+- `POST /order` приймає `delivery_method`, `city(_ref)`, `branch(_ref)`, `recipient_name`, `phone` (нормалізується до +380…), `pay_method`, `promotion_id`, `gift_product_id`;
+  для НП/УП обовʼязкові отримувач, телефон, місто, відділення; без `delivery_method` — стара поведінка. Персоналізація з `customValue` розбивається на `personalization`/`personalization_note`.
+- `services/delivery.py`: `GET /delivery/np/cities?q=`, `GET /delivery/np/warehouses?city=&kind=` (кеш: міста 24 год, відділення 3 год; 90 запитів/хв на користувача; 503 `unavailable` → фронт показує текстове поле),
+  `GET /api/config` → `delivery_methods` (`np` лише з `NOVAPOSHTA_API_KEY`, `self` завжди). **Укрпошта не підключена** — довідник не перевірений, тож її немає в `delivery_methods`.
+- Лишилось в етапі 3: `POST /reviews` + запит відгуку через 3 дні, фронт кошика/успіху/«Моїх замовлень».
 
 ### Етап 4 — Адмінка: оболонка і робота із замовленнями
 - Нова оболонка (розд. 4.0) у стилі магазину, шухляди, Ctrl+K.

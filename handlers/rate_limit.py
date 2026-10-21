@@ -62,7 +62,27 @@ def allow_event(user_id: int) -> bool:
     return True
 
 
+_LOOKUP_MAX_PER_WINDOW = 90
+_lookup_calls: dict[int, list[float]] = {}
+
+
+def allow_delivery_lookup(user_id: int) -> bool:
+    """Довідники міст/відділень: не більше 90 запитів на користувача за хвилину."""
+    now = time.monotonic()
+    recent = [t for t in _lookup_calls.get(user_id, ()) if now - t < _EVENT_WINDOW_SEC]
+    if len(recent) >= _LOOKUP_MAX_PER_WINDOW:
+        _lookup_calls[user_id] = recent
+        return False
+    recent.append(now)
+    _lookup_calls[user_id] = recent
+    if len(_lookup_calls) > 10_000:
+        for uid in [u for u, ts in _lookup_calls.items() if not ts or now - ts[-1] >= _EVENT_WINDOW_SEC]:
+            _lookup_calls.pop(uid, None)
+    return True
+
+
 def reset_rate_limits() -> None:
     """Скидає in-memory cooldown (корисно для тестів)."""
     _last_call.clear()
     _event_calls.clear()
+    _lookup_calls.clear()

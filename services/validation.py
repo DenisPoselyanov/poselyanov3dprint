@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from catalog_store import (
     CUSTOM_PRODUCTS_CACHE,
     FILAMENTS_CACHE,
@@ -15,6 +17,70 @@ from services.pricing import split_discounts
 from services.promotions import compute_order_raw_discount
 
 CUSTOM_VALUE_MAX = 300
+_NOTE_SEPARATOR = " · побажання:"
+
+
+def split_personalization(custom_value: str) -> tuple[str, str]:
+    """«текст · побажання: …» -> (текст, побажання)."""
+    text, sep, note = custom_value.partition(_NOTE_SEPARATOR)
+    return text.strip()[:200], (note.strip()[:200] if sep else "")
+
+
+def normalize_phone(raw: str | None) -> str | None:
+    """Український номер у вигляді +380XXXXXXXXX; None — якщо не схоже на номер."""
+    digits = re.sub(r"\D", "", str(raw or ""))
+    if len(digits) == 10 and digits.startswith("0"):
+        digits = "38" + digits
+    elif len(digits) == 9:
+        digits = "380" + digits
+    if len(digits) == 12 and digits.startswith("380"):
+        return "+" + digits
+    return None
+
+
+def validate_checkout_fields(data: dict) -> tuple[bool, dict | str]:
+    """Поля доставки/контакту з оформлення. Порожній delivery_method — стара поведінка (без вимог)."""
+    method = str(data.get("delivery_method") or "").strip()
+    fields: dict = {"source": "miniapp"}
+    if data.get("promotion_id"):
+        fields["promotion_id"] = str(data["promotion_id"])[:64]
+    if data.get("gift_product_id"):
+        fields["gift_product_id"] = data["gift_product_id"]
+    pay = str(data.get("pay_method") or "").strip()
+    if pay in ("card", "cod"):
+        fields["pay_method"] = pay
+    if not method:
+        return True, fields
+    if method not in ("np", "up", "self"):
+        return False, "Невідомий спосіб доставки"
+    fields["delivery_method"] = method
+    name = str(data.get("recipient_name") or "").strip()
+    phone = normalize_phone(data.get("phone"))
+    if name:
+        fields["recipient_name"] = name[:100]
+    if phone:
+        fields["phone"] = phone
+    if method == "self":
+        return True, fields
+    if not name:
+        return False, "Вкажи ім'я та прізвище отримувача"
+    if not phone:
+        return False, "Для доставки потрібен номер телефону"
+    city = str(data.get("city") or "").strip()
+    branch = str(data.get("branch") or "").strip()
+    if not city:
+        return False, "Обери місто доставки"
+    if not branch:
+        return False, "Обери відділення або поштомат"
+    fields.update(
+        city=city[:200],
+        city_ref=str(data.get("city_ref") or "").strip()[:100],
+        branch=branch[:300],
+        branch_ref=str(data.get("branch_ref") or "").strip()[:100],
+    )
+    if pay not in ("card", "cod"):
+        fields["pay_method"] = "card"
+    return True, fields
 
 
 def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
@@ -90,9 +156,12 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
 
         if not is_contract:
             subtotal += price * qty
+        personalization, personalization_note = split_personalization(custom_value)
         normalized.append(
             {
                 "product_id": pid,
+                "personalization": personalization,
+                "personalization_note": personalization_note,
                 "product_name": name,
                 "price": price,
                 "quantity": qty,

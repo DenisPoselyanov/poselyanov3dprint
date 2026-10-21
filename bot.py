@@ -171,15 +171,16 @@ from services.users import (
     save_user_id,
     set_blocked,
 )
-from services.validation import validate_order_payload
+from services.validation import validate_checkout_fields, validate_order_payload
 from services.notifications import notify_coupon_created
 from handlers.register import (
     TELEGRAM_ALLOWED_UPDATES,
     configure_bot_commands,
     register_telegram_handlers,
 )
-from handlers.rate_limit import allow_event, command_cooldown
+from handlers.rate_limit import allow_delivery_lookup, allow_event, command_cooldown
 from routes.setup import register_http_routes
+import services.delivery as delivery
 
 BOT_TOKEN = config.BOT_TOKEN
 OWNER_ID = config.OWNER_ID
@@ -2034,6 +2035,10 @@ async def handle_order(request):
     if not ok:
         return web.json_response({"ok": False, "error": result}, status=400, headers=cors_headers(request))
 
+    ok, checkout = validate_checkout_fields(data)
+    if not ok:
+        return web.json_response({"ok": False, "error": checkout}, status=400, headers=cors_headers(request))
+
     items = result["items"]
     total_price = result["total_price"]
     coupon_discount = result.get("coupon_discount", 0)
@@ -2078,6 +2083,7 @@ async def handle_order(request):
                 save_order,
                 user_id or 0, username, first_name, items, total_price, comment,
                 gift, coupon_code, total_discount, price_pending, promotion_discount,
+                checkout,
             )
         except CouponConsumptionError as e:
             return web.json_response(
@@ -2834,6 +2840,46 @@ def _query_int(request: web.Request, name: str, default: int) -> int:
         return int(request.query.get(name, default))
     except (TypeError, ValueError):
         return default
+
+
+async def handle_get_config(request: web.Request):
+    """Публічна конфігурація магазину: доступні способи доставки."""
+    return web.json_response(
+        {"delivery_methods": delivery.available_methods()}, headers=cors_headers(request)
+    )
+
+
+async def _delivery_lookup(request: web.Request, fetch):
+    """Спільна обгортка довідників: авторизація, ліміт, відмова API -> текстове поле у фронті."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if not allow_delivery_lookup(user_id):
+        return web.json_response({"ok": False, "error": "rate_limited"}, status=429, headers=cors_headers(request))
+    try:
+        items = await fetch()
+    except delivery.DeliveryUnavailable:
+        return web.json_response(
+            {"ok": False, "error": "unavailable", "items": []}, status=503, headers=cors_headers(request)
+        )
+    return web.json_response({"ok": True, "items": items}, headers=cors_headers(request))
+
+
+async def handle_np_cities(request: web.Request):
+    """Пошук міста, смт чи села для Нової Пошти: ?q="""
+    return await _delivery_lookup(request, lambda: delivery.np_cities(request.query.get("q", "")))
+
+
+async def handle_np_warehouses(request: web.Request):
+    """Відділення й поштомати НП: ?city=<ref>&kind=all|branch|postomat"""
+    return await _delivery_lookup(
+        request,
+        lambda: delivery.np_warehouses(request.query.get("city", ""), request.query.get("kind", "all")),
+    )
 
 
 async def handle_get_hits(request: web.Request):
