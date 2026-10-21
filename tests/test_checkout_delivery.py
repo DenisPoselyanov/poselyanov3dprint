@@ -114,3 +114,95 @@ def test_np_call_without_key_is_unavailable(monkeypatch):
     monkeypatch.setattr(delivery.config, "NOVAPOSHTA_API_KEY", "")
     with pytest.raises(delivery.DeliveryUnavailable):
         asyncio.run(delivery._np_call("Address", "getWarehouses", {}))
+
+
+def _wh(n, postomat_every=0):
+    out = []
+    for i in range(n):
+        post = postomat_every and i % postomat_every == 0
+        out.append({"Ref": f"r{i}", "Number": str(i), "Description": f"W{i}",
+                    "CategoryOfWarehouse": "Postomat" if post else "Branch"})
+    return out
+
+
+def _paged_fake(total, calls, fail_on_page=None, postomat_every=0):
+    items = _wh(total, postomat_every)
+
+    async def fake_call(model, method, props):
+        page, limit = int(props["Page"]), int(props["Limit"])
+        calls.append(page)
+        if fail_on_page == page:
+            raise delivery.DeliveryUnavailable("request_failed")
+        return items[(page - 1) * limit: page * limit]
+
+    return fake_call
+
+
+def test_np_warehouses_multi_page(monkeypatch):
+    delivery.clear_cache()
+    calls = []
+    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1120, calls))
+    res = asyncio.run(delivery.np_warehouses("c"))
+    assert len(res) == 1120 and res[-1]["ref"] == "r1119"
+    assert calls == [1, 2, 3]
+
+
+def test_np_warehouses_exact_page_multiple(monkeypatch):
+    delivery.clear_cache()
+    calls = []
+    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1000, calls))
+    assert len(asyncio.run(delivery.np_warehouses("c"))) == 1000
+    assert calls == [1, 2, 3]  # третя порожня сторінка завершує цикл
+
+
+def test_np_warehouses_kind_filter_across_pages(monkeypatch):
+    delivery.clear_cache()
+    calls = []
+    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1200, calls, postomat_every=3))
+    post = asyncio.run(delivery.np_warehouses("c", "postomat"))
+    branch = asyncio.run(delivery.np_warehouses("c", "branch"))
+    assert len(post) == 400 and len(branch) == 800
+    assert all(w["kind"] == "postomat" for w in post)
+    assert any(int(w["number"]) > 1000 for w in branch)
+
+
+def test_np_warehouses_page_cap(monkeypatch):
+    delivery.clear_cache()
+    calls = []
+
+    async def endless(model, method, props):
+        calls.append(int(props["Page"]))
+        return _wh(500)
+
+    monkeypatch.setattr(delivery, "_np_call", endless)
+    res = asyncio.run(delivery.np_warehouses("c"))
+    assert calls == list(range(1, delivery.WAREHOUSE_MAX_PAGES + 1))
+    assert len(res) == 500 * delivery.WAREHOUSE_MAX_PAGES
+
+
+def test_np_warehouses_partial_failure_short_cache(monkeypatch):
+    delivery.clear_cache()
+    calls = []
+    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1200, calls, fail_on_page=2))
+    res = asyncio.run(delivery.np_warehouses("c"))
+    assert len(res) == 500
+    exp = delivery._cache[("np_wh", "c", "all")][0]
+    assert exp - delivery.time.monotonic() <= delivery.WAREHOUSE_PARTIAL_TTL_SEC + 1
+
+
+def test_np_warehouses_first_page_failure_raises(monkeypatch):
+    delivery.clear_cache()
+    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1200, [], fail_on_page=1))
+    with pytest.raises(delivery.DeliveryUnavailable):
+        asyncio.run(delivery.np_warehouses("c"))
+    assert ("np_wh", "c", "all") not in delivery._cache
+
+
+def test_np_warehouses_cache_hit_no_recall(monkeypatch):
+    delivery.clear_cache()
+    calls = []
+    monkeypatch.setattr(delivery, "_np_call", _paged_fake(700, calls))
+    asyncio.run(delivery.np_warehouses("c"))
+    n = len(calls)
+    asyncio.run(delivery.np_warehouses("c"))
+    assert len(calls) == n

@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 NP_URL = "https://api.novaposhta.ua/v2.0/json/"
 CITY_TTL_SEC = 24 * 3600
 WAREHOUSE_TTL_SEC = 3 * 3600
+WAREHOUSE_PAGE_SIZE = 500
+WAREHOUSE_MAX_PAGES = 10  # запобіжник: до 5000 відділень на місто
+WAREHOUSE_PARTIAL_TTL_SEC = 60  # неповний список кешуємо ненадовго
 REQUEST_TIMEOUT_SEC = 8
 CACHE_MAX = 2000
 
@@ -148,9 +151,30 @@ async def np_warehouses(city_ref: str, kind: str = "all", limit: int = 500) -> l
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    data = await _np_call(
-        "Address", "getWarehouses", {"CityRef": city_ref, "Limit": str(limit), "Language": "UA"}
-    )
-    result = _normalize_warehouses(data, kind)
-    _cache_put(key, result, WAREHOUSE_TTL_SEC)
+    page_size = max(1, min(int(limit or WAREHOUSE_PAGE_SIZE), WAREHOUSE_PAGE_SIZE))
+    raw: list = []
+    partial = False
+    for page in range(1, WAREHOUSE_MAX_PAGES + 1):
+        try:
+            data = await _np_call(
+                "Address",
+                "getWarehouses",
+                {"CityRef": city_ref, "Limit": str(page_size), "Page": str(page), "Language": "UA"},
+            )
+        except DeliveryUnavailable:
+            if page == 1:
+                raise
+            logger.warning(
+                "НП getWarehouses: сторінка %s не завантажилась, повертаю %s відділень (неповний список)",
+                page, len(raw),
+            )
+            partial = True
+            break
+        raw.extend(data)
+        if len(data) < page_size:
+            break
+    else:
+        logger.warning("НП getWarehouses: досягнуто ліміт %s сторінок для %s", WAREHOUSE_MAX_PAGES, city_ref)
+    result = _normalize_warehouses(raw, kind)
+    _cache_put(key, result, WAREHOUSE_PARTIAL_TTL_SEC if partial else WAREHOUSE_TTL_SEC)
     return result

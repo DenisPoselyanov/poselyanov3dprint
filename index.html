@@ -3641,8 +3641,9 @@ let SHOP_CONFIG = { delivery_methods: ['np', 'self'], np_lookup: false };
 const CHK = {
   method: 'np', city: '', cityRef: '', branch: '', branchRef: '', kind: 'all',
   name: '', phone: '', pay: 'card',
-  cities: [], warehouses: [], whLoading: false, cityLoading: false, lookupDown: false, errors: {},
+  cities: [], warehouses: [], whQuery: '', whLoading: false, cityLoading: false, lookupDown: false, errors: {},
 };
+const WH_RENDER_MAX = 150; // скільки відділень малюємо за раз; решта — через пошук
 let cityTimer = null;
 let cityReq = 0;
 let pendingCouponCode = '';
@@ -3699,8 +3700,25 @@ function chkWarehousesHtml() {
   if (!CHK.warehouses.length) {
     return '<div class="chk-hint warn">У цьому населеному пункті немає відділень Нової Пошти. Обери найближче місто.</div>';
   }
-  return CHK.warehouses.map((w, i) =>
-    `<button type="button" class="chk-opt" aria-pressed="${w.ref === CHK.branchRef}" onclick="chkPickBranch(${i})">${escapeHtml(w.name)}</button>`).join('');
+  const q = CHK.whQuery.trim().toLowerCase();
+  const rows = [];
+  let matched = 0;
+  for (let i = 0; i < CHK.warehouses.length; i++) {
+    const w = CHK.warehouses[i];
+    if (q && !(`${w.number} ${w.name}`.toLowerCase().includes(q))) continue;
+    matched++;
+    if (rows.length < WH_RENDER_MAX) {
+      rows.push(`<button type="button" class="chk-opt" aria-pressed="${w.ref === CHK.branchRef}" onclick="chkPickBranch(${i})">${escapeHtml(w.name)}</button>`);
+    }
+  }
+  if (!matched) return '<div class="chk-hint" style="padding:10px 12px">Нічого не знайдено — зміни запит.</div>';
+  if (matched > rows.length) rows.push(`<div class="chk-hint" style="padding:10px 12px">Показано ${rows.length} із ${matched}. Уточни номер або адресу в пошуку.</div>`);
+  return rows.join('');
+}
+function chkWhFilter(value) {
+  CHK.whQuery = value;
+  const el = document.getElementById('chk-wh-list');
+  if (el) el.innerHTML = chkWarehousesHtml();
 }
 function chkNpHtml() {
   const err = CHK.errors['chk-branch'];
@@ -3714,6 +3732,8 @@ function chkNpHtml() {
     if (CHK.cityRef) {
       html += `<div class="chk-seg">${[['all', 'Усі'], ['branch', 'Відділення'], ['postomat', 'Поштомати']].map(([k, l]) =>
         `<button type="button" class="cat-chip" aria-pressed="${CHK.kind === k}" onclick="chkSetKind('${k}')">${l}</button>`).join('')}</div>
+        ${CHK.warehouses.length > 15 ? `<input class="chk-input" id="chk-wh-q" type="search" value="${escapeAttr(CHK.whQuery)}" maxlength="60"
+          placeholder="Пошук за номером або адресою" autocomplete="off" oninput="chkWhFilter(this.value)">` : ''}
         <div class="chk-list" id="chk-wh-list">${chkWarehousesHtml()}</div>
         ${err ? `<div class="chk-err">${escapeHtml(err)}</div>` : ''}`;
     } else {
@@ -3823,7 +3843,7 @@ function chkPickCity(i) {
 async function loadWarehouses() {
   if (!CHK.cityRef) return;
   const ref = CHK.cityRef;
-  CHK.whLoading = true; CHK.warehouses = [];
+  CHK.whLoading = true; CHK.warehouses = []; CHK.whQuery = '';
   try {
     const data = await apiGet(`/delivery/np/warehouses?city=${encodeURIComponent(ref)}&kind=${CHK.kind}`);
     if (ref !== CHK.cityRef) return;
