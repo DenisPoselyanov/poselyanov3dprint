@@ -167,11 +167,12 @@ def save_order(
     price_pending=0,
     promotion_discount=0,
     extra=None,
+    merge=True,
 ):
     conn = db_connect()
     uid = int(user_id or 0)
     extra_fields = _clean_extra(extra)
-    active = _find_active_order(uid) if uid > 0 else None
+    active = _find_active_order(uid) if uid > 0 and merge else None
 
     if active:
         order_id = int(active["id"])

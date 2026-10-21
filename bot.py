@@ -1546,7 +1546,7 @@ def _build_admin_batch(
 
     rows = []
     for s in sections:
-        if s.get("status") in ("confirmed", "cancelled"):
+        if s.get("status") in ("confirmed", "cancelled", *FULFILMENT_STATUS_LABELS):
             continue
         oid = s["order_id"]
         if s.get("price_pending"):
@@ -2518,10 +2518,12 @@ async def handle_set_item_printed(request: web.Request):
             {"ok": False, "error": "Позицію не знайдено"}, status=404, headers=cors_headers(request)
         )
     result = {"ok": True, **state}
-    target = next_status_after_print(state["status"], state["total"], state["printed"])
-    if target and is_valid_transition(state["status"], target):
-        order_id = state["order_id"]
-        order, _ = await run_db(get_order_with_items, order_id)
+    order_id = state["order_id"]
+    # Статус перечитуємо: за цей час його могла змінити інша відмітка чи адмін.
+    order, _ = await run_db(get_order_with_items, order_id)
+    current_status = (order or {}).get("status") or state["status"]
+    target = next_status_after_print(current_status, state["total"], state["printed"])
+    if target and is_valid_transition(current_status, target):
         await _sync_order_status_to_telegram(order_id, target)
         result["status"] = target
         result["client_notified"] = await _notify_client_status(order or {"id": order_id}, target)
@@ -2548,7 +2550,7 @@ async def handle_create_manual_order(request: web.Request):
     def _create() -> int:
         order_id, _ = save_order(
             parsed["user_id"], parsed["username"], parsed["first_name"], parsed["items"],
-            parsed["total_price"], parsed["comment"], extra=parsed["extra"],
+            parsed["total_price"], parsed["comment"], extra=parsed["extra"], merge=False,
         )
         if parsed["status"] != "new":
             update_order_status(order_id, parsed["status"])
@@ -3702,6 +3704,12 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     write_button = btn
                 elif btn.url and ("t.me/" in btn.url or btn.url.startswith("tg://user?id=")):
                     write_button = btn
+
+    target_status = {"confirm": "confirmed", "draft": "draft", "cancel": "cancelled"}.get(action)
+    if target_status:
+        current, _ = await run_db(get_order_with_items, order_id)
+        if current and not is_valid_transition(current.get("status") or "new", target_status):
+            return  # застаріла кнопка: замовлення вже далі по ланцюжку
 
     if action == "confirm":
         await run_db(update_order_status, order_id, "confirmed")

@@ -217,3 +217,39 @@ def test_print_flags_drive_status(orders):
     assert orders.next_status_after_print("printing", 2, 0) is None
     assert orders.next_status_after_print("shipped", 2, 2) is None
     assert orders.set_item_printed(99999, True) is None
+
+
+def test_manual_order_does_not_merge_into_open_order(orders):
+    first = _make_order(orders, user_id=5)
+    second, is_new = orders.save_order(
+        5, "@u", "Тест", [{"product_id": 0, "product_name": "Інше", "price": 50, "quantity": 1}], 50, "",
+        extra={"source": "instagram"}, merge=False,
+    )
+    assert is_new and second != first
+    assert _row(first)[0]["source"] != "instagram"
+
+
+def test_stale_channel_button_cannot_move_order_back(orders):
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    import bot
+    from db_core import db_connect
+
+    conn = db_connect()
+    conn.execute("CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, stl_link TEXT)")
+    conn.commit()
+    conn.close()
+
+    oid = _make_order(orders)
+    orders.update_order_status(oid, "printing")
+
+    query = MagicMock()
+    query.answer = AsyncMock()
+    query.data = f"confirm_{oid}"
+    query.from_user.id = bot.OWNER_ID
+    query.message.reply_markup = None
+    update = MagicMock(callback_query=query)
+
+    asyncio.run(bot.order_action(update, MagicMock()))
+    assert _row(oid)[0]["status"] == "printing"

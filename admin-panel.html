@@ -6186,6 +6186,16 @@
         ];
         const ORDER_DELIVERY_LABELS = { np: 'Нова Пошта', up: 'Укрпошта', self: 'Самовивіз' };
         const ORDER_PAY_LABELS = { card: 'Карткою', cod: 'Накладений платіж' };
+        // Підтвердження: у Telegram — рідний попап (до 256 символів), поза ним — confirm() браузера.
+        function askConfirm(message) {
+            const tg = window.Telegram?.WebApp;
+            if (tg?.initData && typeof tg.showConfirm === 'function' && tg.isVersionAtLeast?.('6.2')) {
+                const text = message.length > 250 ? message.slice(0, 247) + '…' : message;
+                return new Promise(resolve => tg.showConfirm(text, ok => resolve(!!ok)));
+            }
+            return Promise.resolve(window.confirm(message));
+        }
+
         let ordersTab = 'all';
         let ordersCounts = {};
         let ordersSearch = '';
@@ -6686,7 +6696,7 @@
             const text = (document.getElementById(`order-msg-text-${orderId}`)?.value || '').trim();
             if (!text) { showToast('Спочатку оберіть шаблон або введіть текст', 'error'); return; }
             if (text.includes('[вставте')) { showToast('Заповніть місце в квадратних дужках перед відправкою', 'error'); return; }
-            if (!confirm(`Надіслати клієнту замовлення #${orderId} повідомлення?\n\n${text}`)) return;
+            if (!(await askConfirm(`Надіслати клієнту замовлення #${orderId}?\n\n${text}`))) return;
             try {
                 const res = await fetch(API_BASE + `/orders/${orderId}/message`, {
                     method: 'POST',
@@ -6820,6 +6830,8 @@
 
         async function openOrderPricing(orderId) {
             expandedOrderId = orderId;
+            ordersTab = 'all';
+            ordersView = 'list';
             switchPage('orders');
             await loadOrders();
             const card = document.getElementById(`order-card-${orderId}`);
@@ -7016,7 +7028,7 @@
                 shipped: `позначити «Відправлено» (ТТН ${ttn})`,
                 delivered: 'позначити «Отримано»',
             }[status] || status;
-            if (!confirm(`#${orderId}: ${actionLabel}?\n\nКлієнт отримає повідомлення в боті.`)) return;
+            if (!(await askConfirm(`#${orderId}: ${actionLabel}?\n\nКлієнт отримає повідомлення в боті.`))) return;
 
             try {
                 const res = await fetch(API_BASE + `/orders/${orderId}/status`, {
