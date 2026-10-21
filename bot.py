@@ -198,6 +198,7 @@ from handlers.register import (
 from handlers.rate_limit import allow_delivery_lookup, allow_event, allow_review_upload, command_cooldown
 from routes.setup import register_http_routes
 import services.delivery as delivery
+from services.manual_orders import orders_to_csv, parse_manual_order
 
 BOT_TOKEN = config.BOT_TOKEN
 OWNER_ID = config.OWNER_ID
@@ -2524,6 +2525,99 @@ async def handle_set_item_printed(request: web.Request):
         result["status"] = target
         result["client_notified"] = await _notify_client_status(order or {"id": order_id}, target)
     return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_create_manual_order(request: web.Request):
+    """Замовлення вручну (Instagram, OLX, особисто): одразу підтверджене, без повідомлення клієнту."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    ok, parsed = parse_manual_order(data if isinstance(data, dict) else {})
+    if not ok:
+        return web.json_response({"ok": False, "error": parsed}, status=400, headers=cors_headers(request))
+
+    def _create() -> int:
+        order_id, _ = save_order(
+            parsed["user_id"], parsed["username"], parsed["first_name"], parsed["items"],
+            parsed["total_price"], parsed["comment"], extra=parsed["extra"],
+        )
+        if parsed["status"] != "new":
+            update_order_status(order_id, parsed["status"])
+        return order_id
+
+    order_id = await run_db(_create)
+    return web.json_response({"ok": True, "id": order_id}, headers=cors_headers(request))
+
+
+async def handle_send_order_message(request: web.Request):
+    """Надіслати клієнту в бот текст (шаблон з адмінки, відредагований адміном)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        order_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+        text = str(data.get("text") or "").strip()
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    if not text or len(text) > 2000:
+        return web.json_response(
+            {"ok": False, "error": "Текст має бути від 1 до 2000 символів"}, status=400, headers=cors_headers(request)
+        )
+
+    order, _ = await run_db(get_order_with_items, order_id)
+    if not order:
+        return web.json_response(
+            {"ok": False, "error": "Замовлення не знайдено"}, status=404, headers=cors_headers(request)
+        )
+    user_id = int(order.get("user_id") or 0)
+    if user_id <= 0:
+        return web.json_response(
+            {"ok": False, "error": "У цього замовлення немає Telegram-клієнта — надішліть повідомлення вручну"},
+            status=409,
+            headers=cors_headers(request),
+        )
+    paragraphs = "".join(f"<p>{html.escape(line)}</p>" for line in text.splitlines() if line.strip())
+    try:
+        await send_rich_message(bot_app.bot, user_id, paragraphs)
+    except Exception as e:
+        logger.warning("Не вдалось надіслати повідомлення клієнту %s (замовлення #%s): %s", user_id, order_id, e)
+        return web.json_response(
+            {"ok": False, "error": "Клієнт не отримав повідомлення (можливо, заблокував бота)"},
+            status=502,
+            headers=cors_headers(request),
+        )
+    return web.json_response({"ok": True}, headers=cors_headers(request))
+
+
+async def handle_export_orders_csv(request: web.Request):
+    """CSV усіх (або відфільтрованих за status) замовлень."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    statuses = expand_status_filter(request.query.get("status"))
+    rows = await run_db(list_orders, limit=5000, statuses=statuses or None)
+    body = chr(0xFEFF) + orders_to_csv(rows)  # BOM, щоб Excel розпізнав UTF-8
+    headers = {
+        **cors_headers(request),
+        "Content-Disposition": 'attachment; filename="orders.csv"',
+    }
+    return web.Response(body=body.encode("utf-8"), content_type="text/csv", charset="utf-8", headers=headers)
 
 
 async def handle_get_order_counts(request: web.Request):

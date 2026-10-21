@@ -738,6 +738,28 @@
             .queue-order, .queue-state { display: none; }
         }
 
+        .orders-view-toggle { display: inline-flex; border: 1px solid var(--border-alt); border-radius: 8px; overflow: hidden; }
+        .orders-view-toggle button { padding: 8px 12px; border: 0; background: var(--bg-input); color: var(--text-main); font-size: 13px; font-weight: 600; cursor: pointer; }
+        .orders-view-toggle button.active { background: var(--bg-tab-active); color: var(--accent-text); }
+        .kanban { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
+        .kanban-col { background: var(--bg-section); border: 1px dashed transparent; border-radius: 12px; padding: 10px; min-height: 120px; display: flex; flex-direction: column; gap: 8px; }
+        .kanban-col.drop-ok { border-color: var(--accent); background: var(--bg-tab-active); }
+        .kanban-col-head { display: flex; justify-content: space-between; font-size: 13px; }
+        .kanban-col-head span { color: var(--text-muted); font-weight: 700; }
+        .kanban-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; cursor: grab; display: flex; flex-direction: column; gap: 4px; }
+        .kanban-card-top { display: flex; align-items: center; gap: 6px; }
+        .kanban-sum { margin-left: auto; font-weight: 800; font-size: 13px; }
+        .kanban-name { font-size: 13px; font-weight: 600; }
+        .kanban-items { font-size: 12px; color: var(--text-muted); }
+        .kanban-next { margin-top: 4px; padding: 6px 10px; font-size: 12px; }
+        .manual-item { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) 56px 76px auto; gap: 6px; margin-bottom: 6px; }
+        .manual-item input, .manual-item select { min-width: 0; padding: 8px; border-radius: 8px; border: 1px solid var(--border-input); background: var(--bg-input); color: var(--text-main); font: inherit; font-size: 13px; }
+        .manual-total { display: flex; justify-content: space-between; font-weight: 800; margin: 8px 0 14px; }
+        @media (max-width: 600px) {
+            .manual-item { grid-template-columns: 1fr 1fr 56px 76px auto; }
+            .manual-item .manual-product { grid-column: 1 / -1; }
+        }
+
         .order-actions {
             margin-top: 14px;
             display: flex;
@@ -2177,7 +2199,13 @@
                             <input type="checkbox" id="ordersPendingFilter" onchange="loadOrders()">
                             Лише потребують ціни
                         </label>
+                        <div class="orders-view-toggle">
+                            <button type="button" id="ordersViewList" class="active" onclick="setOrdersView('list')">Список</button>
+                            <button type="button" id="ordersViewKanban" onclick="setOrdersView('kanban')">Канбан</button>
+                        </div>
+                        <button class="btn btn-secondary" type="button" onclick="exportOrdersCsv()">⬇️ CSV</button>
                         <button class="btn btn-secondary" type="button" onclick="loadOrders()">🔄 Оновити</button>
+                        <button class="btn btn-primary" type="button" onclick="openManualOrderModal()">➕ Замовлення вручну</button>
                     </div>
                 </div>
                 <div id="ordersTabs" class="orders-tabs"></div>
@@ -2576,6 +2604,79 @@
                 <div class="form-buttons">
                     <button type="button" class="btn btn-secondary" onclick="closeFilamentModal()">Скасувати</button>
                     <button type="submit" class="btn btn-primary" id="filamentSubmitBtn">✅ Зберегти філамент</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="manualOrderModal" class="modal">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header">
+                <span>➕ Замовлення вручну</span>
+                <button class="btn btn-secondary" type="button" onclick="closeManualOrderModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+            </div>
+            <form id="manualOrderForm" onsubmit="submitManualOrder(event)">
+                <div class="form-group required">
+                    <label>Імʼя клієнта</label>
+                    <input type="text" name="customer_name" required maxlength="100">
+                </div>
+                <div class="form-group">
+                    <label>Джерело</label>
+                    <select name="source">
+                        <option value="instagram">Instagram</option>
+                        <option value="olx">OLX</option>
+                        <option value="telegram">Telegram</option>
+                        <option value="offline">Особисто</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>@username (необовʼязково)</label>
+                    <input type="text" name="username" maxlength="64" placeholder="@name">
+                </div>
+                <div class="form-group">
+                    <label>Телефон</label>
+                    <input type="tel" name="phone" placeholder="+380501234567">
+                </div>
+                <div class="form-group">
+                    <label>Telegram ID (якщо клієнт є в боті — отримуватиме повідомлення про статуси)</label>
+                    <input type="number" name="user_id" min="0" step="1">
+                </div>
+                <div class="form-group">
+                    <label>Позиції</label>
+                    <datalist id="manualProductsList"></datalist>
+                    <div id="manualItems"></div>
+                    <button class="btn btn-secondary" type="button" onclick="addManualItemRow()">➕ Ще позиція</button>
+                </div>
+                <div class="manual-total"><span>Разом</span><span id="manualTotal">0 ₴</span></div>
+                <div class="form-group">
+                    <label>Доставка</label>
+                    <select name="delivery_method">
+                        <option value="">Не вказано</option>
+                        <option value="np">Нова Пошта</option>
+                        <option value="up">Укрпошта</option>
+                        <option value="self">Самовивіз</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Місто і відділення</label>
+                    <input type="text" name="city" placeholder="Місто" maxlength="100" style="margin-bottom:6px;">
+                    <input type="text" name="branch" placeholder="Відділення / адреса" maxlength="200">
+                </div>
+                <div class="form-group">
+                    <label>Оплата</label>
+                    <select name="pay_method">
+                        <option value="">Не вказано</option>
+                        <option value="card">Карткою</option>
+                        <option value="cod">Накладений платіж</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Коментар</label>
+                    <textarea name="comment" rows="2" maxlength="1000"></textarea>
+                </div>
+                <div style="display:flex; gap:10px; justify-content:flex-end;">
+                    <button class="btn btn-secondary" type="button" onclick="closeManualOrderModal()">Скасувати</button>
+                    <button class="btn btn-primary" type="submit">Створити замовлення</button>
                 </div>
             </form>
         </div>
@@ -3101,7 +3202,7 @@
             } catch (_) {}
             updateHeaderPrimaryAction();
             updateHeaderStat();
-            if (page === 'orders') loadOrders();
+            if (page === 'orders') { syncOrdersViewUi(); loadOrders(); }
             if (page === 'queue') loadPrintQueue();
             if (page === 'coupons') loadCoupons();
             if (page === 'promotions') loadPromotions();
@@ -5804,7 +5905,8 @@
                 loading.style.display = 'flex';
                 list.style.opacity = '0.5';
                 const params = new URLSearchParams({ limit: '200' });
-                if (ordersTab !== 'all') params.set('status', ordersTab);
+                if (ordersView === 'kanban') params.set('status', 'new,draft,work,shipped');
+                else if (ordersTab !== 'all') params.set('status', ordersTab);
                 if (pendingOnly) params.set('pending_price', 'true');
                 const [res] = await Promise.all([
                     fetch(API_BASE + '/orders?' + params.toString()),
@@ -5843,6 +5945,7 @@
         }
 
         function renderOrdersList() {
+            if (ordersView === 'kanban') { renderOrdersKanban(); return; }
             const list = document.getElementById('ordersList');
             const empty = document.getElementById('ordersEmpty');
             const orders = allOrders.filter(orderMatchesSearch);
@@ -5898,6 +6001,251 @@
                 </div>`;
             }).join('');
             if (expandedOrderId) renderOrderDetails(expandedOrderId);
+        }
+
+        // ── Вигляд: список / канбан ──────────────────────────────────
+        const KANBAN_COLUMNS = [
+            { key: 'new', title: 'Нові', statuses: ['new', 'draft'], drop: null },
+            { key: 'confirmed', title: 'Підтверджені', statuses: ['confirmed'], drop: 'confirmed' },
+            { key: 'printing', title: 'Друкуються', statuses: ['printing'], drop: 'printing' },
+            { key: 'ready', title: 'Готові', statuses: ['ready'], drop: 'ready' },
+            { key: 'shipped', title: 'Відправлені', statuses: ['shipped'], drop: 'shipped' },
+        ];
+        let ordersView = (() => { try { return localStorage.getItem('adminOrdersView') === 'kanban' ? 'kanban' : 'list'; } catch (_) { return 'list'; } })();
+
+        function setOrdersView(view) {
+            ordersView = view === 'kanban' ? 'kanban' : 'list';
+            try { localStorage.setItem('adminOrdersView', ordersView); } catch (_) {}
+            expandedOrderId = null;
+            syncOrdersViewUi();
+            loadOrders();
+        }
+
+        function syncOrdersViewUi() {
+            document.getElementById('ordersTabs').style.display = ordersView === 'list' ? 'flex' : 'none';
+            document.getElementById('ordersViewList')?.classList.toggle('active', ordersView === 'list');
+            document.getElementById('ordersViewKanban')?.classList.toggle('active', ordersView === 'kanban');
+        }
+
+        // Дозволений перехід (як на сервері): лише вперед по ланцюжку, з new/draft — на будь-який крок.
+        function canDropOrder(order, target) {
+            if (!order || !target || order.status === target) return false;
+            const from = ORDER_CHAIN.findIndex(s => s.status === order.status);
+            const to = ORDER_CHAIN.findIndex(s => s.status === target);
+            return to !== -1 && (from === -1 || to > from);
+        }
+
+        let kanbanDragId = null;
+        function onKanbanDragStart(event, orderId) {
+            kanbanDragId = orderId;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', String(orderId));
+        }
+        function onKanbanDragOver(event, target) {
+            const order = allOrders.find(o => o.id === kanbanDragId);
+            if (canDropOrder(order, target)) {
+                event.preventDefault();
+                event.currentTarget.classList.add('drop-ok');
+            }
+        }
+        function onKanbanDragLeave(event) { event.currentTarget.classList.remove('drop-ok'); }
+        async function onKanbanDrop(event, target) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drop-ok');
+            const order = allOrders.find(o => o.id === kanbanDragId);
+            kanbanDragId = null;
+            if (canDropOrder(order, target)) await changeOrderStatus(order.id, target);
+        }
+
+        function renderOrdersKanban() {
+            const list = document.getElementById('ordersList');
+            const empty = document.getElementById('ordersEmpty');
+            const orders = allOrders.filter(orderMatchesSearch);
+            empty.style.display = 'none';
+            list.innerHTML = `<div class="kanban">${KANBAN_COLUMNS.map(col => {
+                const cards = orders.filter(o => col.statuses.includes(o.status || 'new'));
+                const dropAttrs = col.drop
+                    ? `ondragover="onKanbanDragOver(event, '${col.drop}')" ondragleave="onKanbanDragLeave(event)" ondrop="onKanbanDrop(event, '${col.drop}')"`
+                    : '';
+                return `
+                <div class="kanban-col" ${dropAttrs}>
+                    <div class="kanban-col-head"><b>${col.title}</b><span>${cards.length}</span></div>
+                    ${cards.map(o => {
+                        const next = nextOrderStatus(o.status || 'new');
+                        const summary = renderOrderItemsSummary(o);
+                        return `
+                        <div class="kanban-card" draggable="true" ondragstart="onKanbanDragStart(event, ${o.id})">
+                            <div class="kanban-card-top"><b>#${o.id}</b>${o.status === 'draft' ? '<span class="order-status-badge draft">Під питанням</span>' : ''}
+                                <span class="kanban-sum">${o.price_pending ? '⚠️' : `${o.total_price} ₴`}</span></div>
+                            <div class="kanban-name">${escapeHtml(o.first_name || o.username || '—')}</div>
+                            ${summary ? `<div class="kanban-items">${summary}</div>` : ''}
+                            ${o.ttn ? `<div class="kanban-items">ТТН ${escapeHtml(o.ttn)}</div>` : ''}
+                            ${next ? `<button class="btn btn-secondary kanban-next" type="button" onclick="advanceOrder(${o.id})">${ORDER_NEXT_LABEL[next]} →</button>` : ''}
+                        </div>`;
+                    }).join('')}
+                </div>`;
+            }).join('')}</div>`;
+        }
+
+        // ── Експорт CSV ──────────────────────────────────────────────
+        async function exportOrdersCsv() {
+            try {
+                const qs = ordersView === 'list' && ordersTab !== 'all' ? `?status=${encodeURIComponent(ordersTab)}` : '';
+                const res = await fetch(API_BASE + '/orders.csv' + qs);
+                if (!res.ok) throw new Error('Не вдалося сформувати CSV');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (e) {
+                showToast(e.message || 'Помилка експорту', 'error');
+            }
+        }
+
+        // ── Шаблони повідомлень клієнту ──────────────────────────────
+        const ORDER_MESSAGE_TEMPLATES = [
+            { key: 'requisites', label: 'Реквізити для оплати', text: (o) => `Замовлення №${o.id} підтверджено! Сума до сплати: ${o.total_price} ₴.\nРеквізити для оплати: [вставте реквізити]` },
+            { key: 'ready', label: 'Готово до відправки', text: (o) => `Замовлення №${o.id} надруковано й запаковано — відправлю найближчим часом.` },
+            { key: 'ttn', label: 'ТТН', text: (o) => `Відправив замовлення №${o.id}! ТТН: ${o.ttn || '[вставте ТТН]'}. Відстежити: novaposhta.ua` },
+            { key: 'review', label: 'Попросити відгук', text: (o) => `Як тобі замовлення №${o.id}? Буду вдячний за відгук у Mini App 💙` },
+        ];
+        const orderMessageCache = {};
+
+        function renderOrderMessageBlock(order) {
+            if (!(Number(order.user_id) > 0)) {
+                return '<div class="order-field"><label>Повідомлення клієнту</label><div class="order-card-meta">Замовлення без Telegram-клієнта — повідомлення в бот недоступні.</div></div>';
+            }
+            orderMessageCache[order.id] = order;
+            return `
+            <div class="order-field">
+                <label for="order-msg-tpl-${order.id}">Повідомлення клієнту в бот</label>
+                <select id="order-msg-tpl-${order.id}" class="order-field-input" onchange="fillOrderMessage(${order.id})">
+                    <option value="">Оберіть шаблон…</option>
+                    ${ORDER_MESSAGE_TEMPLATES.map(t => `<option value="${t.key}">${t.label}</option>`).join('')}
+                </select>
+                <textarea id="order-msg-text-${order.id}" class="order-field-input" rows="3" maxlength="2000" placeholder="Текст повідомлення — можна редагувати"></textarea>
+                <button class="btn btn-secondary" type="button" onclick="sendOrderMessage(${order.id})">📨 Надіслати в бот</button>
+            </div>`;
+        }
+
+        function fillOrderMessage(orderId) {
+            const key = document.getElementById(`order-msg-tpl-${orderId}`)?.value;
+            const tpl = ORDER_MESSAGE_TEMPLATES.find(t => t.key === key);
+            const order = orderMessageCache[orderId];
+            const ttnInput = document.getElementById(`order-ttn-${orderId}`);
+            const live = ttnInput && ttnInput.value.trim() ? { ...order, ttn: ttnInput.value.replace(/\s+/g, '') } : order;
+            document.getElementById(`order-msg-text-${orderId}`).value = tpl && order ? tpl.text(live) : '';
+        }
+
+        async function sendOrderMessage(orderId) {
+            const text = (document.getElementById(`order-msg-text-${orderId}`)?.value || '').trim();
+            if (!text) { showToast('Спочатку оберіть шаблон або введіть текст', 'error'); return; }
+            if (text.includes('[вставте')) { showToast('Заповніть місце в квадратних дужках перед відправкою', 'error'); return; }
+            if (!confirm(`Надіслати клієнту замовлення #${orderId} повідомлення?\n\n${text}`)) return;
+            try {
+                const res = await fetch(API_BASE + `/orders/${orderId}/message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                    body: JSON.stringify({ text }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося надіслати');
+                showToast('Повідомлення надіслано ✅', 'success');
+                document.getElementById(`order-msg-text-${orderId}`).value = '';
+                document.getElementById(`order-msg-tpl-${orderId}`).value = '';
+            } catch (e) {
+                showToast(e.message || 'Не вдалося надіслати', 'error');
+            }
+        }
+
+        // ── Замовлення вручну ────────────────────────────────────────
+        function manualItemRow() {
+            const filaments = (allFilaments || []).map(f => `<option value="${escapeAttr(f.name)}">${escapeHtml(f.name)}</option>`).join('');
+            return `
+            <div class="manual-item">
+                <input class="manual-product" list="manualProductsList" placeholder="Товар" oninput="onManualProductInput(this)">
+                <select class="manual-filament"><option value="">Колір…</option>${filaments}</select>
+                <input class="manual-qty" type="number" min="1" max="99" value="1" oninput="updateManualTotal()" aria-label="Кількість">
+                <input class="manual-price" type="number" min="0" step="1" placeholder="₴" oninput="updateManualTotal()" aria-label="Ціна">
+                <button type="button" class="btn btn-secondary" onclick="this.closest('.manual-item').remove(); updateManualTotal();" aria-label="Прибрати">✕</button>
+            </div>`;
+        }
+
+        function addManualItemRow() {
+            document.getElementById('manualItems').insertAdjacentHTML('beforeend', manualItemRow());
+        }
+
+        function onManualProductInput(input) {
+            const product = allProducts.find(p => String(p.name).toLowerCase() === input.value.trim().toLowerCase());
+            const row = input.closest('.manual-item');
+            row.dataset.productId = product ? product.id : '';
+            const price = product ? parseInt(product.price, 10) : NaN;
+            if (product && !Number.isNaN(price) && !row.querySelector('.manual-price').value) {
+                row.querySelector('.manual-price').value = price;
+            }
+            updateManualTotal();
+        }
+
+        function updateManualTotal() {
+            let total = 0;
+            document.querySelectorAll('#manualItems .manual-item').forEach(row => {
+                total += (parseInt(row.querySelector('.manual-qty').value, 10) || 0) * (parseInt(row.querySelector('.manual-price').value, 10) || 0);
+            });
+            document.getElementById('manualTotal').textContent = `${total} ₴`;
+        }
+
+        function openManualOrderModal() {
+            const form = document.getElementById('manualOrderForm');
+            form.reset();
+            document.getElementById('manualProductsList').innerHTML = (allProducts || [])
+                .map(p => `<option value="${escapeAttr(p.name)}"></option>`).join('');
+            document.getElementById('manualItems').innerHTML = manualItemRow();
+            updateManualTotal();
+            document.getElementById('manualOrderModal').classList.add('active');
+        }
+
+        function closeManualOrderModal() {
+            document.getElementById('manualOrderModal').classList.remove('active');
+        }
+
+        async function submitManualOrder(event) {
+            event.preventDefault();
+            const form = event.target;
+            const fd = new FormData(form);
+            const items = [...document.querySelectorAll('#manualItems .manual-item')].map(row => ({
+                product_id: row.dataset.productId || 0,
+                product_name: row.querySelector('.manual-product').value.trim(),
+                filament: row.querySelector('.manual-filament').value,
+                quantity: row.querySelector('.manual-qty').value,
+                price: row.querySelector('.manual-price').value,
+            })).filter(i => i.product_name);
+            const body = {
+                customer_name: fd.get('customer_name'), username: fd.get('username'), phone: fd.get('phone'),
+                user_id: fd.get('user_id'), source: fd.get('source'), delivery_method: fd.get('delivery_method'),
+                city: fd.get('city'), branch: fd.get('branch'), pay_method: fd.get('pay_method'),
+                comment: fd.get('comment'), items,
+            };
+            try {
+                const res = await fetch(API_BASE + '/orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                    body: JSON.stringify(body),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Помилка створення');
+                closeManualOrderModal();
+                showToast(`Замовлення #${result.id} створено ✅`, 'success');
+                ordersTab = 'all';
+                renderOrderTabs();
+                await loadOrders();
+            } catch (e) {
+                showToast(e.message || 'Помилка створення', 'error');
+            }
         }
 
         function parseServerDate(raw) {
@@ -6054,6 +6402,7 @@
                             <button class="btn btn-secondary" type="button" onclick="saveOrderTtn(${orderId})">Зберегти ТТН</button>
                         </div>
                     </div>` : ''}
+                    ${renderOrderMessageBlock(order)}
                     <div class="order-field">
                         <label for="order-note-${orderId}">Нотатка (клієнт не бачить)</label>
                         <textarea id="order-note-${orderId}" class="order-field-input" rows="2" maxlength="500"
