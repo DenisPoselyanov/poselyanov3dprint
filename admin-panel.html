@@ -2149,34 +2149,170 @@
                 padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
             }
         }
+        /* ═══ ОБОЛОНКА: токени магазину, бічне меню, верхній рядок, шухляди ═══ */
+        body {
+            --bg-page: #F3F5F8; --bg-container: #FFFFFF; --bg-card: #FFFFFF; --bg-input: #FFFFFF;
+            --bg-tab-idle: #EEF2F6; --bg-tab-active: #E3F3FC; --bg-upload: #EEF2F6; --bg-section: #EEF2F6;
+            --bg-surface-alt: #EEF2F6; --bg-tag: #E3F3FC; --bg-drag-drop: #EEF2F6; --bg-drag-active: #E3F3FC;
+            --text-main: #14202B; --text-secondary: #5B6B7A; --text-muted: #5B6B7A; --text-faint: #8696A5;
+            --text-subtle: #8696A5; --text-chip: #5B6B7A; --text-toggle: #14202B; --text-checkbox: #5B6B7A;
+            --border: rgba(20,32,43,.09); --border-alt: rgba(20,32,43,.16); --border-input: rgba(20,32,43,.16);
+            --border-dashed: rgba(20,32,43,.16); --border-row: rgba(20,32,43,.09); --border-checkbox: rgba(20,32,43,.16);
+            --accent: #2AABEE; --accent-dark: #0B7FC0; --accent-text: #0B7FC0;
+            --spinner-track: #E4EAF0; --shadow-container: rgba(20,32,43,.12); --shadow-card: rgba(20,32,43,.10);
+            --sale: #E5383B; --green: #1F9D55; --amber: #C98A0B;
+            color-scheme: light;
+        }
+        body.dark {
+            --bg-page: #0E141B; --bg-container: #17202A; --bg-card: #17202A; --bg-input: #1F2A36;
+            --bg-tab-idle: #1F2A36; --bg-tab-active: #13324A; --bg-upload: #1F2A36; --bg-section: #1F2A36;
+            --bg-surface-alt: #1F2A36; --bg-tag: #13324A; --bg-drag-drop: #1F2A36; --bg-drag-active: #13324A;
+            --text-main: #E9EFF5; --text-secondary: #93A3B3; --text-muted: #93A3B3; --text-faint: #6C7D8E;
+            --text-subtle: #6C7D8E; --text-chip: #93A3B3; --text-toggle: #E9EFF5; --text-checkbox: #93A3B3;
+            --border: rgba(255,255,255,.08); --border-alt: rgba(255,255,255,.15); --border-input: rgba(255,255,255,.15);
+            --border-dashed: rgba(255,255,255,.15); --border-row: rgba(255,255,255,.08); --border-checkbox: rgba(255,255,255,.15);
+            --accent: #2AABEE; --accent-dark: #5CC3F5; --accent-text: #5CC3F5;
+            --spinner-track: #283543; --shadow-container: rgba(0,0,0,.5); --shadow-card: rgba(0,0,0,.3);
+            color-scheme: dark;
+        }
+        body { padding: 0; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+        .btn { box-shadow: none; padding: 10px 16px; border: 1px solid transparent; border-radius: 11px; transition: background .15s, border-color .15s; }
+        .btn:hover, .btn-primary:hover, .btn-secondary:hover, .btn-danger:hover { transform: none; box-shadow: none; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-dark); }
+        .btn-secondary { background: var(--bg-section); color: var(--text-main); border-color: var(--border); }
+        .btn-secondary:hover { background: var(--bg-tab-active); }
+        .btn-danger { background: var(--sale); color: #fff; }
+        .btn-danger:hover { background: #c92d30; box-shadow: none; }
+        .order-card, .queue-group, .ov-panel, .queue-kpi-card, .category-row { box-shadow: none; }
+
+        .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
+        .sidebar {
+            position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--bg-container);
+            border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px 12px; z-index: 10;
+        }
+        .sb-brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; font-weight: 800; font-size: 15px; }
+        .sb-brand small { display: block; font-weight: 500; font-size: 12px; color: var(--text-muted); }
+        .sb-logo { width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: 0 0 auto; }
+        .sb-group { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); padding: 14px 10px 6px; }
+        .page-tab.sb-item {
+            display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; color: var(--text-secondary);
+            padding: 9px 10px; border-radius: 10px; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer;
+        }
+        .page-tab.sb-item:hover { background: var(--bg-section); }
+        .page-tab.sb-item.active { background: var(--bg-tab-active); color: var(--accent-text); }
+        .nav-svg { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .sb-logo .nav-svg { width: 20px; height: 20px; }
+        .orders-toolbar > h2 { display: none; }
+        .orders-toolbar { justify-content: flex-end; }
+        .sb-count { margin-left: auto; min-width: 22px; padding: 1px 7px; border-radius: 99px; background: var(--bg-section); color: var(--text-muted); font-size: 12px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+        .sb-count:empty { display: none; }
+        .sb-count.hot { background: var(--sale); color: #fff; }
+        .sb-foot { margin-top: auto; padding: 12px 8px 4px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 8px; }
+        .sb-status { display: flex; align-items: center; gap: 8px; }
+        .sb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex: 0 0 auto; }
+        .sb-dot.ok { background: var(--green); box-shadow: 0 0 0 3px rgba(31, 157, 85, .18); }
+        .sb-dot.bad { background: var(--sale); }
+        .sb-foot a { color: var(--accent-text); font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+        .sb-backdrop { display: none; }
+
+        .main { min-width: 0; display: flex; flex-direction: column; }
+        .topbar {
+            position: sticky; top: 0; z-index: 900; display: flex; align-items: center; gap: 10px; padding: 12px 24px;
+            background: var(--bg-container); border-bottom: 1px solid var(--border);
+            padding-top: calc(12px + env(safe-area-inset-top));
+        }
+        .topbar h1 { font-size: 18px; font-weight: 800; margin-right: auto; }
+        .tb-btn { position: relative; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--bg-section); color: var(--text-secondary); border-radius: 11px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .tb-btn:hover { background: var(--bg-tab-active); }
+        .tb-btn kbd { font: inherit; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--bg-container); border: 1px solid var(--border); }
+        .tb-burger { display: none; }
+        .tb-badge { position: absolute; top: -5px; right: -5px; min-width: 18px; padding: 0 5px; border-radius: 99px; background: var(--sale); color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; }
+        .tb-badge:empty { display: none; }
+        .content { padding: 20px 24px; }
+        .orders-toolbar h2, .toolbar h2 { font-size: 16px; }
+
+        /* Шухляда справа замість центрованої модалки */
+        .modal { align-items: stretch; justify-content: flex-end; padding: 0; background: rgba(8, 14, 20, .5); backdrop-filter: none; }
+        .modal .modal-content {
+            margin: 0; width: min(640px, 100%); max-width: none !important; height: 100vh; max-height: 100vh; border-radius: 0;
+            border-left: 1px solid var(--border); box-shadow: -20px 0 60px var(--shadow-container); animation: drawerIn .22s ease;
+            padding: 22px 24px calc(22px + env(safe-area-inset-bottom));
+        }
+        @keyframes drawerIn { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .modal .modal-content { animation: none; } }
+
+        /* Ctrl+K */
+        .cmdk { display: none; position: fixed; inset: 0; z-index: 3000; background: rgba(8, 14, 20, .5); align-items: flex-start; justify-content: center; padding: 10vh 16px 16px; }
+        .cmdk.open { display: flex; }
+        .cmdk-box { width: min(620px, 100%); background: var(--bg-container); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 20px 60px var(--shadow-container); overflow: hidden; display: flex; flex-direction: column; max-height: 70vh; }
+        .cmdk-input { border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text-main); padding: 16px 18px; font: inherit; font-size: 16px; outline: none; }
+        .cmdk-list { overflow-y: auto; padding: 6px; }
+        .cmdk-group { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); padding: 10px 12px 4px; }
+        .cmdk-item { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; color: var(--text-main); padding: 9px 12px; border-radius: 10px; font: inherit; text-align: left; cursor: pointer; }
+        .cmdk-item.sel, .cmdk-item:hover { background: var(--bg-tab-active); }
+        .cmdk-item small { margin-left: auto; color: var(--text-muted); }
+        .cmdk-empty { padding: 18px; text-align: center; color: var(--text-muted); }
+
+        @media (max-width: 900px) {
+            .app { grid-template-columns: minmax(0, 1fr); }
+            .sidebar { position: fixed; left: 0; top: 0; z-index: 1200; width: min(280px, 86vw); transform: translateX(-100%); transition: transform .22s ease; box-shadow: none; padding-top: calc(16px + env(safe-area-inset-top)); }
+            .sidebar.open { transform: none; box-shadow: 20px 0 60px var(--shadow-container); }
+            .sb-backdrop.open { display: block; position: fixed; inset: 0; z-index: 1100; background: rgba(8, 14, 20, .5); }
+            .tb-burger { display: inline-flex; }
+            .topbar { padding: 10px 12px; padding-top: calc(10px + env(safe-area-inset-top)); }
+            .topbar h1 { font-size: 16px; }
+            .tb-search-label, .tb-btn kbd { display: none; }
+            .content { padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+            .modal .modal-content { padding: 16px; }
+            .topbar h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            #headerPrimaryAction { padding: 8px 10px; font-size: 12px; white-space: nowrap; flex: 0 0 auto; }
+            .order-actions { flex-direction: row; flex-wrap: wrap; align-items: center; }
+            .order-actions > .btn, .order-actions > .order-more { width: auto; flex: 1 1 auto; min-height: 40px; }
+            .order-actions > .order-more { flex: 0 0 auto; }
+            .order-actions > .order-next-btn { flex: 1 1 100%; }
+        }
+
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>📊 Адмін панель</h1>
-            <div class="header-stats">
-                <div class="stat">
-                    <div class="stat-label" id="headerStatLabel">Всього товарів</div>
-                    <div class="stat-value" id="headerStatValue">0</div>
-                </div>
+    <div class="app">
+        <aside id="sidebar" class="sidebar">
+            <div class="sb-brand">
+                <span class="sb-logo" data-icon="store" style="display:grid"></span>
+                <div>Poselyanov 3D<small>Адмінка</small></div>
             </div>
+            <nav>
+                <div class="sb-group">Робота</div>
+                <button class="page-tab sb-item" type="button" data-page="overview" onclick="switchPage('overview'); toggleSidebar(false)"><span class="sb-ico" data-icon="overview" style="display:contents"></span>Огляд</button>
+                <button class="page-tab sb-item" type="button" data-page="orders" onclick="switchPage('orders'); toggleSidebar(false)"><span class="sb-ico" data-icon="orders" style="display:contents"></span>Замовлення<span class="sb-count" id="navCountOrders"></span></button>
+                <button class="page-tab sb-item" type="button" data-page="queue" onclick="switchPage('queue'); toggleSidebar(false)"><span class="sb-ico" data-icon="queue" style="display:contents"></span>Черга друку<span class="sb-count" id="navCountQueue"></span></button>
+                <div class="sb-group">Каталог</div>
+                <button class="page-tab sb-item" type="button" data-page="products" onclick="switchPage('products'); toggleSidebar(false)"><span class="sb-ico" data-icon="products" style="display:contents"></span>Товари<span class="sb-count" id="navCountProducts"></span></button>
+                <button class="page-tab sb-item" type="button" data-page="categories" onclick="switchPage('categories'); toggleSidebar(false)"><span class="sb-ico" data-icon="categories" style="display:contents"></span>Категорії</button>
+                <button class="page-tab sb-item" type="button" data-page="filaments" onclick="switchPage('filaments'); toggleSidebar(false)"><span class="sb-ico" data-icon="filaments" style="display:contents"></span>Філаменти</button>
+                <div class="sb-group">Маркетинг</div>
+                <button class="page-tab sb-item" type="button" data-page="promotions" onclick="switchPage('promotions'); toggleSidebar(false)"><span class="sb-ico" data-icon="promotions" style="display:contents"></span>Акції</button>
+                <button class="page-tab sb-item" type="button" data-page="coupons" onclick="switchPage('coupons'); toggleSidebar(false)"><span class="sb-ico" data-icon="coupons" style="display:contents"></span>Купони</button>
+                <button class="page-tab sb-item" type="button" data-page="users" onclick="switchPage('users'); toggleSidebar(false)"><span class="sb-ico" data-icon="users" style="display:contents"></span>Клієнти</button>
+            </nav>
+            <div class="sb-foot">
+                <div class="sb-status"><span id="sbDot" class="sb-dot"></span><span><span id="sbBotLabel">Перевіряю…</span> · <b id="sbProducts">0</b> товарів у магазині</span></div>
+                <a href="/" target="_blank" rel="noopener"><span data-icon="store" style="display:contents"></span>Відкрити магазин</a>
+            </div>
+        </aside>
+        <div id="sbBackdrop" class="sb-backdrop" onclick="toggleSidebar(false)"></div>
+
+        <div class="main">
+        <div class="topbar">
+            <button class="tb-btn tb-burger" type="button" aria-label="Меню" onclick="toggleSidebar()" data-icon="menu"></button>
+            <h1 id="pageTitle">Адмінка</h1>
+            <button class="tb-btn" type="button" onclick="openCmdk()" aria-label="Пошук" data-icon="search"><span class="tb-search-label">Пошук</span><kbd>Ctrl K</kbd></button>
+            <button class="tb-btn" type="button" onclick="overviewOpenOrders('new')" aria-label="Нові замовлення" data-icon="bell"><span id="tbBellBadge" class="tb-badge"></span></button>
             <button id="headerPrimaryAction" class="btn btn-primary" onclick="openAddModal()">➕ Додати товар</button>
         </div>
 
         <div class="content">
-            <div class="page-nav">
-                <button class="page-tab" type="button" data-page="overview" onclick="switchPage('overview')">📊 Огляд</button>
-                <button class="page-tab active" type="button" data-page="products" onclick="switchPage('products')">📦 Товари</button>
-                <button class="page-tab" type="button" data-page="orders" onclick="switchPage('orders')">🧾 Замовлення</button>
-                <button class="page-tab" type="button" data-page="queue" onclick="switchPage('queue')">🖨️ Черга друку</button>
-                <button class="page-tab" type="button" data-page="categories" onclick="switchPage('categories')">🗂️ Категорії</button>
-                <button class="page-tab" type="button" data-page="filaments" onclick="switchPage('filaments')">🎨 Філаменти</button>
-                <button class="page-tab" type="button" data-page="coupons" onclick="switchPage('coupons')">🎟️ Купони</button>
-                <button class="page-tab" type="button" data-page="promotions" onclick="switchPage('promotions')">🔥 Акції</button>
-                <button class="page-tab" type="button" data-page="users" onclick="switchPage('users')">👥 Користувачі</button>
-            </div>
-
             <section id="productsPage" class="page-section active">
                 <div class="toolbar">
                     <div class="search-box">
@@ -2232,7 +2368,6 @@
                         </div>
                         <button class="btn btn-secondary" type="button" onclick="exportOrdersCsv()">⬇️ CSV</button>
                         <button class="btn btn-secondary" type="button" onclick="loadOrders()">🔄 Оновити</button>
-                        <button class="btn btn-primary" type="button" onclick="openManualOrderModal()">➕ Замовлення вручну</button>
                     </div>
                 </div>
                 <div id="ordersTabs" class="orders-tabs"></div>
@@ -2425,6 +2560,15 @@
                     <button class="btn btn-primary" type="button" onclick="openPromotionModal()">➕ Додати акцію</button>
                 </div>
             </section>
+        </div>
+        </div>
+    </div>
+
+    <div id="cmdk" class="cmdk" onclick="if (event.target === this) closeCmdk()">
+        <div class="cmdk-box">
+            <input id="cmdkInput" class="cmdk-input" type="text" placeholder="Сторінка, товар, замовлення, клієнт…" autocomplete="off"
+                oninput="onCmdkInput(this.value)" onkeydown="onCmdkKey(event)">
+            <div id="cmdkList" class="cmdk-list"></div>
         </div>
     </div>
 
@@ -3187,7 +3331,9 @@
                 btn.onclick = () => openPromotionModal();
                 btn.style.display = 'inline-flex';
             } else if (currentPage === 'orders') {
-                btn.style.display = 'none';
+                btn.textContent = '➕ Замовлення вручну';
+                btn.onclick = openManualOrderModal;
+                btn.style.display = 'inline-flex';
             } else {
                 btn.style.display = 'none';
             }
@@ -3257,6 +3403,8 @@
             try {
                 localStorage.setItem('adminActivePage', page);
             } catch (_) {}
+            const titleEl = document.getElementById('pageTitle');
+            if (titleEl) titleEl.textContent = PAGE_TITLES[page] || 'Адмінка';
             updateHeaderPrimaryAction();
             updateHeaderStat();
             if (page === 'orders') { syncOrdersViewUi(); loadOrders(); }
@@ -3688,6 +3836,7 @@
                 if (!res.ok) throw new Error('Помилка завантаження черги друку');
                 printQueue = await res.json();
                 renderPrintQueue();
+                refreshNavCounts();
             } catch (e) {
                 showToast(e.message || 'Помилка завантаження черги друку', 'error');
             } finally {
@@ -3878,6 +4027,221 @@
             ordersView = 'list';
             switchPage('orders');
         }
+
+        // ═══════════════════════════════════════════════════════════
+        // ОБОЛОНКА: меню, лічильники, Ctrl+K
+        // ═══════════════════════════════════════════════════════════
+
+        const PAGE_TITLES = {
+            overview: 'Огляд', orders: 'Замовлення', queue: 'Черга друку', products: 'Товари', categories: 'Категорії',
+            filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', users: 'Клієнти',
+        };
+
+        const NAV_ICON_PATHS = {
+            overview: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+            orders: '<path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
+            queue: '<path d="M6 9V2h12v7"/><rect x="2" y="9" width="20" height="9" rx="2"/><path d="M6 14h12v8H6z"/>',
+            products: '<path d="M21 16V8l-9-5-9 5v8l9 5Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
+            categories: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+            filaments: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6"/>',
+            promotions: '<path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-9-1 2-2 3-4 3 0-2 0-4-1-6-3 3-5 7-5 12 0 4 3 7 7 7Z"/>',
+            coupons: '<path d="M3 7a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4Z"/><path d="M13 5v2M13 11v2M13 17v2"/>',
+            users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 3.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-4-6.3"/>',
+            search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+            bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/>',
+            menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+            store: '<path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v11h16V9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/>',
+        };
+
+        function navIcon(name) {
+            return `<svg class="nav-svg" viewBox="0 0 24 24" aria-hidden="true">${NAV_ICON_PATHS[name] || ''}</svg>`;
+        }
+
+        function hydrateShellIcons() {
+            document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = navIcon(el.dataset.icon) + el.innerHTML; });
+        }
+
+        function toggleSidebar(open) {
+            const sb = document.getElementById('sidebar');
+            const bd = document.getElementById('sbBackdrop');
+            const next = open === undefined ? !sb.classList.contains('open') : open;
+            sb.classList.toggle('open', next);
+            bd.classList.toggle('open', next);
+        }
+
+        function setNavCount(id, value, hot = false) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = value > 0 ? String(value) : '';
+            el.classList.toggle('hot', hot && value > 0);
+        }
+
+        function refreshNavCounts() {
+            const fresh = (ordersCounts.new || 0) + (ordersCounts.draft || 0);
+            setNavCount('navCountOrders', fresh, true);
+            setNavCount('navCountQueue', printQueue.kpi?.parts || 0);
+            setNavCount('navCountProducts', allProducts.length);
+            const bell = document.getElementById('tbBellBadge');
+            if (bell) bell.textContent = fresh > 0 ? String(fresh) : '';
+            const sbProducts = document.getElementById('sbProducts');
+            if (sbProducts) sbProducts.textContent = String(allProducts.length);
+        }
+
+        async function bootNavCounts() {
+            try {
+                const [c, q] = await Promise.all([
+                    fetch(API_BASE + '/orders/counts').then(r => (r.ok ? r.json() : null)),
+                    fetch(API_BASE + '/print-queue').then(r => (r.ok ? r.json() : null)),
+                ]);
+                if (c) ordersCounts = c;
+                if (q) printQueue = q;
+            } catch (_) { /* лічильники не критичні */ }
+            refreshNavCounts();
+        }
+
+        async function checkBotHealth() {
+            const dot = document.getElementById('sbDot');
+            const label = document.getElementById('sbBotLabel');
+            try {
+                const res = await fetch(API_BASE.replace(/\/api$/, '') + '/health');
+                const ok = res.ok;
+                dot.className = 'sb-dot ' + (ok ? 'ok' : 'bad');
+                label.textContent = ok ? 'Бот працює' : 'Бот не відповідає';
+            } catch (_) {
+                dot.className = 'sb-dot bad';
+                label.textContent = 'Бот не відповідає';
+            }
+        }
+
+        // ── Ctrl+K: пошук по сторінках, товарах, замовленнях і клієнтах ──
+        let cmdkItems = [];
+        let cmdkSel = 0;
+        let cmdkOrders = null;
+        let cmdkUserTimer = null;
+        let cmdkUsers = [];
+        let cmdkSeq = 0;
+
+        function openCmdk() {
+            const box = document.getElementById('cmdk');
+            box.classList.add('open');
+            const input = document.getElementById('cmdkInput');
+            input.value = '';
+            cmdkUsers = [];
+            renderCmdk('');
+            setTimeout(() => input.focus(), 30);
+            if (!cmdkOrders) {
+                fetch(API_BASE + '/orders?limit=200').then(r => (r.ok ? r.json() : [])).then(rows => {
+                    cmdkOrders = rows;
+                    if (box.classList.contains('open')) renderCmdk(input.value);
+                }).catch(() => { cmdkOrders = []; });
+            }
+        }
+
+        function closeCmdk() {
+            document.getElementById('cmdk').classList.remove('open');
+        }
+
+        function cmdkMatches(hay, q) {
+            return hay.toLowerCase().includes(q);
+        }
+
+        function buildCmdkItems(q) {
+            const needle = q.trim().toLowerCase().replace(/^#/, '');
+            const groups = [];
+            const pages = Object.entries(PAGE_TITLES)
+                .filter(([, title]) => !needle || cmdkMatches(title, needle))
+                .map(([key, title]) => ({ label: title, hint: 'Сторінка', run: () => switchPage(key) }));
+            if (pages.length) groups.push({ title: 'Сторінки', items: pages });
+            if (needle) {
+                const products = (allProducts || []).filter(p => cmdkMatches(`${p.name} ${p.id}`, needle)).slice(0, 6)
+                    .map(p => ({ label: p.name, hint: `ID ${p.id}`, run: () => { switchPage('products'); editProduct(p.id); } }));
+                if (products.length) groups.push({ title: 'Товари', items: products });
+                const orders = (cmdkOrders || []).filter(o => cmdkMatches(
+                    `${o.id} ${o.first_name || ''} ${o.username || ''} ${o.recipient_name || ''} ${o.phone || ''} ${o.ttn || ''}`, needle,
+                )).slice(0, 6).map(o => ({
+                    label: `№${o.id} · ${o.first_name || o.username || '—'}`,
+                    hint: ORDER_STATUS_LABELS[o.status || 'new'] || '',
+                    run: () => { ordersTab = 'all'; ordersView = 'list'; openOrderPricing(o.id); },
+                }));
+                if (orders.length) groups.push({ title: 'Замовлення', items: orders });
+                const users = cmdkUsers.map(u => ({
+                    label: u.name || u.username || `ID ${u.id}`,
+                    hint: u.username ? `@${String(u.username).replace(/^@/, '')}` : `ID ${u.id}`,
+                    run: () => {
+                        switchPage('users');
+                        const input = document.getElementById('usersSearch');
+                        if (input) { input.value = u.username ? String(u.username).replace(/^@/, '') : String(u.id); onUsersSearchInput(); }
+                    },
+                }));
+                if (users.length) groups.push({ title: 'Клієнти', items: users });
+            }
+            return groups;
+        }
+
+        function renderCmdk(q) {
+            const groups = buildCmdkItems(q);
+            cmdkItems = groups.flatMap(g => g.items);
+            cmdkSel = Math.min(cmdkSel, Math.max(0, cmdkItems.length - 1));
+            const list = document.getElementById('cmdkList');
+            if (!cmdkItems.length) {
+                list.innerHTML = '<div class="cmdk-empty">Нічого не знайдено</div>';
+                return;
+            }
+            let idx = 0;
+            list.innerHTML = groups.map(g => `<div class="cmdk-group">${g.title}</div>` + g.items.map(it => {
+                const i = idx++;
+                return `<button type="button" class="cmdk-item ${i === cmdkSel ? 'sel' : ''}" data-i="${i}" onclick="runCmdk(${i})"><span>${escapeHtml(it.label)}</span><small>${escapeHtml(it.hint)}</small></button>`;
+            }).join('')).join('');
+        }
+
+        function runCmdk(i) {
+            const item = cmdkItems[i];
+            if (!item) return;
+            closeCmdk();
+            item.run();
+        }
+
+        function onCmdkInput(value) {
+            cmdkSel = 0;
+            renderCmdk(value);
+            clearTimeout(cmdkUserTimer);
+            const q = value.trim();
+            if (q.length < 2) { cmdkUsers = []; return; }
+            const seq = ++cmdkSeq;
+            cmdkUserTimer = setTimeout(async () => {
+                try {
+                    const res = await fetch(API_BASE + `/admin/users?search=${encodeURIComponent(q)}&limit=5`);
+                    if (!res.ok || seq !== cmdkSeq) return;
+                    const data = await res.json();
+                    cmdkUsers = data.users || data.items || [];
+                    renderCmdk(document.getElementById('cmdkInput').value);
+                } catch (_) { /* без клієнтів у пошуку */ }
+            }, 250);
+        }
+
+        function onCmdkKey(event) {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const n = cmdkItems.length;
+                if (!n) return;
+                cmdkSel = (cmdkSel + (event.key === 'ArrowDown' ? 1 : n - 1)) % n;
+                renderCmdk(document.getElementById('cmdkInput').value);
+                document.querySelector('.cmdk-item.sel')?.scrollIntoView({ block: 'nearest' });
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                runCmdk(cmdkSel);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                closeCmdk();
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                document.getElementById('cmdk').classList.contains('open') ? closeCmdk() : openCmdk();
+            }
+        });
 
         function formatCouponDiscount(coupon) {
             return coupon.type === 'percent' ? `${coupon.value}%` : `${coupon.value} ₴`;
@@ -4177,6 +4541,7 @@
 
                 // Оновлюємо лічильник
                 updateHeaderStat();
+                refreshNavCounts();
                 renderCategoriesManager();
 
                 // Застосовуємо фільтрацію
@@ -6068,6 +6433,7 @@
                 if (res.ok) ordersCounts = await res.json();
             } catch (_) { /* лічильники не критичні */ }
             renderOrderTabs();
+            refreshNavCounts();
         }
 
         async function loadOrders() {
@@ -6748,12 +7114,16 @@
 
         const savedPage = (() => {
             try {
-                return localStorage.getItem('adminActivePage') || 'products';
+                return localStorage.getItem('adminActivePage') || 'overview';
             } catch (_) {
-                return 'products';
+                return 'overview';
             }
         })();
-        switchPage(['products', 'categories', 'filaments', 'orders', 'coupons'].includes(savedPage) ? savedPage : 'products');
+        hydrateShellIcons();
+        switchPage(Object.keys(PAGE_TITLES).includes(savedPage) ? savedPage : 'overview');
+        bootNavCounts();
+        checkBotHealth();
+        setInterval(bootNavCounts, 60000);
         loadCategories().then(loadProducts);
         loadFilaments();
         setInterval(loadProducts, 30000);
