@@ -124,7 +124,7 @@ from services.coupons import (
 )
 from services.collections import public_collections
 from services.db_utils import init_db, row_to_dict as _row_to_dict
-from services.events import EVENT_TYPES, popular_searches, record_search
+from services.events import EVENT_TYPES, FUNNEL_EVENT_TYPES, popular_searches, record_funnel_event, record_search
 from services.hits import bought_together, top_selling_products
 from services.promotions import (
     create_promotion,
@@ -199,6 +199,7 @@ from handlers.rate_limit import allow_delivery_lookup, allow_event, allow_review
 from routes.setup import register_http_routes
 import services.delivery as delivery
 from services.manual_orders import orders_to_csv, parse_manual_order
+from services.overview import get_overview
 
 BOT_TOKEN = config.BOT_TOKEN
 OWNER_ID = config.OWNER_ID
@@ -2620,6 +2621,21 @@ async def handle_export_orders_csv(request: web.Request):
     return web.Response(body=body.encode("utf-8"), content_type="text/csv", charset="utf-8", headers=headers)
 
 
+async def handle_get_overview(request: web.Request):
+    """Огляд: KPI, виторг по днях, воронка, топ товарів, «потребує уваги»."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    try:
+        days = int(request.query.get("days", "7") or 7)
+    except ValueError:
+        days = 7
+    return web.json_response(await run_db(get_overview, days), headers=cors_headers(request))
+
+
 async def handle_get_order_counts(request: web.Request):
     """Лічильники замовлень для вкладок і бічного меню адмінки."""
     auth, err = resolve_request_user(request, {})
@@ -3303,7 +3319,7 @@ async def handle_get_popular_searches(request: web.Request):
 
 
 async def handle_post_event(request: web.Request):
-    """Подія аналітики з вітрини. Зараз — лише `search`."""
+    """Подія аналітики з вітрини: `search` і події воронки."""
     try:
         data = await request.json()
     except Exception:
@@ -3322,6 +3338,14 @@ async def handle_post_event(request: web.Request):
         return web.json_response({"ok": True, "recorded": False}, headers=cors_headers(request))
     if not allow_event(user_id):
         return web.json_response({"ok": False, "error": "rate_limited"}, status=429, headers=cors_headers(request))
+
+    if data["type"] in FUNNEL_EVENT_TYPES:
+        try:
+            product_id = int(data.get("product_id") or 0) or None
+        except (TypeError, ValueError):
+            product_id = None
+        recorded = await run_db(record_funnel_event, user_id, data["type"], product_id)
+        return web.json_response({"ok": True, "recorded": recorded}, headers=cors_headers(request))
 
     try:
         results = int(data.get("results") or 0)

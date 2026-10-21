@@ -55,3 +55,12 @@ def test_csv_escapes_formulas_and_has_rows():
     assert "Відправлено" in lines[1]
     assert "Брелок ×2 (Чорний)" in lines[1]
     assert "'=HYPERLINK(1)" in lines[1]
+
+
+def test_csv_cell_guards_hidden_formula_prefixes():
+    from services.manual_orders import _csv_cell
+
+    for bad in ("=1+1", "  =1+1", "	=1", "+7", "-2", "@x", "＝1", " =1"):
+        assert _csv_cell(bad).startswith("'"), bad
+    assert _csv_cell("Олена") == "Олена"
+    assert _csv_cell(160) == "160"

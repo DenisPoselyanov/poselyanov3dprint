@@ -1,8 +1,8 @@
 """Події з вітрини (аналітика) і популярні пошукові запити.
 
-Зараз фронт пише лише `search` — коли покупець зупинився після введення (~1 с)
-або тапнув по результату. Таблиця загальна: на етапі 4 сюди ж ляжуть
-catalog_open / product_view / add_to_cart / order для воронки в адмінці.
+Фронт пише `search` (коли покупець зупинився після введення ~1 с або тапнув по
+результату) і події воронки `catalog_open` / `product_view` / `add_to_cart`
+(раз на добу на користувача [і товар]). «Оформили» береться з таблиці orders.
 """
 
 from __future__ import annotations
@@ -15,7 +15,8 @@ from db_core import db_connect, is_postgres, sql as _sql
 
 logger = logging.getLogger(__name__)
 
-EVENT_TYPES = ("search",)
+FUNNEL_EVENT_TYPES = ("catalog_open", "product_view", "add_to_cart")
+EVENT_TYPES = ("search", *FUNNEL_EVENT_TYPES)
 
 QUERY_MIN_LEN = 2
 QUERY_MAX_LEN = 64
@@ -89,6 +90,37 @@ def record_search(user_id: int, query: str, results: int) -> bool:
                 _sql("INSERT INTO events (type, user_id, query, value) VALUES ('search', ?, ?, ?)"),
                 (int(user_id), q, results),
             )
+        conn.commit()
+    finally:
+        conn.close()
+    return True
+
+
+def record_funnel_event(user_id: int, event_type: str, product_id: int | None = None) -> bool:
+    """Подія воронки; повтор того ж (тип, користувач, товар) за добу не пишеться."""
+    if event_type not in FUNNEL_EVENT_TYPES or not user_id:
+        return False
+    pid = int(product_id) if product_id else None
+    if event_type != "catalog_open" and not pid:
+        return False
+    today_expr = "CURRENT_DATE" if is_postgres() else "date('now')"
+    conn = db_connect()
+    try:
+        row = conn.execute(
+            _sql(f"""
+                SELECT id FROM events
+                WHERE type = ? AND user_id = ? AND COALESCE(product_id, 0) = ?
+                  AND created_at >= {today_expr}
+                LIMIT 1
+            """),
+            (event_type, int(user_id), pid or 0),
+        ).fetchone()
+        if row:
+            return False
+        conn.execute(
+            _sql("INSERT INTO events (type, user_id, product_id) VALUES (?, ?, ?)"),
+            (event_type, int(user_id), pid),
+        )
         conn.commit()
     finally:
         conn.close()

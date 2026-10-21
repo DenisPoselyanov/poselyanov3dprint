@@ -1792,11 +1792,41 @@ function loadCart() {
     cart = [];
   }
   normalizeCart();
+  cartQtySnapshot = cartQtyByProduct();
+}
+
+// Подія воронки для «Огляду» в адмінці (лише в Telegram; сервер дедуплікує за добу)
+function trackEvent(type, productId) {
+  if (!tgApp()?.initData) return;
+  fetch(API_BASE + '/api/events', {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify({ type, product_id: productId || null }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+// Кількість по товарах на момент останнього збереження: зростання = «додав у кошик»
+let cartQtySnapshot = null;
+function cartQtyByProduct() {
+  const totals = {};
+  for (const line of cart) {
+    if (line.isGift) continue;
+    totals[line.id] = (totals[line.id] || 0) + (line.quantity || 0);
+  }
+  return totals;
 }
 
 function saveCart() {
   localStorage.setItem('cart_v1', JSON.stringify(cart));
   if (!isSubmitting) pendingIdempotencyKey = null;
+  const totals = cartQtyByProduct();
+  if (cartQtySnapshot) {
+    for (const id of Object.keys(totals)) {
+      if (totals[id] > (cartQtySnapshot[id] || 0)) trackEvent('add_to_cart', Number(id));
+    }
+  }
+  cartQtySnapshot = totals;
 }
 
 function getCartItem(id) {
@@ -3497,6 +3527,7 @@ function openModal(id, source = 'products', options = {}) {
 
   modalGiftPreview = !!options.giftPreview;
   modalCartSource = source;
+  if (!modalGiftPreview && currentProduct?.id !== p.id) trackEvent('product_view', Number(p.id));
   currentProduct = p;
   p._isCustom = source === 'custom';
   // З рядка кошика — редагуємо саме його; з каталогу — єдиний рядок товару (кілька рядків: нова позиція)
@@ -5627,6 +5658,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await Promise.all([loadProducts(), loadFilaments(), loadCategories(), loadPromotions(), loadShowcase(), loadShopConfig()]);
   renderCheckout();
+  trackEvent('catalog_open');
 
   refreshShowcaseDerived();
   renderHome();

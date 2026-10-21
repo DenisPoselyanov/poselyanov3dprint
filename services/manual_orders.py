@@ -115,10 +115,16 @@ def parse_manual_order(data: dict) -> tuple[bool, dict | str]:
     }
 
 
+_CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r", "＝", "＋", "－", "＠")
+_CSV_LEADING_NOISE = " \u00a0\u200b\ufeff"
+
+
 def _csv_cell(value) -> str:
+    """Захист від формул у Excel/Sheets: перевіряємо перший значущий символ (OWASP)."""
     text = "" if value is None else str(value)
-    # Захист від формул у Excel/Sheets.
-    return "'" + text if text[:1] in ("=", "+", "-", "@") else text
+    if text.lstrip(_CSV_LEADING_NOISE).startswith(_CSV_FORMULA_TRIGGERS):
+        return "'" + text
+    return text
 
 
 def orders_to_csv(orders: list[dict]) -> str:

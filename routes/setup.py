@@ -41,6 +41,7 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_post("/api/orders", handlers.handle_create_manual_order)
     http_app.router.add_post("/api/orders/{id}/message", handlers.handle_send_order_message)
     http_app.router.add_get("/api/print-queue", handlers.handle_get_print_queue)
+    http_app.router.add_get("/api/admin/overview", handlers.handle_get_overview)
     http_app.router.add_put("/api/order-items/{id}/printed", handlers.handle_set_item_printed)
     http_app.router.add_get("/api/orders/{id}", handlers.handle_get_order)
     http_app.router.add_put("/api/orders/{id}", handlers.handle_update_order)

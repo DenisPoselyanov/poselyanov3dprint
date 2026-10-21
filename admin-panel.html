@@ -760,6 +760,32 @@
             .manual-item .manual-product { grid-column: 1 / -1; }
         }
 
+        .ov-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .ov-delta { font-size: 11px; color: var(--text-muted); }
+        .ov-delta.up { color: #16a34a; }
+        .ov-delta.down { color: #dc2626; }
+        .ov-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+        .ov-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; min-width: 0; }
+        .ov-panel h3 { font-size: 14px; margin-bottom: 10px; }
+        .ov-chart { width: 100%; height: auto; font-size: 10px; fill: var(--text-muted); }
+        .ov-funnel-row { display: grid; grid-template-columns: 130px 1fr 44px; gap: 10px; align-items: center; font-size: 13px; }
+        .ov-funnel-row b, .ov-top-row b { text-align: right; font-variant-numeric: tabular-nums; }
+        .ov-funnel-bar { height: 8px; border-radius: 4px; background: var(--bg-section); overflow: hidden; margin-top: 4px; }
+        .ov-funnel-row .ov-funnel-bar { margin-top: 0; }
+        .ov-funnel-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+        .ov-funnel-conv { font-size: 11px; color: var(--text-muted); margin: 2px 0 6px 140px; }
+        .ov-alert { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 10px 12px; border-radius: 10px; margin-bottom: 8px; font-size: 13px; }
+        .ov-alert.info { background: rgba(59, 130, 246, .12); }
+        .ov-alert.warn { background: rgba(245, 158, 11, .14); }
+        .ov-alert .btn { padding: 6px 10px; font-size: 12px; flex: 0 0 auto; }
+        .ov-top-row { display: grid; grid-template-columns: 1fr 36px; gap: 10px; align-items: center; margin-bottom: 10px; font-size: 13px; }
+        @media (max-width: 700px) {
+            .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .ov-cols { grid-template-columns: 1fr; }
+            .ov-funnel-row { grid-template-columns: 100px 1fr 36px; }
+            .ov-funnel-conv { margin-left: 110px; }
+        }
+
         .order-actions {
             margin-top: 14px;
             display: flex;
@@ -2140,6 +2166,7 @@
 
         <div class="content">
             <div class="page-nav">
+                <button class="page-tab" type="button" data-page="overview" onclick="switchPage('overview')">📊 Огляд</button>
                 <button class="page-tab active" type="button" data-page="products" onclick="switchPage('products')">📦 Товари</button>
                 <button class="page-tab" type="button" data-page="orders" onclick="switchPage('orders')">🧾 Замовлення</button>
                 <button class="page-tab" type="button" data-page="queue" onclick="switchPage('queue')">🖨️ Черга друку</button>
@@ -2216,6 +2243,30 @@
                 <div id="ordersEmpty" class="empty-state" style="display:none;">
                     <div class="empty-state-icon">📭</div>
                     <p>Замовлень не знайдено</p>
+                </div>
+            </section>
+
+            <section id="overviewPage" class="page-section">
+                <div class="orders-toolbar">
+                    <h2>📊 Огляд</h2>
+                    <div class="orders-toolbar-right">
+                        <div id="overviewPeriods" class="orders-view-toggle">
+                            <button type="button" data-days="1" onclick="setOverviewPeriod(1)">Сьогодні</button>
+                            <button type="button" data-days="7" class="active" onclick="setOverviewPeriod(7)">7 днів</button>
+                            <button type="button" data-days="30" onclick="setOverviewPeriod(30)">30 днів</button>
+                        </div>
+                        <button class="btn btn-secondary" type="button" onclick="loadOverview()">🔄 Оновити</button>
+                    </div>
+                </div>
+                <div id="overviewLoading" class="loading" style="display:none;"><div class="spinner"></div></div>
+                <div id="overviewKpis" class="ov-kpis"></div>
+                <div class="ov-cols">
+                    <div class="ov-panel"><h3>Виторг по днях</h3><div id="overviewChart"></div></div>
+                    <div class="ov-panel"><h3>Воронка</h3><div id="overviewFunnel"></div></div>
+                </div>
+                <div class="ov-cols">
+                    <div class="ov-panel"><h3>Потребує уваги</h3><div id="overviewAttention"></div></div>
+                    <div class="ov-panel"><h3>Топ товарів <small style="font-weight:400;color:var(--text-muted)">продано, шт</small></h3><div id="overviewTop"></div></div>
                 </div>
             </section>
 
@@ -3173,6 +3224,12 @@
                 return;
             }
 
+            if (currentPage === 'overview') {
+                label.textContent = 'Нових замовлень';
+                value.textContent = String(overviewData?.attention?.new_orders?.count || 0);
+                return;
+            }
+
             if (currentPage === 'queue') {
                 label.textContent = 'Деталей до друку';
                 value.textContent = String(printQueue.kpi?.parts || 0);
@@ -3204,6 +3261,7 @@
             updateHeaderStat();
             if (page === 'orders') { syncOrdersViewUi(); loadOrders(); }
             if (page === 'queue') loadPrintQueue();
+            if (page === 'overview') loadOverview();
             if (page === 'coupons') loadCoupons();
             if (page === 'promotions') loadPromotions();
             if (page === 'users') loadUsers();
@@ -3703,6 +3761,122 @@
                 showToast(e.message || 'Помилка збереження', 'error');
                 await loadPrintQueue();
             }
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // ОГЛЯД
+        // ═══════════════════════════════════════════════════════════
+
+        let overviewDays = 7;
+        let overviewData = null;
+
+        function formatMoney(n) {
+            return `${Math.round(Number(n) || 0).toLocaleString('uk-UA')} ₴`;
+        }
+
+        function setOverviewPeriod(days) {
+            overviewDays = days;
+            loadOverview();
+        }
+
+        async function loadOverview() {
+            const loading = document.getElementById('overviewLoading');
+            try {
+                loading.style.display = 'flex';
+                const res = await fetch(API_BASE + `/admin/overview?days=${overviewDays}`);
+                if (!res.ok) throw new Error('Помилка завантаження огляду');
+                overviewData = await res.json();
+                renderOverview();
+            } catch (e) {
+                showToast(e.message || 'Помилка завантаження огляду', 'error');
+            } finally {
+                loading.style.display = 'none';
+                updateHeaderStat();
+            }
+        }
+
+        function renderDelta(delta, unit = '%') {
+            if (delta === null || delta === undefined) return '<span class="ov-delta">немає даних для порівняння</span>';
+            const up = delta >= 0;
+            const text = `${up ? '↑' : '↓'} ${Math.abs(delta).toLocaleString('uk-UA')}${unit === '%' ? '%' : ' п.п.'}`;
+            return `<span class="ov-delta ${up ? 'up' : 'down'}">${text} до попер. періоду</span>`;
+        }
+
+        function renderOverviewChart(chart) {
+            const W = 640, H = 210, pl = 44, pb = 24;
+            const max = Math.max(...chart.map(c => c.revenue), 1);
+            const bw = (W - pl - 10) / chart.length;
+            const grid = [0, .5, 1].map(t => {
+                const y = H - pb - t * (H - pb - 16);
+                return `<line x1="${pl}" x2="${W - 6}" y1="${y}" y2="${y}" stroke="var(--border)"/>`
+                    + `<text x="${pl - 6}" y="${y + 3}" text-anchor="end">${Math.round(max * t)}</text>`;
+            }).join('');
+            const bars = chart.map((c, i) => {
+                const h = (c.revenue / max) * (H - pb - 16);
+                const d = c.date.slice(8, 10) + '.' + c.date.slice(5, 7);
+                return `<rect x="${pl + i * bw + 4}" y="${H - pb - h}" width="${Math.max(bw - 8, 2)}" height="${Math.max(h, 1.5)}" rx="4" fill="${i === chart.length - 1 ? 'var(--accent)' : 'var(--accent)'}" opacity="${i === chart.length - 1 ? 1 : .55}"><title>${d}: ${formatMoney(c.revenue)}</title></rect>`;
+            }).join('');
+            const step = chart.length > 14 ? 3 : 1;
+            const labels = chart.map((c, i) => (i % step === 0 || i === chart.length - 1)
+                ? `<text x="${pl + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${c.date.slice(8, 10)}</text>` : '').join('');
+            return `<svg class="ov-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Виторг по днях">${grid}${bars}${labels}</svg>`;
+        }
+
+        function renderOverview() {
+            const d = overviewData;
+            if (!d) return;
+            document.querySelectorAll('#overviewPeriods button').forEach(b => {
+                b.classList.toggle('active', Number(b.dataset.days) === d.days);
+            });
+            const k = d.kpi;
+            const conv = k.conversion.value;
+            document.getElementById('overviewKpis').innerHTML = `
+                <div class="queue-kpi-card"><span>Виторг</span><b>${formatMoney(k.revenue.value)}</b>${renderDelta(k.revenue.delta)}</div>
+                <div class="queue-kpi-card"><span>Замовлень</span><b>${k.orders.value}</b>${renderDelta(k.orders.delta)}</div>
+                <div class="queue-kpi-card"><span>Середній чек</span><b>${formatMoney(k.avg_check.value)}</b>${renderDelta(k.avg_check.delta)}</div>
+                <div class="queue-kpi-card"><span>Конверсія в замовлення</span><b>${conv === null ? '—' : conv.toLocaleString('uk-UA') + '%'}</b>${renderDelta(k.conversion.delta, 'pp')}</div>`;
+
+            document.getElementById('overviewChart').innerHTML = renderOverviewChart(d.chart);
+
+            const maxFunnel = Math.max(...d.funnel.map(f => f.count), 1);
+            const funnelEmpty = d.funnel.every(f => !f.count);
+            document.getElementById('overviewFunnel').innerHTML = funnelEmpty
+                ? '<div class="order-card-meta">Даних воронки ще немає: події збираються з відкриття магазину в Telegram.</div>'
+                : d.funnel.map((f, i) => `
+                    <div class="ov-funnel-row"><span>${escapeHtml(f.label)}</span>
+                        <div class="ov-funnel-bar"><i style="width:${f.count / maxFunnel * 100}%;opacity:${1 - i * .18}"></i></div><b>${f.count}</b></div>
+                    ${i < d.funnel.length - 1 && d.funnel[i + 1].pct !== null ? `<div class="ov-funnel-conv">→ ${d.funnel[i + 1].pct}% далі</div>` : ''}`).join('');
+
+            const att = d.attention;
+            const rows = [];
+            if (att.new_orders.count) {
+                rows.push(`<div class="ov-alert info"><span><b>${att.new_orders.count} ${pluralUa(att.new_orders.count, 'нове замовлення', 'нові замовлення', 'нових замовлень')}</b> чекає підтвердження</span>
+                    <button class="btn btn-secondary" type="button" onclick="overviewOpenOrders('new')">Відкрити</button></div>`);
+            }
+            att.pending_price.items.forEach(o => {
+                rows.push(`<div class="ov-alert warn"><span><b>№${o.id}</b> з договірною ціною — вкажіть суму</span>
+                    <button class="btn btn-secondary" type="button" onclick="openOrderPricing(${o.id})">Вказати</button></div>`);
+            });
+            if (att.filaments_out.length) {
+                const out = att.filaments_out;
+                const outText = out.slice(0, 3).map(escapeHtml).join(', ') + (out.length > 3 ? ` і ще ${out.length - 3}` : '');
+                rows.push(`<div class="ov-alert warn"><span><b>${outText}</b> — немає в наявності</span>
+                    <button class="btn btn-secondary" type="button" onclick="switchPage('filaments')">Філаменти</button></div>`);
+            }
+            document.getElementById('overviewAttention').innerHTML = rows.join('') || '<div class="order-card-meta">Усе під контролем 👌</div>';
+
+            const topMax = Math.max(...d.top_products.map(t => t.qty), 1);
+            document.getElementById('overviewTop').innerHTML = d.top_products.length
+                ? d.top_products.map(t => `
+                    <div class="ov-top-row"><div><div style="font-weight:600">${escapeHtml(t.name)}</div>
+                        <div class="ov-funnel-bar"><i style="width:${t.qty / topMax * 100}%"></i></div></div><b>${t.qty}</b></div>`).join('')
+                : '<div class="order-card-meta">За цей період продажів ще не було.</div>';
+        }
+
+        function overviewOpenOrders(tab) {
+            ordersTab = tab;
+            ordersView = 'list';
+            switchPage('orders');
         }
 
         function formatCouponDiscount(coupon) {
