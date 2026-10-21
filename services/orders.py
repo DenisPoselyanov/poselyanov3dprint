@@ -700,6 +700,116 @@ def list_orders(
     return rows
 
 
+PRINT_QUEUE_STATUSES = ("confirmed", "printing")
+
+
+def _product_thumb(product_id) -> tuple[str, str]:
+    """(фото, емодзі) товару з кешу каталогу — для рядка черги друку."""
+    pid = str(product_id or "")
+    for product in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE:
+        if str(product.get("id")) == pid:
+            photos = product.get("photos") or []
+            return (photos[0] if photos else ""), str(product.get("emoji") or "")
+    return "", ""
+
+
+def get_print_queue() -> dict:
+    """Позиції замовлень confirmed/printing, згруповані за кольором (менше перезаправок)."""
+    conn = db_connect(dict_rows=True)
+    rows = conn.execute(
+        _sql(
+            "SELECT oi.id, oi.order_id, oi.product_id, oi.product_name, oi.quantity, oi.filament, "
+            "oi.personalization, oi.personalization_note, oi.is_gift, oi.printed, o.status "
+            "FROM order_items oi JOIN orders o ON o.id = oi.order_id "
+            "WHERE o.status IN (" + ", ".join("?" * len(PRINT_QUEUE_STATUSES)) + ") "
+            "ORDER BY oi.order_id, oi.id"
+        ),
+        PRINT_QUEUE_STATUSES,
+    ).fetchall()
+    conn.close()
+
+    groups: dict[str, dict] = {}
+    order_ids: set[int] = set()
+    queued_parts = 0
+    for row in rows:
+        item = row_to_dict(row)
+        color = (item.get("filament") or "").strip()
+        printed = bool(item.get("printed"))
+        photo, emoji = _product_thumb(item.get("product_id"))
+        group = groups.setdefault(color, {"filament": color, "items": []})
+        group["items"].append(
+            {
+                "id": int(item["id"]),
+                "order_id": int(item["order_id"]),
+                "product_name": item.get("product_name") or "—",
+                "quantity": int(item.get("quantity") or 1),
+                "personalization": item.get("personalization") or "",
+                "personalization_note": item.get("personalization_note") or "",
+                "is_gift": bool(item.get("is_gift")),
+                "printed": printed,
+                "photo": photo,
+                "emoji": emoji,
+            }
+        )
+        if not printed:
+            order_ids.add(int(item["order_id"]))
+            queued_parts += int(item.get("quantity") or 1)
+    ordered = sorted(groups.values(), key=lambda g: (g["filament"] == "", g["filament"].lower()))
+    for group in ordered:
+        group["pending"] = sum(1 for i in group["items"] if not i["printed"])
+    return {
+        "groups": ordered,
+        "kpi": {
+            "parts": queued_parts,
+            "orders": len(order_ids),
+            "colors": sum(1 for g in ordered if g["pending"]),
+        },
+    }
+
+
+def set_item_printed(item_id: int, printed: bool) -> dict | None:
+    """Ставить/знімає відмітку «надруковано». None — позиції немає.
+
+    Повертає стан замовлення, щоб викликач переключив статус: перша відмітка
+    -> printing, усі позиції надруковані -> ready.
+    """
+    conn = db_connect(dict_rows=True)
+    row = conn.execute(
+        _sql("SELECT order_id FROM order_items WHERE id = ?"), (int(item_id),)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    order_id = int(row_to_dict(row)["order_id"])
+    conn.execute(
+        _sql("UPDATE order_items SET printed = ? WHERE id = ?"), (1 if printed else 0, int(item_id))
+    )
+    conn.commit()
+    items = conn.execute(
+        _sql("SELECT printed FROM order_items WHERE order_id = ?"), (order_id,)
+    ).fetchall()
+    status_row = conn.execute(
+        _sql("SELECT status FROM orders WHERE id = ?"), (order_id,)
+    ).fetchone()
+    conn.close()
+    flags = [bool(row_to_dict(i).get("printed")) for i in items]
+    return {
+        "order_id": order_id,
+        "status": (row_to_dict(status_row).get("status") if status_row else None) or "new",
+        "total": len(flags),
+        "printed": sum(flags),
+    }
+
+
+def next_status_after_print(status: str, total: int, printed: int) -> str | None:
+    """Статус, у який треба перевести замовлення після зміни відмітки; None — без змін."""
+    if status not in PRINT_QUEUE_STATUSES or printed <= 0:
+        return None
+    if total and printed >= total:
+        return "ready"
+    return "printing" if status == "confirmed" else None
+
+
 def update_order_pricing(order_id: int, item_prices: dict[int, int]) -> dict:
     conn = db_connect(dict_rows=True)
     order = conn.execute(

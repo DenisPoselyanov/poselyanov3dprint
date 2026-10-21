@@ -175,3 +175,45 @@ def test_sharing_channel_message_on_sqlite(orders):
     assert orders.get_orders_sharing_channel_message(a) == [a]
     orders.set_orders_channel_message_ids([a, b], 555)
     assert orders.get_orders_sharing_channel_message(a) == [a, b]
+
+
+def _two_item_order(orders, user_id, color_a, color_b):
+    items = [
+        {"product_id": 1, "product_name": "Брелок", "price": 80, "quantity": 2, "filament_name": color_a},
+        {"product_id": 2, "product_name": "Лампа", "price": 200, "quantity": 1, "filament_name": color_b},
+    ]
+    oid, _ = orders.save_order(user_id, "@u", "Тест", items, 360, "")
+    orders.update_order_status(oid, "confirmed")
+    return oid
+
+
+def test_print_queue_groups_by_color_and_skips_unconfirmed(orders):
+    a = _two_item_order(orders, 1, "Чорний", "Червоний")
+    b = _two_item_order(orders, 2, "Чорний", "Чорний")
+    _make_order(orders, user_id=3)  # new — у чергу не потрапляє
+    queue = orders.get_print_queue()
+    colors = {g["filament"]: g for g in queue["groups"]}
+    assert set(colors) == {"Чорний", "Червоний"}
+    assert len(colors["Чорний"]["items"]) == 3
+    assert queue["kpi"] == {"parts": 6, "orders": 2, "colors": 2}
+    assert {i["order_id"] for g in queue["groups"] for i in g["items"]} == {a, b}
+
+
+def test_print_flags_drive_status(orders):
+    oid = _two_item_order(orders, 1, "Чорний", "Червоний")
+    first, second = [r["id"] for r in _row(oid)[1]]
+
+    state = orders.set_item_printed(first, True)
+    assert state == {"order_id": oid, "status": "confirmed", "total": 2, "printed": 1}
+    assert orders.next_status_after_print(state["status"], state["total"], state["printed"]) == "printing"
+
+    orders.update_order_status(oid, "printing")
+    state = orders.set_item_printed(second, True)
+    assert orders.next_status_after_print(state["status"], state["total"], state["printed"]) == "ready"
+    orders.update_order_status(oid, "ready")
+    assert orders.get_print_queue()["groups"] == []  # готове вже не в черзі
+
+    state = orders.set_item_printed(first, False)
+    assert orders.next_status_after_print("printing", 2, 0) is None
+    assert orders.next_status_after_print("shipped", 2, 2) is None
+    assert orders.set_item_printed(99999, True) is None

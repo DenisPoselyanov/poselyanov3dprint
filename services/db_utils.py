@@ -67,6 +67,7 @@ ORDER_ITEM_EXTRA_COLUMNS = {
     "personalization": "TEXT DEFAULT ''",
     "personalization_note": "TEXT DEFAULT ''",
     "is_gift": "INTEGER DEFAULT 0",
+    "printed": "INTEGER DEFAULT 0",
 }
 
 

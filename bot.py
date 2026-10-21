@@ -162,6 +162,9 @@ from services.orders import (
     get_orders_sharing_channel_message,
     get_orders_with_items_batch,
     count_orders_by_status,
+    get_print_queue,
+    next_status_after_print,
+    set_item_printed,
     expand_status_filter,
     list_orders,
     save_idempotent_order,
@@ -2478,6 +2481,49 @@ async def handle_get_orders(request: web.Request):
         list_orders, pending_price_only=pending_only, limit=limit, statuses=statuses or None
     )
     return web.json_response(orders, headers=cors_headers(request))
+
+
+async def handle_get_print_queue(request: web.Request):
+    """Черга друку: позиції confirmed/printing, згруповані за кольором."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    return web.json_response(await run_db(get_print_queue), headers=cors_headers(request))
+
+
+async def handle_set_item_printed(request: web.Request):
+    """Відмітка «надруковано»: перша -> printing, усі -> ready (клієнт отримує повідомлення)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        item_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+        printed = bool(data.get("printed"))
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+
+    state = await run_db(set_item_printed, item_id, printed)
+    if not state:
+        return web.json_response(
+            {"ok": False, "error": "Позицію не знайдено"}, status=404, headers=cors_headers(request)
+        )
+    result = {"ok": True, **state}
+    target = next_status_after_print(state["status"], state["total"], state["printed"])
+    if target and is_valid_transition(state["status"], target):
+        order_id = state["order_id"]
+        order, _ = await run_db(get_order_with_items, order_id)
+        await _sync_order_status_to_telegram(order_id, target)
+        result["status"] = target
+        result["client_notified"] = await _notify_client_status(order or {"id": order_id}, target)
+    return web.json_response(result, headers=cors_headers(request))
 
 
 async def handle_get_order_counts(request: web.Request):

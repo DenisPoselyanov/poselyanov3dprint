@@ -714,6 +714,30 @@
             border: 1px solid var(--border-input); background: var(--bg-input); color: var(--text-main);
         }
 
+        .queue-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .queue-kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+        .queue-kpi-card span { font-size: 12px; color: var(--text-muted); }
+        .queue-kpi-card b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .queue-group { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+        .queue-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+        .queue-head small { display: block; color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+        .queue-spool { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border-input); flex: 0 0 auto; }
+        .queue-row { display: grid; grid-template-columns: 22px 44px minmax(0, 1fr) auto auto auto; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+        .queue-row:last-child { border-bottom: 0; }
+        .queue-row input { width: 18px; height: 18px; accent-color: #16a34a; }
+        .queue-row img, .queue-thumb-emoji { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: var(--bg-section); display: grid; place-items: center; font-size: 22px; }
+        .queue-row-main small { display: block; color: var(--text-muted); margin-top: 2px; }
+        .queue-row.done { opacity: .5; }
+        .queue-row.done b { text-decoration: line-through; }
+        .queue-qty { font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; }
+        .queue-order { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--bg-section); color: var(--text-secondary); }
+        .queue-state { font-size: 12px; color: var(--text-muted); min-width: 76px; text-align: right; }
+        @media (max-width: 600px) {
+            .queue-kpis { grid-template-columns: 1fr; }
+            .queue-row { grid-template-columns: 22px 40px minmax(0, 1fr) auto; }
+            .queue-order, .queue-state { display: none; }
+        }
+
         .order-actions {
             margin-top: 14px;
             display: flex;
@@ -2096,6 +2120,7 @@
             <div class="page-nav">
                 <button class="page-tab active" type="button" data-page="products" onclick="switchPage('products')">📦 Товари</button>
                 <button class="page-tab" type="button" data-page="orders" onclick="switchPage('orders')">🧾 Замовлення</button>
+                <button class="page-tab" type="button" data-page="queue" onclick="switchPage('queue')">🖨️ Черга друку</button>
                 <button class="page-tab" type="button" data-page="categories" onclick="switchPage('categories')">🗂️ Категорії</button>
                 <button class="page-tab" type="button" data-page="filaments" onclick="switchPage('filaments')">🎨 Філаменти</button>
                 <button class="page-tab" type="button" data-page="coupons" onclick="switchPage('coupons')">🎟️ Купони</button>
@@ -2163,6 +2188,22 @@
                 <div id="ordersEmpty" class="empty-state" style="display:none;">
                     <div class="empty-state-icon">📭</div>
                     <p>Замовлень не знайдено</p>
+                </div>
+            </section>
+
+            <section id="queuePage" class="page-section">
+                <div class="orders-toolbar">
+                    <h2>🖨️ Черга друку</h2>
+                    <div class="orders-toolbar-right">
+                        <button class="btn btn-secondary" type="button" onclick="loadPrintQueue()">🔄 Оновити</button>
+                    </div>
+                </div>
+                <div id="queueKpi" class="queue-kpis"></div>
+                <div id="queueLoading" class="loading" style="display:none;"><div class="spinner"></div></div>
+                <div id="queueList"></div>
+                <div id="queueEmpty" class="empty-state" style="display:none;">
+                    <div class="empty-state-icon">🖨️</div>
+                    <p>Черга порожня: немає підтверджених замовлень до друку</p>
                 </div>
             </section>
 
@@ -3031,6 +3072,12 @@
                 return;
             }
 
+            if (currentPage === 'queue') {
+                label.textContent = 'Деталей до друку';
+                value.textContent = String(printQueue.kpi?.parts || 0);
+                return;
+            }
+
             if (currentPage === 'users') {
                 label.textContent = 'Користувачів';
                 value.textContent = String(usersTotal);
@@ -3055,6 +3102,7 @@
             updateHeaderPrimaryAction();
             updateHeaderStat();
             if (page === 'orders') loadOrders();
+            if (page === 'queue') loadPrintQueue();
             if (page === 'coupons') loadCoupons();
             if (page === 'promotions') loadPromotions();
             if (page === 'users') loadUsers();
@@ -3446,6 +3494,113 @@
             } catch (e) {
                 console.error('loadFilaments error:', e);
                 showToast('Помилка завантаження філаментів', 'error');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // ЧЕРГА ДРУКУ
+        // ═══════════════════════════════════════════════════════════
+
+        let printQueue = { groups: [], kpi: { parts: 0, orders: 0, colors: 0 } };
+
+        function filamentHexByName(name) {
+            const f = allFilaments.find(x => String(x.name || '').toLowerCase() === String(name || '').toLowerCase());
+            return f ? safeHexColor(f.hex) : '#cbd5e1';
+        }
+
+        function pluralUa(n, one, few, many) {
+            const m10 = n % 10, m100 = n % 100;
+            if (m10 === 1 && m100 !== 11) return one;
+            if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+            return many;
+        }
+
+        async function loadPrintQueue() {
+            const loading = document.getElementById('queueLoading');
+            try {
+                loading.style.display = 'flex';
+                if (!allFilaments.length) {
+                    try {
+                        const fres = await fetch(API_BASE + '/filaments');
+                        if (fres.ok) allFilaments = await fres.json();
+                    } catch (_) { /* кольори — лише оздоблення */ }
+                }
+                const res = await fetch(API_BASE + '/print-queue');
+                if (!res.ok) throw new Error('Помилка завантаження черги друку');
+                printQueue = await res.json();
+                renderPrintQueue();
+            } catch (e) {
+                showToast(e.message || 'Помилка завантаження черги друку', 'error');
+            } finally {
+                loading.style.display = 'none';
+                updateHeaderStat();
+            }
+        }
+
+        function renderQueueRow(item) {
+            const thumb = item.photo
+                ? `<img src="${escapeAttr(item.photo)}" alt="" loading="lazy">`
+                : `<span class="queue-thumb-emoji">${escapeHtml(item.emoji || '📦')}</span>`;
+            const extra = [item.personalization ? `✏️ ${escapeHtml(item.personalization)}` : '', item.personalization_note ? escapeHtml(item.personalization_note) : '']
+                .filter(Boolean).join(' · ');
+            return `
+                <label class="queue-row ${item.printed ? 'done' : ''}">
+                    <input type="checkbox" ${item.printed ? 'checked' : ''} onchange="toggleItemPrinted(${item.id}, this.checked, this)">
+                    ${thumb}
+                    <div class="queue-row-main">
+                        <b>${item.is_gift ? '🎁 ' : ''}${escapeHtml(item.product_name)}</b>
+                        ${extra ? `<small>${extra}</small>` : ''}
+                    </div>
+                    <span class="queue-qty">×${item.quantity}</span>
+                    <span class="queue-order">№${item.order_id}</span>
+                    <span class="queue-state">${item.printed ? 'надруковано' : 'в черзі'}</span>
+                </label>`;
+        }
+
+        function renderPrintQueue() {
+            const kpi = document.getElementById('queueKpi');
+            const list = document.getElementById('queueList');
+            const empty = document.getElementById('queueEmpty');
+            const k = printQueue.kpi || {};
+            kpi.innerHTML = `
+                <div class="queue-kpi-card"><span>Деталей до друку</span><b>${k.parts || 0}</b></div>
+                <div class="queue-kpi-card"><span>Замовлень у черзі</span><b>${k.orders || 0}</b></div>
+                <div class="queue-kpi-card"><span>Кольорів</span><b>${k.colors || 0}</b></div>`;
+            const groups = printQueue.groups || [];
+            empty.style.display = groups.length ? 'none' : 'block';
+            list.innerHTML = groups.map(g => `
+                <div class="queue-group">
+                    <div class="queue-head">
+                        <span class="queue-spool" style="background:${filamentHexByName(g.filament)}"></span>
+                        <div><b>${escapeHtml(g.filament || 'Без кольору')}</b>
+                        <small>${g.items.length} ${pluralUa(g.items.length, 'позиція', 'позиції', 'позицій')} · ${g.pending} в черзі</small></div>
+                    </div>
+                    ${g.items.map(renderQueueRow).join('')}
+                </div>`).join('');
+        }
+
+        async function toggleItemPrinted(itemId, printed, input) {
+            if (input) input.disabled = true;
+            try {
+                const res = await fetch(API_BASE + `/order-items/${itemId}/printed`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                    body: JSON.stringify({ printed }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Помилка збереження');
+                if (result.status === 'ready') {
+                    showToast(`№${result.order_id} повністю надруковано — статус «Готове»`, result.client_notified === false ? 'error' : 'success');
+                } else if (result.status === 'printing' && printed) {
+                    showToast(`№${result.order_id} — статус «Друкується»`, result.client_notified === false ? 'error' : 'success');
+                }
+                if (result.client_notified === false) {
+                    showToast(`Клієнт №${result.order_id} не отримав повідомлення`, 'error');
+                }
+                await loadPrintQueue();
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження', 'error');
+                await loadPrintQueue();
             }
         }
 
