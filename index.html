@@ -511,6 +511,31 @@
     opacity: .8;
   }
 
+  /* Оформлення: доставка, контакт, оплата (REDESIGN.md, розд. 3.5) */
+  .chk-sec { background: var(--surface); border-radius: var(--r); box-shadow: 0 0 0 1px var(--line); padding: 14px; margin: 12px 0; display: grid; gap: 10px; }
+  .chk-sec > h4 { margin: 0; font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 8px; color: var(--ink); }
+  .chk-sec > h4 svg.i { width: 18px; height: 18px; color: var(--ink-2); }
+  .chk-seg { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chk-field { display: grid; gap: 5px; }
+  .chk-field > label { font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+  .chk-input { width: 100%; padding: 11px 12px; border: 1.5px solid var(--line-2); border-radius: var(--r-sm); background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; }
+  .chk-input:focus { outline: none; border-color: var(--blue); }
+  .chk-input.err { border-color: var(--sale); }
+  .chk-hint { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
+  .chk-hint.warn { color: var(--amber); }
+  .chk-err { font-size: 12px; color: var(--sale); font-weight: 600; }
+  .chk-list { max-height: 220px; overflow-y: auto; border-radius: var(--r-sm); box-shadow: 0 0 0 1px var(--line); overscroll-behavior: contain; }
+  .chk-list:empty { display: none; }
+  .chk-opt { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+  .chk-opt:last-child { border-bottom: 0; }
+  .chk-opt small { display: block; color: var(--ink-3); font-size: 11.5px; }
+  .chk-opt[aria-pressed="true"] { background: var(--blue-soft); color: var(--blue-ink); font-weight: 700; }
+  .chk-row { display: flex; gap: 8px; }
+  .chk-row .chk-input { flex: 1; min-width: 0; }
+  .chk-share { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 1.5px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface); color: var(--blue-ink); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .chk-share svg.i { width: 16px; height: 16px; }
+  body.cart-tg-main .cart-submit-btn { display: none; }
+
   /* Підвал кошика */
   .cart-footer {
     flex-shrink: 0;
@@ -1284,30 +1309,38 @@
     <div class="order-loading-step" id="order-loading-step">Перевіряємо товари…</div>
   </div>
   <div class="cart-page">
-    <div class="cart-scroll" id="cart-list"></div>
-    <div class="cart-footer" id="cart-footer" style="display:none">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-        <div class="cart-comment-label" style="margin-bottom:0;">Коментар / побажання</div>
-        <button class="coupon-chip" id="couponToggle" onclick="toggleCoupon()">🏷️ Промокод</button>
-      </div>
-      <textarea class="cart-comment" id="cart-comment" rows="2" placeholder="Колір, написи, особливі побажання..."></textarea>
-      <div class="coupon-input-wrap" id="couponInputWrap" style="display:none">
-        <div class="coupon-status" id="couponStatus"></div>
-        <div class="coupon-row">
-          <input type="text" id="couponInput" class="coupon-input" placeholder="" maxlength="32"
-                oninput="this.value = this.value.toUpperCase()"
-                onkeydown="if(event.key==='Enter') applyCoupon()">
-          <button class="coupon-btn" id="couponBtn" onclick="applyCoupon()">Застосувати</button>
+    <div class="cart-scroll" id="cart-scroll">
+      <div id="cart-list"></div>
+      <div id="cart-checkout" style="display:none">
+        <div class="chk-sec" id="chk-delivery"></div>
+        <div class="chk-sec" id="chk-pay"></div>
+        <div class="chk-sec">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div class="cart-comment-label" style="margin-bottom:0;">Коментар / побажання</div>
+            <button class="coupon-chip" id="couponToggle" onclick="toggleCoupon()">🏷️ Промокод</button>
+          </div>
+          <textarea class="cart-comment" id="cart-comment" rows="2" placeholder="Колір, написи, особливі побажання..."></textarea>
+          <div class="coupon-input-wrap" id="couponInputWrap" style="display:none">
+            <div class="coupon-status" id="couponStatus"></div>
+            <div class="coupon-row">
+              <input type="text" id="couponInput" class="coupon-input" placeholder="" maxlength="32"
+                    oninput="this.value = this.value.toUpperCase()"
+                    onkeydown="if(event.key==='Enter') applyCoupon()">
+              <button class="coupon-btn" id="couponBtn" onclick="applyCoupon()">Застосувати</button>
+            </div>
+            <div class="coupon-hint" id="couponHint"></div>
+          </div>
         </div>
-        <div class="coupon-hint" id="couponHint"></div>
       </div>
-
-      <div class="cart-total-row">
+    </div>
+    <div class="cart-footer" id="cart-footer" style="display:none">
+      <div class="cart-total-row" style="margin-top:0">
         <span class="cart-total-label">Разом:</span>
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
           <span class="cart-old-price" id="cartOldPrice"><span></span></span>
           <span class="cart-total-sum" id="cart-total">0 ₴</span>
           <div class="cart-total-hint" id="cart-total-hint" style="display:none">Суму узгодимо після замовлення</div>
+          <div class="cart-total-hint" id="cart-delivery-hint" style="display:block">Доставку оплачуєш за тарифами перевізника</div>
         </div>
       </div>
 
@@ -1632,6 +1665,7 @@ function setOrderSubmitting(active) {
   setSubmitButtonLoading(active);
   if (active) showOrderLoading();
   else hideOrderLoading();
+  syncCartMainButton();
 }
 
 function loadCart() {
@@ -2050,11 +2084,14 @@ function renderCart() {
         <div class="cart-empty-sub">Додай товари з каталогу</div>
       </div>`;
     footer.style.display = 'none';
+    setCheckoutVisible(false);
     return;
   }
 
   // Інакше — показуємо товари та підвал з сумою
   footer.style.display = '';
+  setCheckoutVisible(true);
+  applyPendingCoupon();
   const pricing = getCartPricing();
   const { rawTotal, promotionDiscount, discount, finalTotal } = pricing;
   const totalLabel = formatCartTotalLabel(finalTotal);
@@ -2189,6 +2226,7 @@ function renderCart() {
     list.insertAdjacentHTML('beforeend', '<hr class="cart-promo-divider" aria-hidden="true">');
     list.insertAdjacentHTML('beforeend', promoBlock);
   }
+  syncCartMainButton();
 }
 
 // Рядки знижок під товарами: акція і купон показуються окремо, щоб було видно,
@@ -2435,6 +2473,8 @@ function updateCartTotal() {
   updateCartDiscountSummary(pricing);
   updateCouponHint();
   if (footer) footer.style.display = cart.length || Object.keys(pendingRemovals).length ? '' : 'none';
+  setCheckoutVisible(cart.length > 0);
+  syncCartMainButton();
 }
 
 // ─── СКРОЛ ─────────────────────────────────────────────────
@@ -3243,6 +3283,7 @@ function updateMainButton() {
     btn.classList.toggle('done', !!b.done);
     return;
   }
+  releaseCartMain();
   const mb = tgApp().MainButton;
   try {
     if (!tgMainHandler) {
@@ -3421,6 +3462,7 @@ function closeModal() {
     refreshRecent();
     if (reopenGift) openGiftModal();
     updateBackButton();
+    syncCartMainButton();
   }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 200);
   updateBackButton();
 }
@@ -3433,9 +3475,294 @@ function sheetBack() {
 }
 
 // ─── ORDER ──────────────────────────────────────────────────
+// ─── ОФОРМЛЕННЯ: доставка, контакт, оплата (REDESIGN.md, розд. 3.5) ───
+const CHK_KEY = 'checkout_v1';
+const DELIVERY_LABELS = { np: 'Нова Пошта', up: 'Укрпошта', self: 'Самовивіз' };
+let SHOP_CONFIG = { delivery_methods: ['np', 'self'], np_lookup: false };
+const CHK = {
+  method: 'np', city: '', cityRef: '', branch: '', branchRef: '', kind: 'all',
+  name: '', phone: '', pay: 'card',
+  cities: [], warehouses: [], whLoading: false, cityLoading: false, lookupDown: false, errors: {},
+};
+let cityTimer = null;
+let cityReq = 0;
+let pendingCouponCode = '';
+
+function loadCheckout() {
+  try {
+    const d = JSON.parse(localStorage.getItem(CHK_KEY) || '{}');
+    for (const k of ['method', 'city', 'cityRef', 'branch', 'branchRef', 'name', 'phone', 'pay']) {
+      if (typeof d[k] === 'string') CHK[k] = d[k];
+    }
+  } catch (_) {}
+}
+function saveCheckout() {
+  try {
+    const { method, city, cityRef, branch, branchRef, name, phone, pay } = CHK;
+    localStorage.setItem(CHK_KEY, JSON.stringify({ method, city, cityRef, branch, branchRef, name, phone, pay }));
+  } catch (_) {}
+}
+async function loadShopConfig() {
+  try {
+    const c = await apiGet('/api/config');
+    if (Array.isArray(c?.delivery_methods) && c.delivery_methods.length) {
+      SHOP_CONFIG = { delivery_methods: c.delivery_methods, np_lookup: !!c.np_lookup };
+    }
+  } catch (_) {}
+  if (!SHOP_CONFIG.delivery_methods.includes(CHK.method)) CHK.method = SHOP_CONFIG.delivery_methods[0];
+}
+function npLookupOn() { return SHOP_CONFIG.np_lookup && !CHK.lookupDown; }
+function setCheckoutVisible(on) {
+  const el = document.getElementById('cart-checkout');
+  if (el) el.style.display = on ? '' : 'none';
+}
+
+function chkFieldHtml(id, label, value, { ph = '', type = 'text', max = 100, mode = '' } = {}) {
+  const err = CHK.errors[id];
+  return `<div class="chk-field"><label for="${id}">${label}</label>
+    <input class="chk-input${err ? ' err' : ''}" id="${id}" type="${type}" value="${escapeAttr(value)}" maxlength="${max}"
+      placeholder="${escapeAttr(ph)}" autocomplete="off"${mode ? ` inputmode="${mode}"` : ''}
+      oninput="chkInput('${id}', this.value)">
+    ${err ? `<div class="chk-err">${escapeHtml(err)}</div>` : ''}</div>`;
+}
+function chkContactHtml() {
+  const err = CHK.errors['chk-phone'];
+  const share = inTelegram() && tgApp()?.requestContact
+    ? `<button type="button" class="chk-share" onclick="chkSharePhone()">${ic('phone')}З Telegram</button>` : '';
+  return chkFieldHtml('chk-name', 'Імʼя та прізвище отримувача', CHK.name, { ph: 'Іван Петренко' })
+    + `<div class="chk-field"><label for="chk-phone">Телефон</label>
+      <div class="chk-row"><input class="chk-input${err ? ' err' : ''}" id="chk-phone" type="tel" inputmode="tel" value="${escapeAttr(CHK.phone)}"
+        maxlength="20" placeholder="+380 50 123 45 67" autocomplete="tel" oninput="chkInput('chk-phone', this.value)">${share}</div>
+      ${err ? `<div class="chk-err">${escapeHtml(err)}</div>` : ''}</div>`;
+}
+function chkWarehousesHtml() {
+  if (CHK.whLoading) return '<div class="chk-hint">Завантажую відділення…</div>';
+  if (!CHK.warehouses.length) {
+    return '<div class="chk-hint warn">У цьому населеному пункті немає відділень Нової Пошти. Обери найближче місто.</div>';
+  }
+  return CHK.warehouses.map((w, i) =>
+    `<button type="button" class="chk-opt" aria-pressed="${w.ref === CHK.branchRef}" onclick="chkPickBranch(${i})">${escapeHtml(w.name)}</button>`).join('');
+}
+function chkNpHtml() {
+  const err = CHK.errors['chk-branch'];
+  const cityErr = CHK.errors['chk-city'];
+  let html = `<div class="chk-field"><label for="chk-city">Місто, смт або село</label>
+    <input class="chk-input${cityErr ? ' err' : ''}" id="chk-city" type="text" value="${escapeAttr(CHK.city)}" maxlength="120"
+      placeholder="Почни вводити назву" autocomplete="off" oninput="chkInput('chk-city', this.value)">
+    ${cityErr ? `<div class="chk-err">${escapeHtml(cityErr)}</div>` : ''}
+    <div class="chk-list" id="chk-city-list">${chkCitiesHtml()}</div></div>`;
+  if (npLookupOn()) {
+    if (CHK.cityRef) {
+      html += `<div class="chk-seg">${[['all', 'Усі'], ['branch', 'Відділення'], ['postomat', 'Поштомати']].map(([k, l]) =>
+        `<button type="button" class="cat-chip" aria-pressed="${CHK.kind === k}" onclick="chkSetKind('${k}')">${l}</button>`).join('')}</div>
+        <div class="chk-list" id="chk-wh-list">${chkWarehousesHtml()}</div>
+        ${err ? `<div class="chk-err">${escapeHtml(err)}</div>` : ''}`;
+    } else {
+      html += '<div class="chk-hint">Обери населений пункт зі списку — тоді зʼявляться відділення.</div>';
+    }
+  } else {
+    html += chkFieldHtml('chk-branch', 'Відділення або поштомат', CHK.branch, { ph: '№ відділення або адреса', max: 200 });
+    html += '<div class="chk-hint">Вкажи номер відділення чи поштомата Нової Пошти.</div>';
+  }
+  return html;
+}
+function chkCitiesHtml() {
+  if (CHK.cityLoading) return '<div class="chk-hint" style="padding:10px 12px">Шукаю…</div>';
+  return CHK.cities.map((c, i) =>
+    `<button type="button" class="chk-opt" onclick="chkPickCity(${i})">${escapeHtml(c.name)}<small>${escapeHtml([c.area, c.region].filter(Boolean).join(', '))}</small></button>`).join('');
+}
+function renderCheckout() {
+  const box = document.getElementById('chk-delivery');
+  const pay = document.getElementById('chk-pay');
+  if (!box || !pay) return;
+  const active = document.activeElement;
+  const focusId = active && box.contains(active) ? active.id : '';
+  const caret = focusId && active.selectionStart != null ? active.selectionStart : null;
+  const methods = SHOP_CONFIG.delivery_methods;
+  box.innerHTML = `<h4>${ic('truck')}Доставка</h4>
+    <div class="chk-seg">${methods.map(m =>
+      `<button type="button" class="cat-chip" aria-pressed="${CHK.method === m}" onclick="chkSetMethod('${m}')">${DELIVERY_LABELS[m] || m}</button>`).join('')}</div>
+    ${CHK.method === 'self'
+      ? '<div class="chk-hint">Місце й час узгодимо в особистих повідомленнях.</div>'
+      : chkNpHtml() + chkContactHtml()}`;
+  pay.style.display = CHK.method === 'self' ? 'none' : '';
+  pay.innerHTML = `<h4>${ic('card')}Оплата</h4>
+    <div class="chk-seg">
+      <button type="button" class="cat-chip" aria-pressed="${CHK.pay === 'card'}" onclick="chkSetPay('card')">На картку після підтвердження</button>
+      <button type="button" class="cat-chip" aria-pressed="${CHK.pay === 'cod'}" onclick="chkSetPay('cod')">Накладений платіж</button>
+    </div>
+    <div class="chk-hint">${CHK.pay === 'cod'
+      ? 'Оплата при отриманні. Нова Пошта бере комісію 20 ₴ + 2% від суми — вона не входить у суму замовлення.'
+      : 'Після підтвердження я надішлю реквізити в Telegram.'}</div>`;
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el) { el.focus({ preventScroll: true }); if (caret != null) try { el.setSelectionRange(caret, caret); } catch (_) {} }
+  }
+}
+function chkSetMethod(m) {
+  if (CHK.method === m) return;
+  CHK.method = m; CHK.errors = {};
+  haptic('select'); saveCheckout(); renderCheckout();
+}
+function chkSetPay(p) { CHK.pay = p; haptic('select'); saveCheckout(); renderCheckout(); }
+function chkSetKind(k) {
+  CHK.kind = k;
+  if (CHK.cityRef) loadWarehouses();
+  renderCheckout();
+}
+function chkInput(id, value) {
+  if (CHK.errors[id]) {
+    delete CHK.errors[id];
+    document.getElementById(id)?.classList.remove('err');
+  }
+  if (id === 'chk-name') CHK.name = value;
+  else if (id === 'chk-phone') CHK.phone = value;
+  else if (id === 'chk-branch') CHK.branch = value;
+  else if (id === 'chk-city') {
+    CHK.city = value; CHK.cityRef = ''; CHK.branch = ''; CHK.branchRef = ''; CHK.warehouses = [];
+    if (npLookupOn()) {
+      clearTimeout(cityTimer);
+      cityTimer = setTimeout(() => searchCities(value), 300);
+    }
+  }
+  saveCheckout();
+}
+async function searchCities(q) {
+  q = q.trim();
+  const req = ++cityReq;
+  if (q.length < 2) { CHK.cities = []; CHK.cityLoading = false; refreshCityList(); return; }
+  CHK.cityLoading = true; refreshCityList();
+  try {
+    const data = await apiGet(`/delivery/np/cities?q=${encodeURIComponent(q)}`);
+    if (req !== cityReq) return;
+    CHK.cities = Array.isArray(data?.items) ? data.items : [];
+  } catch (_) {
+    if (req !== cityReq) return;
+    // Довідник недоступний — переходимо на ручне введення, замовлення не блокуємо
+    CHK.lookupDown = true; CHK.cities = [];
+    CHK.cityLoading = false;
+    renderCheckout();
+    return;
+  }
+  CHK.cityLoading = false;
+  refreshCityList();
+}
+function refreshCityList() {
+  const el = document.getElementById('chk-city-list');
+  if (el) el.innerHTML = chkCitiesHtml();
+}
+function chkPickCity(i) {
+  const c = CHK.cities[i];
+  if (!c) return;
+  CHK.city = [c.name, c.area].filter(Boolean).join(', ');
+  CHK.cityRef = c.ref; CHK.branch = ''; CHK.branchRef = ''; CHK.cities = [];
+  delete CHK.errors['chk-city'];
+  haptic('select'); saveCheckout();
+  loadWarehouses();
+  renderCheckout();
+}
+async function loadWarehouses() {
+  if (!CHK.cityRef) return;
+  const ref = CHK.cityRef;
+  CHK.whLoading = true; CHK.warehouses = [];
+  try {
+    const data = await apiGet(`/delivery/np/warehouses?city=${encodeURIComponent(ref)}&kind=${CHK.kind}`);
+    if (ref !== CHK.cityRef) return;
+    CHK.warehouses = Array.isArray(data?.items) ? data.items : [];
+  } catch (_) {
+    if (ref !== CHK.cityRef) return;
+    CHK.lookupDown = true;
+  }
+  CHK.whLoading = false;
+  renderCheckout();
+}
+function chkPickBranch(i) {
+  const w = CHK.warehouses[i];
+  if (!w) return;
+  CHK.branch = w.name; CHK.branchRef = w.ref;
+  delete CHK.errors['chk-branch'];
+  haptic('select'); saveCheckout(); renderCheckout();
+}
+function chkSharePhone() {
+  const t = tgApp();
+  if (!t?.requestContact) return;
+  try {
+    t.requestContact(sent => {
+      if (!sent) showToast({ msg: 'Можна вказати номер вручну', icon: 'info' });
+    });
+  } catch (_) {}
+}
+// Номер приходить у події contactRequested (рядок response з полем contact); якщо формат інший — лишається ручне поле
+function onContactRequested(ev) {
+  try {
+    const params = new URLSearchParams(ev?.response || '');
+    const contact = JSON.parse(params.get('contact') || '{}');
+    const digits = String(contact.phone_number || '').replace(/\D/g, '');
+    if (digits.length >= 10) {
+      CHK.phone = `+${digits}`;
+      delete CHK.errors['chk-phone'];
+      saveCheckout(); renderCheckout();
+    }
+  } catch (_) {}
+}
+// Ті самі правила, що на сервері (validate_checkout_fields): повертає { field, msg } або null
+function validateCheckout() {
+  if (CHK.method === 'self') return null;
+  const digits = CHK.phone.replace(/\D/g, '');
+  const phoneOk = (digits.length === 10 && digits.startsWith('0')) || (digits.length === 12 && digits.startsWith('380')) || digits.length === 9;
+  if (!CHK.city.trim()) return { field: 'chk-city', msg: 'Обери місто доставки' };
+  if (!CHK.branch.trim()) return { field: npLookupOn() && CHK.cityRef ? 'chk-branch' : 'chk-branch', msg: 'Обери відділення або поштомат' };
+  if (!CHK.name.trim()) return { field: 'chk-name', msg: 'Вкажи імʼя та прізвище отримувача' };
+  if (!phoneOk) return { field: 'chk-phone', msg: 'Вкажи номер телефону у форматі +380…' };
+  return null;
+}
+function failCheckout(e) {
+  CHK.errors = { [e.field]: e.msg };
+  renderCheckout();
+  haptic('error');
+  showToast({ msg: e.msg, icon: 'alert', duration: 3200 });
+  (document.getElementById(e.field) || document.getElementById('chk-delivery'))?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+// Deep link startapp=coupon_КОД: застосовуємо, щойно в кошику зʼявляється товар
+function applyPendingCoupon() {
+  if (!pendingCouponCode || appliedCoupon) return;
+  const code = pendingCouponCode;
+  pendingCouponCode = '';
+  const wrap = document.getElementById('couponInputWrap');
+  if (wrap) wrap.style.display = 'flex';
+  document.getElementById('couponToggle')?.classList.add('active');
+  const input = document.getElementById('couponInput');
+  if (input) { input.value = code; applyCoupon(); }
+}
+
+// ─── MainButton кошика (Telegram): «Оформити замовлення · сума» ───
+let cartMainHandler = null;
+function releaseCartMain() {
+  const mb = useTgMainButton() ? tgApp().MainButton : null;
+  if (mb && cartMainHandler) { try { mb.offClick(cartMainHandler); } catch (_) {} }
+  cartMainHandler = null;
+}
+function syncCartMainButton() {
+  const want = useTgMainButton() && isCartPageActive() && cart.length > 0 && !isSheetOpen()
+    && !document.getElementById('success-screen').classList.contains('open');
+  document.body.classList.toggle('cart-tg-main', !!want);
+  if (!useTgMainButton() || isSheetOpen()) return;   // у картці товару кнопкою керує updateMainButton
+  const mb = tgApp().MainButton;
+  try {
+    if (!want) { releaseCartMain(); mb.hide(); return; }
+    if (!cartMainHandler) { cartMainHandler = () => submitOrder(); mb.onClick(cartMainHandler); }
+    const pricing = getCartPricing();
+    const onlyContract = cartHasContractItems() && getCartFixedTotal() === 0;
+    const text = onlyContract ? 'Надіслати заявку' : `Оформити замовлення · ${money(pricing.finalTotal)}`;
+    mb.setParams({ text, color: MAIN_BLUE, text_color: '#FFFFFF', is_active: !isSubmitting, is_visible: true });
+  } catch (_) {}
+}
+
 async function submitOrder() {
   if (!cart.length || isSubmitting) return;
   if (submitOrderPromise) return submitOrderPromise;
+  const invalid = validateCheckout();
+  if (invalid) { failCheckout(invalid); return; }
   const submitBtn = document.getElementById('cart-submit-btn');
   if (submitBtn) submitBtn.disabled = true;
   submitOrderPromise = submitOrderOnce();
@@ -3460,8 +3787,9 @@ async function submitOrderOnce() {
   const tg   = window.Telegram?.WebApp;
   const user = tg?.initDataUnsafe?.user;
 
-  // Розрахунок загальної суми замовлення з урахуванням кількості кожного товару та застосованої знижки. Це дозволяє нам отримати точну суму, яку користувач повинен сплатити, враховуючи всі товари в кошику та можливі знижки від купонів.
+  // Сума має збігатися з серверною до копійки: доставку й комісію накладеного платежу в неї не додаємо
   const { discount, finalTotal: total } = getCartPricing();
+  const ship = CHK.method !== 'self';
 
   const payload = {
     action: 'order',
@@ -3482,6 +3810,15 @@ async function submitOrderOnce() {
     discount_amount: discount,
     comment:      comment,
     gift:         (shouldShowGift() && selectedGift) ? formatGiftForOrder() : null,
+    gift_product_id: (shouldShowGift() && selectedGift) ? selectedGift.id : null,
+    delivery_method: CHK.method,
+    city:         ship ? CHK.city.trim() : '',
+    city_ref:     ship ? CHK.cityRef : '',
+    branch:       ship ? CHK.branch.trim() : '',
+    branch_ref:   ship ? CHK.branchRef : '',
+    recipient_name: ship ? CHK.name.trim() : '',
+    phone:        ship ? CHK.phone.trim() : '',
+    pay_method:   ship ? CHK.pay : '',
     user:         user?.username ? '@' + user.username : (user?.first_name || 'невідомо'),
     user_id:      user?.id || null,
     first_name:   user?.first_name || '',
@@ -3489,11 +3826,11 @@ async function submitOrderOnce() {
   };
 
   try {
-    await Promise.all([
+    const [res] = await Promise.all([
       apiPost('/order', payload),
       delay(MIN_LOADING_MS),
     ]);
-    const orderedIds = cart.map(i => i.id);
+    const orderedIds = [...new Set(cart.map(i => i.id))];
     pendingIdempotencyKey = null;
     cart = [];
     appliedCoupon = null;
@@ -3505,11 +3842,14 @@ async function submitOrderOnce() {
     orderedIds.forEach(id => updateCardBadge(id));
     setOrderSubmitting(false);
     document.getElementById('success-screen').classList.add('open');
+    syncCartMainButton();
     haptic('success');
     updateBackButton();
   } catch(e) {
     console.error('Помилка відправки:', e);
-    showToast({ msg: "Не вдалось надіслати замовлення. Перевір з'єднання і спробуй ще раз.", icon: 'alert', duration: 4000 });
+    // Текст помилки сервера (сума не збіглась, немає телефону…) корисніший за загальне «перевір зʼєднання»
+    const msg = e instanceof TypeError ? "Не вдалось надіслати замовлення. Перевір з'єднання і спробуй ще раз." : (e.message || 'Не вдалось надіслати замовлення');
+    showToast({ msg, icon: 'alert', duration: 4500 });
   } finally {
     isSubmitting = false;
     setOrderSubmitting(false);
@@ -3518,6 +3858,7 @@ async function submitOrderOnce() {
 
 function backToCatalog() {
   document.getElementById('success-screen').classList.remove('open');
+  syncCartMainButton();
   switchPage('products');
   goHome();
   updateBackButton();
@@ -3654,6 +3995,12 @@ const ICON_PATHS = {
   share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
   play: '<path d="M7 4v16l13-8Z"/>',
   pencil: '<path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  truck: '<path d="M2 6h11v10H2z"/><path d="M13 9h4l4 4v3h-8"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/>',
+  card: '<rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20M6 15h4"/>',
+  phone: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2Z"/>',
+  copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
+  box: '<path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
 };
 function ic(name) {
   return `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
@@ -4581,7 +4928,7 @@ function switchPage(page) {
   ms.scrollTop = page === 'products' && SHOP.view === 'home' ? SHOP.homeScroll : 0;
   if (page === 'cart') {
     renderCart();
-    const cartScroll = document.getElementById('cart-list');
+    const cartScroll = document.getElementById('cart-scroll');
     if (cartScroll) cartScroll.scrollTop = 0;
   } else {
     // Кошик міг змінитись на іншій сторінці — синхронізуємо кнопки на картках
@@ -4592,6 +4939,7 @@ function switchPage(page) {
   if (page === 'sales') renderSales();
   haptic('select');
   updateBackButton();
+  syncCartMainButton();
 }
 function goToCart() {
   switchPage('cart');
@@ -4829,13 +5177,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   loadCart();
+  loadCheckout();
   updateCartBadge();
   loadFavs();
+  tg?.onEvent?.('contactRequested', onContactRequested);
   bindShopEvents();
   bindSheetInputs();
   renderHomeSkeleton();
 
-  await Promise.all([loadProducts(), loadFilaments(), loadCategories(), loadPromotions(), loadShowcase()]);
+  await Promise.all([loadProducts(), loadFilaments(), loadCategories(), loadPromotions(), loadShowcase(), loadShopConfig()]);
+  renderCheckout();
 
   refreshShowcaseDerived();
   renderHome();
@@ -4848,6 +5199,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Відкрити конкретний товар якщо прийшли через startapp=product_1 або product_1_p2
   const startParam = tg?.initDataUnsafe?.start_param;
+  const couponLink = /^coupon_([A-Za-z0-9_-]{2,32})$/.exec(startParam || '');
+  if (couponLink) {
+    pendingCouponCode = couponLink[1].toUpperCase();
+    showToast({ msg: `Промокод ${pendingCouponCode} застосую в кошику`, icon: 'tag' });
+  }
   const parsed = parseProductStartParam(startParam);
   if (parsed?.id) {
     openModal(parsed.id, 'products', { photoIndex: parsed.photoIndex });
