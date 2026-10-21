@@ -15,7 +15,7 @@ os.environ.setdefault("VALIDATE_INIT_DATA", "false")
 os.environ.setdefault("LOCAL_DEV_MODE", "true")
 os.environ.setdefault("DB_BACKEND", "sqlite")
 
-GOOD_PHOTO = "https://res.cloudinary.com/x/image/upload/poselyanov3dprint/review_1.jpg"
+GOOD_PHOTO = "https://res.cloudinary.com/mycloud/image/upload/v1/poselyanov3dprint/review_7_1700000000.jpg"
 
 
 @pytest.fixture
@@ -24,6 +24,8 @@ def env(monkeypatch):
         db_path = tmp.name
     monkeypatch.setenv("DB_FILE", db_path)
     monkeypatch.setenv("DB_BACKEND", "sqlite")
+
+    monkeypatch.setenv("CLOUDINARY_CLOUD_NAME", "mycloud")
 
     import config
 
@@ -66,7 +68,17 @@ def test_pending_lists_only_delivered_unreviewed(env):
 def test_submit_goes_to_moderation_and_blocks_duplicates(env):
     orders, reviews, _ = env
     oid = _delivered_order(orders)
-    result = reviews.submit_review(7, "Іван Петренко", oid, 11, 5, "Супер", [GOOD_PHOTO, "https://evil.example/x.jpg"])
+    result = reviews.submit_review(
+        7, "Іван Петренко", oid, 11, 5, "Супер",
+        [
+            GOOD_PHOTO,
+            "https://evil.example/x.jpg",
+            "https://res.cloudinary.com/other/image/upload/poselyanov3dprint/review_7_1.jpg",
+            "https://res.cloudinary.com/mycloud/image/upload/v1/poselyanov3dprint/review_8_1.jpg",
+            GOOD_PHOTO + "?x=1",
+            "https://res.cloudinary.com@evil.example/mycloud/image/upload/v1/poselyanov3dprint/review_7_1.jpg",
+        ],
+    )
     assert result["status"] == "pending"
     review = reviews.get_review(result["id"])
     assert review["photos"] == [GOOD_PHOTO]

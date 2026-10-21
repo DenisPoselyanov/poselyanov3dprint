@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from urllib.parse import urlparse
 
 from db_core import db_connect, is_postgres, sql as _sql
 from services.hits import SOLD_STATUSES
@@ -196,9 +197,10 @@ def product_reviews(product_id: int, limit: int = 10, offset: int = 0) -> dict:
 
 TEXT_MAX = 1000
 PHOTOS_MAX = 3
-# Фото відгуків завантажуються нашим ендпоінтом у цю папку Cloudinary; чужі URL не приймаємо.
-PHOTO_URL_PREFIXES = ("https://res.cloudinary.com/",)
-PHOTO_URL_MARKER = "/poselyanov3dprint/"
+# Фото відгуків завантажує наш ендпоінт: public_id = poselyanov3dprint/review_<user_id>_<ts>.
+# Приймаємо лише URL з нашого акаунта Cloudinary і лише власні фото користувача.
+PHOTO_HOST = "res.cloudinary.com"
+PHOTO_FOLDER = "poselyanov3dprint"
 REVIEW_REQUEST_DELAY_DAYS = 3
 
 
@@ -206,14 +208,28 @@ class ReviewError(Exception):
     """Помилка, текст якої можна показати користувачу."""
 
 
-def _clean_photos(photos) -> list[str]:
+def _is_own_photo_url(url, user_id: int) -> bool:
+    import config
+
+    cloud = (config.CLOUDINARY_CLOUD_NAME or "").strip()
+    if not cloud or not isinstance(url, str) or len(url) > 500:
+        return False
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or parsed.hostname != PHOTO_HOST or parsed.port is not None:
+        return False
+    if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.params:
+        return False
+    path = parsed.path
+    return path.startswith(f"/{cloud}/image/upload/") and f"/{PHOTO_FOLDER}/review_{int(user_id)}_" in path
+
+
+def _clean_photos(photos, user_id: int) -> list[str]:
     if not isinstance(photos, list):
         return []
-    clean = [
-        u for u in photos
-        if isinstance(u, str) and u.startswith(PHOTO_URL_PREFIXES) and PHOTO_URL_MARKER in u and len(u) < 500
-    ]
-    return clean[:PHOTOS_MAX]
+    return [u for u in photos if _is_own_photo_url(u, user_id)][:PHOTOS_MAX]
 
 
 def pending_reviews(user_id: int) -> list[dict]:
@@ -272,7 +288,7 @@ def submit_review(
     if not 1 <= rating <= 5:
         raise ReviewError("Оцінка має бути від 1 до 5")
     text = str(text or "").strip()[:TEXT_MAX]
-    photos = _clean_photos(photos)
+    photos = _clean_photos(photos, uid)
     status = "approved" if get_bool(REVIEWS_AUTO_PUBLISH_KEY) else "pending"
 
     conn = db_connect()

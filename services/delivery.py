@@ -29,12 +29,17 @@ class DeliveryUnavailable(Exception):
 
 
 def available_methods() -> list[str]:
-    """Способи доставки для `GET /api/config`: НП лише з ключем, самовивіз завжди."""
-    methods = []
-    if config.NOVAPOSHTA_API_KEY:
-        methods.append("np")
-    methods.append("self")
-    return methods
+    """Способи доставки для `GET /api/config`.
+
+    НП обовʼязкова (рішення власника) і доступна завжди: без ключа API фронт переходить
+    на ручне введення міста й відділення (`np_lookup_enabled` = false). Самовивіз — завжди.
+    """
+    return ["np", "self"]
+
+
+def np_lookup_enabled() -> bool:
+    """Чи працюють довідники міст/відділень (потрібен NOVAPOSHTA_API_KEY)."""
+    return bool(config.NOVAPOSHTA_API_KEY)
 
 
 def _cache_get(key: tuple):

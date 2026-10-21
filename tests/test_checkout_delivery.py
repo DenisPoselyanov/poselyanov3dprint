@@ -66,11 +66,13 @@ def test_checkout_rejects_unknown_method():
     assert not ok
 
 
-def test_available_methods(monkeypatch):
+def test_available_methods_np_always_lookup_needs_key(monkeypatch):
     monkeypatch.setattr(delivery.config, "NOVAPOSHTA_API_KEY", "")
-    assert delivery.available_methods() == ["self"]
+    assert delivery.available_methods() == ["np", "self"]
+    assert delivery.np_lookup_enabled() is False
     monkeypatch.setattr(delivery.config, "NOVAPOSHTA_API_KEY", "k")
     assert delivery.available_methods() == ["np", "self"]
+    assert delivery.np_lookup_enabled() is True
 
 
 def test_np_cities_cached_and_filtered(monkeypatch):

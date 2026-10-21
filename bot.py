@@ -538,8 +538,11 @@ async def handle_health(request: web.Request):
     )
 
 
-def _order_ok_response(request: web.Request, order_id: int, *, duplicate: bool = False) -> web.Response:
-    body: dict = {"ok": True, "order_id": int(order_id)}
+def _order_ok_response(
+    request: web.Request, order_id: int, *, duplicate: bool = False, is_new: bool = True
+) -> web.Response:
+    # is_new=false — позиції додано до ще не підтвердженого замовлення (воно зберігає старий номер)
+    body: dict = {"ok": True, "order_id": int(order_id), "is_new": bool(is_new)}
     if duplicate:
         body["duplicate"] = True
     return web.json_response(body, headers=cors_headers(request))
@@ -2083,13 +2086,17 @@ async def handle_order(request):
                 "♻️ Idempotent duplicate: user=%s order=#%s",
                 uid, cached["order_id"],
             )
-            return _order_ok_response(request, int(cached["order_id"]), duplicate=True)
+            return _order_ok_response(
+                request, int(cached["order_id"]), duplicate=True, is_new=bool(cached.get("is_new", 1))
+            )
 
     async with _user_order_lock(uid):
         if idempotency_key and uid > 0:
             cached = await run_db(get_idempotent_order, uid, idempotency_key)
             if cached:
-                return _order_ok_response(request, int(cached["order_id"]), duplicate=True)
+                return _order_ok_response(
+                request, int(cached["order_id"]), duplicate=True, is_new=bool(cached.get("is_new", 1))
+            )
 
         try:
             order_id, is_new = await run_db(
@@ -2152,7 +2159,7 @@ async def handle_order(request):
         gift=gift,
         price_pending=price_pending,
     ))
-    return _order_ok_response(request, order_id)
+    return _order_ok_response(request, order_id, is_new=is_new)
 
 
 # ─── АДМІН HANDLERS ─────────────────────────────────────────
@@ -2526,8 +2533,10 @@ async def handle_upload_review_photo(request: web.Request):
 def _review_moderation_html(review: dict, product_name: str) -> str:
     stars = "★" * int(review["rating"]) + "☆" * (5 - int(review["rating"]))
     text = escape(review.get("text") or "—")
-    photos = len(review.get("photos") or [])
-    photos_line = f"<p>📷 Фото: {photos}</p>" if photos else ""
+    links = [
+        f'<a href="{escape(url)}">фото {n}</a>' for n, url in enumerate(review.get("photos") or [], 1)
+    ]
+    photos_line = f"<p>📷 {' · '.join(links)}</p>" if links else ""
     return (
         f"<h2>⭐ Новий відгук #{review['id']}</h2>"
         f"<p><b>{escape(product_name)}</b> · замовлення #{review['order_id']}</p>"
@@ -3027,7 +3036,11 @@ def _query_int(request: web.Request, name: str, default: int) -> int:
 async def handle_get_config(request: web.Request):
     """Публічна конфігурація магазину: доступні способи доставки."""
     return web.json_response(
-        {"delivery_methods": delivery.available_methods()}, headers=cors_headers(request)
+        {
+            "delivery_methods": delivery.available_methods(),
+            "np_lookup": delivery.np_lookup_enabled(),
+        },
+        headers=cors_headers(request),
     )
 
 
