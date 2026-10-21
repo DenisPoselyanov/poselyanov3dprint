@@ -602,6 +602,36 @@
   .chk-share svg.i { width: 16px; height: 16px; }
   body.cart-tg-main .cart-submit-btn { display: none; }
 
+  /* Кошик за дизайном (REDESIGN.md, розд. 3.5) */
+  .cart-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 12px; }
+  .cart-head h2 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+  .cart-head h2 small { color: var(--ink-3); font-size: 15px; font-weight: 700; }
+  .link-btn.danger { color: var(--sale); }
+  .cart-progress { display: grid; gap: 8px; margin-bottom: 12px; }
+  .gift-card { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: var(--r); box-shadow: 0 0 0 1px var(--line); padding: 12px; margin-bottom: 10px; }
+  .gift-card .th { width: 56px; height: 56px; border-radius: 12px; background: var(--orange-soft); position: relative; display: grid; place-items: center; font-size: 24px; flex: none; }
+  .gift-card .th.empty { border: 1.5px dashed var(--orange); background: none; }
+  .gift-card .th img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+  .gift-card .th .gb { position: absolute; right: -6px; top: -6px; width: 22px; height: 22px; border-radius: 50%; background: var(--orange); color: #fff; display: grid; place-items: center; font-size: 12px; }
+  .gift-card .info { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-3); }
+  .gift-card .info b { display: block; font-size: 14px; color: var(--ink); margin-bottom: 2px; }
+  .gift-card .tag { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--orange-ink); background: var(--orange-soft); padding: 2px 8px; border-radius: 99px; margin-bottom: 4px; }
+  .gift-card .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; box-shadow: 0 0 0 1px var(--line-2); }
+  .gift-card s { color: var(--ink-3); }
+  .gift-card .free { color: var(--green); font-weight: 800; }
+  .cart-upsell { margin: 14px 0 6px; }
+  .cart-upsell h4 { margin: 0 2px 10px; font-size: 15px; font-weight: 800; }
+  .sum-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--ink-2); }
+  .sum-row b { color: var(--ink); font-weight: 700; }
+  .sum-row.g b { color: var(--green); }
+  .sum-row.total { font-size: 15px; color: var(--ink); font-weight: 800; border-top: 1px solid var(--line); padding-top: 10px; }
+  .sum-row.total b { font-weight: 800; }
+  .gift-sub { font-size: 12.5px; color: var(--ink-2); padding: 0 18px 10px; }
+  .gift-thumb { width: 44px; height: 44px; border-radius: 10px; overflow: hidden; background: var(--surface-2); flex: none; display: grid; place-items: center; font-size: 22px; cursor: pointer; }
+  .gift-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .gift-radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line-2); flex: none; }
+  .gift-option.selected .gift-radio { border-color: var(--blue); background: radial-gradient(var(--blue) 44%, transparent 50%); }
+
   /* Підвал кошика */
   .cart-footer {
     flex-shrink: 0;
@@ -1409,7 +1439,6 @@
           <span class="cart-old-price" id="cartOldPrice"><span></span></span>
           <span class="cart-total-sum" id="cart-total">0 ₴</span>
           <div class="cart-total-hint" id="cart-total-hint" style="display:none">Суму узгодимо після замовлення</div>
-          <div class="cart-total-hint" id="cart-delivery-hint" style="display:block">Доставку оплачуєш за тарифами перевізника</div>
         </div>
       </div>
 
@@ -1476,12 +1505,10 @@
   <div class="gift-modal" id="gift-modal">
     <div class="modal-handle"></div>
     <div class="gift-modal-title">
-      🎁 Обери подарунок
-      <button class="gift-modal-close" onclick="closeGiftModal()">✕</button>
+      Обери подарунок
+      <button class="gift-modal-close" onclick="closeGiftModal()" aria-label="Закрити">✕</button>
     </div>
-    <div style="font-size:11px;color:var(--muted);padding:0 18px 10px;font-weight:600;">
-      👇 Натисни на фото щоб переглянути товар
-    </div>
+    <div class="gift-sub" id="gift-sub"></div>
     <div id="gift-options-list"></div>
   </div>
 </div>
@@ -2087,20 +2114,22 @@ function openGiftModal() {
   // Якщо немає кандидатів — не відкриваємо модалку
   const list = document.getElementById('gift-options-list');
   // Якщо немає кандидатів — показуємо заглушку
-  list.innerHTML = candidates.map(p => `
-      <div class="gift-option${selectedGift?.id === p.id ? ' selected' : ''}" onclick="selectGift(${p.id})">
-            <div class="gift-option-emoji" onclick="event.stopPropagation(); previewGift(${p.id})" style="cursor:pointer;position:relative;width:36px;height:36px;flex-shrink:0;" title="Переглянути товар">
-        ${p.photos && p.photos.length > 0
-          ? `<img src="${escapeAttr(photo(p.photos[0], { w: 120 }))}" style="width:36px;height:36px;object-fit:cover;border-radius:8px;" alt="${escapeAttr(p.name)}" decoding="async" loading="lazy" crossorigin="anonymous">`
-          : escapeHtml(p.emoji)}
-      </div>
+  const max = GIFT_RULE?.max_gift_price;
+  const sub = document.getElementById('gift-sub');
+  if (sub) sub.textContent = `${GIFT_RULE?.category ? 'Будь-який товар з категорії' : 'Будь-який товар'}${max ? ` до ${money(max)}` : ''} — безкоштовно. Тап по фото — переглянути.`;
+  list.innerHTML = candidates.map(p => {
+    const sel = selectedGift?.id === p.id;
+    return `<div class="gift-option${sel ? ' selected' : ''}" onclick="selectGift(${p.id})" role="radio" aria-checked="${sel}">
+      <div class="gift-thumb" onclick="event.stopPropagation(); previewGift(${p.id})" title="Переглянути товар">${p.photos && p.photos.length > 0
+        ? `<img src="${escapeAttr(photo(p.photos[0], { w: 120 }))}" alt="${escapeAttr(p.name)}" decoding="async" loading="lazy" crossorigin="anonymous">`
+        : escapeHtml(p.emoji)}</div>
       <div class="gift-option-info">
         <div class="gift-option-name">${escapeHtml(p.name)}</div>
-        <div class="gift-option-price">${escapeHtml(p.mat)}${selectedGift?.id === p.id && selectedGift.filamentName ? ` · 🎨 ${escapeHtml(selectedGift.filamentName)}` : ''} · безкоштовно</div>
+        <div class="gift-option-price"><s>${money(p.price)}</s> · <b style="color:var(--green)">0 ₴</b>${sel && selectedGift.filamentName ? ` · ${escapeHtml(selectedGift.filamentName)}` : ''}</div>
       </div>
-      ${selectedGift?.id === p.id ? '<div class="gift-option-check">✓</div>' : ''}
-    </div>
-  `).join('');
+      <span class="gift-radio"></span>
+    </div>`;
+  }).join('');
   document.getElementById('gift-modal-backdrop').classList.add('open');
   updateBackButton();
 }
@@ -2142,20 +2171,95 @@ function selectGift(id) {
   closeGiftModal();
 }
 
-// Будує HTML блоку подарунку
-function buildGiftBlock() {
-  if (!selectedGift) return '';
-  return `
-    <div class="cart-gift-block" id="cart-gift-block">
-      <div class="cart-gift-emoji">🎁</div>
-      <div class="cart-gift-info">
-        <div class="cart-gift-title">Подарунок від нас!</div>
-        <div class="cart-gift-name">${escapeHtml(selectedGift.name)}${selectedGift.filamentName ? ` · 🎨 ${escapeHtml(selectedGift.filamentName)}` : ''}</div>
-        <div class="cart-gift-free">Безкоштовно</div>
-      </div>
-      <button class="cart-gift-change" onclick="openGiftModal()">Обрати інший ↻</button>
-    </div>
-  `;
+// Рядок подарунка серед товарів (REDESIGN.md, розд. 3.5): до вибору — «Обери подарунок», після — фото, колір, 0 ₴
+function giftRowHtml() {
+  if (!shouldShowGift()) return '';
+  const max = GIFT_RULE?.max_gift_price;
+  if (!selectedGift) {
+    return `<div class="gift-card" id="cart-gift-block"><div class="th empty">🎁</div>
+      <div class="info"><b>Обери подарунок</b>${max ? `до ${money(max)} · ` : ''}безкоштовно</div>
+      <button type="button" class="btn soft" onclick="openGiftModal()">Обрати подарунок</button></div>`;
+  }
+  const p = findAnyProduct(selectedGift.id);
+  const f = selectedGift.filamentId ? FILAMENTS.find(x => x.id === selectedGift.filamentId) : null;
+  const thumb = selectedGift.photos?.length
+    ? `<img src="${escapeAttr(photo(selectedGift.photos[0], { w: 160 }))}" alt="" decoding="async" crossorigin="anonymous">`
+    : escapeHtml(selectedGift.emoji || '🎁');
+  return `<div class="gift-card" id="cart-gift-block"><div class="th">${thumb}<span class="gb">🎁</span></div>
+    <div class="info"><span class="tag">Подарунок</span><b>${escapeHtml(selectedGift.name)}</b>
+      ${selectedGift.filamentName ? `<span class="dot" style="background:${cssColor(f?.hex)}"></span>${escapeHtml(selectedGift.filamentName)} · ` : ''}${p ? `<s>${money(p.price)}</s> ` : ''}<span class="free">0 ₴</span></div>
+    <button type="button" class="btn soft" onclick="openGiftModal()">Змінити</button></div>`;
+}
+
+// Прогрес до знижки й подарунка — ті самі картки, що на вкладці «Акції», але без переходу
+function cartProgressHtml() {
+  const promos = PROMOTIONS.filter(p => p.type === 'gift_threshold' || p.type === 'order_percent' || p.type === 'order_fixed');
+  return salesPromoCards(promos).map(c => c
+    .replace(/<button type="button" class="progress-card/, '<div class="progress-card')
+    .replace(/ data-act="promo" data-id="[^"]*"/, '')
+    .replace(/<\/button>\s*$/, '</div>')
+    .replace('Виконано — обери подарунок у кошику', 'Подарунок твій! Обери його нижче')
+  ).join('');
+}
+
+function cartTopHtml() {
+  const count = cart.reduce((n, i) => n + i.quantity, 0);
+  const progress = cartProgressHtml();
+  return `<div class="cart-head"><h2>Кошик <small>${count}</small></h2>
+      <button type="button" class="link-btn danger" data-act="cart-clear">Очистити</button></div>
+    ${progress ? `<div class="cart-progress">${progress}</div>` : ''}`;
+}
+
+// «Додай до замовлення»: недорогі товари, щоб дотягнути до знижки чи подарунка
+function cartUpsellHtml() {
+  const inCart = new Set(cart.map(i => i.id));
+  const items = PRODUCTS.filter(p => !inCart.has(p.id) && !opensCard(p) && !isContractProduct(p) && p.price > 0)
+    .sort((a, b) => a.price - b.price).slice(0, 8);
+  if (!items.length) return '';
+  return `<div class="cart-upsell"><h4>Додай до замовлення</h4><div class="hscroll mini-row">${items.map(p =>
+    `<div class="mini" data-act="open" data-id="${p.id}"><div class="thumb">${thumbHtml(p, 240)}</div><p>${escapeHtml(p.name)}</p>
+      <div style="display:flex;align-items:center;justify-content:space-between"><span class="price">${money(p.price)}</span>${controlHtml(p)}</div></div>`).join('')}</div></div>`;
+}
+
+// Підсумок з розбивкою: товари, акція, промокод, подарунок, доставка, до сплати
+function cartSummaryHtml() {
+  const pricing = getCartPricing();
+  const qty = cart.reduce((n, i) => n + i.quantity, 0);
+  const promo = pricing.promotionDiscount > 0 ? getBestPromotion(pricing.rawTotal)?.promo : null;
+  const rows = [`<div class="sum-row"><span>Товари (${qty})</span><b>${cartHasContractItems() ? (pricing.rawTotal ? `${money(pricing.rawTotal)} + узгодимо` : 'за домовленістю') : money(pricing.rawTotal)}</b></div>`];
+  if (pricing.promotionDiscount > 0) rows.push(`<div class="sum-row g"><span>Акція${promo?.title ? ` «${escapeHtml(promo.title)}»` : ''}</span><b>−${money(pricing.promotionDiscount)}</b></div>`);
+  if (appliedCoupon && pricing.couponDiscount > 0) rows.push(`<div class="sum-row g"><span>Промокод ${escapeHtml(appliedCoupon.code)}</span><b>−${money(pricing.couponDiscount)}</b></div>`);
+  if (shouldShowGift() && selectedGift) rows.push(`<div class="sum-row g"><span>Подарунок: ${escapeHtml(selectedGift.name)}</span><b>0 ₴</b></div>`);
+  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'безкоштовно' : 'за тарифами перевізника'}</b></div>`);
+  rows.push(`<div class="sum-row total"><span>До сплати</span><b>${escapeHtml(formatCartTotalLabel(pricing.finalTotal))}</b></div>`);
+  return `<div class="chk-sec">${rows.join('')}</div>`;
+}
+
+// Оновлює все, що залежить від складу й суми кошика, не перемальовуючи рядки товарів
+function refreshCartExtras() {
+  const top = document.getElementById('cart-top');
+  if (!top) return;
+  top.innerHTML = cartTopHtml();
+  document.getElementById('cart-gift-slot').innerHTML = giftRowHtml();
+  document.getElementById('cart-summary').innerHTML = cartSummaryHtml();
+}
+
+function clearCart() {
+  const go = () => {
+    Object.values(pendingRemovals).forEach(r => clearTimeout(r.timeoutId));
+    Object.keys(pendingRemovals).forEach(k => delete pendingRemovals[k]);
+    const ids = [...new Set(cart.map(i => i.id))];
+    cart = [];
+    selectedGift = null;
+    saveCart();
+    updateCartBadge();
+    ids.forEach(id => updateCardBadge(id));
+    haptic('light');
+    renderCart();
+  };
+  const t = tgApp();
+  if (inTelegram() && t.showConfirm) t.showConfirm('Очистити кошик?', ok => { if (ok) go(); });
+  else if (confirm('Очистити кошик?')) go();
 }
 
 function renderCart() {
@@ -2264,10 +2368,7 @@ function renderCart() {
     selectedGift = null;
   }
 
-  const promoBlock = buildDiscountBlocks(pricing);
-
-  // Спочатку рендеримо товарні позиції, потім — якщо потрібно — блок з подарунком, а потім — плашки "Повернути" для товарів що очікують видалення
-  list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => `
+  const itemsHtml = cart.map(item => `
     <div class="cart-item" id="cart-item-${item.lid}">
       <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}', { lid: '${item.lid}' })">
         ${item.photos && item.photos.length > 0
@@ -2304,64 +2405,16 @@ function renderCart() {
     </div>
   `).join('');
 
+  list.innerHTML = `<div id="cart-top"></div><div id="cart-items">${itemsHtml}</div><div id="cart-gift-slot"></div>
+    <div id="cart-upsell">${cartUpsellHtml()}</div><div id="cart-summary"></div>`;
+  refreshCartExtras();
+  enhanceScrollers(document.getElementById('cart-upsell'));
+
   // Відновлюємо плашки "Повернути" для товарів що ще не видалились
   Object.values(pendingRemovals).forEach(({ item, endsAt }) => {
-    const bar = buildUndoBar(item, endsAt);
-    list.appendChild(bar);
+    document.getElementById('cart-items').appendChild(buildUndoBar(item, endsAt));
   });
-
-  if (promoBlock) {
-    list.insertAdjacentHTML('beforeend', '<hr class="cart-promo-divider" aria-hidden="true">');
-    list.insertAdjacentHTML('beforeend', promoBlock);
-  }
   syncCartMainButton();
-}
-
-// Рядки знижок під товарами: акція і купон показуються окремо, щоб було видно,
-// з чого складається підсумкова знижка, коли вони сумуються.
-function buildDiscountBlocks(pricing) {
-  const { rawTotal, couponDiscount, promotionDiscount, stacked } = pricing;
-  const blocks = [];
-
-  if (promotionDiscount > 0) {
-    const activePromo = getBestPromotion(rawTotal)?.promo || null;
-    blocks.push(`
-    <div class="cart-item cart-item-promo" id="cart-promo-item">
-      <div class="cart-item-emoji">${escapeHtml(activePromo?.emoji || '🎁')}</div>
-      <div class="cart-item-info">
-        <div class="cart-item-top">
-          <div class="cart-item-name">${escapeHtml(activePromo?.title || 'Акція')}</div>
-        </div>
-        <div class="cart-item-sub">${escapeHtml(activePromo?.subtitle || 'Автоматична знижка на замовлення')}</div>
-        <div class="cart-item-bottom">
-          <div class="cart-item-total discount"><span class="amount">−${promotionDiscount}</span> <span class="currency">₴</span></div>
-        </div>
-      </div>
-    </div>`);
-  }
-
-  if (appliedCoupon && couponDiscount > 0) {
-    blocks.push(`
-    <div class="cart-item cart-item-promo cart-item-coupon" id="cart-coupon-item">
-      <div class="cart-item-emoji">🏷️</div>
-      <div class="cart-item-info">
-        <div class="cart-item-top">
-          <div class="cart-item-name">Промокод <span class="cart-item-code">${escapeHtml(appliedCoupon.code)}</span></div>
-        </div>
-        <div class="cart-item-sub">${appliedCoupon.type === 'percent'
-          ? `Знижка ${Number(appliedCoupon.value) || 0}% на замовлення`
-          : 'Фіксована знижка на замовлення'}</div>
-        <div class="cart-item-bottom">
-          <div class="cart-item-total discount"><span class="amount">−${couponDiscount}</span> <span class="currency">₴</span></div>
-        </div>
-      </div>
-    </div>`);
-  }
-
-  if (stacked) {
-    blocks.push('<div class="cart-discount-stack-note">🔥 Акція + промокод сумуються</div>');
-  }
-  return blocks.join('');
 }
 
 // Створює плашку "Повернути" для видаленого товару з прогрес-баром, що показує час до остаточного видалення
@@ -2427,14 +2480,8 @@ function cartQtyChange(lid, delta) {
     // Якщо після видалення товару в кошику менше 3 унікальних позицій — прибираємо подарунок
     updateCardBadge(id);
     // Якщо подарунок більше не потрібен — прибираємо його з кошика та скидаємо вибір
-    if (!shouldShowGift() && selectedGift) {
-      selectedGift = null;
-      const giftBlock = document.getElementById('cart-gift-block');
-      if (giftBlock) {
-        giftBlock.classList.add('hiding');
-        setTimeout(() => { giftBlock.remove(); }, 300);
-      }
-    } 
+    if (!shouldShowGift() && selectedGift) selectedGift = null;
+    refreshCartExtras();
 
     // Анімуємо слайд вліво
     const el = document.getElementById(`cart-item-${lid}`);
@@ -2443,7 +2490,7 @@ function cartQtyChange(lid, delta) {
       el.addEventListener('transitionend', () => {
         el.remove();
         // Вставляємо плашку "Повернути"
-        const list = document.getElementById('cart-list');
+        const list = document.getElementById('cart-items');
         if (list) {
           const endsAt = Date.now() + 3000;
           const bar = buildUndoBar(savedItem, endsAt);
@@ -2504,7 +2551,7 @@ function cartRemoveItem(lid) {
 }
 
 function updateCartDiscountSummary(pricing) {
-  const { rawTotal, couponDiscount, promotionDiscount, stacked, discount, finalTotal } = pricing;
+  const { rawTotal, discount, finalTotal } = pricing;
   const oldPriceEl = document.getElementById('cartOldPrice');
   if (oldPriceEl) {
     const oldPriceTextEl = oldPriceEl.querySelector('span');
@@ -2516,38 +2563,7 @@ function updateCartDiscountSummary(pricing) {
       if (oldPriceTextEl) oldPriceTextEl.textContent = '';
     }
   }
-
-  const promoItem = document.getElementById('cart-promo-item');
-  const couponItem = document.getElementById('cart-coupon-item');
-  const stackNote = document.querySelector('.cart-discount-stack-note');
-  const needPromo = promotionDiscount > 0;
-  const needCoupon = !!appliedCoupon && couponDiscount > 0;
-
-  // Поява нового рядка знижки (або плашки сумування) змінює структуру списку —
-  // тут дешевше перемалювати кошик, ніж вставляти блоки в правильному порядку.
-  const structureChanged =
-    (needPromo && !promoItem) || (needCoupon && !couponItem) || (stacked !== !!stackNote);
-  if (structureChanged) {
-    if (document.getElementById('page-cart')?.classList.contains('active')) {
-      renderCart();
-      return;
-    }
-  }
-
-  const setAmount = (el, value) => {
-    const amountEl = el?.querySelector('.amount');
-    if (amountEl) amountEl.textContent = `−${value}`;
-  };
-  if (needPromo) setAmount(promoItem, promotionDiscount);
-  else if (promoItem) promoItem.remove();
-  if (needCoupon) setAmount(couponItem, couponDiscount);
-  else if (couponItem) couponItem.remove();
-  if (!stacked && stackNote) stackNote.remove();
-
-  if (!needPromo && !needCoupon) {
-    document.querySelector('.cart-promo-divider')?.remove();
-  }
-
+  refreshCartExtras();
   const totalEl = document.getElementById('cart-total');
   if (totalEl) totalEl.classList.toggle('discounted', finalTotal < rawTotal);
 }
@@ -4833,6 +4849,7 @@ function flyToCart(fromEl) {
 // Спільне після зміни кошика з вітрини. Повертає true, якщо щойно виконалась умова подарунка
 function afterShopCartChange(prevGiftCount) {
   updateCartBadge();
+  if (isCartPageActive()) renderCart();
   refreshHero();
   if (activePage === 'sales') refreshSalesPromos();
   const min = getGiftMinItems();
@@ -5366,9 +5383,9 @@ function timeLeftText(endsAt) {
   if (h) return `${h} год ${m} хв`;
   return `${Math.max(1, m)} хв`;
 }
-function salesPromoCards() {
+function salesPromoCards(promos = PROMOTIONS) {
   const rawTotal = getCartFixedTotal();
-  return PROMOTIONS.map(p => {
+  return promos.map(p => {
     const open = `data-act="promo" data-id="${escapeAttr(p.id)}"`;
     if (p.type === 'gift_threshold') {
       const need = p.min_items || 0;
@@ -5538,6 +5555,7 @@ function bindShopEvents() {
       case 'search-recent-clear': writeJsonStorage(SEARCH_RECENT_KEY, []); renderSearchBody(); break;
       case 'page': switchPage(el.dataset.page); break;
       case 'fav-all': addFavsToCart(); break;
+      case 'cart-clear': clearCart(); break;
       case 'order-copy': copyTtn(el.dataset.ttn); break;
       case 'review-open': openReviewForm(Number(el.dataset.id)); break;
       case 'review-close': closeReviewForm(); break;
