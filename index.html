@@ -1502,6 +1502,29 @@ function productWantsFilamentChoice(p) {
 // ─── КОШИК ──────────────────────────────────────────────────
 // Формат: [{ id, name, price, quantity, fromCustom, emoji, customValue }]
 let cart = [];
+// Позиція кошика = товар + колір + персоналізація (як на сервері: дублікат ключа відхиляється).
+// lid — стабільний ідентифікатор рядка для DOM і обробників; key — ключ злиття.
+let lineSeq = 0;
+function lineKeyOf(r) { return `${r.id}|${r.filamentId || ''}|${r.customValue || ''}`; }
+function stampLine(r) {
+  if (!r.lid) r.lid = `l${++lineSeq}${Date.now().toString(36)}`;
+  r.key = lineKeyOf(r);
+  return r;
+}
+function getLine(lid) { return cart.find(i => i.lid === lid) || null; }
+function getCartLines(pid) { return cart.filter(i => i.id === pid); }
+// Склеює рядки з однаковим ключем (старі дані, редагування рядка до існуючого ключа)
+function normalizeCart() {
+  const byKey = new Map();
+  const out = [];
+  for (const raw of cart) {
+    const r = stampLine(raw);
+    const same = byKey.get(r.key);
+    if (same) same.quantity = Math.min(99, same.quantity + r.quantity);
+    else { byKey.set(r.key, r); out.push(r); }
+  }
+  cart = out;
+}
 let isSubmitting = false;
 let pendingIdempotencyKey = null;
 let submitOrderPromise = null;
@@ -1615,9 +1638,11 @@ function loadCart() {
   try {
     const raw = localStorage.getItem('cart_v1');
     cart = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(cart)) cart = [];
   } catch(e) {
     cart = [];
   }
+  normalizeCart();
 }
 
 function saveCart() {
@@ -1689,7 +1714,7 @@ function takeSheetPersonalization(p) {
 }
 
 // MainButton картки: додати в кошик або оновити позицію (кількість, колір, персоналізація)
-function addToCartFromModal() {
+function addToCartFromModal(asNew = false) {
   const p = currentProduct;
   if (!p) return;
   if (modalGiftPreview) { confirmGiftFromModal(); return; }
@@ -1702,8 +1727,9 @@ function addToCartFromModal() {
   }
 
   const prevGift = getGiftEligibleToyLineCount();
-  let line = getCartItem(p.id);
+  let line = asNew ? null : sheetLine();
   if (line) {
+    // Редагуємо рядок на місці; якщо ключ збігся з іншим рядком — зливаємо
     line.quantity = SHEET.qty;
     if (filament) {
       line.filamentId = filament.id;
@@ -1712,19 +1738,42 @@ function addToCartFromModal() {
       delete line.filamentId;
       delete line.filamentName;
     }
-  } else {
-    line = buildCartRow(p, SHEET.qty, filament);
-    if (isCustomProduct(p)) {
-      line.fromCustom = true;
-      line.addedFrom = 'custom';
+    if (pers) {
+      line.customValue = pers.value;
+      line.persMain = pers.main;
+      line.persNote = pers.note;
     }
-    cart.push(line);
+    line.key = lineKeyOf(line);
+    const dup = cart.find(i => i !== line && i.key === line.key);
+    if (dup) {
+      dup.quantity = Math.min(99, dup.quantity + line.quantity);
+      cart = cart.filter(i => i !== line);
+      line = dup;
+    }
+  } else {
+    const fresh = buildCartRow(p, SHEET.qty, filament);
+    if (isCustomProduct(p)) {
+      fresh.fromCustom = true;
+      fresh.addedFrom = 'custom';
+    }
+    if (pers) {
+      fresh.customValue = pers.value;
+      fresh.persMain = pers.main;
+      fresh.persNote = pers.note;
+    }
+    stampLine(fresh);
+    // Така сама позиція вже є — додаємо кількість, а не дублюємо рядок
+    const same = cart.find(i => i.key === fresh.key);
+    if (same) {
+      same.quantity = Math.min(99, same.quantity + fresh.quantity);
+      line = same;
+    } else {
+      cart.push(fresh);
+      line = fresh;
+    }
   }
-  if (pers) {
-    line.customValue = pers.value;
-    line.persMain = pers.main;
-    line.persNote = pers.note;
-  }
+  SHEET.lid = line.lid;
+  SHEET.qty = line.quantity;
   saveCart();
   haptic('success');
   bumpCartBadge();
@@ -1882,8 +1931,9 @@ function isGiftEligibleToyItem(item) {
   return itemCat === GIFT_RULE.category;
 }
 
+// «Різні товари»: рядки одного товару (різні кольори / імена) рахуються за один
 function getGiftEligibleToyLineCount() {
-  return cart.filter(isGiftEligibleToyItem).length;
+  return new Set(cart.filter(isGiftEligibleToyItem).map(i => i.id)).size;
 }
 
 function getGiftMinItems() {
@@ -2093,8 +2143,8 @@ function renderCart() {
 
   // Спочатку рендеримо товарні позиції, потім — якщо потрібно — блок з подарунком, а потім — плашки "Повернути" для товарів що очікують видалення
   list.innerHTML = (shouldShowGift() ? buildGiftBlock() : '') + cart.map(item => `
-    <div class="cart-item" id="cart-item-${item.id}">
-      <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}')">
+    <div class="cart-item" id="cart-item-${item.lid}">
+      <div class="cart-item-emoji" onclick="openModal(${item.id}, '${item.fromCustom ? 'custom' : (item.addedFrom || 'products')}', { lid: '${item.lid}' })">
         ${item.photos && item.photos.length > 0
           ? `<img src="${escapeAttr(photo(item.photos[0], { w: 160 }))}" alt="${escapeAttr(item.name)}" decoding="async" loading="lazy" crossorigin="anonymous">`
           : escapeHtml(item.emoji)}
@@ -2102,7 +2152,7 @@ function renderCart() {
       <div class="cart-item-info">
         <div class="cart-item-top">
           <div class="cart-item-name">${escapeHtml(item.name)}</div>
-          <button class="cart-item-remove" onclick="cartRemoveItem(${item.id})" aria-label="Видалити ${escapeHtml(item.name)}">
+          <button class="cart-item-remove" onclick="cartRemoveItem('${item.lid}')" aria-label="Видалити ${escapeHtml(item.name)}">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M9 3.75A1.75 1.75 0 0 0 7.25 5.5V6H5.5a.75.75 0 0 0 0 1.5h.7l.72 10.16A2.25 2.25 0 0 0 9.16 19.75h5.68a2.25 2.25 0 0 0 2.24-2.09l.72-10.16h.7a.75.75 0 0 0 0-1.5h-1.75v-.5A1.75 1.75 0 0 0 15 3.75H9Zm6.25 2.25V5.5a.25.25 0 0 0-.25-.25H9a.25.25 0 0 0-.25.25V6h6.5ZM9.42 8.75a.75.75 0 0 1 .75.7l.3 6a.75.75 0 1 1-1.5.08l-.3-6a.75.75 0 0 1 .7-.78h.05Zm5.16 0a.75.75 0 0 1 .7.78l-.3 6a.75.75 0 1 1-1.5-.08l.3-6a.75.75 0 0 1 .75-.7h.05ZM12 8.75a.75.75 0 0 1 .75.75v6a.75.75 0 0 1-1.5 0v-6A.75.75 0 0 1 12 8.75Z"/>
             </svg>
@@ -2117,13 +2167,13 @@ function renderCart() {
         </div>
         <div class="cart-item-bottom">
           <div class="cart-item-controls">
-            <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, -1)" aria-label="Зменшити кількість">−</button>
-            <span class="cart-qty-val" id="cart-qty-${item.id}">${item.quantity}</span>
-            <button class="cart-qty-btn" onclick="cartQtyChange(${item.id}, 1)" aria-label="Збільшити кількість">+</button>
+            <button class="cart-qty-btn" onclick="cartQtyChange('${item.lid}', -1)" aria-label="Зменшити кількість">−</button>
+            <span class="cart-qty-val" id="cart-qty-${item.lid}">${item.quantity}</span>
+            <button class="cart-qty-btn" onclick="cartQtyChange('${item.lid}', 1)" aria-label="Збільшити кількість">+</button>
           </div>
           ${item.contractPrice
-            ? '<div class="cart-item-total contract" id="cart-total-' + item.id + '">Узгодимо</div>'
-            : `<div class="cart-item-total" id="cart-total-${item.id}"><span class="amount">${item.price * item.quantity}</span> <span class="currency">₴</span></div>`}
+            ? '<div class="cart-item-total contract" id="cart-total-' + item.lid + '">Узгодимо</div>'
+            : `<div class="cart-item-total" id="cart-total-${item.lid}"><span class="amount">${item.price * item.quantity}</span> <span class="currency">₴</span></div>`}
         </div>
       </div>
     </div>
@@ -2193,16 +2243,16 @@ function buildUndoBar(item, endsAt) {
   const DURATION = 3000;
   const div = document.createElement('div');
   div.className = 'cart-undo-bar';
-  div.id = `undo-${item.id}`;
+  div.id = `undo-${item.lid}`;
   div.innerHTML = `
     <span style="font-size:28px">${escapeHtml(item.emoji)}</span>
     <div style="flex:1">
       <div class="cart-undo-text">Повернути «${escapeHtml(item.name)}»</div>
       <div class="cart-undo-hint">Натисни щоб скасувати</div>
     </div>
-    <div class="cart-undo-progress" id="undo-prog-${item.id}"></div>
+    <div class="cart-undo-progress" id="undo-prog-${item.lid}"></div>
   `;
-  div.addEventListener('click', () => undoRemove(item.id));
+  div.addEventListener('click', () => undoRemove(item.lid));
 
   // Запускаємо прогрес-бар
   const prog = div.querySelector('.cart-undo-progress');
@@ -2219,29 +2269,32 @@ function buildUndoBar(item, endsAt) {
   return div;
 }
 
-function undoRemove(id) {
+function undoRemove(lid) {
   if (isSubmitting) return;
-  const pending = pendingRemovals[id];
+  const pending = pendingRemovals[lid];
   if (!pending) return;
   clearTimeout(pending.timeoutId);
-  delete pendingRemovals[id];
+  delete pendingRemovals[lid];
 
-  // Повертаємо товар в кошик
+  // Повертаємо товар в кошик (якщо за 3 секунди додали такий самий — зливаємо)
   cart.push(pending.item);
+  normalizeCart();
   saveCart();
+  updateCardBadge(pending.item.id);
   updateCartBadge();
   renderCart();
 }
 
-function cartQtyChange(id, delta) {
+function cartQtyChange(lid, delta) {
   if (isSubmitting) return;
-  const item = getCartItem(id);
+  const item = getLine(lid);
   if (!item) return;
+  const id = item.id;
 
   if (delta < 0 && item.quantity === 1) {
     // Видаляємо з кошика — запускаємо анімацію
     const savedItem = { ...item };
-    cart = cart.filter(i => i.id !== id);
+    cart = cart.filter(i => i !== item);
     saveCart();
     // Оновлюємо бейджі на картках
     updateCartBadge();
@@ -2258,7 +2311,7 @@ function cartQtyChange(id, delta) {
     } 
 
     // Анімуємо слайд вліво
-    const el = document.getElementById(`cart-item-${id}`);
+    const el = document.getElementById(`cart-item-${lid}`);
     if (el) {
       el.classList.add('removing');
       el.addEventListener('transitionend', () => {
@@ -2271,14 +2324,14 @@ function cartQtyChange(id, delta) {
           list.appendChild(bar);
 
           const timeoutId = setTimeout(() => {
-            delete pendingRemovals[id];
-            const b = document.getElementById(`undo-${id}`);
+            delete pendingRemovals[lid];
+            const b = document.getElementById(`undo-${lid}`);
             if (b) b.remove();
             // Якщо кошик тепер порожній — оновити вигляд
             if (!cart.length && !Object.keys(pendingRemovals).length) renderCart();
           }, 3000);
 
-          pendingRemovals[id] = { item: savedItem, timeoutId, endsAt };
+          pendingRemovals[lid] = { item: savedItem, timeoutId, endsAt };
         }
       }, { once: true });
     } else {
@@ -2309,18 +2362,19 @@ function cartQtyChange(id, delta) {
   }
 
   // Точкове оновлення — без повного перерендеру
-  const qtyEl = document.getElementById(`cart-qty-${id}`);
-  const totalEl = document.querySelector(`#cart-total-${id} .amount`);
+  updateCardBadge(id);
+  const qtyEl = document.getElementById(`cart-qty-${lid}`);
+  const totalEl = document.querySelector(`#cart-total-${lid} .amount`);
   if (qtyEl) qtyEl.textContent = item.quantity;
   if (totalEl) totalEl.textContent = item.price * item.quantity;
   updateCartTotal();
 }
 
-function cartRemoveItem(id) {
-  const item = getCartItem(id);
+function cartRemoveItem(lid) {
+  const item = getLine(lid);
   if (!item) return;
   item.quantity = 1;
-  cartQtyChange(id, -1);
+  cartQtyChange(lid, -1);
 }
 
 function updateCartDiscountSummary(pricing) {
@@ -2895,7 +2949,7 @@ function initLightboxSwipe() {
 // ─── КАРТКА ТОВАРУ (REDESIGN.md, розд. 3.4): повноекранний лист, MainButton Telegram ───
 // Стан відкритої картки. qty — скільки додати (або скільки вже в кошику, якщо товар там є);
 // dirty — у кошику є товар, а в картці змінили кількість/колір/персоналізацію → «Оновити кошик»
-const SHEET = { qty: 1, dirty: false, infoOpen: false, pers: { main: '', note: '', err: false }, stack: [], reviews: [], token: 0 };
+const SHEET = { lid: null, qty: 1, dirty: false, infoOpen: false, pers: { main: '', note: '', err: false }, stack: [], reviews: [], token: 0 };
 const REVIEWS_CACHE = new Map();
 const RELATED_CACHE = new Map();
 const PERS_DEFAULT_MAX = 40;
@@ -3044,11 +3098,13 @@ function giftProgressHtml(p) {
 
 function qtyBlockHtml() {
   if (modalGiftPreview || !currentProduct) return '';
-  const inCart = !!getCartItem(currentProduct.id);
+  const inCart = !!sheetLine();
+  const split = inCart && SHEET.dirty && sheetKeyChanged()
+    ? '<button type="button" class="link-btn" data-act="sheet-new">Додати окремою позицією</button>' : '';
   return `<div class="p-block"><div class="qty-line">
     <div><b>${inCart ? 'У кошику' : 'Кількість'}</b>${inCart ? '<small class="hint-sm">Зміни й натисни «Оновити кошик»</small>' : ''}</div>
     <div class="qty-big"><button type="button" data-act="sq" data-d="-1" aria-label="Менше"${SHEET.qty <= 1 ? ' disabled' : ''}>${ic('minus')}</button><b aria-live="polite">${SHEET.qty}</b><button type="button" data-act="sq" data-d="1" aria-label="Більше">${ic('plus')}</button></div>
-  </div></div>`;
+  </div>${split}</div>`;
 }
 
 function sheetSectionsHtml(p) {
@@ -3145,13 +3201,27 @@ async function loadSheetRelated(p, token) {
 }
 
 // ─── MainButton: у Telegram — нативна кнопка, поза Telegram — власна внизу картки ───
+function sheetLine() { return SHEET.lid ? getLine(SHEET.lid) : null; }
+// Чи змінилось у картці те, що відрізняє позицію (колір / персоналізація)
+function sheetKeyChanged() {
+  const line = sheetLine();
+  const p = currentProduct;
+  if (!line || !p) return false;
+  const { filament } = sheetFilament(p);
+  const f = persConfig(p);
+  let main = SHEET.pers.main.trim();
+  if (f && f.upper) main = main.toUpperCase();
+  const note = SHEET.pers.note.trim();
+  const value = f && main ? (note ? `${main} · побажання: ${note}` : main) : (line.customValue || '');
+  return (filament?.id || '') !== (line.filamentId || '') || (f ? value !== (line.customValue || '') : false);
+}
 function sheetButton() {
   const p = currentProduct;
   if (modalGiftPreview) {
     const picked = selectedGift?.id === p.id && (selectedGift.filamentId || null) === (modalFilamentId || null);
     return picked ? { text: 'Обрано подарунком', icon: 'check', done: true } : { text: 'Обрати подарунком', icon: 'gift' };
   }
-  const line = getCartItem(p.id);
+  const line = sheetLine();
   const sum = isContractProduct(p) ? '' : ` · ${money(p.price * SHEET.qty)}`;
   if (line && !SHEET.dirty) return { text: 'В кошику · перейти до оформлення', icon: 'check', done: true };
   if (line) return { text: `Оновити кошик${sum}`, icon: 'refresh' };
@@ -3210,7 +3280,8 @@ function onSheetMainButton() {
 
 // Зміни в картці товару, який уже в кошику, чекають «Оновити кошик»
 function markSheetDirty() {
-  if (!modalGiftPreview && getCartItem(currentProduct.id) && !SHEET.dirty) SHEET.dirty = true;
+  if (!modalGiftPreview && sheetLine() && !SHEET.dirty) SHEET.dirty = true;
+  if (sheetLine()) renderSheetPart('m-qty', qtyBlockHtml());
   updateMainButton();
 }
 function pickSheetColor(fid) {
@@ -3283,7 +3354,10 @@ function openModal(id, source = 'products', options = {}) {
   modalCartSource = source;
   currentProduct = p;
   p._isCustom = source === 'custom';
-  const line = modalGiftPreview ? null : getCartItem(p.id);
+  // З рядка кошика — редагуємо саме його; з каталогу — єдиний рядок товару (кілька рядків: нова позиція)
+  const lines = getCartLines(p.id);
+  const line = modalGiftPreview ? null : (options.lid ? getLine(options.lid) : (lines.length === 1 ? lines[0] : null));
+  SHEET.lid = line ? line.lid : null;
   SHEET.qty = line?.quantity || 1;
   SHEET.dirty = false;
   SHEET.infoOpen = false;
@@ -3714,7 +3788,7 @@ function priceHtml(p) {
   return `<div class="price-row">${d ? `<span class="price-old">${money(p.oldPrice)}</span>` : ''}<span class="price${d ? ' sale' : ''}">${money(p.price)}</span></div>`;
 }
 function customAttr(p) { return isCustomProduct(p) ? ' data-custom="1"' : ''; }
-function cartQty(id) { return getCartItem(id)?.quantity || 0; }
+function cartQty(id) { return getCartLines(id).reduce((s, l) => s + l.quantity, 0); }
 
 // Кнопка «+» / степпер. data-ctl — щоб оновлювати на місці без перемальовування рядків
 function controlHtml(p, kind = 'card') {
@@ -3922,7 +3996,7 @@ function renderFav() {
 function addFavsToCart() {
   const prevGift = getGiftEligibleToyLineCount();
   const added = favProducts().filter(p => !opensCard(p) && !getCartItem(p.id));
-  added.forEach(p => cart.push(buildCartRow(p, 1, defaultFilamentFor(p))));
+  added.forEach(p => cart.push(stampLine(buildCartRow(p, 1, defaultFilamentFor(p)))));
   if (!added.length) {
     showToast({ msg: 'Усе, що можна додати одним тапом, уже в кошику', icon: 'info', ...toCartAction() });
     return;
@@ -4022,7 +4096,7 @@ function quickAdd(id, fromEl) {
   if (line) line.quantity += 1;
   else {
     filament = defaultFilamentFor(p);
-    cart.push(buildCartRow(p, 1, filament));
+    cart.push(stampLine(buildCartRow(p, 1, filament)));
   }
   saveCart();
   haptic('light');
@@ -4037,7 +4111,8 @@ function quickAdd(id, fromEl) {
   }
 }
 function changeQtyFromShop(id, delta, fromEl) {
-  const line = getCartItem(id);
+  const lines = getCartLines(id);
+  const line = delta < 0 ? lines[lines.length - 1] : lines[0];
   if (!line) { if (delta > 0) quickAdd(id, fromEl); return; }
   const prevGift = getGiftEligibleToyLineCount();
   line.quantity += delta;
@@ -4055,8 +4130,8 @@ function showGiftToast() {
 
 // ─── БАНЕР АКЦІЙ ─────────────────────────────────────────────
 function promoGiftCount(promo) {
-  return cart.filter(i => !i.contractPrice && !i.fromCustom && i.addedFrom !== 'custom'
-    && (!promo.category || (i.cat || findAnyProduct(i.id)?.cat) === promo.category)).length;
+  return new Set(cart.filter(i => !i.contractPrice && !i.fromCustom && i.addedFrom !== 'custom'
+    && (!promo.category || (i.cat || findAnyProduct(i.id)?.cat) === promo.category)).map(i => i.id)).size;
 }
 // Дата з API: «2026-10-03 04:06:59» чи ISO; без часового поясу — UTC, як у services/promotions.py
 function parseServerDate(value) {
@@ -4707,6 +4782,7 @@ function bindShopEvents() {
       case 'contact-owner': openOwnerChat(); break;
       case 'color': pickSheetColor(el.dataset.fid); break;
       case 'sq': changeSheetQty(Number(el.dataset.d)); break;
+      case 'sheet-new': addToCartFromModal(true); break;
       case 'info-toggle': toggleSheetInfo(); break;
       case 'to-reviews': document.getElementById('reviews-block')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
       case 'reviews-all': loadSheetReviews(currentProduct, SHEET.token, true); break;
