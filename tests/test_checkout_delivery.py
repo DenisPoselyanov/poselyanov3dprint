@@ -99,26 +99,13 @@ def test_np_cities_cached_and_filtered(monkeypatch):
     assert asyncio.run(delivery.np_cities("к")) == []
 
 
-def test_np_warehouses_kind_filter(monkeypatch):
-    delivery.clear_cache()
-
-    async def fake_call(model, method, props):
-        return [
-            {"Ref": "a", "Number": "1", "Description": "Відділення №1", "CategoryOfWarehouse": "Branch"},
-            {"Ref": "b", "Number": "2", "Description": "Поштомат №2", "CategoryOfWarehouse": "Postomat"},
-        ]
-
-    monkeypatch.setattr(delivery, "_np_call", fake_call)
-    assert [w["ref"] for w in asyncio.run(delivery.np_warehouses("c", "all"))] == ["a", "b"]
-    assert [w["ref"] for w in asyncio.run(delivery.np_warehouses("c", "postomat"))] == ["b"]
-    assert [w["ref"] for w in asyncio.run(delivery.np_warehouses("c", "branch"))] == ["a"]
-    assert asyncio.run(delivery.np_warehouses("")) == []
-
-
 def test_np_call_without_key_is_unavailable(monkeypatch):
     monkeypatch.setattr(delivery.config, "NOVAPOSHTA_API_KEY", "")
     with pytest.raises(delivery.DeliveryUnavailable):
         asyncio.run(delivery._np_call("Address", "getWarehouses", {}))
+
+
+REF = "8d5a980d-391c-11dd-90d9-001a92567626"
 
 
 def _wh(n, postomat_every=0):
@@ -130,84 +117,167 @@ def _wh(n, postomat_every=0):
     return out
 
 
-def _paged_fake(total, calls, fail_on_page=None, postomat_every=0):
-    items = _wh(total, postomat_every)
-
+def _fake(data, calls, raises=None):
     async def fake_call(model, method, props):
-        page, limit = int(props["Page"]), int(props["Limit"])
-        calls.append(page)
-        if fail_on_page == page:
-            raise delivery.DeliveryUnavailable("request_failed")
-        return items[(page - 1) * limit: page * limit]
+        calls.append(props)
+        if raises:
+            exc = raises.pop(0) if isinstance(raises, list) else raises
+            if exc:
+                raise exc
+        return data
 
     return fake_call
 
 
-def test_np_warehouses_multi_page(monkeypatch):
+def _wh_items(res):
+    return [w["ref"] for w in res["items"]]
+
+
+def test_np_warehouses_search_single_call(monkeypatch):
     delivery.clear_cache()
     calls = []
-    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1120, calls))
-    res = asyncio.run(delivery.np_warehouses("c"))
-    assert len(res) == 1120 and res[-1]["ref"] == "r1119"
-    assert calls == [1, 2, 3]
+    monkeypatch.setattr(delivery, "_np_call", _fake(_wh(3), calls))
+    res = asyncio.run(delivery.np_warehouses(REF, "all", "  15\x00 Хрещатик "))
+    assert len(calls) == 1
+    assert calls[0]["FindByString"] == "15 хрещатик" and calls[0]["Limit"] == "100"
+    assert res == {"items": res["items"], "truncated": False} and len(res["items"]) == 3
+    # кеш за нормалізованим q
+    asyncio.run(delivery.np_warehouses(REF, "all", "15 ХРЕЩАТИК"))
+    assert len(calls) == 1
 
 
-def test_np_warehouses_exact_page_multiple(monkeypatch):
+def test_np_warehouses_query_clamped(monkeypatch):
     delivery.clear_cache()
     calls = []
-    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1000, calls))
-    assert len(asyncio.run(delivery.np_warehouses("c"))) == 1000
-    assert calls == [1, 2, 3]  # третя порожня сторінка завершує цикл
+    monkeypatch.setattr(delivery, "_np_call", _fake([], calls))
+    asyncio.run(delivery.np_warehouses(REF, "all", "x" * 100))
+    assert len(calls[0]["FindByString"]) == delivery.WAREHOUSE_QUERY_MAX
 
 
-def test_np_warehouses_kind_filter_across_pages(monkeypatch):
+def test_np_warehouses_no_q_first_page_truncated(monkeypatch):
     delivery.clear_cache()
     calls = []
-    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1200, calls, postomat_every=3))
-    post = asyncio.run(delivery.np_warehouses("c", "postomat"))
-    branch = asyncio.run(delivery.np_warehouses("c", "branch"))
-    assert len(post) == 400 and len(branch) == 800
-    assert all(w["kind"] == "postomat" for w in post)
-    assert any(int(w["number"]) > 1000 for w in branch)
+    monkeypatch.setattr(delivery, "_np_call", _fake(_wh(100), calls))
+    res = asyncio.run(delivery.np_warehouses(REF))
+    assert len(calls) == 1 and "FindByString" not in calls[0]
+    assert res["truncated"] is True and len(res["items"]) == 100
+    exp = delivery._cache[("np_wh", REF, "all", "")][0]
+    assert exp - delivery.time.monotonic() > delivery.WAREHOUSE_SEARCH_TTL_SEC
 
 
-def test_np_warehouses_page_cap(monkeypatch):
+def test_np_warehouses_kind_filter(monkeypatch):
     delivery.clear_cache()
     calls = []
-
-    async def endless(model, method, props):
-        calls.append(int(props["Page"]))
-        return _wh(500)
-
-    monkeypatch.setattr(delivery, "_np_call", endless)
-    res = asyncio.run(delivery.np_warehouses("c"))
-    assert calls == list(range(1, delivery.WAREHOUSE_MAX_PAGES + 1))
-    assert len(res) == 500 * delivery.WAREHOUSE_MAX_PAGES
+    monkeypatch.setattr(delivery, "_np_call", _fake(_wh(6, postomat_every=3), calls))
+    assert len(asyncio.run(delivery.np_warehouses(REF, "all"))["items"]) == 6
+    post = asyncio.run(delivery.np_warehouses(REF, "postomat"))
+    branch = asyncio.run(delivery.np_warehouses(REF, "branch"))
+    assert _wh_items(post) == ["r0", "r3"] and len(branch["items"]) == 4
+    assert post["truncated"] is False
 
 
-def test_np_warehouses_partial_failure_short_cache(monkeypatch):
+def test_np_warehouses_invalid_ref_no_upstream(monkeypatch):
     delivery.clear_cache()
     calls = []
-    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1200, calls, fail_on_page=2))
-    res = asyncio.run(delivery.np_warehouses("c"))
-    assert len(res) == 500
-    exp = delivery._cache[("np_wh", "c", "all")][0]
-    assert exp - delivery.time.monotonic() <= delivery.WAREHOUSE_PARTIAL_TTL_SEC + 1
+    monkeypatch.setattr(delivery, "_np_call", _fake(_wh(2), calls))
+    for bad in ("", "c", "../x", REF + "x"):
+        assert asyncio.run(delivery.np_warehouses(bad)) == {"items": [], "truncated": False}
+    assert calls == []
 
 
-def test_np_warehouses_first_page_failure_raises(monkeypatch):
+def test_np_warehouses_api_error_negative_cache(monkeypatch):
     delivery.clear_cache()
-    monkeypatch.setattr(delivery, "_np_call", _paged_fake(1200, [], fail_on_page=1))
+    calls = []
+    monkeypatch.setattr(delivery, "_np_call", _fake([], calls, raises=delivery.DeliveryUnavailable("api_error")))
+    for q in ("", "5", "6"):
+        with pytest.raises(delivery.DeliveryUnavailable):
+            asyncio.run(delivery.np_warehouses(REF, "all", q))
+    assert len(calls) == 1  # без повторів і без нових звернень
+
+
+def test_np_warehouses_rate_limited_retry_then_success(monkeypatch):
+    delivery.clear_cache()
+    calls = []
+    err = [delivery.DeliveryUnavailable("rate_limited"), None]
+    monkeypatch.setattr(delivery, "_np_call", _fake(_wh(2), calls, raises=err))
+    assert len(asyncio.run(delivery.np_warehouses(REF, "all", "1"))["items"]) == 2
+    assert len(calls) == 2
+
+
+def test_np_warehouses_gives_up_after_two_attempts(monkeypatch):
+    delivery.clear_cache()
+    calls = []
+    errs = [delivery.DeliveryUnavailable("request_failed")] * 5
+    monkeypatch.setattr(delivery, "_np_call", _fake([], calls, raises=errs))
     with pytest.raises(delivery.DeliveryUnavailable):
-        asyncio.run(delivery.np_warehouses("c"))
-    assert ("np_wh", "c", "all") not in delivery._cache
+        asyncio.run(delivery.np_warehouses(REF))
+    assert len(calls) == delivery.WAREHOUSE_ATTEMPTS
+    assert ("np_wh", REF, "all", "") not in delivery._cache
 
 
-def test_np_warehouses_cache_hit_no_recall(monkeypatch):
-    delivery.clear_cache()
-    calls = []
-    monkeypatch.setattr(delivery, "_np_call", _paged_fake(700, calls))
-    asyncio.run(delivery.np_warehouses("c"))
-    n = len(calls)
-    asyncio.run(delivery.np_warehouses("c"))
-    assert len(calls) == n
+def test_np_call_maps_many_requests_to_rate_limited(monkeypatch):
+    class Resp:
+        async def json(self, content_type=None):
+            return {"success": False, "errors": ["To many requests"]}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class Sess(Resp):
+        def __init__(self, *a, **k):
+            pass
+
+        def post(self, *a, **k):
+            return Resp()
+
+    monkeypatch.setattr(delivery.config, "NOVAPOSHTA_API_KEY", "k")
+    monkeypatch.setattr(delivery.aiohttp, "ClientSession", Sess)
+    with pytest.raises(delivery.DeliveryUnavailable, match="rate_limited"):
+        asyncio.run(delivery._np_call("Address", "getWarehouses", {}))
+
+
+def test_np_call_concurrency_bounded(monkeypatch):
+    monkeypatch.setattr(delivery.config, "NOVAPOSHTA_API_KEY", "k")
+    state = {"now": 0, "max": 0}
+
+    async def fake_request(model, method, props):
+        state["now"] += 1
+        state["max"] = max(state["max"], state["now"])
+        await asyncio.sleep(0.01)
+        state["now"] -= 1
+        return []
+
+    monkeypatch.setattr(delivery, "_np_request", fake_request)
+
+    async def run():
+        await asyncio.gather(*[delivery._np_call("A", "b", {}) for _ in range(12)])
+
+    asyncio.run(run())
+    assert state["max"] == delivery.NP_CONCURRENCY
+
+
+def test_handler_passes_q_and_returns_items_truncated(monkeypatch):
+    import json
+
+    import bot
+    from aiohttp.test_utils import make_mocked_request
+
+    seen = []
+
+    async def fake_wh(city, kind, q):
+        seen.append((city, kind, q))
+        return {"items": [{"ref": "a"}], "truncated": True}
+
+    monkeypatch.setattr(bot, "resolve_request_user", lambda req, data: ({"user_id": 7}, None))
+    monkeypatch.setattr(bot, "allow_delivery_lookup", lambda uid: True)
+    monkeypatch.setattr(bot.delivery, "np_warehouses", fake_wh)
+    req = make_mocked_request("GET", f"/delivery/np/warehouses?city={REF}&kind=branch&q=15")
+    body = json.loads(asyncio.run(bot.handle_np_warehouses(req)).text)
+    assert seen == [(REF, "branch", "15")]
+    assert body == {"ok": True, "items": [{"ref": "a"}], "truncated": True}
+
+    monkeypatch.setattr(bot, "allow_delivery_lookup", lambda uid: False)
+    assert asyncio.run(bot.handle_np_warehouses(req)).status == 429

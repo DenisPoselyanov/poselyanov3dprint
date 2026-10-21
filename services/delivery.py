@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 
 import aiohttp
@@ -19,13 +20,17 @@ logger = logging.getLogger(__name__)
 NP_URL = "https://api.novaposhta.ua/v2.0/json/"
 CITY_TTL_SEC = 24 * 3600
 WAREHOUSE_TTL_SEC = 3 * 3600
-WAREHOUSE_PAGE_SIZE = 500
-WAREHOUSE_MAX_PAGES = 10  # запобіжник: до 5000 відділень на місто
-WAREHOUSE_PARTIAL_TTL_SEC = 60  # неповний список кешуємо ненадовго
-WAREHOUSE_PAGE_DELAY_SEC = 1.0  # пауза між сторінками: НП відповідає «To many requests» на запити підряд
-WAREHOUSE_PAGE_RETRIES = 3  # спроб на одну сторінку (з наростаючою паузою)
+WAREHOUSE_PAGE_SIZE = 100  # одна сторінка: перші N відділень, решта — через пошук
+WAREHOUSE_SEARCH_TTL_SEC = 30 * 60
+WAREHOUSE_NEG_TTL_SEC = 60  # відмова НП (api_error) на місто — не стукаємо повторно
+WAREHOUSE_QUERY_MAX = 40
+WAREHOUSE_PAGE_DELAY_SEC = 1.0  # пауза перед повтором при «To many requests»
+WAREHOUSE_ATTEMPTS = 2
+NP_CONCURRENCY = 4
 REQUEST_TIMEOUT_SEC = 8
 CACHE_MAX = 2000
+
+_REF_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 _cache: dict[tuple, tuple[float, object]] = {}
 
@@ -69,9 +74,27 @@ def clear_cache() -> None:
     _cache.clear()
 
 
+_np_sem: asyncio.Semaphore | None = None
+_np_sem_loop = None
+
+
+def _get_sem() -> asyncio.Semaphore:
+    global _np_sem, _np_sem_loop
+    loop = asyncio.get_running_loop()
+    if _np_sem is None or _np_sem_loop is not loop:
+        _np_sem, _np_sem_loop = asyncio.Semaphore(NP_CONCURRENCY), loop
+    return _np_sem
+
+
 async def _np_call(model: str, method: str, props: dict) -> list:
+    """Запит до НП; одночасно не більше NP_CONCURRENCY."""
     if not config.NOVAPOSHTA_API_KEY:
         raise DeliveryUnavailable("no_api_key")
+    async with _get_sem():
+        return await _np_request(model, method, props)
+
+
+async def _np_request(model: str, method: str, props: dict) -> list:
     payload = {
         "apiKey": config.NOVAPOSHTA_API_KEY,
         "modelName": model,
@@ -87,7 +110,10 @@ async def _np_call(model: str, method: str, props: dict) -> list:
         logger.warning("Нова Пошта %s.%s недоступна: %s", model, method, exc)
         raise DeliveryUnavailable("request_failed") from exc
     if not isinstance(body, dict) or not body.get("success"):
-        logger.warning("Нова Пошта %s.%s відхилила запит: %s", model, method, (body or {}).get("errors"))
+        errors = (body or {}).get("errors") if isinstance(body, dict) else None
+        logger.warning("Нова Пошта %s.%s відхилила запит: %s", model, method, errors)
+        if any("many requests" in str(e).lower() for e in (errors or [])):
+            raise DeliveryUnavailable("rate_limited")
         raise DeliveryUnavailable("api_error")
     return body.get("data") or []
 
@@ -144,50 +170,47 @@ def _normalize_warehouses(data: list, kind: str) -> list[dict]:
     return out
 
 
-async def np_warehouses(city_ref: str, kind: str = "all", limit: int = 500) -> list[dict]:
+def _clean_query(q) -> str:
+    q = "".join(ch if ch.isprintable() else " " for ch in str(q or ""))
+    return " ".join(q.split()).lower()[:WAREHOUSE_QUERY_MAX]
+
+
+async def np_warehouses(city_ref: str, kind: str = "all", q: str = "") -> dict:
+    """Відділення міста: пошук за `q` (FindByString) або перша сторінка без нього.
+
+    Повертає {"items": [...], "truncated": bool}; truncated — відповідь НП заповнила сторінку,
+    тож є ще відділення, які знаходяться уточненням пошуку.
+    """
     city_ref = str(city_ref or "").strip()
-    if not city_ref:
-        return []
+    if not _REF_RE.match(city_ref):
+        return {"items": [], "truncated": False}
     if kind not in ("all", "branch", "postomat"):
         kind = "all"
-    key = ("np_wh", city_ref, kind)
+    q = _clean_query(q)
+    key = ("np_wh", city_ref, kind, q)
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    page_size = max(1, min(int(limit or WAREHOUSE_PAGE_SIZE), WAREHOUSE_PAGE_SIZE))
-    raw: list = []
-    partial = False
-    for page in range(1, WAREHOUSE_MAX_PAGES + 1):
-        if page > 1:
+    if _cache_get(("np_wh_neg", city_ref)) is not None:
+        raise DeliveryUnavailable("api_error")
+    props = {"CityRef": city_ref, "Limit": str(WAREHOUSE_PAGE_SIZE), "Page": "1", "Language": "UA"}
+    if q:
+        props["FindByString"] = q
+    data = None
+    for attempt in range(1, WAREHOUSE_ATTEMPTS + 1):
+        try:
+            data = await _np_call("Address", "getWarehouses", props)
+            break
+        except DeliveryUnavailable as exc:
+            reason = str(exc)
+            if reason == "api_error":
+                _cache_put(("np_wh_neg", city_ref), True, WAREHOUSE_NEG_TTL_SEC)
+            if reason not in ("rate_limited", "request_failed") or attempt == WAREHOUSE_ATTEMPTS:
+                raise
             await asyncio.sleep(WAREHOUSE_PAGE_DELAY_SEC)
-        data = None
-        for attempt in range(1, WAREHOUSE_PAGE_RETRIES + 1):
-            try:
-                data = await _np_call(
-                    "Address",
-                    "getWarehouses",
-                    {"CityRef": city_ref, "Limit": str(page_size), "Page": str(page), "Language": "UA"},
-                )
-                break
-            except DeliveryUnavailable as exc:
-                if str(exc) == "no_api_key":
-                    raise
-                if attempt < WAREHOUSE_PAGE_RETRIES:
-                    await asyncio.sleep(WAREHOUSE_PAGE_DELAY_SEC * 2 * attempt)
-        if data is None:
-            if page == 1:
-                raise DeliveryUnavailable("api_error")
-            logger.warning(
-                "НП getWarehouses: сторінка %s не завантажилась, повертаю %s відділень (неповний список)",
-                page, len(raw),
-            )
-            partial = True
-            break
-        raw.extend(data)
-        if len(data) < page_size:
-            break
-    else:
-        logger.warning("НП getWarehouses: досягнуто ліміт %s сторінок для %s", WAREHOUSE_MAX_PAGES, city_ref)
-    result = _normalize_warehouses(raw, kind)
-    _cache_put(key, result, WAREHOUSE_PARTIAL_TTL_SEC if partial else WAREHOUSE_TTL_SEC)
+    result = {
+        "items": _normalize_warehouses(data, kind),
+        "truncated": len(data) >= WAREHOUSE_PAGE_SIZE,
+    }
+    _cache_put(key, result, WAREHOUSE_SEARCH_TTL_SEC if q else WAREHOUSE_TTL_SEC)
     return result

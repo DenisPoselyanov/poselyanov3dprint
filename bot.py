@@ -3580,7 +3580,8 @@ async def _delivery_lookup(request: web.Request, fetch):
         return web.json_response(
             {"ok": False, "error": "unavailable", "items": []}, status=503, headers=cors_headers(request)
         )
-    return web.json_response({"ok": True, "items": items}, headers=cors_headers(request))
+    payload = items if isinstance(items, dict) else {"items": items}
+    return web.json_response({"ok": True, **payload}, headers=cors_headers(request))
 
 
 async def handle_np_cities(request: web.Request):
@@ -3589,10 +3590,12 @@ async def handle_np_cities(request: web.Request):
 
 
 async def handle_np_warehouses(request: web.Request):
-    """Відділення й поштомати НП: ?city=<ref>&kind=all|branch|postomat"""
+    """Відділення й поштомати НП: ?city=<ref>&kind=all|branch|postomat&q=<пошук>"""
     return await _delivery_lookup(
         request,
-        lambda: delivery.np_warehouses(request.query.get("city", ""), request.query.get("kind", "all")),
+        lambda: delivery.np_warehouses(
+            request.query.get("city", ""), request.query.get("kind", "all"), request.query.get("q", "")
+        ),
     )
 
 
