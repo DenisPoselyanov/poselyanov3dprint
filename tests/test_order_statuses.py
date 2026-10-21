@@ -134,3 +134,44 @@ def test_client_status_message():
 
     assert "20450" in build_client_status_update(5, "shipped", "20450")
     assert build_client_status_update(5, "new") is None
+
+
+def test_status_filter_groups(orders):
+    assert orders.expand_status_filter("work") == ["confirmed", "printing", "ready"]
+    assert orders.expand_status_filter("shipped, bogus ,delivered") == ["shipped", "delivered"]
+    assert orders.expand_status_filter("") == []
+
+
+def test_counts_and_filtered_list(orders):
+    a, b, c, d = (_make_order(orders, user_id=i) for i in (1, 2, 3, 4))
+    orders.update_order_status(a, "confirmed")
+    orders.update_order_status(b, "printing")
+    orders.update_order_status(c, "shipped")
+    counts = orders.count_orders_by_status()
+    assert counts["all"] == 4
+    assert counts["new"] == 1
+    assert counts["work"] == 2
+    assert counts["shipped"] == 1
+    assert counts["delivered"] == 0
+
+    work = orders.list_orders(statuses=orders.expand_status_filter("work"))
+    assert sorted(r["id"] for r in work) == sorted([a, b])
+    row = work[0]
+    assert row["items"] and row["items"][0]["product_name"]
+    assert "ttn" in row and "internal_note" in row
+    assert {r["id"] for r in orders.list_orders()} == {a, b, c, d}
+
+
+def test_internal_note_saved(orders):
+    oid = _make_order(orders)
+    assert orders.update_order_fields(oid, {"internal_note": "  оплата на карту  "}) is True
+    order, _ = _row(oid)
+    assert order["internal_note"] == "оплата на карту"
+
+
+def test_sharing_channel_message_on_sqlite(orders):
+    a = _make_order(orders, user_id=1)
+    b = _make_order(orders, user_id=2)
+    assert orders.get_orders_sharing_channel_message(a) == [a]
+    orders.set_orders_channel_message_ids([a, b], 555)
+    assert orders.get_orders_sharing_channel_message(a) == [a, b]

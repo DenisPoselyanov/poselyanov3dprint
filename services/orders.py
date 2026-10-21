@@ -433,6 +433,7 @@ def get_orders_sharing_channel_message(order_id: int) -> list[int]:
         _sql("SELECT channel_message_id FROM orders WHERE id = ?"),
         (order_id,),
     ).fetchone()
+    row = row_to_dict(row) if row else None
     if not row or not row.get("channel_message_id"):
         conn.close()
         return [order_id]
@@ -529,7 +530,8 @@ def get_order_with_items(order_id: int):
     items = conn.execute(
         _sql("""
             SELECT oi.id, oi.product_id, oi.product_name, oi.price, oi.quantity,
-                   oi.filament, oi.is_contract_price, oi.comment, p.stl_link
+                   oi.filament, oi.is_contract_price, oi.comment, p.stl_link,
+                   oi.personalization, oi.personalization_note, oi.is_gift
             FROM order_items oi
             LEFT JOIN products p ON p.id = oi.product_id
             WHERE oi.order_id = ?
@@ -602,23 +604,100 @@ def delete_order(order_id: int):
     return {"ok": True}
 
 
-def list_orders(*, pending_price_only: bool = False, limit: int = 50):
+# Вкладки адмінки -> статуси. «В роботі» = підтверджені + друк + готові до відправки.
+STATUS_GROUPS = {
+    "new": ("new",),
+    "draft": ("draft",),
+    "work": ("confirmed", "printing", "ready"),
+    "shipped": ("shipped",),
+    "delivered": ("delivered",),
+    "cancelled": ("cancelled",),
+}
+
+_LIST_COLUMNS = """
+    id, user_id, username, first_name, total_price, comment,
+    gift_product_name, coupon_code, discount_amount, promotion_discount,
+    status, ordered_at, price_pending, delivery_method, city, branch,
+    recipient_name, phone, pay_method, ttn, internal_note, source, delivered_at
+"""
+
+
+def expand_status_filter(raw: str | None) -> list[str]:
+    """«work,shipped» або «printing» -> плоский список відомих статусів."""
+    out: list[str] = []
+    for part in str(raw or "").split(","):
+        part = part.strip().lower()
+        if not part:
+            continue
+        for status in STATUS_GROUPS.get(part, (part,)):
+            if status in ORDER_STATUSES and status not in out:
+                out.append(status)
+    return out
+
+
+def count_orders_by_status() -> dict[str, int]:
+    """Лічильники для вкладок: по кожній групі, «all» і «pending_price»."""
     conn = db_connect(dict_rows=True)
-    sql = """
-        SELECT id, user_id, username, first_name, total_price, comment,
-               gift_product_name, coupon_code, discount_amount, promotion_discount,
-               status, ordered_at, price_pending
-        FROM orders
-    """
+    rows = conn.execute(_sql("SELECT status, COUNT(*) AS n FROM orders GROUP BY status")).fetchall()
+    pending = conn.execute(
+        _sql("SELECT COUNT(*) AS n FROM orders WHERE price_pending = ?"), (1,)
+    ).fetchone()
+    conn.close()
+    by_status = {str(row_to_dict(r)["status"] or "new"): int(row_to_dict(r)["n"]) for r in rows}
+    counts = {
+        group: sum(by_status.get(s, 0) for s in members)
+        for group, members in STATUS_GROUPS.items()
+    }
+    counts["all"] = sum(by_status.values())
+    counts["pending_price"] = int(row_to_dict(pending)["n"]) if pending else 0
+    return counts
+
+
+def list_orders(
+    *,
+    pending_price_only: bool = False,
+    limit: int = 50,
+    statuses: list[str] | None = None,
+):
+    conn = db_connect(dict_rows=True)
+    sql = f"SELECT {_LIST_COLUMNS} FROM orders"
+    where: list[str] = []
     params: list = []
     if pending_price_only:
-        sql += " WHERE price_pending = ?"
+        where.append("price_pending = ?")
         params.append(1)
+    if statuses:
+        where.append("status IN (" + ", ".join("?" * len(statuses)) + ")")
+        params.extend(statuses)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY id DESC LIMIT ?"
     params.append(int(limit))
-    rows = conn.execute(_sql(sql), tuple(params)).fetchall()
+    rows = [row_to_dict(r) for r in conn.execute(_sql(sql), tuple(params)).fetchall()]
+    if rows:
+        ids = [int(r["id"]) for r in rows]
+        items = conn.execute(
+            _sql(
+                "SELECT order_id, product_name, quantity, filament, is_gift FROM order_items "
+                "WHERE order_id IN (" + ", ".join("?" * len(ids)) + ") ORDER BY id"
+            ),
+            tuple(ids),
+        ).fetchall()
+        by_order: dict[int, list[dict]] = {}
+        for item in items:
+            d = row_to_dict(item)
+            by_order.setdefault(int(d["order_id"]), []).append(
+                {
+                    "product_name": d.get("product_name"),
+                    "quantity": int(d.get("quantity") or 1),
+                    "filament": d.get("filament") or "",
+                    "is_gift": bool(d.get("is_gift")),
+                }
+            )
+        for row in rows:
+            row["items"] = by_order.get(int(row["id"]), [])
     conn.close()
-    return [row_to_dict(r) for r in rows]
+    return rows
 
 
 def update_order_pricing(order_id: int, item_prices: dict[int, int]) -> dict:

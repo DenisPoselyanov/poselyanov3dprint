@@ -10,6 +10,7 @@ import html
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import time
@@ -160,6 +161,8 @@ from services.orders import (
     get_order_with_items,
     get_orders_sharing_channel_message,
     get_orders_with_items_batch,
+    count_orders_by_status,
+    expand_status_filter,
     list_orders,
     save_idempotent_order,
     save_order,
@@ -1330,7 +1333,7 @@ def _build_order_status_channel_markup(
 ) -> InlineKeyboardMarkup | None:
     write_button = _make_contact_button(user_id, username, first_name or "клієнт")
 
-    if status == "confirmed":
+    if status == "confirmed" or status in FULFILMENT_STATUS_LABELS:
         return InlineKeyboardMarkup([[write_button]]) if write_button else None
     if status == "cancelled":
         return None
@@ -1350,13 +1353,28 @@ def _build_order_status_channel_markup(
     return _build_single_order_channel_markup(order_id, price_pending, user_id, username, first_name)
 
 
+FULFILMENT_STATUS_LABELS = {
+    "printing": "🖨️ Друкується",
+    "ready": "📦 Готове до відправки",
+    "shipped": "🚚 Відправлено",
+    "delivered": "🎉 Отримано",
+}
+
+
 async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
     """Синхронізує статус замовлення з повідомленням у Telegram-каналі (як order_action)."""
-    status_map = {"confirm": "confirmed", "draft": "draft", "cancel": "cancelled"}
+    status_map = {
+        "confirm": "confirmed", "draft": "draft", "cancel": "cancelled",
+        "printing": "printing", "ready": "ready", "shipped": "shipped", "delivered": "delivered",
+    }
     label_map = {
         "confirm": "✅ Підтверджено",
         "draft": "❓ Під питанням",
         "cancel": "❌ Відмінено",
+        "printing": "🖨️ Друкується",
+        "ready": "📦 Готове до відправки",
+        "shipped": "🚚 Відправлено",
+        "delivered": "🎉 Отримано",
     }
     if action not in status_map:
         return
@@ -1465,6 +1483,8 @@ def _build_admin_batch_section_data(order_id: int, order: dict | None = None, it
         sl = "❌ Відмінено"
     elif status == "draft":
         sl = "❓ Під питанням"
+    elif status in FULFILMENT_STATUS_LABELS:
+        sl = FULFILMENT_STATUS_LABELS[status]
     else:
         sl = None
     admin_items = [
@@ -2449,9 +2469,56 @@ async def handle_get_orders(request: web.Request):
         return denied
 
     pending_only = request.query.get("pending_price", "false").lower() in ("1", "true", "yes")
-    limit = min(100, max(1, int(request.query.get("limit", "50") or 50)))
-    orders = await run_db(list_orders, pending_price_only=pending_only, limit=limit)
+    try:
+        limit = min(200, max(1, int(request.query.get("limit", "50") or 50)))
+    except ValueError:
+        limit = 50
+    statuses = expand_status_filter(request.query.get("status"))
+    orders = await run_db(
+        list_orders, pending_price_only=pending_only, limit=limit, statuses=statuses or None
+    )
     return web.json_response(orders, headers=cors_headers(request))
+
+
+async def handle_get_order_counts(request: web.Request):
+    """Лічильники замовлень для вкладок і бічного меню адмінки."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    return web.json_response(await run_db(count_orders_by_status), headers=cors_headers(request))
+
+
+async def handle_update_order(request: web.Request):
+    """ТТН і внутрішня нотатка (клієнт нотатку не бачить)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+
+    try:
+        order_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    fields = {k: data[k] for k in ("ttn", "internal_note") if k in data}
+    if not fields:
+        return web.json_response(
+            {"ok": False, "error": "Нічого оновлювати: очікуються ttn або internal_note"},
+            status=400,
+            headers=cors_headers(request),
+        )
+    if "ttn" in fields:
+        fields["ttn"] = re.sub(r"\s+", "", str(fields["ttn"] or ""))
+    if not await run_db(update_order_fields, order_id, fields):
+        return web.json_response(
+            {"ok": False, "error": "Замовлення не знайдено"}, status=404, headers=cors_headers(request)
+        )
+    return web.json_response({"ok": True}, headers=cors_headers(request))
 
 
 async def _notify_client_status(order: dict, status: str, ttn: str | None = None) -> bool:
@@ -2808,9 +2875,9 @@ async def handle_update_order_status(request: web.Request):
             "confirmed": "confirm",
             "cancelled": "cancel",
             "draft": "draft",
+            **{s: s for s in FULFILMENT_STATUS_LABELS},
         }
-        fulfilment = ("printing", "ready", "shipped", "delivered")
-        if status not in action_map and status not in fulfilment:
+        if status not in action_map:
             return web.json_response(
                 {
                     "ok": False,
@@ -2846,10 +2913,7 @@ async def handle_update_order_status(request: web.Request):
                 )
             await run_db(update_order_fields, order_id, {"ttn": ttn})
 
-        if status in action_map:
-            await _sync_order_status_to_telegram(order_id, action_map[status])
-        else:
-            await run_db(update_order_status, order_id, status)
+        await _sync_order_status_to_telegram(order_id, action_map[status])
 
         notified = await _notify_client_status(order, status, ttn)
         return web.json_response(
