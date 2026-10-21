@@ -17,17 +17,82 @@ from services.db_utils import row_to_dict
 
 _user_order_locks: dict[int, asyncio.Lock] = {}
 
+# Ланцюжок виконання: далі йти можна лише вперед; cancelled/draft — з будь-якого.
+FULFILMENT_CHAIN = ("confirmed", "printing", "ready", "shipped", "delivered")
+ORDER_STATUSES = ("new", "draft", "cancelled", *FULFILMENT_CHAIN)
+# Статуси, у яких купон уже списано, а замовлення прийняте в роботу.
+ACCEPTED_STATUSES = frozenset(FULFILMENT_CHAIN)
+
+# 8 статусів -> 4 кроки трекера в Mini App (None — трекер не показується).
+TRACKER_STEPS = ("accepted", "printing", "shipped", "delivered")
+STATUS_TO_STEP = {
+    "new": "accepted",
+    "draft": "accepted",
+    "confirmed": "accepted",
+    "printing": "printing",
+    "ready": "printing",
+    "shipped": "shipped",
+    "delivered": "delivered",
+    "cancelled": None,
+}
+
+# Поля замовлення, які можна міняти через update_order_fields.
+EDITABLE_ORDER_FIELDS = frozenset({
+    "delivery_method", "city", "city_ref", "branch", "branch_ref", "recipient_name",
+    "phone", "pay_method", "ttn", "internal_note", "source", "promotion_id", "gift_product_id",
+})
+_DELIVERY_METHODS = ("np", "up", "self")
+_PAY_METHODS = ("card", "cod")
+_SOURCES = ("miniapp", "instagram", "olx", "telegram", "offline")
+
+
+def is_valid_transition(old_status: str, new_status: str) -> bool:
+    """Чи дозволений перехід: вперед по ланцюжку; cancelled/draft — завжди."""
+    if new_status not in ORDER_STATUSES or old_status == new_status:
+        return False
+    if new_status in ("cancelled", "draft"):
+        return True
+    if old_status not in FULFILMENT_CHAIN:
+        return True  # new/draft/cancelled -> будь-який крок ланцюжка
+    return FULFILMENT_CHAIN.index(new_status) > FULFILMENT_CHAIN.index(old_status)
+
+
+def _clean_extra(extra: dict | None) -> dict:
+    """Лише дозволені поля, з нормалізацією переліків і обрізанням довжини."""
+    out: dict = {}
+    for key, value in (extra or {}).items():
+        if key not in EDITABLE_ORDER_FIELDS:
+            continue
+        if key == "gift_product_id":
+            try:
+                out[key] = int(value) if value else None
+            except (TypeError, ValueError):
+                out[key] = None
+            continue
+        text = str(value or "").strip()[:500]
+        if key == "delivery_method" and text not in _DELIVERY_METHODS:
+            text = ""
+        elif key == "pay_method" and text not in _PAY_METHODS:
+            text = ""
+        elif key == "source" and text not in _SOURCES:
+            text = "miniapp"
+        out[key] = text
+    return out
+
 
 def _insert_order_items(conn, order_id: int, items: list) -> None:
     for item in items:
         fl = (item.get("filament_name") or item.get("filament_id") or "").strip()
         is_contract = 1 if item.get("is_contract_price") else 0
         item_comment = (item.get("comment") or "").strip()
+        personalization = str(item.get("personalization") or "").strip()[:200]
+        personalization_note = str(item.get("personalization_note") or "").strip()[:200]
         conn.execute(
             _sql("""
                 INSERT INTO order_items
-                (order_id, product_id, product_name, price, quantity, filament, is_contract_price, comment)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (order_id, product_id, product_name, price, quantity, filament, is_contract_price, comment,
+                 personalization, personalization_note, is_gift)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """),
             (
                 order_id,
@@ -38,8 +103,35 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
                 fl,
                 is_contract,
                 item_comment or None,
+                personalization,
+                personalization_note,
+                1 if item.get("is_gift") else 0,
             ),
         )
+
+
+def _apply_order_fields(conn, order_id: int, fields: dict) -> None:
+    if not fields:
+        return
+    assignments = ", ".join(f"{name} = ?" for name in fields)
+    conn.execute(
+        _sql(f"UPDATE orders SET {assignments} WHERE id = ?"),
+        (*fields.values(), int(order_id)),
+    )
+
+
+def update_order_fields(order_id: int, fields: dict) -> bool:
+    """Оновлює дозволені поля (ТТН, нотатка, доставка…). False — замовлення немає."""
+    clean = _clean_extra(fields)
+    conn = db_connect()
+    row = conn.execute(_sql("SELECT id FROM orders WHERE id = ?"), (int(order_id),)).fetchone()
+    if not row:
+        conn.close()
+        return False
+    _apply_order_fields(conn, order_id, clean)
+    conn.commit()
+    conn.close()
+    return True
 
 
 def _find_active_order(user_id: int) -> dict | None:
@@ -74,9 +166,11 @@ def save_order(
     discount_amount=0,
     price_pending=0,
     promotion_discount=0,
+    extra=None,
 ):
     conn = db_connect()
     uid = int(user_id or 0)
+    extra_fields = _clean_extra(extra)
     active = _find_active_order(uid) if uid > 0 else None
 
     if active:
@@ -105,12 +199,13 @@ def save_order(
         if gift_product_name:
             conn.execute(
                 _sql("""
-                    INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
-                    VALUES (?, 0, ?, 0, 1)
+                    INSERT INTO order_items (order_id, product_id, product_name, price, quantity, is_gift)
+                    VALUES (?, 0, ?, 0, 1, 1)
                 """),
                 (order_id, f"🎁 {gift_product_name} (безкоштовно)"),
             )
 
+        _apply_order_fields(conn, order_id, extra_fields)
         conn.commit()
         conn.close()
         return order_id, False
@@ -166,11 +261,13 @@ def save_order(
     if gift_product_name:
         conn.execute(
             _sql("""
-                INSERT INTO order_items (order_id, product_id, product_name, price, quantity)
-                VALUES (?, 0, ?, 0, 1)
+                INSERT INTO order_items (order_id, product_id, product_name, price, quantity, is_gift)
+                VALUES (?, 0, ?, 0, 1, 1)
             """),
             (order_id, f"🎁 {gift_product_name} (безкоштовно)"),
         )
+
+    _apply_order_fields(conn, order_id, extra_fields)
 
     if coupon_code:
         try:
@@ -245,14 +342,66 @@ def update_order_status(order_id: int, status: str) -> None:
 
     old_status = row["status"] if isinstance(row, dict) else row[0]
     conn.execute(_sql("UPDATE orders SET status = ? WHERE id = ?"), (status, order_id))
+    if status == "delivered" and old_status != "delivered":
+        now_expr = "NOW()" if _is_postgres() else "CURRENT_TIMESTAMP"
+        conn.execute(_sql(f"UPDATE orders SET delivered_at = {now_expr} WHERE id = ?"), (order_id,))
 
-    if status == "confirmed" and old_status != "confirmed":
+    if status in ACCEPTED_STATUSES and old_status not in ACCEPTED_STATUSES:
         confirm_coupon_for_order(conn, order_id)
     elif status == "cancelled" and old_status in ("new", "draft"):
         release_coupon_for_order(conn, order_id)
 
     conn.commit()
     conn.close()
+
+
+def list_user_orders(user_id: int, limit: int = 30) -> list[dict]:
+    """Замовлення покупця з позиціями — для «Моїх замовлень» у Mini App.
+
+    Віддає лише публічні поля: без username, внутрішньої нотатки і STL.
+    """
+    uid = int(user_id or 0)
+    if uid <= 0:
+        return []
+    conn = db_connect(dict_rows=True)
+    orders = conn.execute(
+        _sql("""
+            SELECT id, total_price, status, ordered_at, delivery_method, city, branch,
+                   pay_method, ttn, comment, coupon_code, discount_amount,
+                   promotion_discount, gift_product_name, price_pending
+            FROM orders
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+        """),
+        (uid, int(limit)),
+    ).fetchall()
+    ids = [int(o["id"]) for o in orders]
+    items_by_order: dict[int, list[dict]] = {}
+    if ids:
+        placeholders = ", ".join("?" * len(ids))
+        items = conn.execute(
+            _sql(f"""
+                SELECT order_id, product_id, product_name, price, quantity, filament,
+                       is_contract_price, personalization, personalization_note, is_gift
+                FROM order_items
+                WHERE order_id IN ({placeholders})
+                ORDER BY id
+            """),
+            tuple(ids),
+        ).fetchall()
+        for item in items:
+            row = row_to_dict(item)
+            items_by_order.setdefault(int(row["order_id"]), []).append(row)
+    conn.close()
+
+    result = []
+    for o in orders:
+        row = row_to_dict(o)
+        row["step"] = STATUS_TO_STEP.get(row.get("status") or "new")
+        row["items"] = items_by_order.get(int(row["id"]), [])
+        result.append(row)
+    return result
 
 
 def set_order_channel_message_id(order_id: int, message_id: int | None) -> None:
@@ -367,7 +516,9 @@ def get_order_with_items(order_id: int):
         _sql("""
             SELECT id, user_id, username, first_name, total_price, comment,
                    gift_product_name, coupon_code, discount_amount, promotion_discount,
-                   status, ordered_at, price_pending, channel_message_id
+                   status, ordered_at, price_pending, channel_message_id,
+                   delivery_method, city, branch, recipient_name, phone, pay_method,
+                   ttn, internal_note, source, delivered_at
             FROM orders WHERE id = ?
         """),
         (order_id,),

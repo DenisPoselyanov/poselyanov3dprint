@@ -28,6 +28,8 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_post("/api/products", handlers.handle_create_product)
     http_app.router.add_put("/api/products/{id}", handlers.handle_update_product)
     http_app.router.add_delete("/api/products/{id}", handlers.handle_delete_product)
+    http_app.router.add_get("/my/orders", handlers.handle_get_my_orders)
+    http_app.router.add_route("OPTIONS", "/my/orders", handlers.handle_options)
     http_app.router.add_get("/api/orders", handlers.handle_get_orders)
     http_app.router.add_get("/api/orders/{id}", handlers.handle_get_order)
     http_app.router.add_put("/api/orders/{id}/pricing", handlers.handle_update_order_pricing)

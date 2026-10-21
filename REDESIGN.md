@@ -504,6 +504,15 @@ green, teal, pink, red` + «Авто» (колір за типом акції). 
 - Бекенд: нові колонки `orders`/`order_items`, **8 статусів + повідомлення клієнту на кожному кроці**, `GET /my/orders`, проксі довідників з кешем,
   `POST /reviews` + запит відгуку ботом через 3 дні після `delivered`, схвалення відгуків кнопками в чаті замовлень, оновлення `rich_messages.py`.
 
+**Прогрес етапу 3 — бекенд замовлень ✅ (2026-10-21):**
+- Колонки `orders` (`delivery_method`, `city`, `city_ref`, `branch`, `branch_ref`, `recipient_name`, `phone`, `pay_method`, `ttn`, `internal_note`, `source`,
+  `promotion_id`, `gift_product_id`, `delivered_at`, `review_requested_at`) і `order_items` (`personalization`, `personalization_note`, `is_gift`) — міграція на старті.
+- `save_order(..., extra=)` приймає лише дозволені поля; `update_order_fields` (ТТН, нотатка…); `is_valid_transition` — лише вперед по ланцюжку, `cancelled`/`draft` з будь-якого.
+- `PUT /api/orders/{id}/status` приймає усі 8 статусів, для `shipped` вимагає ТТН, шле клієнту повідомлення (`build_client_status_update`); недоставлене не блокує зміну (`client_notified`).
+  Повідомлення в каналі замовлень для `printing…delivered` поки не оновлюється (етап 4).
+- `GET /my/orders` (initData) — замовлення покупця з позиціями й кроком трекера (`step`); без username, нотатки, STL.
+- Лишилось в етапі 3: доставка (НП/УП), `POST /reviews` + запит відгуку через 3 дні, фронт кошика/успіху/«Моїх замовлень», приймання нових полів з `POST /order`.
+
 ### Етап 4 — Адмінка: оболонка і робота із замовленнями
 - Нова оболонка (розд. 4.0) у стилі магазину, шухляди, Ctrl+K.
 - Замовлення (список, канбан, деталі, ТТН, шаблони, нотатка, вручну, CSV), Черга друку (без грамів і часу), Огляд.

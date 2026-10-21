@@ -42,6 +42,7 @@ from rich_messages import (
     build_admin_orders_batch,
     build_broadcast_report,
     build_client_order_confirmation,
+    build_client_status_update,
     build_admin_coupon_created_notification,
     build_personal_coupon_notification,
     build_order_history,
@@ -139,6 +140,9 @@ from services.settings import (
     update_admin_settings,
 )
 from services.orders import (
+    is_valid_transition,
+    list_user_orders,
+    update_order_fields,
     delete_order,
     find_gift_product_id,
     get_idempotent_order,
@@ -2424,6 +2428,35 @@ async def handle_get_orders(request: web.Request):
     return web.json_response(orders, headers=cors_headers(request))
 
 
+async def _notify_client_status(order: dict, status: str, ttn: str | None = None) -> bool:
+    """Повідомлення клієнту про новий статус. Помилка доставки не блокує зміну статусу."""
+    user_id = int(order.get("user_id") or 0)
+    html_text = build_client_status_update(int(order["id"]), status, ttn)
+    if user_id <= 0 or not html_text:
+        return False
+    try:
+        await send_rich_message(bot_app.bot, user_id, html_text)
+        return True
+    except Exception as e:
+        logger.warning("Не вдалось сповістити клієнта %s про статус #%s: %s", user_id, order.get("id"), e)
+        return False
+
+
+async def handle_get_my_orders(request: web.Request):
+    """Замовлення поточного покупця (за initData) для «Моїх замовлень»."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0:
+        return web.json_response({"orders": []}, headers=cors_headers(request))
+    orders = await run_db(list_user_orders, user_id, _query_int(request, "limit", 30))
+    return web.json_response({"orders": orders}, headers=cors_headers(request))
+
+
 async def handle_get_order(request: web.Request):
     """Деталі замовлення з позиціями."""
     auth, err = resolve_request_user(request, {})
@@ -2579,9 +2612,13 @@ async def handle_update_order_status(request: web.Request):
             "cancelled": "cancel",
             "draft": "draft",
         }
-        if status not in action_map:
+        fulfilment = ("printing", "ready", "shipped", "delivered")
+        if status not in action_map and status not in fulfilment:
             return web.json_response(
-                {"ok": False, "error": "Невідомий статус. Дозволено: confirmed, cancelled, draft"},
+                {
+                    "ok": False,
+                    "error": "Невідомий статус. Дозволено: confirmed, printing, ready, shipped, delivered, cancelled, draft",
+                },
                 status=400,
                 headers=cors_headers(request),
             )
@@ -2594,8 +2631,34 @@ async def handle_update_order_status(request: web.Request):
                 headers=cors_headers(request),
             )
 
-        await _sync_order_status_to_telegram(order_id, action_map[status])
-        return web.json_response({"ok": True, "status": status}, headers=cors_headers(request))
+        old_status = order.get("status") or "new"
+        if not is_valid_transition(old_status, status):
+            return web.json_response(
+                {"ok": False, "error": f"Перехід {old_status} → {status} недозволений"},
+                status=409,
+                headers=cors_headers(request),
+            )
+
+        ttn = str(data.get("ttn") or order.get("ttn") or "").strip()
+        if status == "shipped":
+            if not ttn:
+                return web.json_response(
+                    {"ok": False, "error": "Для статусу shipped потрібна ТТН"},
+                    status=400,
+                    headers=cors_headers(request),
+                )
+            await run_db(update_order_fields, order_id, {"ttn": ttn})
+
+        if status in action_map:
+            await _sync_order_status_to_telegram(order_id, action_map[status])
+        else:
+            await run_db(update_order_status, order_id, status)
+
+        notified = await _notify_client_status(order, status, ttn)
+        return web.json_response(
+            {"ok": True, "status": status, "client_notified": notified},
+            headers=cors_headers(request),
+        )
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
 
