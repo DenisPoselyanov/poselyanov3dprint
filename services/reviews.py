@@ -363,6 +363,141 @@ def set_review_status(review_id: int, status: str) -> bool:
     return changed
 
 
+# ─── АДМІНКА: МОДЕРАЦІЯ, ВІДПОВІДІ, ВИДАЛЕННЯ (етап 5, слайс 4) ───
+
+REPLY_MAX = 1000
+ADMIN_LIST_SCAN = 1000  # скільки найновіших рядків дивимось перед текстовим пошуком
+
+
+def _iso(value) -> str:
+    return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
+
+
+def admin_list_reviews(
+    status: str = "all",
+    q: str = "",
+    rating=None,
+    limit: int = 100,
+    product_names: dict | None = None,
+) -> list[dict]:
+    """Відгуки для сторінки «Відгуки», нові першими.
+
+    `product_names` — {product_id: назва} з каталогу (товари не лежать у цій БД), потрібне для пошуку
+    за назвою. Пошук (товар, імʼя/нік клієнта, текст, №замовлення) — у Python, бо LIKE у SQLite не
+    знає регістру кирилиці. Дивимось ADMIN_LIST_SCAN найновіших рядків.
+    """
+    limit = max(1, min(int(limit or 100), 500))
+    where, params = [], []
+    if status in STATUSES:
+        where.append("r.status = ?")
+        params.append(status)
+    try:
+        rating = int(rating) if rating not in (None, "", "all") else None
+    except (TypeError, ValueError):
+        rating = None
+    if rating is not None and 1 <= rating <= 5:
+        where.append("r.rating = ?")
+        params.append(rating)
+    sql_text = """
+        SELECT r.id, r.product_id, r.order_id, r.user_id, r.author_name, r.rating, r.text, r.photos,
+               r.status, r.admin_reply, r.created_at, u.name, u.username
+        FROM reviews r LEFT JOIN users u ON u.id = r.user_id
+    """
+    if where:
+        sql_text += " WHERE " + " AND ".join(where)
+    sql_text += " ORDER BY r.created_at DESC, r.id DESC LIMIT ?"
+    conn = db_connect()
+    try:
+        rows = conn.execute(_sql(sql_text), (*params, ADMIN_LIST_SCAN)).fetchall()
+    finally:
+        conn.close()
+    needle = str(q or "").strip().lower().lstrip("#")
+    names = product_names or {}
+    out = []
+    for rid, pid, oid, uid, author, rate, text, photos, st, reply, created, uname, username in rows:
+        client = (uname or author or "").strip()
+        item = {
+            "id": int(rid),
+            "product_id": int(pid) if pid is not None else None,
+            "order_id": int(oid) if oid is not None else None,
+            "user_id": int(uid) if uid is not None else None,
+            "client_name": client or "Покупець",
+            "client_username": (username or "").lstrip("@"),
+            "rating": max(1, min(int(rate or 0), 5)),
+            "text": text or "",
+            "photos": _public_photos(photos),
+            "status": st,
+            "reply": reply or "",
+            "created_at": _iso(created),
+        }
+        if needle:
+            hay = " ".join((
+                str(names.get(item["product_id"], "")), item["client_name"], author or "",
+                item["client_username"], item["text"], str(item["order_id"] or ""),
+            )).lower()
+            if needle not in hay:
+                continue
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def admin_review_counts() -> dict:
+    """{pending, approved, hidden, all, avg_rating, rated_count}: вкладки, шапка сторінки й лічильник меню.
+    Середня й кількість — лише за опублікованими (так само, як бачить покупець)."""
+    conn = db_connect()
+    try:
+        rows = conn.execute(
+            _sql("SELECT status, COUNT(*), AVG(rating) FROM reviews GROUP BY status")
+        ).fetchall()
+    finally:
+        conn.close()
+    counts = {s: 0 for s in STATUSES}
+    avg = None
+    for st, n, a in rows:
+        if st in counts:
+            counts[st] = int(n or 0)
+        if st == "approved" and n:
+            avg = round(float(a), 1)
+    return {**counts, "all": sum(counts.values()), "avg_rating": avg, "rated_count": counts["approved"]}
+
+
+def pending_review_count() -> int:
+    conn = db_connect()
+    try:
+        return int(conn.execute(_sql("SELECT COUNT(*) FROM reviews WHERE status = 'pending'")).fetchone()[0] or 0)
+    finally:
+        conn.close()
+
+
+def set_admin_reply(review_id: int, reply) -> bool:
+    """Відповідь магазину під відгуком (≤1000 символів, порожня — прибрати). False, якщо відгуку немає."""
+    reply = str(reply or "").strip()
+    if len(reply) > REPLY_MAX:
+        raise ReviewError(f"Відповідь задовга (максимум {REPLY_MAX} символів)")
+    conn = db_connect()
+    try:
+        cur = conn.execute(_sql("UPDATE reviews SET admin_reply = ? WHERE id = ?"), (reply, int(review_id)))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_review(review_id: int) -> bool:
+    """Остаточно видаляє відгук і скидає кеш рейтингу. Покупець зможе залишити відгук на цей товар знову."""
+    conn = db_connect()
+    try:
+        cur = conn.execute(_sql("DELETE FROM reviews WHERE id = ?"), (int(review_id),))
+        conn.commit()
+        deleted = cur.rowcount > 0
+    finally:
+        conn.close()
+    invalidate_stats_cache()
+    return deleted
+
+
 # ─── ЗАПИТ ВІДГУКУ ПІСЛЯ ДОСТАВКИ ──────────────────────────────
 
 def orders_due_review_request(days: int = REVIEW_REQUEST_DELAY_DAYS) -> list[dict]:

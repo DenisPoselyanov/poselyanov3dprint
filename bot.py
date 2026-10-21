@@ -160,6 +160,11 @@ from services.promotions import (
 )
 from services.reviews import (
     ReviewError,
+    admin_list_reviews,
+    admin_review_counts,
+    delete_review,
+    pending_review_count,
+    set_admin_reply,
     get_review,
     mark_review_requested,
     orders_due_review_request,
@@ -2812,7 +2817,12 @@ async def handle_get_order_counts(request: web.Request):
     denied = require_admin(request, auth)
     if denied:
         return denied
-    return web.json_response(await run_db(count_orders_by_status), headers=cors_headers(request))
+    counts = await run_db(count_orders_by_status)
+    try:  # лічильник «Відгуки» в меню; збій не повинен ламати лічильники замовлень
+        counts["reviews_pending"] = await run_db(pending_review_count)
+    except Exception:
+        logger.warning("order counts: не вдалось порахувати відгуки на модерації", exc_info=True)
+    return web.json_response(counts, headers=cors_headers(request))
 
 
 async def handle_update_order(request: web.Request):
@@ -2990,6 +3000,107 @@ async def handle_post_review(request: web.Request):
         except Exception as e:
             logger.warning("Не вдалось надіслати відгук #%s на модерацію: %s", result["id"], e)
     return web.json_response({"ok": True, **result}, headers=cors_headers(request))
+
+
+def _catalog_product_map() -> dict[int, dict]:
+    """{id: товар} для товарів усіх статусів (відгук може стосуватись прихованого чи архівного)."""
+    from catalog_store import INACTIVE_CUSTOM_PRODUCTS_CACHE, INACTIVE_PRODUCTS_CACHE
+
+    out = {}
+    for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE + INACTIVE_PRODUCTS_CACHE + INACTIVE_CUSTOM_PRODUCTS_CACHE:
+        try:
+            out[int(p.get("id"))] = p
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _review_review_id(request: web.Request) -> int:
+    try:
+        return int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _review_not_found(request: web.Request):
+    return web.json_response({"ok": False, "error": "Відгук не знайдено"}, status=404, headers=cors_headers(request))
+
+
+async def handle_get_admin_reviews(request: web.Request):
+    """Відгуки для сторінки «Відгуки»: ?status=pending|approved|hidden|all&q=&rating=&limit=.
+    Разом із лічильниками (вкладки, середній рейтинг, кількість на модерації)."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    status = request.query.get("status", "all")
+    if status not in ("pending", "approved", "hidden", "all"):
+        return web.json_response({"ok": False, "error": "Невірний статус"}, status=400, headers=cors_headers(request))
+    products = _catalog_product_map()
+    names = {pid: str(p.get("name") or "") for pid, p in products.items()}
+    reviews = await run_db(
+        admin_list_reviews,
+        status,
+        request.query.get("q", ""),
+        request.query.get("rating"),
+        _query_int(request, "limit", 100),
+        names,
+    )
+    for item in reviews:
+        p = products.get(item["product_id"])
+        photos = p.get("photos") if p else None
+        item["product_name"] = (p.get("name") if p else None) or f"Товар #{item['product_id']}"
+        item["product_photo"] = photos[0] if isinstance(photos, list) and photos else ""
+        item["product_emoji"] = (p.get("emoji") if p else "") or ""
+    counts = await run_db(admin_review_counts)
+    return web.json_response({"reviews": reviews, "counts": counts}, headers=cors_headers(request))
+
+
+async def handle_set_admin_review_status(request: web.Request):
+    """PUT /api/admin/reviews/{id}/status {status: approved|hidden|pending}."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    status = data.get("status")
+    if status not in ("pending", "approved", "hidden"):
+        return web.json_response({"ok": False, "error": "Невірний статус"}, status=400, headers=cors_headers(request))
+    review_id = _review_review_id(request)
+    if not await run_db(get_review, review_id):
+        return _review_not_found(request)
+    await run_db(set_review_status, review_id, status)
+    return web.json_response(
+        {"ok": True, "counts": await run_db(admin_review_counts)}, headers=cors_headers(request)
+    )
+
+
+async def handle_set_admin_review_reply(request: web.Request):
+    """PUT /api/admin/reviews/{id}/reply {reply}: ≤1000 символів, порожня відповідь прибирає її."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    try:
+        found = await run_db(set_admin_reply, _review_review_id(request), data.get("reply"))
+    except ReviewError as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+    if not found:
+        return _review_not_found(request)
+    return web.json_response({"ok": True}, headers=cors_headers(request))
+
+
+async def handle_delete_admin_review(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    if not await run_db(delete_review, _review_review_id(request)):
+        return _review_not_found(request)
+    return web.json_response(
+        {"ok": True, "counts": await run_db(admin_review_counts)}, headers=cors_headers(request)
+    )
 
 
 async def review_action(update: Update, context: ContextTypes.DEFAULT_TYPE):

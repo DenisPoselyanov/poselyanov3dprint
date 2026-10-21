@@ -46,6 +46,27 @@ _c = db_connect()
 for _pid, _t in ((1, "product_view"), (1, "product_view"), (1, "add_to_cart"), (2, "product_view")):
     _c.execute("INSERT INTO events (type, user_id, product_id) VALUES (?, ?, ?)", (_t, 900 + _pid, _pid))
 _c.commit(); _c.close()
+# Відгуки в усіх статусах (з фото й відповіддю) для сторінки «Відгуки»
+import json as _json
+_c = db_connect()
+_c.execute("INSERT OR IGNORE INTO users (id, name, username) VALUES (101, 'Олена К.', '@olena')")
+_c.execute("INSERT OR IGNORE INTO users (id, name, username) VALUES (103, 'Марія', '@maria')")
+_c.commit(); _c.close()
+_ph = lambda n: "https://picsum.photos/seed/rv%d/600/450" % n
+for _uid, _pid, _rate, _txt, _photos, _st, _reply in (
+    (101, 1, 5, "Дуже гарний брелок, друк чистий, прийшов швидко!", [_ph(1), _ph(2)], "pending", ""),
+    (102, 2, 2, "Трохи кривувато надрукувало, очікував краще.", [], "pending", ""),
+    (103, 3, 4, "", [_ph(3)], "pending", ""),
+    (104, 1, 5, "Дарував подарунок - всім сподобалось. Рекомендую!", [_ph(4), _ph(5), _ph(6)], "approved", "Дякуємо за відгук! Раді, що сподобалось."),
+    (105, 2, 4, "Нормально, але чекав довше ніж обіцяли.", [], "approved", ""),
+    (106, 4, 3, "Колір трохи інший ніж на фото.", [], "hidden", ""),
+):
+    _oid, _ = orders.save_order(_uid, "@u", "Тест", [it("Товар %d" % _pid, 100, 1, product_id=_pid)], 100, "")
+    orders.update_order_status(_oid, "delivered")
+    _c = db_connect()
+    _c.execute("INSERT INTO reviews (product_id, order_id, user_id, author_name, rating, text, photos, status, admin_reply) VALUES (?,?,?,?,?,?,?,?,?)",
+               (_pid, _oid, _uid, "Клієнт %d" % _uid, _rate, _txt, _json.dumps(_photos), _st, _reply))
+    _c.commit(); _c.close()
 app = web.Application(client_max_size=30 * 1024 * 1024)
 register_http_routes(app, bot)
 web.run_app(app, host="127.0.0.1", port=8081, print=None)

@@ -2587,6 +2587,60 @@
             #collectionsPage > div:first-child { flex-direction: column !important; align-items: stretch !important; }
         }
 
+        /* Відгуки */
+        .rv-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; }
+        .rv-summary .rv-big { font-size: 24px; font-weight: 800; color: var(--text-main); font-variant-numeric: tabular-nums; }
+        .rv-summary .rv-big .rv-star { color: #F5A524; }
+        .rv-summary .rv-sub { color: var(--text-muted); font-size: 13px; }
+        .rv-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+        .rv-filters .orders-search { flex: 1 1 200px; width: auto; max-width: 320px; }
+        .rv-filters select.orders-search { flex: 0 0 auto; max-width: none; }
+        .orders-tab.hot .orders-tab-n { background: var(--sale); color: #fff; opacity: 1; border-radius: 99px; padding: 0 7px; }
+        .rv-list { display: grid; gap: 12px; }
+        .rv-card { display: grid; gap: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; min-width: 0; }
+        .rv-card.is-pending { border-color: color-mix(in srgb, var(--amber) 55%, var(--border)); }
+        .rv-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .rv-prod { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
+        .rv-th { width: 44px; height: 44px; border-radius: 10px; background: var(--bg-section); display: grid; place-items: center; font-size: 22px; overflow: hidden; flex: none; }
+        .rv-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .rv-pname { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+        .rv-meta { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+        .rv-date { font-size: 12px; color: var(--text-muted); white-space: nowrap; flex: none; text-align: right; }
+        .rv-stars { color: #F5A524; font-size: 17px; letter-spacing: 1px; line-height: 1; }
+        .rv-stars .off { color: var(--border-alt); }
+        .rv-who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); }
+        .rv-who b { color: var(--text-main); }
+        .rv-text { font-size: 14px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+        .rv-text.empty { color: var(--text-faint); font-style: italic; }
+        .rv-photos { display: flex; gap: 8px; flex-wrap: wrap; }
+        .rv-photo { width: 76px; height: 76px; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-section); cursor: zoom-in; }
+        .rv-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .rv-reply { display: grid; gap: 4px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg-section); border-radius: 0 10px 10px 0; font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
+        .rv-reply b { font-size: 12px; color: var(--text-secondary); }
+        .rv-reply-note { font-size: 12px; color: var(--amber); }
+        .rv-edit { display: grid; gap: 8px; }
+        .rv-edit textarea { width: 100%; min-height: 84px; padding: 10px 12px; border: 1px solid var(--border-input); border-radius: 10px; background: var(--bg-input); color: var(--text-main); font: inherit; font-size: 14px; resize: vertical; box-sizing: border-box; }
+        .rv-edit-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .rv-edit-row .rv-count { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+        .rv-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .rv-actions .btn { padding: 8px 14px; font-size: 13px; min-height: 36px; }
+        .rv-actions .pt-menu { margin-left: auto; }
+        .rv-empty { text-align: center; padding: 40px 16px; color: var(--text-muted); background: var(--bg-card); border: 1px dashed var(--border-alt); border-radius: 14px; }
+        .rv-lb { position: fixed; inset: 0; z-index: 4000; background: rgba(8, 12, 18, .88); display: none; align-items: center; justify-content: center; padding: 16px; }
+        .rv-lb.open { display: flex; }
+        .rv-lb img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+        .rv-lb button { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .16); color: #fff; font-size: 22px; cursor: pointer; display: grid; place-items: center; }
+        .rv-lb .lb-close { top: 12px; right: 12px; }
+        .rv-lb .lb-prev { left: 12px; top: 50%; transform: translateY(-50%); }
+        .rv-lb .lb-next { right: 12px; top: 50%; transform: translateY(-50%); }
+        .rv-lb .lb-n { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; opacity: .8; }
+        @media (max-width: 700px) {
+            .rv-top { align-items: flex-start; }
+            .rv-filters .orders-search { max-width: none; flex-basis: 100%; }
+            .rv-actions .btn { flex: 1 1 auto; }
+            .rv-actions .pt-menu { margin-left: 0; }
+        }
+
         /* Філаменти */
         .fl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 16px; }
         .fl-card { display: flex; flex-direction: column; gap: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; min-width: 0; }
@@ -2674,6 +2728,7 @@
                 <div class="sb-group">Маркетинг</div>
                 <button class="page-tab sb-item" type="button" data-page="promotions" onclick="switchPage('promotions'); toggleSidebar(false)"><span class="sb-ico" data-icon="promotions" style="display:contents"></span>Акції</button>
                 <button class="page-tab sb-item" type="button" data-page="coupons" onclick="switchPage('coupons'); toggleSidebar(false)"><span class="sb-ico" data-icon="coupons" style="display:contents"></span>Купони</button>
+                <button class="page-tab sb-item" type="button" data-page="reviews" onclick="switchPage('reviews'); toggleSidebar(false)"><span class="sb-ico" data-icon="reviews" style="display:contents"></span>Відгуки<span class="sb-count" id="navCountReviews"></span></button>
                 <button class="page-tab sb-item" type="button" data-page="users" onclick="switchPage('users'); toggleSidebar(false)"><span class="sb-ico" data-icon="users" style="display:contents"></span>Клієнти</button>
             </nav>
             <div class="sb-foot">
@@ -2903,6 +2958,26 @@
                 <div id="filamentsList" class="fl-grid"></div>
             </section>
 
+            <section id="reviewsPage" class="page-section">
+                <div class="orders-toolbar">
+                    <h2>⭐ Відгуки</h2>
+                    <div class="orders-toolbar-right">
+                        <button class="btn btn-secondary" type="button" onclick="loadReviews()">🔄 Оновити</button>
+                    </div>
+                </div>
+                <div id="reviewsSummary" class="rv-summary"></div>
+                <div id="reviewsTabs" class="orders-tabs"></div>
+                <div class="rv-filters">
+                    <input type="search" class="orders-search" placeholder="Товар, клієнт, текст, №" oninput="onReviewsSearchInput(this.value)">
+                    <select class="orders-search" aria-label="Оцінка" onchange="onReviewsRatingChange(this.value)">
+                        <option value="">Усі оцінки</option>
+                        <option value="5">5 ★</option><option value="4">4 ★</option><option value="3">3 ★</option>
+                        <option value="2">2 ★</option><option value="1">1 ★</option>
+                    </select>
+                </div>
+                <div id="reviewsList" class="rv-list"></div>
+            </section>
+
             <section id="couponsPage" class="page-section">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 16px;">
                     <h2 style="font-size:20px; margin:0;">🎟️ Купони</h2>
@@ -2969,6 +3044,13 @@
         </div>
     </div>
 
+    <div id="rvLightbox" class="rv-lb" onclick="if (event.target === this) closeReviewLightbox()" role="dialog" aria-label="Фото відгуку">
+        <img alt="">
+        <button type="button" class="lb-close" aria-label="Закрити" onclick="closeReviewLightbox()">✕</button>
+        <button type="button" class="lb-prev" aria-label="Попереднє" onclick="stepReviewLightbox(-1)">‹</button>
+        <button type="button" class="lb-next" aria-label="Наступне" onclick="stepReviewLightbox(1)">›</button>
+        <span class="lb-n"></span>
+    </div>
     <div id="cmdk" class="cmdk" onclick="if (event.target === this) closeCmdk()">
         <div class="cmdk-box">
             <input id="cmdkInput" class="cmdk-input" type="text" placeholder="Сторінка, товар, замовлення, клієнт…" autocomplete="off"
@@ -4005,6 +4087,7 @@
             if (page === 'promotions') loadPromotions();
             if (page === 'users') loadUsers();
             if (page === 'collections') loadCollections();
+            if (page === 'reviews') loadReviews();
         }
 
         function renderCategoryFilterMenu() {
@@ -4675,7 +4758,7 @@
 
         const PAGE_TITLES = {
             overview: 'Огляд', orders: 'Замовлення', queue: 'Черга друку', products: 'Товари', categories: 'Категорії', collections: 'Добірки',
-            filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', users: 'Клієнти',
+            filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', reviews: 'Відгуки', users: 'Клієнти',
         };
 
         const NAV_ICON_PATHS = {
@@ -4688,6 +4771,7 @@
             filaments: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6"/>',
             promotions: '<path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-9-1 2-2 3-4 3 0-2 0-4-1-6-3 3-5 7-5 12 0 4 3 7 7 7Z"/>',
             coupons: '<path d="M3 7a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4Z"/><path d="M13 5v2M13 11v2M13 17v2"/>',
+            reviews: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/>',
             users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 3.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-4-6.3"/>',
             search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
             bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/>',
@@ -4723,6 +4807,7 @@
             setNavCount('navCountOrders', fresh, true);
             setNavCount('navCountQueue', printQueue.kpi?.parts || 0);
             setNavCount('navCountProducts', allProducts.length);
+            setNavCount('navCountReviews', ordersCounts.reviews_pending || 0, true);
             const bell = document.getElementById('tbBellBadge');
             if (bell) bell.textContent = fresh > 0 ? String(fresh) : '';
             const sbProducts = document.getElementById('sbProducts');
@@ -9033,6 +9118,302 @@
                 showToast(e.message || 'Помилка видалення замовлення', 'error');
             }
         }
+
+        // ═══════════════════════════════════════════════════════════
+        // ВІДГУКИ: модерація, відповіді, видалення (етап 5, слайс 4)
+        // ═══════════════════════════════════════════════════════════
+
+        const REVIEW_TABS = [
+            { key: 'pending', label: 'На модерації', hot: true },
+            { key: 'approved', label: 'Опубліковані' },
+            { key: 'hidden', label: 'Приховані' },
+        ];
+        const REVIEW_REPLY_MAX = 1000;
+        let reviewsTab = 'pending';
+        let reviewsSearch = '';
+        let reviewsRating = '';
+        let reviewsItems = [];
+        let reviewsCounts = null;
+        let reviewsLoaded = false;
+        let reviewsSeq = 0;
+        let reviewsSearchTimer = null;
+        const reviewReplyDrafts = new Map(); // id -> текст відповіді, що редагується
+        let reviewLightbox = { photos: [], index: 0 };
+
+        function reviewStarsHtml(n) {
+            return '★'.repeat(n) + `<span class="off">${'★'.repeat(5 - n)}</span>`;
+        }
+
+        function reviewDateLabel(raw) {
+            if (!raw) return '';
+            let s = String(raw).replace(' ', 'T');
+            if (!/[zZ]|[+-]\d\d:?\d\d$/.test(s)) s += 'Z'; // SQLite віддає UTC без пояса
+            const d = new Date(s);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function renderReviewsHeader() {
+            const el = document.getElementById('reviewsSummary');
+            if (!el) return;
+            const c = reviewsCounts;
+            if (!c) { el.innerHTML = ''; return; }
+            if (!c.rated_count) {
+                el.innerHTML = '<span class="rv-sub">Опублікованих відгуків ще немає — середнього рейтингу поки нема.</span>';
+                return;
+            }
+            const avg = String(c.avg_rating).replace('.', ',');
+            el.innerHTML = `<span class="rv-big"><span class="rv-star">★</span> ${escapeHtml(avg)}</span>
+                <span class="rv-sub">середня оцінка магазину · ${c.rated_count} ${pluralUa(c.rated_count, 'опублікований відгук', 'опублікованих відгуки', 'опублікованих відгуків')}${c.all > c.rated_count ? ` · усього ${c.all}` : ''}</span>`;
+        }
+
+        function renderReviewTabs() {
+            const box = document.getElementById('reviewsTabs');
+            if (!box) return;
+            box.innerHTML = REVIEW_TABS.map(t => {
+                const n = reviewsCounts ? (reviewsCounts[t.key] || 0) : '';
+                return `<button type="button" class="orders-tab${reviewsTab === t.key ? ' active' : ''}${t.hot && n > 0 ? ' hot' : ''}" onclick="setReviewsTab('${t.key}')">
+                    ${t.label} <span class="orders-tab-n">${n}</span></button>`;
+            }).join('');
+        }
+
+        function syncReviewsNav() {
+            if (reviewsCounts) {
+                ordersCounts.reviews_pending = reviewsCounts.pending || 0;
+                refreshNavCounts();
+            }
+        }
+
+        async function loadReviews() {
+            const seq = ++reviewsSeq;
+            const params = new URLSearchParams({ status: reviewsTab, limit: '200' });
+            if (reviewsSearch) params.set('q', reviewsSearch);
+            if (reviewsRating) params.set('rating', reviewsRating);
+            try {
+                const res = await fetch(API_BASE + '/admin/reviews?' + params.toString());
+                if (!res.ok) throw new Error(`Помилка завантаження (${res.status})`);
+                const data = await res.json();
+                if (seq !== reviewsSeq) return; // прийшла новіша відповідь
+                reviewsItems = Array.isArray(data.reviews) ? data.reviews : [];
+                reviewsCounts = data.counts || reviewsCounts;
+                reviewsLoaded = true;
+                renderReviewsHeader();
+                renderReviewTabs();
+                renderReviewsList();
+                syncReviewsNav();
+            } catch (e) {
+                console.error('loadReviews error:', e);
+                if (seq === reviewsSeq) showToast('Не вдалося завантажити відгуки', 'error');
+            }
+        }
+
+        function setReviewsTab(key) {
+            if (reviewsTab === key) return;
+            reviewsTab = key;
+            renderReviewTabs();
+            loadReviews();
+        }
+
+        function onReviewsSearchInput(value) {
+            reviewsSearch = String(value || '').trim();
+            clearTimeout(reviewsSearchTimer);
+            reviewsSearchTimer = setTimeout(loadReviews, 250);
+        }
+
+        function onReviewsRatingChange(value) {
+            reviewsRating = value || '';
+            loadReviews();
+        }
+
+        function reviewEmptyText() {
+            if (reviewsSearch || reviewsRating) return 'За цими фільтрами відгуків не знайдено.';
+            if (reviewsTab === 'pending') return 'Немає відгуків на модерації. Нові зʼявляться тут (і в чаті замовлень).';
+            if (reviewsTab === 'approved') return 'Опублікованих відгуків ще немає.';
+            return 'Прихованих відгуків немає.';
+        }
+
+        function reviewReplyHtml(r) {
+            if (reviewReplyDrafts.has(r.id)) {
+                const draft = reviewReplyDrafts.get(r.id);
+                return `<div class="rv-edit">
+                    <textarea id="rvReply${r.id}" maxlength="${REVIEW_REPLY_MAX}" placeholder="Відповідь магазину — її побачать покупці під відгуком" oninput="onReviewReplyInput(${r.id}, this)">${escapeHtml(draft)}</textarea>
+                    <div class="rv-edit-row">
+                        <button type="button" class="btn btn-primary" onclick="saveReviewReply(${r.id})">Зберегти відповідь</button>
+                        <button type="button" class="btn btn-secondary" onclick="cancelReviewReply(${r.id})">Скасувати</button>
+                        ${r.reply ? `<button type="button" class="btn btn-secondary" onclick="clearReviewReply(${r.id})">Прибрати відповідь</button>` : ''}
+                        <span class="rv-count" id="rvCount${r.id}">${draft.length}/${REVIEW_REPLY_MAX}</span>
+                    </div>
+                    ${r.status !== 'approved' ? '<div class="rv-reply-note">Відповідь побачать покупці, коли відгук буде опубліковано.</div>' : ''}
+                </div>`;
+            }
+            if (!r.reply) return '';
+            return `<div class="rv-reply"><b>Відповідь магазину</b>${escapeHtml(r.reply)}${r.status !== 'approved' ? '<span class="rv-reply-note">Покупці побачать її, коли відгук буде опубліковано.</span>' : ''}</div>`;
+        }
+
+        function reviewCardHtml(r) {
+            const photo = r.product_photo
+                ? `<img src="${escapeAttr(r.product_photo)}" alt="" loading="lazy">`
+                : escapeHtml(r.product_emoji || '📦');
+            const username = r.client_username ? ` · @${escapeHtml(r.client_username)}` : '';
+            const photos = (r.photos || []).map((u, i) =>
+                `<button type="button" class="rv-photo" aria-label="Збільшити фото ${i + 1}" onclick="openReviewLightbox(${r.id}, ${i})"><img src="${escapeAttr(u)}" alt="" loading="lazy"></button>`).join('');
+            const editing = reviewReplyDrafts.has(r.id);
+            const publish = r.status !== 'approved'
+                ? `<button type="button" class="btn btn-primary" onclick="setReviewStatus(${r.id}, 'approved')">Опублікувати</button>` : '';
+            const hide = r.status !== 'hidden'
+                ? `<button type="button" class="btn btn-secondary" onclick="setReviewStatus(${r.id}, 'hidden')">Сховати</button>` : '';
+            const reply = editing ? '' : `<button type="button" class="btn btn-secondary" onclick="openReviewReply(${r.id})">${r.reply ? 'Змінити відповідь' : 'Відповісти'}</button>`;
+            return `<article class="rv-card${r.status === 'pending' ? ' is-pending' : ''}" data-rv="${r.id}">
+                <div class="rv-top">
+                    <div class="rv-prod">
+                        <span class="rv-th">${photo}</span>
+                        <div style="min-width:0;">
+                            <div class="rv-pname">${escapeHtml(r.product_name)}</div>
+                            <div class="rv-meta">Замовлення ${r.order_id ? '№' + r.order_id : '—'}</div>
+                        </div>
+                    </div>
+                    <div class="rv-date">${escapeHtml(reviewDateLabel(r.created_at))}</div>
+                </div>
+                <div class="rv-who"><span class="rv-stars" aria-label="Оцінка ${r.rating} з 5">${reviewStarsHtml(r.rating)}</span><span><b>${escapeHtml(r.client_name)}</b>${username}</span></div>
+                ${r.text ? `<div class="rv-text">${escapeHtml(r.text)}</div>` : '<div class="rv-text empty">Без тексту — лише оцінка</div>'}
+                ${photos ? `<div class="rv-photos">${photos}</div>` : ''}
+                ${reviewReplyHtml(r)}
+                <div class="rv-actions">
+                    ${publish}${hide}${reply}
+                    <details class="pt-menu" ontoggle="positionProductMenu(this)">
+                        <summary aria-label="Інші дії">⋯</summary>
+                        <div class="pt-menu-list">
+                            <button type="button" class="danger" onclick="closeProductMenus(); deleteReview(${r.id})">Видалити…</button>
+                        </div>
+                    </details>
+                </div>
+            </article>`;
+        }
+
+        function renderReviewsList() {
+            const list = document.getElementById('reviewsList');
+            if (!list) return;
+            if (!reviewsLoaded) { list.innerHTML = '<div class="rv-empty">Завантаження…</div>'; return; }
+            list.innerHTML = reviewsItems.length
+                ? reviewsItems.map(reviewCardHtml).join('')
+                : `<div class="rv-empty">${escapeHtml(reviewEmptyText())}</div>`;
+        }
+
+        async function reviewApi(path, method, body) {
+            const options = { method };
+            if (body !== undefined) {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify(body);
+            }
+            const res = await fetch(API_BASE + path, options);
+            let data = {};
+            try { data = await res.json(); } catch (_) { /* порожня відповідь */ }
+            if (!res.ok || data.ok === false) throw new Error(data.error || `Помилка (${res.status})`);
+            return data;
+        }
+
+        async function setReviewStatus(id, status) {
+            try {
+                await reviewApi(`/admin/reviews/${id}/status`, 'PUT', { status });
+                showToast(status === 'approved' ? 'Відгук опубліковано' : 'Відгук приховано', 'success');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося змінити статус', 'error');
+            }
+            await loadReviews();
+        }
+
+        function openReviewReply(id) {
+            const r = reviewsItems.find(x => x.id === id);
+            if (!r) return;
+            reviewReplyDrafts.set(id, r.reply || '');
+            renderReviewsList();
+            const ta = document.getElementById('rvReply' + id);
+            if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+        }
+
+        function onReviewReplyInput(id, ta) {
+            reviewReplyDrafts.set(id, ta.value);
+            const c = document.getElementById('rvCount' + id);
+            if (c) c.textContent = `${ta.value.length}/${REVIEW_REPLY_MAX}`;
+        }
+
+        function cancelReviewReply(id) {
+            reviewReplyDrafts.delete(id);
+            renderReviewsList();
+        }
+
+        async function persistReviewReply(id, text, okMessage) {
+            try {
+                await reviewApi(`/admin/reviews/${id}/reply`, 'PUT', { reply: text });
+                reviewReplyDrafts.delete(id);
+                const r = reviewsItems.find(x => x.id === id);
+                if (r) r.reply = text;
+                renderReviewsList();
+                showToast(okMessage, 'success');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося зберегти відповідь', 'error');
+            }
+        }
+
+        function saveReviewReply(id) {
+            const text = (reviewReplyDrafts.get(id) || '').trim();
+            return persistReviewReply(id, text, text ? 'Відповідь збережено' : 'Відповідь прибрано');
+        }
+
+        function clearReviewReply(id) {
+            return persistReviewReply(id, '', 'Відповідь прибрано');
+        }
+
+        async function deleteReview(id) {
+            if (!await askConfirm('Видалити відгук назавжди? Рейтинг товару перерахується, а покупець зможе залишити відгук знову.')) return;
+            try {
+                await reviewApi(`/admin/reviews/${id}`, 'DELETE');
+                reviewReplyDrafts.delete(id);
+                showToast('Відгук видалено', 'success');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося видалити відгук', 'error');
+            }
+            await loadReviews();
+        }
+
+        // ── Перегляд фото ──
+        function renderReviewLightbox() {
+            const box = document.getElementById('rvLightbox');
+            if (!box) return;
+            const { photos, index } = reviewLightbox;
+            box.querySelector('img').src = photos[index] || '';
+            box.querySelector('.lb-n').textContent = photos.length > 1 ? `${index + 1} / ${photos.length}` : '';
+            box.querySelector('.lb-prev').style.display = photos.length > 1 ? 'grid' : 'none';
+            box.querySelector('.lb-next').style.display = photos.length > 1 ? 'grid' : 'none';
+        }
+
+        function openReviewLightbox(id, index) {
+            const r = reviewsItems.find(x => x.id === id);
+            if (!r || !(r.photos || []).length) return;
+            reviewLightbox = { photos: r.photos, index: index || 0 };
+            document.getElementById('rvLightbox').classList.add('open');
+            renderReviewLightbox();
+        }
+
+        function stepReviewLightbox(delta) {
+            const n = reviewLightbox.photos.length;
+            if (!n) return;
+            reviewLightbox.index = (reviewLightbox.index + delta + n) % n;
+            renderReviewLightbox();
+        }
+
+        function closeReviewLightbox() {
+            const box = document.getElementById('rvLightbox');
+            if (box) box.classList.remove('open');
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const box = document.getElementById('rvLightbox');
+            if (!box || !box.classList.contains('open')) return;
+            if (e.key === 'Escape') { e.stopImmediatePropagation(); closeReviewLightbox(); }
+            else if (e.key === 'ArrowLeft') stepReviewLightbox(-1);
+            else if (e.key === 'ArrowRight') stepReviewLightbox(1);
+        }, true);
 
         // ═══════════════════════════════════════════════════════════
         // TOAST ПОВІДОМЛЕННЯ
