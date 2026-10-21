@@ -215,4 +215,24 @@ CREATE TABLE IF NOT EXISTS promotions (
 ALTER TABLE promotions ADD COLUMN IF NOT EXISTS accent TEXT NOT NULL DEFAULT '';
 ALTER TABLE promotions ADD COLUMN IF NOT EXISTS show_timer INTEGER NOT NULL DEFAULT 1;
 
+-- Розсилки (таблицю створює і мігрує сам бот — services/broadcasts.py; тут для довідки).
+-- Слайс 6 етапу 5. Переходи: подія events.type = 'broadcast_open' (value = id розсилки).
+CREATE TABLE IF NOT EXISTS broadcasts (
+    id BIGSERIAL PRIMARY KEY,
+    segment TEXT NOT NULL DEFAULT 'all',
+    text TEXT NOT NULL DEFAULT '',
+    photo TEXT NOT NULL DEFAULT '',
+    button_label TEXT NOT NULL DEFAULT '',
+    button_target TEXT NOT NULL DEFAULT '',
+    scheduled_at TIMESTAMPTZ,
+    status TEXT NOT NULL DEFAULT 'draft',
+    total INTEGER NOT NULL DEFAULT 0,
+    delivered INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0,
+    clicks INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    sent_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_broadcasts_status_sched ON broadcasts(status, scheduled_at);
+
 COMMIT;

@@ -2386,6 +2386,54 @@
             .pt-flags { flex-wrap: wrap; }
         }
 
+        /* ═══ КЛІЄНТИ І РОЗСИЛКИ (етап 5, слайс 6) ═══ */
+        .cl-segs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .cl-seg { text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg-card); color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+        .cl-seg:hover { border-color: var(--accent); }
+        .cl-seg.on { border-color: var(--accent); background: var(--bg-tab-active); box-shadow: 0 0 0 1px var(--accent) inset; }
+        .cl-seg .l { display: block; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+        .cl-seg .n { display: block; font-size: 22px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
+        .cl-who b { display: block; }
+        .cl-act { display: flex; gap: 6px; flex-wrap: wrap; }
+        .cl-act .user-action-btn { white-space: nowrap; }
+        .cl-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        @media (max-width: 900px) { .cl-segs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 700px) {
+            .cl-segs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+            .cl-seg { padding: 10px 12px; }
+            .cl-seg .n { font-size: 19px; }
+            .cl-table, .cl-table tbody { display: block; min-width: 0; }
+            .cl-table thead { display: none; }
+            .users-table-wrap { background: transparent; border: 0; overflow: visible; }
+            .cl-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px; margin-bottom: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; }
+            .cl-table td { display: block; padding: 0; border: 0; }
+            .cl-table td.c-who { grid-column: 1 / 3; }
+            .cl-table td.c-act { grid-column: 1 / 3; }
+            .cl-table td[data-l]::before { content: attr(data-l) ' '; color: var(--text-muted); font-size: 12px; }
+        }
+        .bc-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
+        .bc-card { display: grid; gap: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; min-width: 0; align-content: start; }
+        .bc-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
+        .bc-chip { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 99px; background: var(--bg-section); color: var(--text-secondary); }
+        .bc-chip.sent { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
+        .bc-chip.scheduled, .bc-chip.sending { background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--amber); }
+        .bc-chip.failed { background: color-mix(in srgb, var(--sale) 14%, transparent); color: var(--sale); }
+        .bc-text { font-size: 14px; line-height: 1.4; white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+        .bc-photo { width: 100%; max-height: 160px; object-fit: cover; border-radius: 10px; display: block; }
+        .bc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+        .bc-stat { background: var(--bg-section); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+        .bc-stat .l { font-size: 11px; color: var(--text-muted); }
+        .bc-stat .v { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+        .bc-stat .s { font-size: 11px; color: var(--text-muted); }
+        .bc-btn-line { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+        .bc-actions { display: flex; justify-content: flex-end; }
+        .bc-empty { text-align: center; padding: 40px 16px; color: var(--text-muted); background: var(--bg-card); border: 1px dashed var(--border-alt); border-radius: 14px; grid-column: 1 / -1; }
+        .tg-bubble { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px 14px 14px 4px; overflow: hidden; max-width: 300px; }
+        .tg-bubble img { width: 100%; display: block; max-height: 220px; object-fit: cover; }
+        .tg-bubble .tg-t { padding: 8px 12px 10px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .tg-bubble .tg-t.ph { color: var(--text-faint); }
+        .tg-btn { margin-top: 4px; max-width: 300px; text-align: center; padding: 9px 12px; border-radius: 10px; background: var(--bg-tab-active); color: var(--accent-text); font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+
         /* ═══ ШУХЛЯДИ-РЕДАКТОРИ (товар, категорія, колір): секції, превʼю, закріплений низ ═══ */
         .modal .modal-content.dr {
             display: flex; flex-direction: column; padding: 0; overflow: hidden; width: min(560px, 100%);
@@ -2856,8 +2904,9 @@
                 <div class="sb-group">Маркетинг</div>
                 <button class="page-tab sb-item" type="button" data-page="promotions" onclick="switchPage('promotions'); toggleSidebar(false)"><span class="sb-ico" data-icon="promotions" style="display:contents"></span>Акції</button>
                 <button class="page-tab sb-item" type="button" data-page="coupons" onclick="switchPage('coupons'); toggleSidebar(false)"><span class="sb-ico" data-icon="coupons" style="display:contents"></span>Купони</button>
-                <button class="page-tab sb-item" type="button" data-page="reviews" onclick="switchPage('reviews'); toggleSidebar(false)"><span class="sb-ico" data-icon="reviews" style="display:contents"></span>Відгуки<span class="sb-count" id="navCountReviews"></span></button>
                 <button class="page-tab sb-item" type="button" data-page="users" onclick="switchPage('users'); toggleSidebar(false)"><span class="sb-ico" data-icon="users" style="display:contents"></span>Клієнти</button>
+                <button class="page-tab sb-item" type="button" data-page="broadcasts" onclick="switchPage('broadcasts'); toggleSidebar(false)"><span class="sb-ico" data-icon="broadcasts" style="display:contents"></span>Розсилки</button>
+                <button class="page-tab sb-item" type="button" data-page="reviews" onclick="switchPage('reviews'); toggleSidebar(false)"><span class="sb-ico" data-icon="reviews" style="display:contents"></span>Відгуки<span class="sb-count" id="navCountReviews"></span></button>
             </nav>
             <div class="sb-foot">
                 <div class="sb-status"><span id="sbDot" class="sb-dot"></span><span><span id="sbBotLabel">Перевіряю…</span> · <b id="sbProducts">0</b> товарів у магазині</span></div>
@@ -3002,7 +3051,7 @@
 
             <section id="usersPage" class="page-section">
                 <div class="orders-toolbar">
-                    <h2>👥 Користувачі <span id="usersCount" class="orders-count"></span></h2>
+                    <h2>👥 Клієнти <span id="usersCount" class="orders-count"></span></h2>
                     <div class="orders-toolbar-right">
                         <div class="search-box">
                             <input type="text" id="usersSearch" placeholder="🔍 Ім’я, @username або ID..." oninput="onUsersSearchInput()">
@@ -3016,23 +3065,20 @@
                     </div>
                 </div>
 
-                <div class="users-summary" id="usersSummary"></div>
+                <div class="cl-segs" id="usersSegments" role="tablist" aria-label="Сегменти клієнтів"></div>
 
                 <div id="usersLoading" class="loading" style="display:none;">
                     <div class="spinner"></div>
                 </div>
 
                 <div class="users-table-wrap" id="usersTableWrap">
-                    <table class="users-table">
+                    <table class="users-table cl-table">
                         <thead>
                             <tr>
-                                <th class="sortable" onclick="sortUsersBy('name')" data-sort="name">Користувач<span class="sort-arrow">▾</span></th>
-                                <th class="sortable" onclick="sortUsersBy('starts')" data-sort="starts" title="Скільки разів надсилав /start">🚀 Запусків<span class="sort-arrow">▾</span></th>
-                                <th class="sortable" onclick="sortUsersBy('last_start')" data-sort="last_start">Останній запуск<span class="sort-arrow">▾</span></th>
-                                <th class="sortable" onclick="sortUsersBy('activity')" data-sort="activity" title="Будь-які дії: повідомлення, кнопки, каталог">💬 Дій<span class="sort-arrow">▾</span></th>
-                                <th class="sortable" onclick="sortUsersBy('orders')" data-sort="orders">📦 Замовлень<span class="sort-arrow">▾</span></th>
-                                <th class="sortable" onclick="sortUsersBy('spent')" data-sort="spent" title="Сума підтверджених замовлень">💰 Сума<span class="sort-arrow">▾</span></th>
-                                <th class="sortable" onclick="sortUsersBy('joined')" data-sort="joined">Перший запуск<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('name')" data-sort="name">Клієнт<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('orders')" data-sort="orders" title="Замовлення у статусах «підтверджено…доставлено»">Замовлень<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('spent')" data-sort="spent" title="Сума таких замовлень">Сума<span class="sort-arrow">▾</span></th>
+                                <th class="sortable" onclick="sortUsersBy('last_activity')" data-sort="last_activity">Остання активність<span class="sort-arrow">▾</span></th>
                                 <th>Дії</th>
                             </tr>
                         </thead>
@@ -3042,7 +3088,7 @@
 
                 <div id="usersEmpty" class="empty-state" style="display:none;">
                     <div class="empty-state-icon">🕵️</div>
-                    <p>Користувачів не знайдено</p>
+                    <p>Клієнтів не знайдено</p>
                 </div>
 
                 <div class="users-pagination">
@@ -3052,6 +3098,17 @@
                         <button class="btn btn-secondary" type="button" id="usersNextBtn" onclick="changeUsersPage(1)">Далі →</button>
                     </div>
                 </div>
+            </section>
+
+            <section id="broadcastsPage" class="page-section">
+                <div class="orders-toolbar">
+                    <h2>📣 Розсилки <span id="bcCountTotal" class="orders-count"></span></h2>
+                    <div class="orders-toolbar-right">
+                        <button class="btn btn-secondary" type="button" onclick="loadBroadcasts()">🔄 Оновити</button>
+                    </div>
+                </div>
+                <div class="form-hint" style="margin-bottom:12px;">«Перейшли» — клієнти, що відкрили магазин кнопкою розсилки. «Замовлень» — їхні замовлення (підтверджено…доставлено) протягом 7 днів після переходу.</div>
+                <div id="bcList" class="bc-list"></div>
             </section>
 
             <section id="categoriesPage" class="page-section">
@@ -3809,6 +3866,99 @@
         </div>
     </div>
 
+    <div id="broadcastModal" class="modal">
+        <div class="modal-content dr dr-wide">
+            <div class="dr-head">
+                <span>📣 Нова розсилка</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closeBroadcastModal()" aria-label="Закрити">✕</button>
+            </div>
+            <form id="broadcastForm" class="dr-form" novalidate>
+                <div class="dr-body">
+                    <div class="dr-grid">
+                        <div class="dr-main">
+                            <section class="dr-sec">
+                                <h3>Кому</h3>
+                                <div class="form-group">
+                                    <select id="bcSegment" onchange="bcSegmentChanged()"></select>
+                                    <div class="form-hint" id="bcRecipients">Рахую отримувачів…</div>
+                                    <div class="form-hint">Ті, хто заблокував бота, не отримують розсилку.</div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Повідомлення</h3>
+                                <div class="form-group required">
+                                    <textarea id="bcText" rows="6" maxlength="4096" placeholder="Текст повідомлення" oninput="this.closest('.form-group').classList.remove('has-error'); bcField()"></textarea>
+                                    <div class="form-error">Напиши текст розсилки</div>
+                                    <div class="form-hint" id="bcTextCount">0 / 4096</div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Фото <span class="dr-badge">за бажанням</span></label>
+                                    <div class="cp-add-row">
+                                        <input type="file" id="bcPhotoFile" accept="image/*" style="display:none;" onchange="bcUploadPhoto(this)">
+                                        <button type="button" class="btn btn-secondary" id="bcPhotoBtn" onclick="document.getElementById('bcPhotoFile').click()">📷 Завантажити</button>
+                                        <input type="url" id="bcPhoto" placeholder="або https-посилання на фото" autocomplete="off" oninput="bcField()">
+                                    </div>
+                                    <div class="form-hint">З фото текст — підпис, до 1024 символів.</div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Кнопка <span class="dr-badge">за бажанням</span></h3>
+                                <div class="dr-row">
+                                    <div class="form-group">
+                                        <label for="bcBtnLabel">Текст кнопки</label>
+                                        <input type="text" id="bcBtnLabel" maxlength="32" placeholder="Напр.: Дивитись" autocomplete="off" oninput="this.closest('.form-group').classList.remove('has-error'); bcField()">
+                                        <div class="form-error">Вкажи текст кнопки</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="bcTargetKind">Куди веде</label>
+                                        <select id="bcTargetKind" onchange="bcTargetChanged()">
+                                            <option value="shop">Магазин</option>
+                                            <option value="product">Товар</option>
+                                            <option value="collection">Добірка</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-group" id="bcTargetProductWrap" style="display:none;">
+                                    <select id="bcTargetProduct" onchange="bcField()"></select>
+                                </div>
+                                <div class="form-group" id="bcTargetCollectionWrap" style="display:none;">
+                                    <select id="bcTargetCollection" onchange="bcField()"></select>
+                                </div>
+                                <div class="form-hint">Кнопка відкриває Mini App; перехід рахується в історії.</div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Коли</h3>
+                                <div id="bcWhenSeg" class="col-seg">
+                                    <button type="button" class="on" data-v="now" onclick="bcSetWhen('now')">Одразу</button>
+                                    <button type="button" data-v="later" onclick="bcSetWhen('later')">Відкласти</button>
+                                </div>
+                                <div class="form-group" id="bcAtWrap" style="display:none;">
+                                    <label for="bcAt">Дата й час (ваш часовий пояс)</label>
+                                    <input type="datetime-local" id="bcAt" oninput="this.closest('.form-group').classList.remove('has-error'); bcField()">
+                                    <div class="form-error">Вкажи майбутній час</div>
+                                    <div class="form-hint">Відправляє бот: перевіряє чергу раз на 30 секунд.</div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <aside class="dr-preview" aria-label="Так виглядає в Telegram">
+                            <div class="dr-prev-title">Так виглядає в Telegram</div>
+                            <div id="bcPreview"></div>
+                        </aside>
+                    </div>
+                </div>
+                <div class="dr-foot">
+                    <span id="bcDirty" class="dr-dirty" role="status">Без змін</span>
+                    <button type="button" class="btn btn-secondary" onclick="closeBroadcastModal()">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" id="bcSubmitBtn">📣 Надіслати</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="promotionModal" class="modal">
         <div class="modal-content dr dr-wide">
             <div class="dr-head">
@@ -4217,6 +4367,14 @@
                 btn.textContent = '➕ Додати акцію';
                 btn.onclick = () => openPromotionModal();
                 btn.style.display = 'inline-flex';
+            } else if (currentPage === 'users') {
+                btn.textContent = '⬇️ Експорт CSV';
+                btn.onclick = exportUsersCsv;
+                btn.style.display = 'inline-flex';
+            } else if (currentPage === 'broadcasts') {
+                btn.textContent = '➕ Нова розсилка';
+                btn.onclick = openBroadcastModal;
+                btn.style.display = 'inline-flex';
             } else if (currentPage === 'orders') {
                 btn.textContent = '➕ Замовлення вручну';
                 btn.onclick = openManualOrderModal;
@@ -4302,6 +4460,7 @@
             if (page === 'users') loadUsers();
             if (page === 'collections') loadCollections();
             if (page === 'reviews') loadReviews();
+            if (page === 'broadcasts') loadBroadcasts();
         }
 
         function renderCategoryFilterMenu() {
@@ -4972,7 +5131,7 @@
 
         const PAGE_TITLES = {
             overview: 'Огляд', orders: 'Замовлення', queue: 'Черга друку', products: 'Товари', categories: 'Категорії', collections: 'Добірки',
-            filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', reviews: 'Відгуки', users: 'Клієнти',
+            filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', reviews: 'Відгуки', users: 'Клієнти', broadcasts: 'Розсилки',
         };
 
         const NAV_ICON_PATHS = {
@@ -4987,6 +5146,7 @@
             coupons: '<path d="M3 7a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4Z"/><path d="M13 5v2M13 11v2M13 17v2"/>',
             reviews: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/>',
             users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 3.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-4-6.3"/>',
+            broadcasts: '<path d="m3 11 18-8v18l-18-8Z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
             search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
             bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/>',
             menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
@@ -9065,28 +9225,45 @@
             loadUsers();
         }
 
+        const USER_SEGMENTS = [
+            ['all', 'Усі'], ['buyers', 'Купували'], ['non_buyers', 'Не купували'], ['inactive', 'Неактивні 30+ днів'], ['vip', 'Від 1000 ₴'],
+        ];
+        let usersSegment = 'all';
+        let usersSegCounts = {};
+
+        function setUsersSegment(key) {
+            usersSegment = key;
+            usersOffset = 0;
+            loadUsers();
+        }
+
+        function usersQuery(extra = {}) {
+            return new URLSearchParams({
+                search: document.getElementById('usersSearch')?.value.trim() || '',
+                blocked: document.getElementById('usersBlockedFilter')?.value || 'all',
+                segment: usersSegment,
+                ...extra,
+            });
+        }
+
         async function loadUsers() {
             const loading = document.getElementById('usersLoading');
             const wrap = document.getElementById('usersTableWrap');
             try {
                 loading.style.display = 'flex';
                 wrap.style.opacity = '0.5';
-                const params = new URLSearchParams({
-                    search: document.getElementById('usersSearch')?.value.trim() || '',
-                    blocked: document.getElementById('usersBlockedFilter')?.value || 'all',
-                    sort: usersSort,
-                    order: usersOrder,
-                    limit: String(USERS_PAGE_SIZE),
-                    offset: String(usersOffset),
+                const params = usersQuery({
+                    sort: usersSort, order: usersOrder, limit: String(USERS_PAGE_SIZE), offset: String(usersOffset), counts: '1',
                 });
                 const res = await fetch(`${API_BASE}/admin/users?${params.toString()}`);
-                if (!res.ok) throw new Error('Помилка завантаження користувачів');
+                if (!res.ok) throw new Error('Помилка завантаження клієнтів');
                 const data = await res.json();
                 allUsers = data.users || [];
                 usersTotal = data.total || 0;
+                usersSegCounts = data.segment_counts || usersSegCounts;
                 renderUsers();
             } catch (e) {
-                showToast(e.message || 'Помилка завантаження користувачів', 'error');
+                showToast(e.message || 'Помилка завантаження клієнтів', 'error');
             } finally {
                 loading.style.display = 'none';
                 wrap.style.opacity = '1';
@@ -9099,30 +9276,18 @@
             return formatOrderDate(raw);
         }
 
-        function renderUsersSummary() {
-            const el = document.getElementById('usersSummary');
+        function renderUsersSegments() {
+            const el = document.getElementById('usersSegments');
             if (!el) return;
-            const pageStarts = allUsers.reduce((acc, u) => acc + (u.start_count || 0), 0);
-            const withOrders = allUsers.filter(u => (u.orders_count || 0) > 0).length;
-            const repeat = allUsers.filter(u => (u.start_count || 0) > 1).length;
-            el.innerHTML = `
-                <div class="users-summary-card">
-                    <div class="label">Всього користувачів</div>
-                    <div class="value">${usersTotal}</div>
-                </div>
-                <div class="users-summary-card">
-                    <div class="label">Запусків (на сторінці)</div>
-                    <div class="value">${pageStarts}</div>
-                </div>
-                <div class="users-summary-card">
-                    <div class="label">Запускали 2+ рази</div>
-                    <div class="value">${repeat}</div>
-                </div>
-                <div class="users-summary-card">
-                    <div class="label">Із замовленнями</div>
-                    <div class="value">${withOrders}</div>
-                </div>
-            `;
+            el.innerHTML = USER_SEGMENTS.map(([key, label]) => `
+                <button type="button" class="cl-seg ${usersSegment === key ? 'on' : ''}" role="tab" aria-selected="${usersSegment === key}" onclick="setUsersSegment('${key}')">
+                    <span class="l">${label}</span><span class="n">${usersSegCounts[key] ?? '…'}</span>
+                </button>`).join('');
+        }
+
+        function userTgHandle(u) {
+            const handle = String(u.username || '').replace(/^@/, '').trim();
+            return handle && handle !== '—' && handle !== 'невідомо' ? handle : '';
         }
 
         function renderUsers() {
@@ -9139,7 +9304,7 @@
             });
 
             if (countEl) countEl.textContent = usersTotal ? `(${usersTotal})` : '';
-            renderUsersSummary();
+            renderUsersSegments();
 
             if (!allUsers.length) {
                 body.innerHTML = '';
@@ -9149,29 +9314,24 @@
                 wrap.style.display = 'block';
                 empty.style.display = 'none';
                 body.innerHTML = allUsers.map(u => {
-                    const handle = String(u.username || '').replace(/^@/, '').trim();
-                    const hasHandle = handle && handle !== '—' && handle !== 'невідомо';
-                    const nameLine = escapeHtml(u.name || 'Без імені');
-                    const handleLine = hasHandle
+                    const handle = userTgHandle(u);
+                    const handleLine = handle
                         ? `<a href="https://t.me/${escapeAttr(handle)}" target="_blank" rel="noopener" class="user-id">@${escapeHtml(handle)}</a>`
                         : '<span class="user-id">без username</span>';
                     const blockedBadge = u.blocked ? '<span class="user-blocked-badge">заблокував бота</span>' : '';
-                    const writeBtn = hasHandle
-                        ? `<a class="user-action-btn" href="https://t.me/${escapeAttr(handle)}" target="_blank" rel="noopener">💬 Написати</a>`
-                        : `<button class="user-action-btn" type="button" onclick="copyUserId(${u.id})">📋 Копіювати ID</button>`;
                     return `
                     <tr>
-                        <td class="user-name-cell">
-                            <div style="font-weight:700;">${nameLine}${blockedBadge}</div>
-                            <div>${handleLine} · <span class="user-id">ID: ${u.id}</span></div>
+                        <td class="user-name-cell c-who cl-who">
+                            <b>${escapeHtml(u.name || 'Без імені')}${blockedBadge}</b>
+                            <span>${handleLine} · <span class="user-id">ID: ${u.id}</span></span>
                         </td>
-                        <td class="user-starts">${u.start_count || 0}</td>
-                        <td>${formatUserDate(u.last_start_at)}</td>
-                        <td>${u.activity_count || 0}</td>
-                        <td>${u.orders_count || 0}</td>
-                        <td>${u.orders_total || 0} ₴</td>
-                        <td>${formatUserDate(u.joined_at)}</td>
-                        <td>${writeBtn}</td>
+                        <td class="cl-num" data-l="Замовлень:">${u.purchases_count || 0}</td>
+                        <td class="cl-num" data-l="Сума:">${(u.orders_total || 0).toLocaleString('uk-UA')} ₴</td>
+                        <td data-l="Активність:">${formatUserDate(u.last_activity_at)}</td>
+                        <td class="c-act"><div class="cl-act">
+                            <button class="user-action-btn" type="button" onclick="giveUserCoupon(${u.id})" title="Персональний купон −10%">🎟️ Купон</button>
+                            <button class="user-action-btn" type="button" onclick="writeToUser(${u.id})">💬 Написати</button>
+                        </div></td>
                     </tr>`;
                 }).join('');
             }
@@ -9186,6 +9346,63 @@
             const next = document.getElementById('usersNextBtn');
             if (prev) prev.disabled = usersOffset <= 0;
             if (next) next.disabled = usersOffset + USERS_PAGE_SIZE >= usersTotal;
+        }
+
+        function writeToUser(id) {
+            const u = allUsers.find(x => x.id === id);
+            if (!u) return;
+            const handle = userTgHandle(u);
+            const a = document.createElement('a');
+            a.href = handle ? `https://t.me/${handle}` : `tg://user?id=${u.id}`;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        async function giveUserCoupon(id) {
+            const u = allUsers.find(x => x.id === id);
+            const name = u?.name || `ID ${id}`;
+            if (!(await askConfirm(`Створити персональний купон −10% для ${name}? Одноразовий, лише для нього, діє 30 днів.`))) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/users/${id}/coupon`, { method: 'POST' });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) throw new Error(data.error || 'Не вдалося створити купон');
+                await copyText(data.code);
+                showToast(`Купон ${data.code} створено й скопійовано`, 'success');
+                if (u?.blocked) return;
+                const until = String(data.expires_at || '').split('-').reverse().join('.');
+                if (await askConfirm(`Надіслати клієнту ${name} код ${data.code} у бот?`)) {
+                    const text = `Привіт! Персональний купон −${data.percent}% для тебе: ${data.code}. Діє до ${until}, один раз.`
+                        + (data.link ? `\nЗастосувати: ${data.link}` : '');
+                    const r = await fetch(`${API_BASE}/admin/users/${id}/message`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    showToast(r.ok && d.ok ? 'Повідомлення надіслано' : (d.error || 'Повідомлення не доставлено'), r.ok && d.ok ? 'success' : 'error');
+                }
+            } catch (e) {
+                showToast(e.message || 'Помилка', 'error');
+            }
+        }
+
+        async function exportUsersCsv() {
+            try {
+                const res = await fetch(`${API_BASE}/admin/users.csv?${usersQuery().toString()}`);
+                if (!res.ok) throw new Error('Не вдалося сформувати CSV');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `clients-${usersSegment}-${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (e) {
+                showToast(e.message || 'Помилка експорту', 'error');
+            }
         }
 
         async function copyUserId(userId) {
@@ -10189,6 +10406,258 @@
         // ═══════════════════════════════════════════════════════════
         // TOAST ПОВІДОМЛЕННЯ
         // ═══════════════════════════════════════════════════════════
+
+        // ═══════════════════════════════════════════════════════════
+        // Розсилки
+        // ═══════════════════════════════════════════════════════════
+        let allBroadcasts = [];
+        let bcReloadTimer = null;
+        let bcRecipients = 0;
+        let bcSnapshot = null;
+        let bcCountSeq = 0;
+        const BC_STATUS = { draft: 'Чернетка', scheduled: 'Заплановано', sending: 'Надсилається', sent: 'Надіслано', failed: 'Помилка' };
+
+        function bcDateLabel(raw) {
+            if (!raw) return '';
+            const d = new Date(raw);
+            return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function loadBroadcasts() {
+            clearTimeout(bcReloadTimer);
+            try {
+                const res = await fetch(API_BASE + '/admin/broadcasts');
+                if (!res.ok) throw new Error('Не вдалося завантажити розсилки');
+                allBroadcasts = (await res.json()).broadcasts || [];
+                if (!collectionsLoaded) await loadCollections();
+                renderBroadcasts();
+                if (currentPage === 'broadcasts' && allBroadcasts.some(b => b.status === 'sending' || (b.status === 'scheduled' && new Date(b.scheduled_at) <= new Date()))) {
+                    bcReloadTimer = setTimeout(loadBroadcasts, 4000);
+                }
+            } catch (e) {
+                showToast(e.message || 'Помилка завантаження', 'error');
+            }
+        }
+
+        function bcTargetLabel(b) {
+            if (!b.button_label) return '';
+            const [kind, ...rest] = String(b.button_target).split(':');
+            const val = rest.join(':');
+            let to = 'Магазин';
+            if (kind === 'product') to = `товар №${val}`;
+            else if (kind === 'collection') to = `добірка «${(adminCollections.find(c => c.id === val) || {}).name || val}»`;
+            else if (kind === 'url') to = 'зовнішнє посилання (переходи не рахуються)';
+            return `Кнопка «${b.button_label}» → ${to}`;
+        }
+
+        function renderBroadcasts() {
+            const el = document.getElementById('bcList');
+            const total = document.getElementById('bcCountTotal');
+            if (total) total.textContent = allBroadcasts.length ? `(${allBroadcasts.length})` : '';
+            if (!allBroadcasts.length) {
+                el.innerHTML = '<div class="bc-empty">Розсилок ще не було. Натисни «Нова розсилка».</div>';
+                return;
+            }
+            el.innerHTML = allBroadcasts.map(b => {
+                const due = b.status === 'scheduled' && new Date(b.scheduled_at) <= new Date();
+                const label = due ? 'У черзі' : (BC_STATUS[b.status] || b.status);
+                const when = b.status === 'scheduled' && !due ? `на ${bcDateLabel(b.scheduled_at)}` : bcDateLabel(b.sent_at || b.created_at);
+                const tracked = b.button_label && !String(b.button_target).startsWith('url:');
+                const canDelete = b.status === 'scheduled' || b.status === 'draft';
+                return `
+                <article class="bc-card">
+                    <div class="bc-top"><span class="bc-chip ${escapeAttr(due ? 'sending' : b.status)}">${escapeHtml(label)}</span><span>${escapeHtml(b.segment_label)}</span><span style="margin-left:auto;">${escapeHtml(when)}</span></div>
+                    ${b.photo ? `<img class="bc-photo" src="${escapeAttr(b.photo)}" alt="" loading="lazy">` : ''}
+                    <div class="bc-text">${escapeHtml(b.text)}</div>
+                    ${b.button_label ? `<div class="bc-btn-line">${escapeHtml(bcTargetLabel(b))}</div>` : ''}
+                    <div class="bc-stats">
+                        <div class="bc-stat"><div class="l">Доставлено</div><div class="v">${b.delivered}</div><div class="s">з ${b.total}${b.failed ? ` · ${b.failed} не дійшло` : ''}</div></div>
+                        <div class="bc-stat"><div class="l">Перейшли</div><div class="v">${tracked ? b.clicks : '—'}</div><div class="s">${tracked ? `${b.clicks_pct}%` : 'без кнопки'}</div></div>
+                        <div class="bc-stat"><div class="l">Замовлень</div><div class="v">${tracked ? b.orders : '—'}</div><div class="s">${tracked ? `${(b.revenue || 0).toLocaleString('uk-UA')} ₴` : ''}</div></div>
+                    </div>
+                    ${canDelete ? `<div class="bc-actions"><button class="btn btn-danger" type="button" onclick="deleteBroadcast(${b.id})">🗑️ Скасувати розсилку</button></div>` : ''}
+                </article>`;
+            }).join('');
+        }
+
+        async function deleteBroadcast(id) {
+            if (!(await askConfirm('Скасувати й видалити цю розсилку? Вона не буде надіслана.'))) return;
+            try {
+                const res = await fetch(`${API_BASE}/admin/broadcasts/${id}`, { method: 'DELETE' });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'Не вдалося видалити');
+                showToast('Розсилку скасовано', 'success');
+                loadBroadcasts();
+            } catch (e) {
+                showToast(e.message || 'Помилка', 'error');
+            }
+        }
+
+        function bcState() {
+            const kind = document.getElementById('bcTargetKind').value;
+            let target = 'shop';
+            if (kind === 'product') target = `product:${document.getElementById('bcTargetProduct').value}`;
+            else if (kind === 'collection') target = `collection:${document.getElementById('bcTargetCollection').value}`;
+            const later = document.querySelector('#bcWhenSeg button.on')?.dataset.v === 'later';
+            return {
+                segment: document.getElementById('bcSegment').value,
+                text: document.getElementById('bcText').value.trim(),
+                photo: document.getElementById('bcPhoto').value.trim(),
+                button_label: document.getElementById('bcBtnLabel').value.trim(),
+                button_target: target,
+                later,
+                at: document.getElementById('bcAt').value,
+            };
+        }
+
+        function bcField() {
+            const st = bcState();
+            const max = st.photo ? 1024 : 4096;
+            const len = document.getElementById('bcText').value.length;
+            const cnt = document.getElementById('bcTextCount');
+            cnt.textContent = `${len} / ${max}`;
+            cnt.style.color = len > max ? 'var(--sale)' : '';
+            const photoOk = /^https:\/\//.test(st.photo);
+            document.getElementById('bcPreview').innerHTML = `
+                <div class="tg-bubble">
+                    ${photoOk ? `<img src="${escapeAttr(st.photo)}" alt="">` : ''}
+                    <div class="tg-t ${st.text ? '' : 'ph'}">${st.text ? escapeHtml(st.text) : 'Текст повідомлення…'}</div>
+                </div>
+                ${st.button_label ? `<div class="tg-btn">${escapeHtml(st.button_label)}</div>` : ''}`;
+            setDirtyUi('bcDirty', bcSnapshot !== null && JSON.stringify(st) !== bcSnapshot);
+            document.getElementById('bcSubmitBtn').textContent = st.later ? '🕒 Запланувати' : '📣 Надіслати';
+        }
+
+        async function bcSegmentChanged() {
+            bcField();
+            const seq = ++bcCountSeq;
+            const info = document.getElementById('bcRecipients');
+            info.textContent = 'Рахую отримувачів…';
+            try {
+                const res = await fetch(API_BASE + '/admin/broadcasts/preview', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ segment: document.getElementById('bcSegment').value }),
+                });
+                const data = await res.json();
+                if (seq !== bcCountSeq) return;
+                bcRecipients = data.count || 0;
+                info.innerHTML = `Отримувачів: <b>${bcRecipients}</b>`;
+            } catch (_) {
+                if (seq === bcCountSeq) info.textContent = 'Не вдалося порахувати отримувачів';
+            }
+        }
+
+        function bcTargetChanged() {
+            const kind = document.getElementById('bcTargetKind').value;
+            document.getElementById('bcTargetProductWrap').style.display = kind === 'product' ? '' : 'none';
+            document.getElementById('bcTargetCollectionWrap').style.display = kind === 'collection' ? '' : 'none';
+            bcField();
+        }
+
+        function bcSetWhen(v) {
+            document.querySelectorAll('#bcWhenSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+            document.getElementById('bcAtWrap').style.display = v === 'later' ? '' : 'none';
+            bcField();
+        }
+
+        async function bcUploadPhoto(input) {
+            const file = input.files && input.files[0];
+            input.value = '';
+            if (!file) return;
+            const btn = document.getElementById('bcPhotoBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Завантаження…';
+            try {
+                const fd = new FormData();
+                fd.append('file', file, file.name);
+                const res = await fetch(API_BASE + '/upload-photo', { method: 'POST', headers: { 'X-Telegram-Init-Data': tgInitData }, body: fd });
+                const data = await res.json().catch(() => ({}));
+                if (!data.ok) throw new Error(data.error || 'Не вдалося завантажити фото');
+                document.getElementById('bcPhoto').value = data.url;
+                bcField();
+            } catch (e) {
+                showToast(e.message || 'Помилка завантаження фото', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📷 Завантажити';
+            }
+        }
+
+        async function openBroadcastModal() {
+            // «Нова розсилка» завжди чиста форма
+            document.getElementById('broadcastForm').reset();
+            document.querySelectorAll('#broadcastForm .form-group.has-error').forEach(g => g.classList.remove('has-error'));
+            document.getElementById('bcSegment').innerHTML = USER_SEGMENTS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
+            document.getElementById('bcTargetProduct').innerHTML = (allProducts || []).map(p => `<option value="${p.id}">№${p.id} · ${escapeHtml(p.name)}</option>`).join('');
+            if (!collectionsLoaded) await loadCollections();
+            document.getElementById('bcTargetCollection').innerHTML = (adminCollections || []).map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+            document.getElementById('bcTargetKind').value = 'shop';
+            bcTargetChanged();
+            bcSetWhen('now');
+            bcSnapshot = null;
+            bcField();
+            bcSnapshot = JSON.stringify(bcState());
+            setDirtyUi('bcDirty', false);
+            document.getElementById('broadcastModal').classList.add('active');
+            document.querySelector('#broadcastModal .dr-body').scrollTop = 0;
+            bcSegmentChanged();
+            document.getElementById('bcText').focus();
+        }
+
+        function closeBroadcastModal(force = false) {
+            const modal = document.getElementById('broadcastModal');
+            if (!force && modal.classList.contains('active') && bcSnapshot !== null && JSON.stringify(bcState()) !== bcSnapshot) {
+                askConfirm('Є незбережені зміни. Закрити без надсилання?').then(ok => { if (ok) closeBroadcastModal(true); });
+                return;
+            }
+            modal.classList.remove('active');
+            bcSnapshot = null;
+        }
+
+        async function submitBroadcast(e) {
+            e.preventDefault();
+            const st = bcState();
+            const bad = (id) => { const el = document.getElementById(id); el.closest('.form-group')?.classList.add('has-error'); el.focus(); };
+            if (!st.text) { bad('bcText'); return; }
+            if (st.text.length > (st.photo ? 1024 : 4096)) { showToast('Текст задовгий', 'error'); return; }
+            if (st.photo && !/^https:\/\//.test(st.photo)) { showToast('Фото має бути https-посиланням', 'error'); return; }
+            const hasBtn = !!st.button_label;
+            if (!hasBtn && document.getElementById('bcTargetKind').value !== 'shop') { bad('bcBtnLabel'); return; }
+            if (hasBtn && /:$/.test(st.button_target)) { showToast('Обери, куди веде кнопка', 'error'); return; }
+            let scheduledAt = null;
+            if (st.later) {
+                const d = new Date(st.at);
+                if (!st.at || Number.isNaN(d.getTime()) || d.getTime() < Date.now() + 60000) { bad('bcAt'); return; }
+                scheduledAt = d.toISOString();
+            }
+            const segLabel = (USER_SEGMENTS.find(x => x[0] === st.segment) || [])[1] || st.segment;
+            const question = st.later
+                ? `Запланувати розсилку на ${bcDateLabel(scheduledAt)}? Сегмент «${segLabel}», отримувачів зараз: ${bcRecipients}.`
+                : `Надіслати розсилку зараз? Сегмент «${segLabel}», отримувачів: ${bcRecipients}. Скасувати після відправки не можна.`;
+            if (!(await askConfirm(question))) return;
+            const btn = document.getElementById('bcSubmitBtn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(API_BASE + '/admin/broadcasts', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        segment: st.segment, text: st.text, photo: st.photo,
+                        button_label: st.button_label, button_target: hasBtn ? st.button_target : '',
+                        scheduled_at: scheduledAt,
+                    }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) throw new Error(data.error || 'Не вдалося створити розсилку');
+                showToast(st.later ? 'Розсилку заплановано' : 'Розсилка пішла в роботу', 'success');
+                closeBroadcastModal(true);
+                loadBroadcasts();
+            } catch (err) {
+                showToast(err.message || 'Помилка', 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        document.getElementById('broadcastForm').addEventListener('submit', submitBroadcast);
 
         function showToast(msg, type = 'success') {
             const toast = document.createElement('div');

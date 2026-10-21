@@ -5698,7 +5698,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, 30000);
 
   // Відкрити конкретний товар якщо прийшли через startapp=product_1 або product_1_p2
-  const startParam = tg?.initDataUnsafe?.start_param;
+  let startParam = tg?.initDataUnsafe?.start_param;
+  // Розсилка: bc_<id>[_product_N | _collection_<id>] - рахуємо перехід і далі працюємо із залишком
+  const bcLink = /^bc_(\d+)(?:_(.+))?$/.exec(startParam || '');
+  if (bcLink) {
+    if (tg?.initData) {
+      fetch(API_BASE + '/api/events', {
+        method: 'POST', headers: apiHeaders(), keepalive: true,
+        body: JSON.stringify({ type: 'broadcast_open', broadcast_id: Number(bcLink[1]) }),
+      }).catch(() => {});
+    }
+    startParam = bcLink[2] || '';
+    const colLink = /^collection_([A-Za-z0-9_-]+)$/.exec(startParam);
+    if (colLink && COLLECTIONS.some(c => c.id === colLink[1])) openList('coll', colLink[1]);
+  }
   const couponLink = /^coupon_([A-Za-z0-9_-]{2,32})$/.exec(startParam || '');
   if (couponLink) {
     pendingCouponCode = couponLink[1].toUpperCase();

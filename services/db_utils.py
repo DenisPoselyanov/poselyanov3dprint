@@ -158,6 +158,7 @@ def row_to_dict(row) -> dict:
 
 def init_db() -> None:
     # Локальний імпорт, щоб уникнути циклічної залежності services.promotions -> db_utils.
+    from services.broadcasts import init_broadcasts_table
     from services.collections import init_collections_table
     from services.events import init_events_table
     from services.promotions import init_promotions_table
@@ -290,6 +291,7 @@ def init_db() -> None:
         init_collections_table(conn)
         init_events_table(conn)
         init_reviews_table(conn)
+        init_broadcasts_table(conn)
     else:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -421,6 +423,7 @@ def init_db() -> None:
         init_collections_table(conn)
         init_events_table(conn)
         init_reviews_table(conn)
+        init_broadcasts_table(conn)
 
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)

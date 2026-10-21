@@ -103,6 +103,23 @@ _c = db_connect()
 for _code, _n in (("LETO10", 1), ("SAVE50", 1)):
     _c.execute("UPDATE coupons SET uses_count = ? WHERE code = ?", (_n, _code))
 _c.commit(); _c.close()
+# Клієнти й розсилки (слайс 6): сегменти, історія; відправка в Telegram підмінена заглушкою (без мережі!)
+import services.users as _users, services.broadcasts as _bc
+for _uid, _nm, _un in ((101, "Олена", "olena"), (103, "Марія", "maria"), (107, "Ліля", "lilya"), (150, "Новачок", ""), (151, "Давній", "old_one"), (152, "=Хакер()", "evil"), (153, "Блок", "blocked_one")):
+    _users.record_start(_uid, _nm, _un)
+_c = db_connect()
+_c.execute("UPDATE users SET last_seen_at = datetime('now','-45 days'), last_start_at = datetime('now','-45 days'), joined_at = datetime('now','-50 days') WHERE id = 151")
+_c.commit(); _c.close()
+_users.set_blocked(153, True)
+async def _fake_send(user_id, b):
+    raise RuntimeError("preview: відправка в Telegram вимкнена")
+bot._make_broadcast_sender = lambda: _fake_send
+_b1 = _bc.create_broadcast({"text": "Нова добірка «Подарунки до свята» вже в магазині. Заходь, поки є все в наявності!", "segment": "buyers", "button_label": "Дивитись", "button_target": "shop"})
+_c = db_connect()
+_c.execute("UPDATE broadcasts SET status='sent', total=40, delivered=36, failed=4, clicks=9, sent_at=CURRENT_TIMESTAMP WHERE id=?", (_b1["id"],))
+_c.execute("INSERT INTO events (type, user_id, value) VALUES ('broadcast_open', 103, ?)", (_b1["id"],))
+_c.commit(); _c.close()
+_bc.create_broadcast({"text": "Знижка -10% на брелки до неділі", "segment": "all", "scheduled_at": (_now + _dt.timedelta(days=2)).isoformat()})
 app = web.Application(client_max_size=30 * 1024 * 1024)
 
 

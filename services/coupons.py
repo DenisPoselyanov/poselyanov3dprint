@@ -974,3 +974,32 @@ def get_my_coupons(user_id: int):
     ).fetchall()
     conn.close()
     return rows
+
+
+PERSONAL_COUPON_PERCENT = 10
+PERSONAL_COUPON_DAYS = 30
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def create_personal_coupon(user_id: int, percent: int = PERSONAL_COUPON_PERCENT, days: int = PERSONAL_COUPON_DAYS) -> dict:
+    """Персональний купон −N% для одного клієнта: одноразовий, лише для нього, діє `days` днів.
+    Код латиницею (щоб працювало посилання startapp=coupon_КОД) і унікальний."""
+    import secrets
+    from datetime import timedelta
+
+    user_id = int(user_id)
+    expires = (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%Y-%m-%d")
+    for _ in range(20):
+        code = "P" + "".join(secrets.choice(_CODE_ALPHABET) for _ in range(7))
+        if get_coupon(code):
+            continue
+        res = create_coupon({
+            "code": code, "type": "percent", "value": int(percent), "uses_max": 1, "one_per_user": 1,
+            "expires_at": expires, "personal_user_id": user_id, "allowed_user_ids": [user_id],
+        })
+        if res.get("ok"):
+            return {"ok": True, "code": code, "percent": int(percent), "expires_at": expires,
+                    "link": coupon_deep_link(code), "user_id": user_id}
+        if "вже існує" not in str(res.get("error", "")):
+            return res
+    return {"ok": False, "error": "Не вдалося згенерувати унікальний код"}

@@ -118,6 +118,7 @@ from security_utils import is_safe_http_url, is_static_file_allowed
 import app_state
 from services.coupons import (
     CouponConsumptionError,
+    create_personal_coupon,
     add_coupon_users,
     channel_gated_coupons,
     check_coupon,
@@ -206,7 +207,12 @@ from services.orders import (
     user_order_lock as _user_order_lock,
 )
 from services.stats import get_stats
+import services.broadcasts as broadcasts_svc
 from services.users import (
+    export_users,
+    get_user,
+    segment_counts,
+    users_to_csv,
     get_all_users,
     get_user_display_name,
     is_user_blocked,
@@ -805,7 +811,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await asyncio.sleep(config.BROADCAST_DELAY_SEC)
         except Exception as e:
             logger.warning(f"Broadcast error for {user_id}: {e}")
-            if "bot was blocked" in str(e) or "user is deactivated" in str(e):
+            if broadcasts_svc.is_undeliverable_error(e):
                 set_blocked(user_id, True)
             failed += 1
 
@@ -3729,6 +3735,14 @@ async def handle_post_event(request: web.Request):
     if not allow_event(user_id):
         return web.json_response({"ok": False, "error": "rate_limited"}, status=429, headers=cors_headers(request))
 
+    if data["type"] == "broadcast_open":
+        try:
+            bid = int(data.get("broadcast_id") or 0)
+        except (TypeError, ValueError):
+            bid = 0
+        recorded = await run_db(broadcasts_svc.record_click, user_id, bid)
+        return web.json_response({"ok": True, "recorded": recorded}, headers=cors_headers(request))
+
     if data["type"] in FUNNEL_EVENT_TYPES:
         try:
             product_id = int(data.get("product_id") or 0) or None
@@ -3782,8 +3796,195 @@ async def handle_get_users(request: web.Request):
         limit=limit,
         offset=offset,
         blocked=q.get("blocked") or "all",
+        segment=q.get("segment") or "all",
     )
+    if q.get("counts") in ("1", "true"):
+        result["segment_counts"] = await run_db(
+            segment_counts, (q.get("search") or "")[:64], q.get("blocked") or "all"
+        )
     return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_export_users_csv(request: web.Request):
+    """CSV клієнтів (з урахуванням segment/search/blocked)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    q = request.query
+    rows = await run_db(
+        export_users, (q.get("search") or "")[:64], q.get("blocked") or "all", q.get("segment") or "all"
+    )
+    body = chr(0xFEFF) + users_to_csv(rows)
+    headers = {**cors_headers(request), "Content-Disposition": 'attachment; filename="clients.csv"'}
+    return web.Response(body=body.encode("utf-8"), content_type="text/csv", charset="utf-8", headers=headers)
+
+
+async def handle_create_personal_coupon(request: web.Request):
+    """Персональний купон -10% для клієнта (одноразовий, лише йому, 30 днів)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    try:
+        user_id = int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0 or not await run_db(get_user, user_id):
+        return web.json_response({"ok": False, "error": "Клієнта не знайдено"}, status=404, headers=cors_headers(request))
+    result = await run_db(create_personal_coupon, user_id)
+    return web.json_response(result, status=200 if result.get("ok") else 400, headers=cors_headers(request))
+
+
+async def handle_send_user_message(request: web.Request):
+    """Надіслати клієнту в бот текст (наприклад, код купона)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    try:
+        user_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+        text = str(data.get("text") or "").strip()
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    if not text or len(text) > 2000 or user_id <= 0:
+        return web.json_response(
+            {"ok": False, "error": "Текст має бути від 1 до 2000 символів"}, status=400, headers=cors_headers(request)
+        )
+    if not await run_db(get_user, user_id):
+        return web.json_response({"ok": False, "error": "Клієнта не знайдено"}, status=404, headers=cors_headers(request))
+    paragraphs = "".join(f"<p>{html.escape(line)}</p>" for line in text.splitlines() if line.strip())
+    try:
+        if bot_app is None:
+            raise RuntimeError("bot is not running")
+        await send_rich_message(bot_app.bot, user_id, paragraphs)
+    except Exception as e:
+        logger.warning("Не вдалось надіслати повідомлення клієнту %s: %s", user_id, e)
+        if broadcasts_svc.is_undeliverable_error(e):
+            await run_db(set_blocked, user_id, True)
+        return web.json_response(
+            {"ok": False, "error": "Клієнт не отримав повідомлення (можливо, заблокував бота)"},
+            status=502, headers=cors_headers(request),
+        )
+    return web.json_response({"ok": True}, headers=cors_headers(request))
+
+
+# ─── РОЗСИЛКИ ────────────────────────────────────────────────
+
+def _make_broadcast_sender():
+    """Функція відправки одному отримувачу. Єдине місце, що реально б'є в Telegram -
+    тести й перегляд підміняють її (monkeypatch bot._make_broadcast_sender)."""
+    from rich_messages import _telegram_retry
+
+    async def send_one(user_id: int, b: dict):
+        markup = None
+        if b.get("button_label") and b.get("button_target"):
+            url = broadcasts_svc.button_url(b["id"], b["button_target"])
+            if url:
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton(b["button_label"], url=url)]])
+        tg_bot = bot_app.bot
+        if b.get("photo"):
+            await _telegram_retry(
+                lambda: tg_bot.send_photo(chat_id=user_id, photo=b["photo"], caption=b["text"], reply_markup=markup),
+                label="broadcast photo",
+            )
+        else:
+            await _telegram_retry(
+                lambda: tg_bot.send_message(chat_id=user_id, text=b["text"], reply_markup=markup),
+                label="broadcast message",
+            )
+
+    return send_one
+
+
+_broadcast_tasks: set = set()
+
+
+def _spawn_broadcast(bid: int) -> None:
+    task = asyncio.create_task(broadcasts_svc.send_broadcast(bid, _make_broadcast_sender()))
+    _broadcast_tasks.add(task)
+    task.add_done_callback(_broadcast_tasks.discard)
+
+
+async def _broadcast_scheduler_loop() -> None:
+    """Раз на 30 с відправляє розсилки, час яких настав (захист від дубля - claim у send_broadcast)."""
+    while True:
+        try:
+            await broadcasts_svc.run_due_broadcasts(_make_broadcast_sender())
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("broadcast scheduler failed")
+        await asyncio.sleep(30)
+
+
+async def _admin_guard(request: web.Request):
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    return require_admin(request, auth)
+
+
+async def handle_get_broadcasts(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    items = await run_db(broadcasts_svc.list_broadcasts)
+    return web.json_response({"broadcasts": items}, headers=cors_headers(request))
+
+
+async def handle_preview_broadcast(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    result = await run_db(broadcasts_svc.preview_recipients, (data or {}).get("segment"))
+    return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_create_broadcast(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    result = await run_db(broadcasts_svc.create_broadcast, data if isinstance(data, dict) else {})
+    if not result.get("ok"):
+        return web.json_response(result, status=400, headers=cors_headers(request))
+    if result.pop("send_now", False):
+        _spawn_broadcast(result["id"])
+    return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_delete_broadcast(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    try:
+        bid = int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        bid = 0
+    outcome = await run_db(broadcasts_svc.delete_broadcast, bid)
+    if outcome == "deleted":
+        return web.json_response({"ok": True}, headers=cors_headers(request))
+    if outcome == "locked":
+        return web.json_response(
+            {"ok": False, "error": "Видалити можна лише відкладену розсилку або чернетку"},
+            status=409, headers=cors_headers(request),
+        )
+    return web.json_response({"ok": False, "error": "Не знайдено"}, status=404, headers=cors_headers(request))
 
 
 async def handle_get_settings(request: web.Request):
@@ -4268,6 +4469,12 @@ def main():
     global bot_app
     config.validate_startup_config()
     init_db()
+    try:
+        interrupted = broadcasts_svc.recover_interrupted()
+        if interrupted:
+            logger.warning("Розсилок, перерваних рестартом, позначено failed: %s", interrupted)
+    except Exception:
+        logger.exception("broadcast recovery failed")
     bootstrap_json_catalog(force=True)
     logger.info(
         "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom | філаментів: %s | категорій: %s",
@@ -4334,8 +4541,10 @@ def main():
             ]
             await configure_bot_commands(bot_app, owner_id=OWNER_ID, user_commands=user_commands)
             review_task = asyncio.create_task(_review_request_loop())
+            broadcast_task = asyncio.create_task(_broadcast_scheduler_loop())
             await stop_event.wait()
             review_task.cancel()
+            broadcast_task.cancel()
 
             logger.info("Зупиняю Telegram polling...")
             await bot_app.updater.stop()
