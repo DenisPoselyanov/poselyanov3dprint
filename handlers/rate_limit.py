@@ -81,8 +81,26 @@ def allow_delivery_lookup(user_id: int) -> bool:
     return True
 
 
+_UPLOAD_WINDOW_SEC = 3600.0
+_UPLOAD_MAX_PER_WINDOW = 10
+_upload_calls: dict[int, list[float]] = {}
+
+
+def allow_review_upload(user_id: int) -> bool:
+    """Фото до відгуку: не більше 10 завантажень на користувача за годину."""
+    now = time.monotonic()
+    recent = [t for t in _upload_calls.get(user_id, ()) if now - t < _UPLOAD_WINDOW_SEC]
+    if len(recent) >= _UPLOAD_MAX_PER_WINDOW:
+        _upload_calls[user_id] = recent
+        return False
+    recent.append(now)
+    _upload_calls[user_id] = recent
+    return True
+
+
 def reset_rate_limits() -> None:
     """Скидає in-memory cooldown (корисно для тестів)."""
     _last_call.clear()
     _event_calls.clear()
+    _upload_calls.clear()
     _lookup_calls.clear()

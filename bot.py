@@ -57,6 +57,7 @@ from rich_messages import (
     build_contact,
     build_admin_panel_hint,
     edit_rich_message,
+    escape,
     is_telegram_rate_limited,
     send_rich_message,
 )
@@ -133,7 +134,17 @@ from services.promotions import (
     set_promotion_active,
     update_promotion,
 )
-from services.reviews import product_reviews, with_stats
+from services.reviews import (
+    ReviewError,
+    get_review,
+    mark_review_requested,
+    orders_due_review_request,
+    pending_reviews,
+    product_reviews,
+    set_review_status,
+    submit_review,
+    with_stats,
+)
 from services.settings import (
     admin_settings,
     coupon_stacking_enabled,
@@ -178,7 +189,7 @@ from handlers.register import (
     configure_bot_commands,
     register_telegram_handlers,
 )
-from handlers.rate_limit import allow_delivery_lookup, allow_event, command_cooldown
+from handlers.rate_limit import allow_delivery_lookup, allow_event, allow_review_upload, command_cooldown
 from routes.setup import register_http_routes
 import services.delivery as delivery
 
@@ -190,6 +201,8 @@ DB_FILE = config.DB_FILE
 VALIDATE_INIT_DATA = config.VALIDATE_INIT_DATA
 PROMOTION_ENABLED = config.PROMOTION_ENABLED
 MAX_UPLOAD_BYTES = config.MAX_UPLOAD_BYTES
+REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024
+REVIEW_REQUEST_POLL_SEC = 1800
 MAX_UPLOAD_REQUEST_BYTES = config.MAX_UPLOAD_REQUEST_BYTES
 CLOUDINARY_UPLOAD_TIMEOUT = 60
 
@@ -2463,6 +2476,175 @@ async def handle_get_my_orders(request: web.Request):
     return web.json_response({"orders": orders}, headers=cors_headers(request))
 
 
+async def handle_get_pending_reviews(request: web.Request):
+    """Що покупець ще може оцінити (товари доставлених замовлень без відгуку)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    items = await run_db(pending_reviews, auth.get("user_id") or 0)
+    return web.json_response({"items": items}, headers=cors_headers(request))
+
+
+async def handle_upload_review_photo(request: web.Request):
+    """Фото до відгуку від покупця: лише зображення, з лімітами розміру й кількості."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0:
+        return web.json_response({"ok": False, "error": "invalid_init_data"}, status=403, headers=cors_headers(request))
+    if not allow_review_upload(user_id):
+        return web.json_response({"ok": False, "error": "Забагато фото, спробуй пізніше"}, status=429, headers=cors_headers(request))
+    try:
+        form = await request.post()
+        file_field = form.get("file")
+        if not file_field or not isinstance(file_field, web.FileField):
+            return web.json_response({"ok": False, "error": "Файл не знайдено"}, status=400, headers=cors_headers(request))
+        file_data = file_field.file.read()
+        if len(file_data) > REVIEW_PHOTO_MAX_BYTES:
+            return web.json_response(
+                {"ok": False, "error": f"Фото завелике. Максимум {REVIEW_PHOTO_MAX_BYTES // 1024 // 1024}MB"},
+                status=413,
+                headers=cors_headers(request),
+            )
+        content_type = file_field.content_type or ""
+        if not content_type.startswith("image/") or is_animated_image(file_data, content_type):
+            return web.json_response({"ok": False, "error": "Потрібне звичайне фото"}, status=400, headers=cors_headers(request))
+        content_type = normalize_image_content_type(file_data, content_type)
+        result = await upload_photo_to_cloudinary(file_data, f"review_{user_id}", content_type)
+        if not result.get("ok"):
+            return web.json_response({"ok": False, "error": "Не вдалось завантажити фото"}, status=400, headers=cors_headers(request))
+        return web.json_response({"ok": True, "url": result["url"]}, headers=cors_headers(request))
+    except Exception:
+        logger.exception("review photo upload failed for user=%s", user_id)
+        return web.json_response({"ok": False, "error": "Не вдалось завантажити фото"}, status=400, headers=cors_headers(request))
+
+
+def _review_moderation_html(review: dict, product_name: str) -> str:
+    stars = "★" * int(review["rating"]) + "☆" * (5 - int(review["rating"]))
+    text = escape(review.get("text") or "—")
+    photos = len(review.get("photos") or [])
+    photos_line = f"<p>📷 Фото: {photos}</p>" if photos else ""
+    return (
+        f"<h2>⭐ Новий відгук #{review['id']}</h2>"
+        f"<p><b>{escape(product_name)}</b> · замовлення #{review['order_id']}</p>"
+        f"<p>{stars} · {escape(review.get('author_name') or 'Покупець')}</p>"
+        f"<p>{text}</p>{photos_line}"
+    )
+
+
+def _review_moderation_markup(review_id: int, status: str) -> InlineKeyboardMarkup:
+    if status == "approved":
+        row = [InlineKeyboardButton("🙈 Сховати", callback_data=f"rev_hide_{review_id}")]
+    elif status == "hidden":
+        row = [InlineKeyboardButton("✅ Опублікувати", callback_data=f"rev_pub_{review_id}")]
+    else:
+        row = [
+            InlineKeyboardButton("✅ Опублікувати", callback_data=f"rev_pub_{review_id}"),
+            InlineKeyboardButton("🙈 Сховати", callback_data=f"rev_hide_{review_id}"),
+        ]
+    return InlineKeyboardMarkup([row])
+
+
+async def handle_post_review(request: web.Request):
+    """Відгук покупця: лише на товар із доставленого замовлення, один на пару (замовлення, товар)."""
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    auth, err = resolve_request_user(request, data if isinstance(data, dict) else {})
+    if err:
+        return err
+    if not isinstance(data, dict):
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    try:
+        result = await run_db(
+            submit_review,
+            auth.get("user_id") or 0,
+            auth.get("first_name") or "",
+            data.get("order_id"),
+            data.get("product_id"),
+            data.get("rating"),
+            data.get("text"),
+            data.get("photos"),
+        )
+    except ReviewError as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+    review = await run_db(get_review, result["id"])
+    if review:
+        product_name = next(
+            (p.get("name") for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE if p.get("id") == review["product_id"]),
+            f"товар {review['product_id']}",
+        )
+        try:
+            await send_rich_message(
+                bot_app.bot,
+                ORDERS_CHAT_ID,
+                _review_moderation_html(review, product_name),
+                reply_markup=_review_moderation_markup(review["id"], review["status"]),
+            )
+        except Exception as e:
+            logger.warning("Не вдалось надіслати відгук #%s на модерацію: %s", result["id"], e)
+    return web.json_response({"ok": True, **result}, headers=cors_headers(request))
+
+
+async def review_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопки «Опублікувати / Сховати» під відгуком у чаті замовлень."""
+    query = update.callback_query
+    await query.answer()
+    if query.from_user.id != OWNER_ID:
+        return
+    _, action, raw_id = query.data.split("_", 2)
+    review_id = int(raw_id)
+    status = "approved" if action == "pub" else "hidden"
+    if not await run_db(set_review_status, review_id, status):
+        return
+    try:
+        await query.edit_message_reply_markup(reply_markup=_review_moderation_markup(review_id, status))
+    except Exception as e:
+        logger.warning("review_action: не вдалось оновити кнопки #%s: %s", review_id, e)
+
+
+async def send_due_review_requests() -> int:
+    """Запит відгуку через 3 дні після `delivered`. Позначаємо навіть при помилці, щоб не спамити."""
+    due = await run_db(orders_due_review_request)
+    sent = 0
+    for item in due:
+        await run_db(mark_review_requested, item["order_id"])
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "⭐ Оцінити",
+                url=f"https://t.me/poselyanov3dprint_bot?startapp=review_{item['order_id']}",
+            )
+        ]])
+        try:
+            await send_rich_message(
+                bot_app.bot,
+                item["user_id"],
+                f"<p>💙 Як тобі замовлення №{item['order_id']}? Буду вдячний за відгук — він допомагає іншим обрати.</p>",
+                reply_markup=markup,
+            )
+            sent += 1
+        except Exception as e:
+            logger.warning("Запит відгуку для #%s не доставлено: %s", item["order_id"], e)
+    return sent
+
+
+async def _review_request_loop() -> None:
+    while True:
+        try:
+            await send_due_review_requests()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("review request loop failed")
+        await asyncio.sleep(REVIEW_REQUEST_POLL_SEC)
+
+
 async def handle_get_order(request: web.Request):
     """Деталі замовлення з позиціями."""
     auth, err = resolve_request_user(request, {})
@@ -3514,7 +3696,9 @@ def main():
                 ("contact", "📬 Контакти"),
             ]
             await configure_bot_commands(bot_app, owner_id=OWNER_ID, user_commands=user_commands)
+            review_task = asyncio.create_task(_review_request_loop())
             await stop_event.wait()
+            review_task.cancel()
 
             logger.info("Зупиняю Telegram polling...")
             await bot_app.updater.stop()

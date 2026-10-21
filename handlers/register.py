@@ -43,6 +43,7 @@ def register_telegram_handlers(app: Application, handlers) -> None:
     )
     app.add_handler(CallbackQueryHandler(handlers.contact_action, pattern=r"^contact_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.order_action, pattern=r"^(confirm|draft|cancel)_"))
+    app.add_handler(CallbackQueryHandler(handlers.review_action, pattern=r"^rev_(pub|hide)_\d+$"))
 
 
 async def configure_bot_commands(app: Application, *, owner_id: int, user_commands: list[tuple[str, str]]) -> None:
