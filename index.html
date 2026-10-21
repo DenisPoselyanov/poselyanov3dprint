@@ -279,6 +279,25 @@
   .ord-ttn code { font-weight: 800; letter-spacing: .02em; }
   .ord-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+  /* ФОРМА ВІДГУКУ */
+  .rev-sheet { max-height: 90vh; }
+  .rev-body { padding: 0 18px 8px; display: grid; gap: 14px; }
+  .rev-stars { display: flex; gap: 6px; }
+  .rev-stars button { border: 0; background: none; padding: 2px; color: var(--surface-3); cursor: pointer; }
+  .rev-stars button.on { color: var(--amber); }
+  .rev-stars svg.i { width: 36px; height: 36px; fill: currentColor; stroke: currentColor; }
+  .rev-text { width: 100%; min-height: 96px; padding: 11px 12px; border: 1.5px solid var(--line-2); border-radius: var(--r-sm); background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; resize: vertical; }
+  .rev-text:focus { outline: none; border-color: var(--blue); }
+  .rev-photos { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rev-photos .ph, .rev-photos .add { width: 72px; height: 72px; border-radius: 12px; position: relative; overflow: hidden; background: var(--surface-2); }
+  .rev-photos .ph img { width: 100%; height: 100%; object-fit: cover; }
+  .rev-photos .ph.busy::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+  .rev-photos .ph button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; line-height: 1; cursor: pointer; z-index: 1; }
+  .rev-photos .add { border: 1.5px dashed var(--line-2); display: grid; place-items: center; color: var(--ink-3); cursor: pointer; background: none; }
+  .rev-photos .add svg.i { width: 24px; height: 24px; }
+  .rev-done { text-align: center; padding: 18px 0 6px; display: grid; gap: 10px; justify-items: center; }
+  .rev-done .success-check { margin-bottom: 0; }
+
   /* ORDER LOADING — absolute всередині #page-cart (fixed ламається в Telegram WebView) */
   .order-loading-screen {
     display: none;
@@ -1457,6 +1476,14 @@
       👇 Натисни на фото щоб переглянути товар
     </div>
     <div id="gift-options-list"></div>
+  </div>
+</div>
+
+<!-- ФОРМА ВІДГУКУ (REDESIGN.md, розд. 3.7) -->
+<div class="gift-modal-backdrop" id="review-backdrop" onclick="closeReviewIfBackdrop(event)">
+  <div class="gift-modal rev-sheet" id="review-sheet" role="dialog" aria-label="Відгук">
+    <div class="modal-handle"></div>
+    <div id="review-body"></div>
   </div>
 </div>
 
@@ -3941,6 +3968,8 @@ const ORDER_STATUS = {
 };
 const TRACK_STEPS = [['accepted', 'Прийнято'], ['printing', 'Друкується'], ['shipped', 'Відправлено'], ['delivered', 'Отримано']];
 let MY_ORDERS = null;       // null — ще не завантажено
+let PENDING_REVIEWS = null; // що ще можна оцінити: [{order_id, product_id, product_name}]
+let REVIEW_DEEP = 0;        // startapp=review_<orderId>
 let MY_ORDERS_ERROR = false;
 
 async function loadMyOrders() {
@@ -3988,8 +4017,10 @@ function orderCardHtml(o) {
     ${track}${st.hint ? `<div class="ord-hint">${escapeHtml(st.hint)}</div>` : ''}${ttn}${actions}
   </article>`;
 }
-// Кнопка відгуку зʼявляється разом з формою відгуку
-function orderReviewButton(_o) { return ''; }
+function orderReviewButton(o) {
+  return (PENDING_REVIEWS || []).some(x => x.order_id === o.id)
+    ? `<button type="button" class="btn soft" data-act="review-open" data-id="${o.id}">${ic('star')}Залишити відгук</button>` : '';
+}
 
 async function renderOrders() {
   const page = document.getElementById('page-orders');
@@ -3997,7 +4028,7 @@ async function renderOrders() {
   const head = '<div class="page-head"><h2>Замовлення</h2></div>';
   if (MY_ORDERS === null) {
     page.innerHTML = head + '<div class="ord-list"><div class="ord-card"><div class="sk" style="height:70px"></div></div></div>';
-    await loadMyOrders();
+    await Promise.all([loadMyOrders(), loadPendingReviews()]);
     if (activePage !== 'orders') return;
   }
   if (MY_ORDERS_ERROR) {
@@ -4017,7 +4048,160 @@ async function renderOrders() {
     return;
   }
   page.innerHTML = `${head}<div class="ord-list">${MY_ORDERS.map(orderCardHtml).join('')}</div>`;
+  if (REVIEW_DEEP) {
+    const id = REVIEW_DEEP;
+    REVIEW_DEEP = 0;
+    openReviewForm(id);
+  }
 }
+// ─── ФОРМА ВІДГУКУ: зірки, текст, до 3 фото (REDESIGN.md, розд. 3.7) ───
+const REV = { orderId: 0, productId: 0, rating: 0, text: '', photos: [], sending: false, done: null, err: '' };
+const REV_PHOTOS_MAX = 3;
+let revPhotoSeq = 0;
+
+async function loadPendingReviews() {
+  try {
+    const data = await apiGet('/my/reviews/pending');
+    PENDING_REVIEWS = Array.isArray(data?.items) ? data.items : [];
+  } catch (_) {
+    PENDING_REVIEWS = [];
+  }
+}
+function reviewItems() { return (PENDING_REVIEWS || []).filter(x => x.order_id === REV.orderId); }
+function openReviewForm(orderId) {
+  const items = (PENDING_REVIEWS || []).filter(x => x.order_id === orderId);
+  if (!items.length) {
+    showToast({ msg: 'Для цього замовлення відгуки вже залишені', icon: 'info' });
+    return;
+  }
+  Object.assign(REV, { orderId, productId: items[0].product_id, rating: 0, text: '', photos: [], sending: false, done: null, err: '' });
+  renderReviewForm();
+  document.getElementById('review-backdrop').classList.add('open');
+  updateBackButton();
+}
+function closeReviewForm() {
+  document.getElementById('review-backdrop').classList.remove('open');
+  updateBackButton();
+}
+function closeReviewIfBackdrop(e) {
+  if (e.target === document.getElementById('review-backdrop')) closeReviewForm();
+}
+function renderReviewForm() {
+  const body = document.getElementById('review-body');
+  if (!body) return;
+  if (REV.done) {
+    const more = reviewItems().length > 0;
+    body.innerHTML = `<div class="rev-body"><div class="rev-done"><div class="success-check"><span data-icon="check"></span></div>
+      <b style="font-size:17px">Дякую за відгук!</b>
+      <div class="ord-hint">${REV.done === 'approved' ? 'Відгук уже опубліковано.' : 'Він зʼявиться після перевірки.'}</div>
+      ${more ? '<button type="button" class="btn soft" data-act="review-next">Оцінити ще один товар</button>' : ''}
+      <button type="button" class="btn primary" data-act="review-close">Готово</button></div></div>`;
+    hydrateIcons(body);
+    return;
+  }
+  const items = reviewItems();
+  const cur = items.find(x => x.product_id === REV.productId) || items[0];
+  const chips = items.length > 1 ? `<div class="chk-seg">${items.map(x =>
+    `<button type="button" class="cat-chip" aria-pressed="${x.product_id === REV.productId}" data-act="review-pick" data-pid="${x.product_id}">${escapeHtml(x.product_name)}</button>`).join('')}</div>` : '';
+  const stars = [1, 2, 3, 4, 5].map(n =>
+    `<button type="button" class="${n <= REV.rating ? 'on' : ''}" data-act="review-star" data-n="${n}" aria-label="${n} з 5">${ic('star')}</button>`).join('');
+  const photos = REV.photos.map(p =>
+    `<div class="ph${p.busy ? ' busy' : ''}"><img src="${escapeAttr(p.preview)}" alt="">${p.busy ? '' : `<button type="button" data-act="review-photo-del" data-id="${p.id}" aria-label="Прибрати фото">×</button>`}</div>`).join('');
+  const canAdd = REV.photos.length < REV_PHOTOS_MAX;
+  body.innerHTML = `<div class="gift-modal-title">Відгук про замовлення №${REV.orderId}
+      <button class="gift-modal-close" data-act="review-close" aria-label="Закрити">✕</button></div>
+    <div class="rev-body">
+      ${chips}
+      <div><b>${escapeHtml(cur?.product_name || '')}</b>
+        <div class="rev-stars" role="radiogroup" aria-label="Оцінка">${stars}</div></div>
+      <textarea class="rev-text" id="rev-text" maxlength="1000" placeholder="Що сподобалось? Як вийшов друк? (необовʼязково)" oninput="REV.text = this.value">${escapeHtml(REV.text)}</textarea>
+      <div class="rev-photos">${photos}${canAdd ? `<button type="button" class="add" data-act="review-photo-add" aria-label="Додати фото">${ic('plus')}</button>` : ''}</div>
+      <input type="file" id="rev-file" accept="image/*" multiple hidden onchange="revAddFiles(this.files); this.value = ''">
+      ${REV.err ? `<div class="chk-err">${escapeHtml(REV.err)}</div>` : ''}
+      <button type="button" class="btn primary" data-act="review-send"${REV.sending || REV.photos.some(p => p.busy) ? ' disabled' : ''}>${REV.sending ? 'Надсилаю…' : 'Надіслати відгук'}</button>
+    </div>`;
+}
+// Фото з телефону бувають великі й у HEIC: зменшуємо до JPEG ≤1600px ще на пристрої
+async function shrinkImage(file, maxSide = 1600, quality = 0.82) {
+  let src;
+  try {
+    src = await createImageBitmap(file);
+  } catch (_) {
+    src = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  const w = src.width || src.naturalWidth, h = src.height || src.naturalHeight;
+  const k = Math.min(1, maxSide / Math.max(w, h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(w * k));
+  canvas.height = Math.max(1, Math.round(h * k));
+  canvas.getContext('2d').drawImage(src, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob')), 'image/jpeg', quality));
+}
+async function uploadReviewPhoto(blob) {
+  const headers = apiHeaders();
+  delete headers['Content-Type'];
+  const fd = new FormData();
+  fd.append('file', blob, 'review.jpg');
+  const res = await fetch(API_BASE + '/my/review-photo', { method: 'POST', headers, body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data.url;
+}
+async function revAddFiles(files) {
+  const list = [...(files || [])].slice(0, REV_PHOTOS_MAX - REV.photos.length);
+  for (const file of list) {
+    const entry = { id: ++revPhotoSeq, url: '', preview: '', busy: true };
+    REV.photos.push(entry);
+    renderReviewForm();
+    try {
+      const blob = await shrinkImage(file);
+      entry.preview = URL.createObjectURL(blob);
+      renderReviewForm();
+      entry.url = await uploadReviewPhoto(blob);
+      entry.busy = false;
+    } catch (e) {
+      REV.photos = REV.photos.filter(p => p !== entry);
+      REV.err = e instanceof TypeError || /toBlob|decode|Image/i.test(e.message) ? 'Не вдалось додати фото' : e.message;
+      haptic('error');
+    }
+    renderReviewForm();
+  }
+}
+async function sendReview() {
+  if (REV.sending) return;
+  if (!REV.rating) {
+    REV.err = 'Постав оцінку від 1 до 5 зірок';
+    haptic('error');
+    renderReviewForm();
+    return;
+  }
+  REV.sending = true; REV.err = '';
+  renderReviewForm();
+  try {
+    const res = await apiPost('/reviews', {
+      order_id: REV.orderId,
+      product_id: REV.productId,
+      rating: REV.rating,
+      text: REV.text.trim(),
+      photos: REV.photos.filter(p => p.url).map(p => p.url),
+    });
+    PENDING_REVIEWS = (PENDING_REVIEWS || []).filter(x => !(x.order_id === REV.orderId && x.product_id === REV.productId));
+    REV.done = res.status === 'approved' ? 'approved' : 'pending';
+    haptic('success');
+    if (activePage === 'orders') renderOrders();
+  } catch (e) {
+    REV.err = e instanceof TypeError ? "Не вдалось надіслати. Перевір з'єднання." : e.message;
+    haptic('error');
+  }
+  REV.sending = false;
+  renderReviewForm();
+}
+
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -5237,6 +5421,7 @@ function isOpenEl(id) { return !!document.getElementById(id)?.classList.contains
 function backAction() {
   if (isOpenEl('lightbox')) return closeLightbox;
   if (isSheetOpen()) return sheetBack;
+  if (isOpenEl('review-backdrop')) return closeReviewForm;
   if (isOpenEl('gift-modal-backdrop')) return closeGiftModal;
   if (isOpenEl('success-screen')) return backToCatalog;
   if (activePage === 'products' && SHOP.view !== 'home') return shopBack;
@@ -5347,6 +5532,14 @@ function bindShopEvents() {
       case 'page': switchPage(el.dataset.page); break;
       case 'fav-all': addFavsToCart(); break;
       case 'order-copy': copyTtn(el.dataset.ttn); break;
+      case 'review-open': openReviewForm(Number(el.dataset.id)); break;
+      case 'review-close': closeReviewForm(); break;
+      case 'review-star': REV.rating = Number(el.dataset.n); REV.err = ''; haptic('select'); renderReviewForm(); break;
+      case 'review-pick': REV.productId = Number(el.dataset.pid); renderReviewForm(); break;
+      case 'review-photo-add': document.getElementById('rev-file')?.click(); break;
+      case 'review-photo-del': REV.photos = REV.photos.filter(p => p.id !== Number(el.dataset.id)); renderReviewForm(); break;
+      case 'review-send': sendReview(); break;
+      case 'review-next': Object.assign(REV, { productId: reviewItems()[0].product_id, rating: 0, text: '', photos: [], done: null, err: '' }); renderReviewForm(); break;
       case 'order-repeat': repeatOrder(Number(el.dataset.id)); break;
       case 'orders-reload': MY_ORDERS = null; renderOrders(); break;
       case 'contact-owner': openOwnerChat(); break;
@@ -5425,6 +5618,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (couponLink) {
     pendingCouponCode = couponLink[1].toUpperCase();
     showToast({ msg: `Промокод ${pendingCouponCode} застосую в кошику`, icon: 'tag' });
+  }
+  const reviewLink = /^review_(\d+)$/.exec(startParam || '');
+  if (reviewLink) {
+    REVIEW_DEEP = Number(reviewLink[1]);
+    switchPage('orders');
   }
   const parsed = parseProductStartParam(startParam);
   if (parsed?.id) {
