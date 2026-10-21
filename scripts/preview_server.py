@@ -4,13 +4,20 @@
 (не localhost: для localhost адмінка стукає на :8080). Нічого не пише в прод: .env не діє,
 бот-повідомлення йдуть з фейковим токеном і завершуються помилкою (client_notified=false).
 """
-import os, sys, tempfile
+import os, shutil, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT); sys.path.insert(0, ROOT)
 db = os.path.join(tempfile.gettempdir(), "preview_admin.db")
 if os.path.exists(db): os.remove(db)
+# Каталог теж у temp-копіях: правки товарів у перегляді не чіпають products.json у репозиторії.
+cat_dir = os.path.join(tempfile.gettempdir(), "preview_catalog")
+shutil.rmtree(cat_dir, ignore_errors=True); os.makedirs(cat_dir)
+for _f in ("products.json", "custom_products.json", "categories.json", "filaments.json"):
+    shutil.copy(os.path.join(ROOT, _f), os.path.join(cat_dir, _f))
 os.environ.update(DB_BACKEND="sqlite", CATALOG_BACKEND="json", DATABASE_URL="", SUPABASE_DB_URL="",
                   VALIDATE_INIT_DATA="false", LOCAL_DEV_MODE="true", DB_FILE=db, ALLOW_LOCAL_NETWORK="true",
+                  PRODUCTS_FILE=os.path.join(cat_dir, "products.json"), CUSTOM_PRODUCTS_FILE=os.path.join(cat_dir, "custom_products.json"),
+                  CATEGORIES_FILE=os.path.join(cat_dir, "categories.json"), FILAMENTS_FILE=os.path.join(cat_dir, "filaments.json"),
                   BOT_TOKEN="123456:FAKE-preview-token", NOVAPOSHTA_API_KEY="", ORDERS_CHAT_ID="1", OWNER_ID="777")
 import bot
 from aiohttp import web
@@ -35,6 +42,10 @@ mk(105, "Софія", "@sofia", [it("Квітка", 120)], 120, "ready", deliver
 mk(106, "Данило", "@danylo", [it("Фігурка", 220)], 220, "shipped", ttn="20450000000001")
 mk(107, "Ліля", "@lilya", [it("Лампа", 500)], 500, "delivered")
 mk(108, "Богдан", "@bohdan", [it("Брелок", 80)], 80, "cancelled")
+_c = db_connect()
+for _pid, _t in ((1, "product_view"), (1, "product_view"), (1, "add_to_cart"), (2, "product_view")):
+    _c.execute("INSERT INTO events (type, user_id, product_id) VALUES (?, ?, ?)", (_t, 900 + _pid, _pid))
+_c.commit(); _c.close()
 app = web.Application(client_max_size=30 * 1024 * 1024)
 register_http_routes(app, bot)
 web.run_app(app, host="127.0.0.1", port=8081, print=None)

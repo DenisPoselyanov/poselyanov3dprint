@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS filaments (
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false;
+-- Етап 5: статус товару active/hidden/archive (бот робить те саме на старті); `active` лишається = (status = 'active')
+ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT;
+UPDATE products SET status = CASE WHEN active THEN 'active' ELSE 'archive' END WHERE status IS NULL;
+ALTER TABLE products ALTER COLUMN status SET DEFAULT 'active';
 
 -- Transaction tables
 CREATE TABLE IF NOT EXISTS users (

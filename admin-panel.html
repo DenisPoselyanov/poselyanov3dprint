@@ -2273,6 +2273,117 @@
             .order-actions > .order-next-btn { flex: 1 1 100%; }
         }
 
+
+        /* ═══ ТОВАРИ: вкладки статусів, таблиця, масові дії ═══ */
+        .pt-count { margin: 0 0 10px; color: var(--text-muted); font-size: 13px; }
+        .pt-bulk {
+            position: sticky; top: 64px; z-index: 30; display: none; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+            padding: 10px 12px; margin: 0 0 12px; background: var(--bg-tab-active); border: 1px solid var(--accent); border-radius: 14px;
+        }
+        .pt-bulk.show { display: flex; }
+        .pt-bulk-n { font-weight: 800; color: var(--accent-text); margin-right: 4px; }
+        .pt-bulk-group { display: inline-flex; align-items: center; gap: 6px; }
+        .pt-bulk input[type="number"], .pt-bulk select {
+            padding: 7px 10px; border: 1px solid var(--border-input); border-radius: 9px; background: var(--bg-input);
+            color: var(--text-main); font: inherit; font-size: 13px; min-width: 0;
+        }
+        .pt-bulk input[type="number"] { width: 78px; }
+        .pt-bulk select { max-width: 180px; }
+        .pt-bulk .btn { padding: 7px 12px; font-size: 13px; }
+        .pt-scroll { overflow-x: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; }
+        .pt-table { width: 100%; border-collapse: collapse; min-width: 880px; }
+        .pt-table th {
+            text-align: left; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+            color: var(--text-faint); padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
+        }
+        .pt-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-row); vertical-align: middle; }
+        .pt-table tbody tr:last-child td { border-bottom: 0; }
+        .pt-table .c-chk { width: 34px; padding-right: 0; }
+        .pt-table input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
+        .pt-row.sel td { background: var(--bg-tab-active); }
+        .pt-row.is-archive .pt-prod, .pt-row.is-hidden .pt-prod { opacity: .65; }
+        .pt-prod { display: flex; align-items: center; gap: 10px; min-width: 210px; }
+        .pt-thumb {
+            width: 44px; height: 44px; border-radius: 10px; background: var(--bg-section); object-fit: cover; flex: 0 0 auto;
+            display: grid; place-items: center; font-size: 22px; overflow: hidden;
+        }
+        .pt-prod-text { min-width: 0; }
+        .pt-name { font-weight: 700; color: var(--text-main); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pt-sub { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+        .pt-price-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+        .pt-price-line { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); }
+        .pt-price {
+            width: 84px; padding: 6px 8px; border: 1px solid var(--border-input); border-radius: 9px; background: var(--bg-input);
+            color: var(--text-main); font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right;
+        }
+        .pt-price:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+        .pt-price.busy { opacity: .55; }
+        .pt-old { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .pt-off { color: var(--sale); font-weight: 800; margin-left: 4px; }
+        .pt-contract { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: #FFF4D9; color: #C98A0B; white-space: nowrap; }
+        body.dark .pt-contract { background: #352A10; }
+        .pt-flags { display: flex; gap: 4px; flex-wrap: nowrap; }
+        .pt-flag {
+            border: 1px solid var(--border-alt); background: transparent; color: var(--text-muted); border-radius: 99px;
+            padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+        }
+        .pt-flag:hover:not(:disabled) { background: var(--bg-section); }
+        .pt-flag:disabled { opacity: .4; cursor: not-allowed; }
+        .pt-flag.on { background: var(--bg-tab-active); border-color: var(--accent); color: var(--accent-text); }
+        .pt-flag[data-f="hot"].on { background: #FFF0E3; border-color: #FF7A1A; color: #C2560C; }
+        .pt-flag[data-f="gift"].on { background: #E2F5EA; border-color: #1F9D55; color: #1F9D55; }
+        body.dark .pt-flag[data-f="hot"].on { background: #3A2616; color: #FFA25E; }
+        body.dark .pt-flag[data-f="gift"].on { background: #16301F; color: #4ADE80; }
+        .pt-stats { display: flex; gap: 12px; white-space: nowrap; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .pt-stats b { color: var(--text-main); font-size: 13px; }
+        .pt-st { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: var(--bg-section); color: var(--text-secondary); white-space: nowrap; }
+        .pt-st.active { background: #E2F5EA; color: #1F9D55; }
+        .pt-st.hidden { background: #FFF4D9; color: #C98A0B; }
+        body.dark .pt-st.active { background: #16301F; color: #4ADE80; }
+        body.dark .pt-st.hidden { background: #352A10; color: #E5B53D; }
+        .pt-menu > summary {
+            list-style: none; cursor: pointer; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--bg-section); color: var(--text-secondary); font-weight: 800; user-select: none;
+        }
+        .pt-menu > summary::-webkit-details-marker { display: none; }
+        .pt-menu > summary:hover, .pt-menu[open] > summary { background: var(--bg-tab-active); }
+        .pt-menu-list {
+            position: fixed; z-index: 1500; min-width: 210px; padding: 6px; background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 12px; box-shadow: 0 8px 24px var(--shadow-card); display: flex; flex-direction: column; gap: 2px;
+        }
+        .pt-menu-list button, .pt-menu-list a {
+            text-align: left; padding: 9px 10px; border: 0; background: transparent; color: var(--text-main); font: inherit;
+            font-size: 13px; border-radius: 8px; cursor: pointer; text-decoration: none; display: block;
+        }
+        .pt-menu-list button:hover, .pt-menu-list a:hover { background: var(--bg-section); }
+        .pt-menu-list .danger { color: var(--sale); }
+        .pt-empty { text-align: center; padding: 40px 16px; color: var(--text-muted); }
+        @media (max-width: 700px) {
+            .pt-bulk {
+                position: fixed; top: auto; bottom: 0; left: 0; right: 0; margin: 0; z-index: 1000; max-height: 45vh; overflow-y: auto;
+                border-radius: 14px 14px 0 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 24px var(--shadow-card);
+            }
+            #productsPage:has(.pt-bulk.show) { padding-bottom: 240px; }
+            .pt-scroll { overflow: visible; background: transparent; border: 0; }
+            .pt-table, .pt-table tbody { display: block; min-width: 0; }
+            .pt-table thead { display: none; }
+            .pt-row {
+                display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px 10px; padding: 12px; margin-bottom: 10px;
+                background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+            }
+            .pt-row.sel { background: var(--bg-tab-active); border-color: var(--accent); }
+            .pt-row.sel td { background: transparent; }
+            .pt-table td { display: block; padding: 0; border: 0; }
+            .pt-table .c-chk { grid-column: 1; grid-row: 1; width: auto; padding: 2px 0 0; }
+            .pt-table .c-prod { grid-column: 2; grid-row: 1; min-width: 0; }
+            .pt-table .c-menu { grid-column: 3; grid-row: 1; }
+            .pt-table .c-price, .pt-table .c-flags, .pt-table .c-stats { grid-column: 2 / 4; }
+            .pt-table .c-status { display: none; }
+            .pt-prod { min-width: 0; }
+            .pt-name, .pt-sub { max-width: none; }
+            .pt-price-wrap { flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
+            .pt-flags { flex-wrap: wrap; }
+        }
     </style>
 </head>
 <body>
@@ -2314,6 +2425,7 @@
 
         <div class="content">
             <section id="productsPage" class="page-section active">
+                <div class="orders-tabs" id="productsTabs"></div>
                 <div class="toolbar">
                     <div class="search-box">
                         <input type="text" id="searchInput" placeholder="🔍 Пошук товару..." oninput="filterProducts()">
@@ -2339,17 +2451,32 @@
                     </div>
                 </div>
 
-                <div id="productsCount" class="products-count"></div>
+                <div id="productsCount" class="pt-count"></div>
+
+                <div id="productsBulk" class="pt-bulk" role="region" aria-label="Масові дії">
+                    <span id="bulkCount" class="pt-bulk-n"></span>
+                    <span id="bulkPriceGroup" class="pt-bulk-group">
+                        <input type="number" id="bulkDiscount" min="1" max="90" step="1" placeholder="−%" aria-label="Знижка, відсотків">
+                        <button type="button" class="btn btn-secondary" onclick="bulkDiscountApply()">Знижка %</button>
+                        <button type="button" class="btn btn-secondary" onclick="bulkProducts('clear_discount')">Скинути знижку</button>
+                    </span>
+                    <span id="bulkCategoryGroup" class="pt-bulk-group">
+                        <select id="bulkCategory" aria-label="Категорія"></select>
+                        <button type="button" class="btn btn-secondary" onclick="bulkCategoryApply()">Перенести</button>
+                    </span>
+                    <span id="bulkStatusButtons" class="pt-bulk-group"></span>
+                    <button type="button" class="btn btn-secondary" onclick="clearProductSelection()">Зняти вибір</button>
+                </div>
 
                 <div id="loading" class="loading" style="display: none;">
                     <div class="spinner"></div>
                 </div>
 
-                <div id="products" class="products-grid"></div>
+                <div id="products" class="pt-scroll"></div>
                 <div id="emptyState" class="empty-state" style="display: none;">
                     <div class="empty-state-icon">📦</div>
-                    <p>Товари не знайдено</p>
-                    <button class="btn btn-primary" onclick="openAddModal()">➕ Додати перший товар</button>
+                    <p id="emptyStateText">Товари не знайдено</p>
+                    <button id="emptyStateAdd" class="btn btn-primary" onclick="openAddModal()">➕ Додати товар</button>
                 </div>
             </section>
 
@@ -4522,37 +4649,92 @@
         // ЗАВАНТАЖЕННЯ ТОВАРІВ
         // ═══════════════════════════════════════════════════════════
 
-        async function loadProducts() {
+        // adminProducts — усі товари всіх статусів (з перегляди/кошик/продажі); allProducts — лише активні
+        // (їх використовують лічильники, Ctrl+K, замовлення вручну).
+        let adminProducts = [];
+        let productsTab = 'active';
+        let visibleProducts = [];
+        const selectedProductIds = new Set();
+        const PRODUCT_TABS = [
+            { key: 'active', label: 'Активні' },
+            { key: 'hidden', label: 'Приховані' },
+            { key: 'archive', label: 'Архів' },
+        ];
+        const PRODUCT_STATUS_LABELS = { active: 'В магазині', hidden: 'Прихований', archive: 'В архіві' };
+        const PRODUCT_EMPTY_TEXT = {
+            active: 'Активних товарів немає',
+            hidden: 'Прихованих товарів немає',
+            archive: 'В архіві порожньо',
+        };
+
+        function productStatusOf(p) {
+            return p.status || 'active';
+        }
+
+        async function productApi(path, method, body) {
+            const options = { method };
+            if (body !== undefined) {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify(body);
+            }
+            const res = await fetch(API_BASE + path, options);
+            let data = {};
+            try { data = await res.json(); } catch (_) { /* порожня відповідь */ }
+            if (!res.ok || data.ok === false) throw new Error(data.error || `Помилка (${res.status})`);
+            return data;
+        }
+
+        // Не перемальовуємо таблицю, поки адмін редагує ціну або тримає відкрите меню «⋯».
+        function productsTableBusy() {
+            return !!document.querySelector('.pt-price:focus, .pt-menu[open]');
+        }
+
+        async function loadProducts(force = false) {
             const loading = document.getElementById('loading');
-            const productsContainer = document.getElementById('products');
-            
+            const firstLoad = !adminProducts.length;
+
             try {
-                loading.style.display = 'flex';
-                productsContainer.style.opacity = '0.5';
-                
-                const res = await fetch(API_BASE + '/products');
+                if (firstLoad) loading.style.display = 'flex';
+
+                const res = await fetch(API_BASE + '/admin/products');
                 if (!res.ok) {
                     throw new Error(`Помилка завантаження (${res.status} ${res.statusText})`);
                 }
-                const products = await res.json();
+                adminProducts = await res.json();
+                allProducts = adminProducts.filter(p => productStatusOf(p) === 'active');
 
-                // Зберігаємо всі товари глобально для фільтрації
-                allProducts = products;
+                const known = new Set(adminProducts.map(p => p.id));
+                [...selectedProductIds].forEach(id => { if (!known.has(id)) selectedProductIds.delete(id); });
 
-                // Оновлюємо лічильник
                 updateHeaderStat();
                 refreshNavCounts();
                 renderCategoriesManager();
 
-                // Застосовуємо фільтрацію
-                filterProducts();
+                if (force || !productsTableBusy()) filterProducts();
             } catch (e) {
                 console.error('loadProducts error:', e);
                 showToast('Помилка завантаження товарів', 'error');
             } finally {
                 loading.style.display = 'none';
-                productsContainer.style.opacity = '1';
             }
+        }
+
+        function renderProductsTabs() {
+            const counts = { active: 0, hidden: 0, archive: 0 };
+            adminProducts.forEach(p => { counts[productStatusOf(p)] = (counts[productStatusOf(p)] || 0) + 1; });
+            const box = document.getElementById('productsTabs');
+            if (!box) return;
+            box.innerHTML = PRODUCT_TABS.map(t => `
+                <button type="button" class="orders-tab${productsTab === t.key ? ' active' : ''}" onclick="setProductsTab('${t.key}')">
+                    ${t.label} <span class="orders-tab-n">${counts[t.key] || 0}</span>
+                </button>`).join('');
+        }
+
+        function setProductsTab(key) {
+            if (productsTab === key) return;
+            productsTab = key;
+            selectedProductIds.clear();
+            filterProducts();
         }
 
         // Функція фільтрації товарів
@@ -4560,8 +4742,9 @@
             const search = document.getElementById('searchInput')?.value?.toLowerCase() || '';
             const cat = document.getElementById('categoryFilter')?.value || '';
 
-            const filtered = allProducts.filter(p => {
-                const matchSearch = !search || p.name.toLowerCase().includes(search);
+            const inTab = adminProducts.filter(p => productStatusOf(p) === productsTab);
+            const filtered = inTab.filter(p => {
+                const matchSearch = !search || p.name.toLowerCase().includes(search) || String(p.id) === search.trim();
                 const matchCat = !cat || p.cat === cat;
                 const matchFlags = activeFlags.size === 0
                     || [...activeFlags].every(flag => flag === 'sale'
@@ -4572,12 +4755,15 @@
 
             const counter = document.getElementById('productsCount');
             if (counter) {
-                counter.textContent = filtered.length < allProducts.length
-                    ? `Показано ${filtered.length} із ${allProducts.length} товарів`
-                    : `Всього товарів: ${allProducts.length}`;
+                counter.textContent = filtered.length < inTab.length
+                    ? `Показано ${filtered.length} із ${inTab.length} товарів`
+                    : `Усього: ${inTab.length}`;
             }
 
+            visibleProducts = filtered;
+            renderProductsTabs();
             renderProducts(filtered);
+            updateBulkBar();
         }
 
         function toggleFlagFilter(flag) {
@@ -4626,11 +4812,81 @@
             if (!e.target.closest('.filter-wrap')) {
                 closeCategoryMenu();
             }
+            if (!e.target.closest('.pt-menu')) closeProductMenus();
         });
+        window.addEventListener('scroll', () => closeProductMenus(), true);
+        window.addEventListener('resize', () => closeProductMenus());
 
         // ═══════════════════════════════════════════════════════════
-        // РЕНДЕРИНГ ТОВАРІВ
+        // ТАБЛИЦЯ ТОВАРІВ
         // ═══════════════════════════════════════════════════════════
+
+        function productRowHtml(p) {
+            const status = productStatusOf(p);
+            const categoryMeta = getCategoryMeta(p.cat);
+            const discount = !p.contractPrice && p.oldPrice && p.oldPrice > p.price
+                ? Math.round((p.oldPrice - p.price) / p.oldPrice * 100) : 0;
+            const photo = p.photos && p.photos.length ? p.photos[0] : '';
+            const thumb = photo
+                ? `<img class="pt-thumb" src="${escapeAttr(photo)}" alt="" loading="lazy">`
+                : `<span class="pt-thumb">${escapeHtml(p.emoji || '📦')}</span>`;
+            const giftBlocked = p.contractPrice || p.cat === 'custom';
+            const flagBtn = (flag, label, blocked) => `
+                <button type="button" class="pt-flag${p[flag] ? ' on' : ''}" data-f="${flag}" aria-pressed="${p[flag] ? 'true' : 'false'}"
+                    ${blocked ? 'disabled title="Недоступно для договірного й індивідуального товару"' : ''}
+                    onclick="toggleProductFlag(${p.id}, '${flag}', this)">${label}</button>`;
+            const priceCell = p.contractPrice
+                ? '<span class="pt-contract">Договірна</span>'
+                : `<div class="pt-price-wrap">
+                        <span class="pt-price-line">
+                            <input class="pt-price" type="text" inputmode="numeric" value="${p.price}" data-id="${p.id}" data-orig="${p.price}"
+                                aria-label="Ціна, ₴" onkeydown="productPriceKey(event, this)" onblur="saveProductPrice(this)"> ₴
+                        </span>
+                        ${discount ? `<span class="pt-old"><s>${p.oldPrice} ₴</s><span class="pt-off">−${discount}%</span></span>` : ''}
+                    </div>`;
+
+            let menu = `<button type="button" onclick="closeProductMenus(); editProduct(${p.id})">Редагувати</button>
+                <button type="button" onclick="closeProductMenus(); duplicateProduct(${p.id})">Дублювати</button>`;
+            if (status === 'active') {
+                menu += `<a href="https://t.me/poselyanov3dprint_bot?startapp=product_${p.id}" target="_blank" rel="noopener" onclick="closeProductMenus()">Подивитись у магазині</a>
+                    <button type="button" onclick="closeProductMenus(); setProductStatus(${p.id}, 'hidden')">Приховати</button>`;
+            } else if (status === 'hidden') {
+                menu += `<button type="button" onclick="closeProductMenus(); setProductStatus(${p.id}, 'active')">Показати в магазині</button>`;
+            }
+            menu += status === 'archive'
+                ? `<button type="button" onclick="closeProductMenus(); setProductStatus(${p.id}, 'active')">Повернути в магазин</button>`
+                : `<button type="button" class="danger" onclick="closeProductMenus(); setProductStatus(${p.id}, 'archive')">В архів</button>`;
+
+            return `
+                <tr class="pt-row is-${status}${selectedProductIds.has(p.id) ? ' sel' : ''}" data-id="${p.id}">
+                    <td class="c-chk"><input type="checkbox" aria-label="Вибрати" ${selectedProductIds.has(p.id) ? 'checked' : ''} onchange="toggleProductSelect(${p.id}, this.checked)"></td>
+                    <td class="c-prod">
+                        <div class="pt-prod">
+                            ${thumb}
+                            <div class="pt-prod-text">
+                                <div class="pt-name" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</div>
+                                <div class="pt-sub">${escapeHtml(categoryMeta.emoji)} ${escapeHtml(categoryMeta.name)} · ID ${p.id}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="c-price">${priceCell}</td>
+                    <td class="c-flags"><div class="pt-flags">
+                        ${flagBtn('hot', 'Хіт', false)}${flagBtn('pinned', 'Закріплений', false)}${flagBtn('gift', 'Подарунок', giftBlocked)}
+                    </div></td>
+                    <td class="c-stats"><div class="pt-stats">
+                        <span title="Перегляди картки (унікальні користувачі за добу)"><b>${p.views || 0}</b> перегл.</span>
+                        <span title="Додавання в кошик (унікальні користувачі за добу)"><b>${p.cart_adds || 0}</b> кошик</span>
+                        <span title="Продано штук (підтверджені й далі)"><b>${p.sold || 0}</b> продано</span>
+                    </div></td>
+                    <td class="c-status"><span class="pt-st ${status}">${PRODUCT_STATUS_LABELS[status]}</span></td>
+                    <td class="c-menu">
+                        <details class="pt-menu" ontoggle="positionProductMenu(this)">
+                            <summary aria-label="Дії з товаром">⋯</summary>
+                            <div class="pt-menu-list">${menu}</div>
+                        </details>
+                    </td>
+                </tr>`;
+        }
 
         function renderProducts(products) {
             const container = document.getElementById('products');
@@ -4638,62 +4894,229 @@
 
             if (!products.length) {
                 container.innerHTML = '';
+                container.style.display = 'none';
+                document.getElementById('emptyStateText').textContent = adminProducts.some(p => productStatusOf(p) === productsTab)
+                    ? 'Нічого не знайдено за фільтрами' : PRODUCT_EMPTY_TEXT[productsTab];
+                document.getElementById('emptyStateAdd').style.display = productsTab === 'active' ? '' : 'none';
                 empty.style.display = 'block';
                 return;
             }
 
             empty.style.display = 'none';
-            container.innerHTML = products.map(p => {
-                const categoryMeta = getCategoryMeta(p.cat);
-                const categoryLabel = `${categoryMeta.emoji} ${categoryMeta.name}`;
+            container.style.display = '';
+            const allSelected = products.every(p => selectedProductIds.has(p.id));
+            container.innerHTML = `
+                <table class="pt-table">
+                    <thead><tr>
+                        <th class="c-chk"><input type="checkbox" id="ptSelectAll" aria-label="Вибрати всі" ${allSelected ? 'checked' : ''} onchange="toggleAllProducts(this.checked)"></th>
+                        <th>Товар</th><th>Ціна</th><th>Прапорці</th><th>Перегляди · кошик · продажі</th><th>Статус</th><th></th>
+                    </tr></thead>
+                    <tbody>${products.map(productRowHtml).join('')}</tbody>
+                </table>`;
+        }
 
-                const discount = p.oldPrice && p.oldPrice > 0 ? Math.round((p.oldPrice - p.price) / p.oldPrice * 100) : 0;
+        // ── Меню «⋯» (position: fixed, щоб не обрізалось прокруткою таблиці) ──
+        function closeProductMenus(except) {
+            document.querySelectorAll('.pt-menu[open]').forEach(d => { if (d !== except) d.removeAttribute('open'); });
+        }
 
-                return `
-                    <div class="product-card">
-                        <div class="product-header">
-                            <div class="product-emoji">${escapeHtml(p.emoji)}</div>
-                            <div class="product-info">
-                                <div class="product-name">${escapeHtml(p.name)}</div>
-                                <div class="product-meta">
-                                    <span class="category-badge ${escapeAttr(categoryMeta.badgeClass || `category-${p.cat}`)}">${escapeHtml(categoryLabel)}</span>
-                                    <span>ID: ${p.id}</span>
-                                </div>
-                            </div>
-                        </div>
+        function positionProductMenu(details) {
+            if (!details.open) return;
+            closeProductMenus(details);
+            const list = details.querySelector('.pt-menu-list');
+            if (!list) return;
+            const r = details.getBoundingClientRect();
+            const w = list.offsetWidth;
+            const h = list.offsetHeight;
+            let top = r.bottom + 6;
+            if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+            list.style.top = top + 'px';
+            list.style.left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8) + 'px';
+        }
 
-                        <div>
-                            <div class="product-price">
-                                ${p.contractPrice ? 'Договірна<span class="contract-badge">🤝</span>' : `${p.price} ₴`}
-                                ${!p.contractPrice && p.oldPrice ? `<span class="price-old">${p.oldPrice} ₴</span>` : ''}
-                            </div>
-                            ${!p.contractPrice && p.oldPrice ? `<div class="product-discount">-${discount}%</div>` : ''}
-                        </div>
+        // ── Ціна в рядку ──
+        function productPriceKey(e, input) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                input.value = input.dataset.orig;
+                input.blur();
+            }
+        }
 
-                        ${p.photos && p.photos.length ? `
-                            <div class="product-photos">
-                                ${p.photos.slice(0, 4).map(url => `<img src="${escapeAttr(url)}" class="photo-thumb" alt="фото" title="Натисни для приміру">`).join('')}
-                                ${p.photos.length > 4 ? `<div style="width: 60px; height: 60px; background: var(--border-input); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-faint); font-weight: bold;">+${p.photos.length - 4}</div>` : ''}
-                            </div>
-                        ` : ''}
+        function mergeAdminProduct(target, fresh) {
+            ['price', 'oldPrice', 'hot', 'pinned', 'gift', 'cat', 'status'].forEach(k => {
+                if (fresh[k] === undefined || fresh[k] === null) delete target[k]; else target[k] = fresh[k];
+            });
+        }
 
-                        <div class="product-tags">
-                            ${p.hot ? '<div class="tag">🔥 Гарячий</div>' : ''}
-                            ${p.pinned ? '<div class="tag tag-pinned">📌 Закріплений</div>' : ''}
-                            ${p.gift ? '<div class="tag">🎁 Подарунок</div>' : ''}
-                            ${p.cat !== 'custom' && p.filamentChoice !== false ? '<div class="tag">🎨 Вибір кольору</div>' : ''}
-                            ${p.cat !== 'custom' && p.filamentChoice !== false && p.luminousFilamentChoice ? '<div class="tag">🌙 Світиться вночі</div>' : ''}
-                            ${personalizationLabel(p.custom_fields) ? `<div class="tag">✍️ ${escapeHtml(personalizationLabel(p.custom_fields))}</div>` : ''}
-                            ${p.contractPrice ? '<div class="tag">🤝 Договірна ціна</div>' : ''}
-                        </div>
+        async function saveProductPrice(input) {
+            if (input.dataset.busy) return;
+            const id = Number(input.dataset.id);
+            const p = adminProducts.find(x => x.id === id);
+            if (!p) return;
+            const raw = input.value.trim().replace(/\s+/g, '');
+            if (raw === String(p.price)) return;
+            if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+                showToast('Ціна — ціле число від 1', 'error');
+                input.value = p.price;
+                return;
+            }
+            input.dataset.busy = '1';
+            input.classList.add('busy');
+            try {
+                const data = await productApi(`/products/${id}`, 'PATCH', { price: Number(raw) });
+                mergeAdminProduct(p, data.product);
+                showToast(`Ціну збережено: ${p.price} ₴`, 'success');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося зберегти ціну', 'error');
+                input.value = p.price;
+            } finally {
+                delete input.dataset.busy;
+                input.classList.remove('busy');
+                filterProducts();
+            }
+        }
 
-                        <div class="product-actions">
-                            <button class="btn btn-primary" onclick="editProduct(${p.id})">✏️ Редагувати</button>
-                            <button class="btn btn-danger" onclick="deleteProduct(${p.id})">🗑️ Видалити</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+        async function toggleProductFlag(id, flag, btn) {
+            const p = adminProducts.find(x => x.id === id);
+            if (!p || btn.disabled) return;
+            btn.disabled = true;
+            try {
+                const data = await productApi(`/products/${id}`, 'PATCH', { [flag]: !p[flag] });
+                mergeAdminProduct(p, data.product);
+                const label = { hot: 'Хіт', pinned: 'Закріплений', gift: 'Подарунок' }[flag];
+                showToast(`${label}: ${p[flag] ? 'увімкнено' : 'вимкнено'}`, 'success');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося змінити', 'error');
+            } finally {
+                filterProducts();
+            }
+        }
+
+        // ── Статус, дублювання ──
+        async function setProductStatus(id, status) {
+            const p = adminProducts.find(x => x.id === id);
+            if (!p) return;
+            if (status === 'archive') {
+                const ok = await askConfirm(`Перенести «${p.name}» в архів? Він зникне з магазину, замовлення збережуться. Повернути можна у вкладці «Архів».`);
+                if (!ok) return;
+            }
+            try {
+                await productApi(`/products/${id}/status`, 'PUT', { status });
+                const text = { active: 'Товар у магазині', hidden: 'Товар приховано', archive: 'Товар в архіві' }[status];
+                showToast(text, 'success');
+                selectedProductIds.delete(id);
+                await loadProducts(true);
+            } catch (e) {
+                showToast(e.message || 'Не вдалося змінити статус', 'error');
+            }
+        }
+
+        // Старе «видалення» тепер переносить в архів
+        function deleteProduct(id) {
+            return setProductStatus(id, 'archive');
+        }
+
+        async function duplicateProduct(id) {
+            try {
+                const data = await productApi(`/products/${id}/duplicate`, 'POST');
+                showToast(`Копію створено (ID ${data.id}) — вона прихована, див. вкладку «Приховані»`, 'success');
+                await loadProducts(true);
+            } catch (e) {
+                showToast(e.message || 'Не вдалося створити копію', 'error');
+            }
+        }
+
+        // ── Вибір і масові дії ──
+        function toggleProductSelect(id, checked) {
+            if (checked) selectedProductIds.add(id); else selectedProductIds.delete(id);
+            document.querySelector(`.pt-row[data-id="${id}"]`)?.classList.toggle('sel', checked);
+            const all = document.getElementById('ptSelectAll');
+            if (all) all.checked = visibleProducts.length > 0 && visibleProducts.every(p => selectedProductIds.has(p.id));
+            updateBulkBar();
+        }
+
+        function toggleAllProducts(checked) {
+            visibleProducts.forEach(p => { if (checked) selectedProductIds.add(p.id); else selectedProductIds.delete(p.id); });
+            document.querySelectorAll('.pt-row').forEach(row => {
+                const on = selectedProductIds.has(Number(row.dataset.id));
+                row.classList.toggle('sel', on);
+                const cb = row.querySelector('.c-chk input');
+                if (cb) cb.checked = on;
+            });
+            updateBulkBar();
+        }
+
+        function clearProductSelection() {
+            selectedProductIds.clear();
+            filterProducts();
+        }
+
+        function updateBulkBar() {
+            const bar = document.getElementById('productsBulk');
+            if (!bar) return;
+            const n = selectedProductIds.size;
+            bar.classList.toggle('show', n > 0);
+            if (!n) return;
+            document.getElementById('bulkCount').textContent = `Вибрано: ${n}`;
+            const catSelect = document.getElementById('bulkCategory');
+            const prev = catSelect.value;
+            catSelect.innerHTML = '<option value="">Категорія…</option>' + allCategories
+                .filter(c => c.active !== false && c.id !== 'custom')
+                .map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.emoji)} ${escapeHtml(c.name)}</option>`).join('');
+            catSelect.value = prev;
+            const priceGroup = document.getElementById('bulkPriceGroup');
+            priceGroup.style.display = productsTab === 'archive' ? 'none' : '';
+            document.getElementById('bulkCategoryGroup').style.display = productsTab === 'archive' ? 'none' : '';
+            const statusBtns = {
+                active: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'hidden')">Приховати</button>
+                         <button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'archive')">В архів</button>`,
+                hidden: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'active')">Показати в магазині</button>
+                         <button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'archive')">В архів</button>`,
+                archive: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'active')">Повернути в магазин</button>`,
+            };
+            document.getElementById('bulkStatusButtons').innerHTML = statusBtns[productsTab];
+        }
+
+        function bulkDiscountApply() {
+            const value = Number(document.getElementById('bulkDiscount').value);
+            if (!Number.isInteger(value) || value < 1 || value > 90) {
+                showToast('Знижка — ціле число від 1 до 90', 'error');
+                return;
+            }
+            bulkProducts('discount', value);
+        }
+
+        function bulkCategoryApply() {
+            const value = document.getElementById('bulkCategory').value;
+            if (!value) {
+                showToast('Виберіть категорію', 'error');
+                return;
+            }
+            bulkProducts('category', value);
+        }
+
+        async function bulkProducts(action, value) {
+            const ids = [...selectedProductIds];
+            if (!ids.length) return;
+            const labels = {
+                discount: `Знижка ${value}% на ${ids.length} товар(ів)? Ціна зменшиться, стара ціна збережеться.`,
+                clear_discount: `Скинути знижку на ${ids.length} товар(ів)? Повернеться стара ціна.`,
+                category: `Перенести ${ids.length} товар(ів) в іншу категорію?`,
+                status: { hidden: `Приховати ${ids.length} товар(ів) з магазину?`, archive: `Перенести ${ids.length} товар(ів) в архів?`, active: `Повернути ${ids.length} товар(ів) в магазин?` }[value],
+            };
+            if (!(await askConfirm(labels[action]))) return;
+            try {
+                const data = await productApi('/products/bulk', 'POST', { ids, action, value });
+                const skipped = (data.skipped || []).length;
+                showToast(`Оновлено: ${data.updated}${skipped ? `, пропущено: ${skipped} (${data.skipped[0].reason})` : ''}`, skipped ? 'info' : 'success');
+                selectedProductIds.clear();
+                await loadProducts(true);
+            } catch (e) {
+                showToast(e.message || 'Не вдалося виконати дію', 'error');
+            }
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -4976,25 +5399,6 @@
         // ═══════════════════════════════════════════════════════════
         // ВИДАЛЕННЯ
         // ═══════════════════════════════════════════════════════════
-
-        async function deleteProduct(id) {
-            if (!confirm('Прибрати товар з магазину? Він зникне з каталогу, а наявні замовлення з ним збережуться.')) return;
-
-            try {
-                const res = await fetch(API_BASE + `/products/${id}`, {
-                    method: 'DELETE',
-                    headers: { 'X-Telegram-Init-Data': tgInitData }
-                });
-                if (res.ok) {
-                    showToast('Товар прибрано з магазину ✅', 'success');
-                    loadProducts();
-                } else {
-                    showToast('Помилка видалення', 'error');
-                }
-            } catch (e) {
-                showToast('Помилка видалення', 'error');
-            }
-        }
 
         // ═══════════════════════════════════════════════════════════
         // DRAG & DROP ДЛЯ ФОТО

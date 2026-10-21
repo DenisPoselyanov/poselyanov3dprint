@@ -82,6 +82,12 @@ from catalog_store import (
     add_category,
     add_product,
     bootstrap_json_catalog,
+    bulk_update_products,
+    duplicate_product,
+    get_admin_product,
+    get_admin_products,
+    patch_product,
+    set_product_status,
     delete_category,
     delete_product,
     get_all_categories,
@@ -126,6 +132,7 @@ from services.collections import public_collections
 from services.db_utils import init_db, row_to_dict as _row_to_dict
 from services.events import EVENT_TYPES, FUNNEL_EVENT_TYPES, popular_searches, record_funnel_event, record_search
 from services.hits import bought_together, top_selling_products
+from services.product_stats import admin_products_with_stats
 from services.promotions import (
     create_promotion,
     delete_promotion,
@@ -2297,10 +2304,12 @@ async def handle_get_filaments(request: web.Request):
 async def handle_get_product(request: web.Request):
     """Отримати товар за ID"""
     product_id = int(request.match_info.get('id', 0))
-    product = get_product_by_id(product_id)
+    is_admin = _is_admin_viewer(request)
+    # Адмін бачить і приховані та архівні товари (редактор); покупцям — лише активні.
+    product = get_admin_product(product_id) if is_admin else get_product_by_id(product_id)
     if not product:
         return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
-    if not _is_admin_viewer(request):
+    if not is_admin:
         product = _public_product(product)
     product = (await run_db(with_stats, [product]))[0]
     return web.json_response(product, headers=cors_headers(request))
@@ -2462,6 +2471,83 @@ async def handle_delete_product(request: web.Request):
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
         return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def _admin_guard(request: web.Request):
+    """None, якщо запит від адміна; інакше готова відповідь 401/403."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    return require_admin(request, auth)
+
+
+async def _json_body(request: web.Request):
+    """Тіло запиту як dict або (None, відповідь 400)."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = None
+    if not isinstance(data, dict):
+        return None, web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    return data, None
+
+
+def _result_response(request: web.Request, result: dict, ok_status: int = 200):
+    return web.json_response(result, status=ok_status if result.get("ok") else 400, headers=cors_headers(request))
+
+
+async def handle_get_admin_products(request: web.Request):
+    """Усі товари всіх статусів зі статистикою (перегляди, кошик, продажі) для таблиці в адмінці."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    products = await run_db(lambda: admin_products_with_stats(get_admin_products()))
+    return web.json_response(products, headers=cors_headers(request))
+
+
+async def handle_set_product_status(request: web.Request):
+    """Статус товару: active / hidden / archive."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    result = await run_db(set_product_status, _product_id_param(request), str(data.get("status") or ""))
+    return _result_response(request, result)
+
+
+async def handle_patch_product(request: web.Request):
+    """Швидке оновлення: ціна, стара ціна, hot / pinned / gift."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    result = await run_db(patch_product, _product_id_param(request), data)
+    return _result_response(request, result)
+
+
+async def handle_bulk_products(request: web.Request):
+    """Масові дії: {ids, action: discount|clear_discount|category|status, value}."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    result = await run_db(bulk_update_products, data.get("ids"), str(data.get("action") or ""), data.get("value"))
+    return _result_response(request, result)
+
+
+async def handle_duplicate_product(request: web.Request):
+    """Копія товару (прихована)."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    result = await run_db(duplicate_product, _product_id_param(request))
+    return _result_response(request, result, 201)
 
 
 async def handle_get_orders(request: web.Request):
