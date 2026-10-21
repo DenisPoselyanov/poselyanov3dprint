@@ -22,9 +22,13 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_get("/api/products/{id}/reviews", handlers.handle_get_product_reviews)
     http_app.router.add_get("/api/products/{id}/related", handlers.handle_get_product_related)
     http_app.router.add_post("/api/categories", handlers.handle_create_category)
+    # Статичний шлях раніше за /api/categories/{id}, інакше «order» зловить {id}
+    http_app.router.add_put("/api/categories/order", handlers.handle_reorder_categories)
     http_app.router.add_put("/api/categories/{id}", handlers.handle_update_category)
     http_app.router.add_delete("/api/categories/{id}", handlers.handle_delete_category)
+    http_app.router.add_post("/api/filaments", handlers.handle_create_filament)
     http_app.router.add_put("/api/filaments/{id}", handlers.handle_update_filament)
+    http_app.router.add_delete("/api/filaments/{id}", handlers.handle_delete_filament)
     http_app.router.add_post("/api/products", handlers.handle_create_product)
     http_app.router.add_put("/api/products/{id}", handlers.handle_update_product)
     http_app.router.add_delete("/api/products/{id}", handlers.handle_delete_product)

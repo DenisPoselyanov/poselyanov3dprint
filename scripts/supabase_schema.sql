@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS filaments (
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false;
+
+-- Етап 5 редизайну: прапорець «світиться в темряві» для кольору (спершу без DEFAULT, щоб заповнити старі рядки)
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS glow BOOLEAN;
+UPDATE filaments SET glow = (id LIKE 'luminous%') WHERE glow IS NULL;
+ALTER TABLE filaments ALTER COLUMN glow SET DEFAULT false;
 -- Етап 5: статус товару active/hidden/archive (бот робить те саме на старті); `active` лишається = (status = 'active')
 ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT;
 UPDATE products SET status = CASE WHEN active THEN 'active' ELSE 'archive' END WHERE status IS NULL;

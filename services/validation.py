@@ -9,6 +9,7 @@ from catalog_store import (
     FILAMENTS_CACHE,
     PRODUCTS_CACHE,
     is_contract_product,
+    is_glow_filament,
     reload_filaments_cache,
     reload_products_cache,
 )
@@ -141,7 +142,7 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                     return False, f"Невідомий колір філаменту ({filament_id})"
                 if not meta.get("available"):
                     return False, f"Колір «{meta.get('name', '')}» зараз недоступний для замовлення"
-                if str(filament_id or "").startswith("luminous") and not (
+                if is_glow_filament(meta) and not (
                     product and product.get("luminousFilamentChoice")
                 ):
                     return False, "Цей колір недоступний для обраного товару"

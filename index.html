@@ -1630,7 +1630,7 @@ let modalGiftPreview = false;
 let modalCartSource = 'products';
 
 function isLuminousFilament(f) {
-  return String(f?.id || '').startsWith('luminous');
+  return typeof f?.glow === 'boolean' ? f.glow : String(f?.id || '').startsWith('luminous');
 }
 
 function availableFilaments(product) {

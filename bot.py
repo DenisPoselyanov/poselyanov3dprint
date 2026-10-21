@@ -80,6 +80,7 @@ from catalog_store import (
     FILAMENTS_CACHE,
     PRODUCTS_CACHE,
     add_category,
+    add_filament,
     add_product,
     bootstrap_json_catalog,
     bulk_update_products,
@@ -89,7 +90,11 @@ from catalog_store import (
     patch_product,
     set_product_status,
     delete_category,
+    delete_filament,
     delete_product,
+    filament_usage_counts,
+    is_glow_filament,
+    reorder_categories,
     get_all_categories,
     get_all_products,
     get_category_by_id,
@@ -2298,7 +2303,12 @@ async def handle_get_categories(request: web.Request):
 async def handle_get_filaments(request: web.Request):
     """Отримати список філаментів."""
     reload_filaments_cache()
-    return web.json_response(FILAMENTS_CACHE, headers=cors_headers(request))
+    filaments = [{**f, "glow": is_glow_filament(f)} for f in FILAMENTS_CACHE]
+    if _is_admin_viewer(request):
+        # Для адмінки: у скількох товарах колір пропонується («у N товарах»)
+        usage = await run_db(filament_usage_counts)
+        filaments = [{**f, "used_by": usage.get(str(f.get("id")), 0)} for f in filaments]
+    return web.json_response(filaments, headers=cors_headers(request))
 
 
 async def handle_get_product(request: web.Request):
@@ -2354,6 +2364,65 @@ async def handle_update_filament(request: web.Request):
         filament_id = request.match_info.get('id', '')
         data = await request.json()
         result = update_filament(filament_id, data)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_create_filament(request: web.Request):
+    """Додати колір філаменту (ID — з назви, якщо не передано)."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Очікується JSON-обʼєкт")
+        result = add_filament(data)
+        status = 201 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_delete_filament(request: web.Request):
+    """Видалити колір. Якщо він пропонується в товарах — 409 з used_by; ?force=1 видаляє попри це."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    filament_id = request.match_info.get('id', '')
+    force = request.query.get("force", "").lower() in ("1", "true", "yes")
+    result = await run_db(delete_filament, filament_id, force)
+    if result.get("ok"):
+        status = 200
+    elif "used_by" in result:
+        status = 409
+    elif result.get("error") == "Філамент не знайдено":
+        status = 404
+    else:
+        status = 400
+    return web.json_response(result, status=status, headers=cors_headers(request))
+
+
+async def handle_reorder_categories(request: web.Request):
+    """Порядок категорій одним запитом: {"ids": ["toy", "key", …]}."""
+    auth, err = resolve_request_user(request, {})
+    if err:
+        return err
+    denied = require_admin(request, auth)
+    if denied:
+        return denied
+    try:
+        data = await request.json()
+        ids = data.get("ids") if isinstance(data, dict) else None
+        result = await run_db(reorder_categories, ids)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:

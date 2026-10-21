@@ -2384,6 +2384,162 @@
             .pt-price-wrap { flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
             .pt-flags { flex-wrap: wrap; }
         }
+
+        /* ═══ ШУХЛЯДИ-РЕДАКТОРИ (товар, категорія, колір): секції, превʼю, закріплений низ ═══ */
+        .modal .modal-content.dr {
+            display: flex; flex-direction: column; padding: 0; overflow: hidden; width: min(560px, 100%);
+        }
+        .modal .modal-content.dr.dr-wide { width: min(1040px, 100%); }
+        .dr-head {
+            flex: none; display: flex; align-items: center; gap: 12px; padding: 14px 20px; font-size: 17px; font-weight: 800;
+            border-bottom: 1px solid var(--border); background: var(--bg-container); padding-top: calc(14px + env(safe-area-inset-top));
+        }
+        .dr-close { margin-left: auto; padding: 7px 12px; }
+        .dr-form { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .dr-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; background: var(--bg-page); overscroll-behavior: contain; }
+        .dr-foot {
+            flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+            border-top: 1px solid var(--border); background: var(--bg-container);
+        }
+        .dr-foot .btn { padding: 10px 16px; font-weight: 700; white-space: nowrap; }
+        .dr-dirty { margin-right: auto; font-size: 13px; color: var(--text-faint); min-width: 0; }
+        .dr-dirty.on { color: var(--amber); font-weight: 700; }
+        .dr-dirty.on::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); margin-right: 7px; }
+        .dr-del { margin-right: 4px; }
+        .dr-del + .dr-dirty { margin-left: 0; }
+        .dr-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; align-items: start; }
+        .dr-main { min-width: 0; }
+        .dr-sec { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+        .dr-sec h3 { font-size: 14px; font-weight: 800; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .dr-sec .form-group { margin-bottom: 14px; }
+        .dr-sec .form-group:last-child { margin-bottom: 0; }
+        .dr-badge { font-size: 11px; font-weight: 700; color: var(--accent-text); background: var(--bg-tab-active); border-radius: 99px; padding: 2px 8px; }
+        .dr-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .dr-row > .form-group { min-width: 0; }
+        .dr-calc { margin-top: 10px; font-size: 13px; font-weight: 700; min-height: 18px; color: var(--text-muted); }
+        .dr-calc .ok { color: var(--green); }
+        .dr-calc .bad { color: var(--sale); }
+        .dr-preview { position: sticky; top: 0; }
+        .dr-prev-title { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 10px; }
+
+        /* Превʼю картки: ті самі пропорції, бейджі й ціна, що в магазині */
+        .pv-card { --violet: #7C5CFF; --teal: #0E9F8A; background: var(--bg-card); border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 1px var(--border); display: flex; flex-direction: column; max-width: 240px; }
+        .pv-thumb { position: relative; aspect-ratio: 1; background: var(--bg-section); overflow: hidden; }
+        .pv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pv-thumb .pv-emo { width: 100%; height: 100%; display: grid; place-items: center; font-size: 56px; }
+        .pv-badges { position: absolute; top: 7px; left: 7px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+        .pv-pill { font-size: 10px; font-weight: 800; padding: 3px 6px; border-radius: 6px; line-height: 1.1; color: #fff; }
+        .pv-pill.sale { background: var(--sale); }
+        .pv-pill.hit { background: #fff; color: #D2461B; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+        .pv-pill.glow { background: var(--teal); }
+        .pv-fav { position: absolute; top: 7px; right: 7px; width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,.9); color: #445; display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+        .pv-fav svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .pv-info { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .pv-name { font-size: 13.5px; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.5em; overflow-wrap: anywhere; }
+        .pv-name.ph, .pv-mat.ph { color: var(--text-faint); }
+        .pv-mat { font-size: 11.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pv-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; padding-top: 6px; min-height: 40px; }
+        .pv-price-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
+        .pv-price { font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .pv-price.sale { color: var(--sale); }
+        .pv-old { font-size: 12px; color: var(--text-faint); text-decoration: line-through; font-weight: 600; white-space: nowrap; }
+        .pv-contract { font-size: 12px; font-weight: 700; color: var(--amber); background: rgba(201, 138, 11, .14); border-radius: 7px; padding: 3px 7px; line-height: 1.25; }
+        .pv-add { flex: none; width: 36px; height: 36px; border-radius: 11px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 22px; font-weight: 600; line-height: 1; }
+        .pv-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+        .pv-chip { font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--bg-section); border-radius: 99px; padding: 3px 9px; }
+        .pv-chip.warn { color: var(--amber); background: rgba(201, 138, 11, .14); }
+
+        /* Фото: обкладинка, ★ */
+        .preview-item:first-child::before { display: none; }
+        .preview-item .cover-tag { position: absolute; left: 4px; bottom: 4px; font-size: 10px; font-weight: 800; color: #fff; background: var(--accent); border-radius: 6px; padding: 2px 6px; pointer-events: none; }
+        .preview-item .cover-btn { position: absolute; left: 4px; bottom: 4px; width: 26px; height: 26px; border: 0; border-radius: 8px; background: rgba(0,0,0,.55); color: #fff; font-size: 14px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+        .preview-item .cover-btn:hover { background: var(--accent); }
+
+        /* Категорії */
+        .cat-chip-prev { display: flex; flex-wrap: wrap; gap: 8px; }
+        .cat-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 99px; background: var(--bg-section); border: 1px solid var(--border); font-weight: 700; font-size: 14px; }
+        .cat-chip.active { background: var(--text-main); color: var(--bg-container); border-color: var(--text-main); }
+        .cat-chip small { font-weight: 600; color: var(--text-faint); font-size: 12px; }
+        .cat-chip.active small { color: inherit; opacity: .7; }
+        .cat-chip.off { opacity: .5; }
+        .category-row.cat-row { display: grid; grid-template-columns: 32px 34px minmax(0, 1fr) auto auto auto; align-items: center; gap: 12px; padding: 10px 14px; }
+        .category-row.cat-row.is-off { opacity: .6; }
+        .cat-emo { font-size: 24px; text-align: center; }
+        .cat-name { font-weight: 700; overflow-wrap: anywhere; }
+        .cat-sub { font-size: 12px; color: var(--text-muted); }
+        .cat-slot { font-size: 12px; font-weight: 700; color: var(--accent-text); background: var(--bg-tab-active); border-radius: 99px; padding: 3px 10px; white-space: nowrap; }
+        .cat-slot.none { color: var(--text-faint); background: var(--bg-section); font-weight: 600; }
+        .cat-actions { display: flex; gap: 6px; }
+        .cat-actions .btn { padding: 7px 10px; }
+        .cat-show { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+        .category-row.drag-over { box-shadow: 0 0 0 3px rgba(42, 171, 238, .2); }
+        .category-drag-handle { touch-action: none; }
+
+        /* Філаменти */
+        .fl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 16px; }
+        .fl-card { display: flex; flex-direction: column; gap: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; min-width: 0; }
+        .fl-card.out { background: var(--bg-surface-alt); }
+        .fl-card.out .fl-top { opacity: .65; }
+        .fl-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .fl-dot { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--c, #ccc); box-shadow: inset 0 0 0 1px rgba(0,0,0,.14); }
+        .fl-dot.glow { box-shadow: inset 0 0 0 1px rgba(0,0,0,.14), 0 0 0 3px rgba(14, 159, 138, .25), 0 0 14px 2px var(--c, #7f7); }
+        .fl-name { font-weight: 800; overflow-wrap: anywhere; }
+        .fl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .fl-glow { font-weight: 700; color: #0E9F8A; background: rgba(14, 159, 138, .13); border-radius: 99px; padding: 2px 8px; }
+        .fl-bottom { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+        .fl-avail { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+        .fl-avail.out { color: var(--sale); }
+        .fl-avail:not(.out) { color: var(--green); }
+        .fl-bottom .btn { margin-left: auto; padding: 7px 12px; }
+        .hex-field { display: flex; gap: 10px; align-items: center; }
+        .hex-field input[type="color"] { flex: none; width: 48px; height: 42px; padding: 3px; border: 1px solid var(--border-input); border-radius: 10px; background: var(--bg-input); cursor: pointer; }
+        .hex-field input[type="text"] { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+        .fl-prev { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+        .fl-prev-box { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 12px; background: #fff; border: 1px solid var(--border); }
+        .fl-prev-box.dark { background: #0b1118; border-color: #0b1118; }
+        .fl-prev-box .fl-dot { width: 28px; height: 28px; }
+        .fl-prev-box .fl-dot:nth-child(2) { width: 36px; height: 36px; }
+        .fl-prev-box .fl-dot:nth-child(3) { width: 44px; height: 44px; }
+        .fl-prev-box.dark .fl-dot.glow { box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 0 16px 4px var(--c, #7f7); }
+        .fl-prev-cap { font-size: 12px; color: var(--text-muted); width: 100%; }
+
+        @media (max-width: 900px) {
+            .modal .modal-content.dr, .modal .modal-content.dr.dr-wide { width: 100%; }
+            .dr-head { padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top)); }
+            .dr-body { padding: 12px 12px; }
+            .dr-foot { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); gap: 8px; }
+            .dr-foot .btn { padding: 10px 12px; }
+            .dr-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+            .dr-preview { position: static; order: -1; margin-bottom: 14px; padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; }
+            .dr-prev-title { margin-bottom: 8px; }
+            .pv-card { flex-direction: row; max-width: none; align-items: stretch; }
+            .pv-thumb { width: 84px; flex: none; aspect-ratio: auto; min-height: 84px; }
+            .pv-thumb .pv-emo { font-size: 34px; }
+            .pv-fav { display: none; }
+            .pv-info { flex: 1; }
+            .pv-name { min-height: 0; }
+            .pv-foot { min-height: 0; padding-top: 2px; }
+            .pv-add { width: 30px; height: 30px; font-size: 18px; border-radius: 9px; }
+            .pv-meta { margin-top: 8px; }
+            .dr-row { grid-template-columns: 1fr; gap: 0; }
+            .dr-row.keep-2 { grid-template-columns: 1fr 1fr; gap: 12px; }
+            .dr-dirty { font-size: 12px; }
+            .category-row.cat-row { grid-template-columns: 30px 28px minmax(0, 1fr); row-gap: 10px; }
+            .category-row.cat-row .cat-slot { grid-column: 1 / 3; grid-row: 2; justify-self: start; }
+            .category-row.cat-row .cat-show { grid-column: 3; grid-row: 2; justify-self: end; }
+            .category-row.cat-row .cat-actions { grid-column: 1 / -1; grid-row: 3; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+            .category-row.cat-row .cat-actions .btn { min-height: 38px; padding: 6px; }
+            .fl-grid { grid-template-columns: minmax(0, 1fr); }
+        }
+        @media (max-width: 420px) {
+            .dr-dirty { display: none; }
+            .dr-dirty.on { display: block; flex: 1; }
+            .dr-foot .btn { flex: 1; }
+            .dr-del { flex: none !important; }
+            .dr-del-t { display: none; }
+            .dr-foot .btn { min-width: 0; padding: 10px 8px; }
+        }
+        @media (prefers-reduced-motion: reduce) { .dr-body { scroll-behavior: auto; } }
     </style>
 </head>
 <body>
@@ -2604,9 +2760,9 @@
 
             <section id="categoriesPage" class="page-section">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-                    <h2 style="font-size:20px;">🗂️ Керування категоріями</h2>
-                    <button class="btn btn-primary" type="button" onclick="openCategoryModal()">➕ Додати категорію</button>
+                    <h2 style="font-size:20px;">🗂️ Категорії</h2>
                 </div>
+                <p class="pt-count" style="margin-top:8px;">Перетягни ⋮⋮, щоб змінити порядок — він діє і в магазині. Вимкнену категорію покупці не бачать.</p>
                 <div id="categoriesList" style="margin-top:16px; display:grid; gap:12px;"></div>
                 <div style="margin-top: 20px; border-top: 1px dashed var(--border); padding-top: 16px;">
                     <h3 style="font-size:16px; margin-bottom: 10px;">⚡ Швидкі категорії (сторінка "Товари")</h3>
@@ -2620,9 +2776,10 @@
 
             <section id="filamentsPage" class="page-section">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-                    <h2 style="font-size:20px;">🎨 Керування філаментами</h2>
+                    <h2 style="font-size:20px;">🎨 Філаменти</h2>
                 </div>
-                <div id="filamentsList" style="margin-top:16px; display:grid; gap:12px;"></div>
+                <p class="pt-count" id="filamentsSummary" style="margin-top:8px;"></p>
+                <div id="filamentsList" class="fl-grid"></div>
             </section>
 
             <section id="couponsPage" class="page-section">
@@ -2700,145 +2857,187 @@
     </div>
 
     <div id="modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <span id="modalTitle">➕ Додати новий товар</span>
-                <button class="btn btn-secondary" onclick="closeModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+        <div class="modal-content dr dr-wide">
+            <div class="dr-head">
+                <span id="modalTitle">➕ Новий товар</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closeModal()" aria-label="Закрити">✕</button>
             </div>
-            <form id="productForm">
-                <div class="form-group required">
-                    <label>Назва товару</label>
-                    <input type="text" name="name" required>
-                    <div class="form-error">Назва вимагається</div>
-                </div>
+            <form id="productForm" class="dr-form">
+                <div class="dr-body">
+                    <div class="dr-grid">
+                        <div class="dr-main">
+                            <section class="dr-sec" aria-labelledby="secBasic">
+                                <h3 id="secBasic">Основне</h3>
+                                <div class="form-group required">
+                                    <label>Назва товару</label>
+                                    <input type="text" name="name" required>
+                                    <div class="form-error">Назва вимагається</div>
+                                </div>
 
-                <div class="form-group required">
-                    <label>Категорія</label>
-                    <select name="cat" id="productCategorySelect" required onchange="updateCategoryFields()">
-                        <option value="">Вибрати категорію...</option>
-                    </select>
-                    <div class="form-error">Категорія вимагається</div>
-                </div>
+                                <div class="dr-row">
+                                    <div class="form-group required">
+                                        <label>Категорія</label>
+                                        <select name="cat" id="productCategorySelect" required onchange="updateCategoryFields()">
+                                            <option value="">Вибрати категорію...</option>
+                                        </select>
+                                        <div class="form-error">Категорія вимагається</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Статус</label>
+                                        <select name="status" id="productStatusSelect">
+                                            <option value="active">Активний — у магазині</option>
+                                            <option value="hidden">Прихований</option>
+                                            <option value="archive">В архіві</option>
+                                        </select>
+                                    </div>
+                                </div>
 
-                <div class="form-group required emoji-field-group">
-                    <label>Emoji</label>
-                    <div class="emoji-field">
-                        <input type="text" name="emoji" value="📦" required readonly class="emoji-input" autocomplete="off">
-                        <button type="button" class="emoji-trigger" aria-label="Обрати emoji">😀</button>
-                    </div>
-                    <div class="form-hint">Натисніть поле, щоб обрати emoji</div>
-                    <div class="form-error">Оберіть один emoji</div>
-                </div>
+                                <div class="form-group required emoji-field-group" id="productEmojiGroup">
+                                    <label>Emoji</label>
+                                    <div class="emoji-field">
+                                        <input type="text" name="emoji" value="📦" required readonly class="emoji-input" autocomplete="off">
+                                        <button type="button" class="emoji-trigger" aria-label="Обрати emoji">😀</button>
+                                    </div>
+                                    <div class="form-hint">Показується замість фото. Коли додаєш фото, поле ховається.</div>
+                                    <div class="form-error">Оберіть один emoji</div>
+                                </div>
+                            </section>
 
-                <div class="form-group">
-                    <label class="checkbox-group" style="display:block;">
-                        <label><input type="checkbox" name="contractPrice" id="contractPriceToggle" onchange="toggleContractPriceFields()"> 💬 Договірна ціна</label>
-                    </label>
-                    <div class="contract-hint" id="contractPriceHint" style="display:none;">Ціна не показується покупцю. Встановлюється в замовленні після узгодження.</div>
-                </div>
+                            <section class="dr-sec" aria-labelledby="secPrice">
+                                <h3 id="secPrice">Ціна</h3>
+                                <div class="form-group">
+                                    <label class="checkbox-group" style="display:block;">
+                                        <label><input type="checkbox" name="contractPrice" id="contractPriceToggle" onchange="toggleContractPriceFields()"> 💬 Договірна ціна</label>
+                                    </label>
+                                    <div class="contract-hint" id="contractPriceHint" style="display:none;">Ціна не показується покупцю. Встановлюється в замовленні після узгодження.</div>
+                                </div>
 
-                <div id="priceFieldsGroup" class="price-fields-group">
-                <div class="form-group required">
-                    <label>Ціна (₴)</label>
-                    <input type="number" name="price" required min="0" step="1">
-                    <div class="form-error">Ціна вимагається (мінімум 0)</div>
-                </div>
+                                <div id="priceFieldsGroup" class="price-fields-group">
+                                    <div class="dr-row">
+                                        <div class="form-group required">
+                                            <label>Ціна (₴)</label>
+                                            <input type="number" name="price" required min="0" step="1" inputmode="numeric">
+                                            <div class="form-error">Ціна вимагається (мінімум 0)</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Стара ціна (₴) — для акцій</label>
+                                            <input type="number" name="oldPrice" min="0" step="1" inputmode="numeric">
+                                            <div class="form-error">Акційна ціна має бути нижчою за стару (оригінальну) ціну</div>
+                                        </div>
+                                    </div>
+                                    <div id="priceCalc" class="dr-calc" aria-live="polite"></div>
+                                </div>
+                            </section>
 
-                <div class="form-group">
-                    <label>Стара ціна (₴) - для акцій</label>
-                    <input type="number" name="oldPrice" min="0" step="1">
-                    <div class="form-error">Акційна ціна має бути нижчою за стару (оригінальну) ціну</div>
-                </div>
-                </div>
+                            <section class="dr-sec" aria-labelledby="secText">
+                                <h3 id="secText">Опис</h3>
+                                <div class="form-group required">
+                                    <label>Короткий рядок (під назвою)</label>
+                                    <input type="text" name="mat" placeholder="Напр.: PLA · колір на вибір" required>
+                                    <div class="form-error">Короткий рядок вимагається</div>
+                                </div>
 
-                <div class="form-group required">
-                    <label>Короткий рядок (під назвою)</label>
-                    <input type="text" name="mat" placeholder="Напр.: PLA · колір на вибір" required>
-                    <div class="form-error">Короткий рядок вимагається</div>
-                </div>
+                                <div class="form-group">
+                                    <label>Опис (необовʼязково)</label>
+                                    <textarea name="description" rows="4" maxlength="3000" placeholder="Кілька абзаців про товар: як користуватись, розміри, для кого."></textarea>
+                                    <div class="form-hint">У магазині довгий опис згортається до 3 рядків з кнопкою «Читати повністю». Абзаци зберігаються.</div>
+                                </div>
 
-                <div class="form-group">
-                    <label>Опис (необовʼязково)</label>
-                    <textarea name="description" rows="4" maxlength="3000" placeholder="Кілька абзаців про товар: як користуватись, розміри, для кого."></textarea>
-                    <div class="form-hint">У магазині довгий опис згортається до 3 рядків з кнопкою «Читати повністю». Абзаци зберігаються.</div>
-                </div>
+                                <div class="form-group">
+                                    <label>Примітка (необовʼязково)</label>
+                                    <input type="text" name="note" maxlength="300" placeholder="Напр.: Друкую під замовлення — відтінок може трохи відрізнятися від фото">
+                                    <div class="form-hint">Показується помітною жовтою плашкою ⓘ у картці товару.</div>
+                                </div>
+                            </section>
 
-                <div class="form-group">
-                    <label>Примітка (необовʼязково)</label>
-                    <input type="text" name="note" maxlength="300" placeholder="Напр.: Друкую під замовлення — відтінок може трохи відрізнятися від фото">
-                    <div class="form-hint">Показується помітною жовтою плашкою ⓘ у картці товару.</div>
-                </div>
+                            <section class="dr-sec" aria-labelledby="secMedia">
+                                <h3 id="secMedia">Фото і відео</h3>
+                                <div class="form-group">
+                                    <div class="drag-drop" id="dragDrop">
+                                        <div class="drag-drop-text">📸 Перетягни фото сюди або натисни для вибору</div>
+                                        <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
+                                    </div>
+                                    <div class="photo-url-row">
+                                        <input type="url" id="photoUrlInput" placeholder="Посилання на GIF/WebP (для анімації)">
+                                        <button type="button" id="photoUrlBtn" onclick="uploadPhotoFromUrl()">Завантажити URL</button>
+                                    </div>
+                                    <div class="photo-url-hint">Ctrl+V з браузера вставляє лише перший кадр. Для анімації — завантаж файл або встав посилання.</div>
+                                    <div class="photo-preview" id="photoPreview"></div>
+                                    <div class="form-hint" id="photoOrderHint" style="display:none;">Перше фото — обкладинка. Перетягни фото, щоб змінити порядок, або натисни ★.</div>
+                                </div>
 
-                <div class="form-group">
-                    <label>Посилання на STL файл (для адміна)</label>
-                    <input type="url" name="stlLink" placeholder="https://example.com/file.stl">
-                </div>
+                                <div class="form-group">
+                                    <label>Відео (необовʼязково)</label>
+                                    <div class="photo-url-row">
+                                        <input type="url" name="video" id="videoUrlInput" placeholder="https://… — або завантаж файл">
+                                        <button type="button" id="videoUploadBtn" onclick="document.getElementById('videoFileInput').click()">Завантажити</button>
+                                    </div>
+                                    <input type="file" id="videoFileInput" accept="video/mp4,video/quicktime,video/webm" style="display: none;" onchange="uploadProductVideo(this.files[0]); this.value = ''">
+                                    <div class="photo-url-hint">MP4, MOV або WebM до 25 МБ. У галереї товару — останнім слайдом; магазин віддає легкий mp4.</div>
+                                </div>
+                            </section>
 
-                <div id="standardFields">
-                    <div class="form-group">
-                        <label>Опції товару</label>
-                        <div class="checkbox-group">
-                            <label><input type="checkbox" name="hot"> 🔥 Гарячий товар (популярний)</label>
-                            <label><input type="checkbox" name="pinned"> 📌 Закріплений товар (слайдер на головній)</label>
-                            <label><input type="checkbox" name="gift"> 🎁 Може бути подарунком (до 100₴)</label>
-                            <label><input type="checkbox" name="filamentChoice" checked onchange="toggleFilamentChoiceFields()"> 🎨 Дозволити вибір кольору філаменту</label>
-                            <div id="filamentChoiceSubmenu" class="checkbox-nested is-visible">
-                                <label><input type="checkbox" name="luminousFilamentChoice"> 🌙 Додати кольори, що світяться вночі</label>
-                            </div>
+                            <section class="dr-sec" aria-labelledby="secOptions">
+                                <h3 id="secOptions">Опції</h3>
+                                <div id="standardFields">
+                                    <div class="checkbox-group">
+                                        <label><input type="checkbox" name="hot"> 🔥 Гарячий товар (популярний)</label>
+                                        <label><input type="checkbox" name="pinned"> 📌 Закріплений товар (слайдер на головній)</label>
+                                        <label><input type="checkbox" name="gift"> 🎁 Може бути подарунком (до 100₴)</label>
+                                        <label><input type="checkbox" name="filamentChoice" checked onchange="toggleFilamentChoiceFields()"> 🎨 Дозволити вибір кольору філаменту</label>
+                                        <div id="filamentChoiceSubmenu" class="checkbox-nested is-visible">
+                                            <label><input type="checkbox" name="luminousFilamentChoice"> 🌙 Додати кольори, що світяться вночі</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="customFields" style="display: none;">
+                                    <div class="form-group">
+                                        <label>Поле для вводу клієнтом</label>
+                                        <input type="text" name="custom_fields" maxlength="60" placeholder="Наприклад: Номер автомобіля">
+                                        <div class="form-hint">Підпис поля персоналізації. Поки покупець його не заповнить, товар не додається в кошик.</div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="form-group">
+                                            <label>Максимум символів</label>
+                                            <input type="number" name="pers_max" min="1" max="200" step="1" placeholder="40">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Приклад у полі</label>
+                                            <input type="text" name="pers_placeholder" maxlength="60" placeholder="Напр.: AA 1234 BB">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Підказка під полем</label>
+                                        <input type="text" name="pers_hint" maxlength="200" placeholder="Напр.: Кирилиця чи латиниця. Перевірю написання перед друком.">
+                                    </div>
+                                    <div class="form-group">
+                                        <div class="checkbox-group">
+                                            <label><input type="checkbox" name="pers_upper"> 🔠 Великими літерами (номер авто)</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec" aria-labelledby="secInternal">
+                                <h3 id="secInternal">Внутрішнє <span class="dr-badge">видно лише адміну</span></h3>
+                                <div class="form-group">
+                                    <label>Посилання на STL файл</label>
+                                    <input type="url" name="stlLink" placeholder="https://example.com/file.stl">
+                                    <div class="form-hint">Покупці це посилання не бачать — його немає в публічному API.</div>
+                                </div>
+                            </section>
                         </div>
+
+                        <aside class="dr-preview" aria-label="Так виглядає в магазині">
+                            <div class="dr-prev-title">Так виглядає в магазині</div>
+                            <div id="productPreview"></div>
+                            <div id="productPreviewMeta" class="pv-meta"></div>
+                        </aside>
                     </div>
                 </div>
-
-                <div id="customFields" style="display: none;">
-                    <div class="form-group">
-                        <label>Поле для вводу клієнтом</label>
-                        <input type="text" name="custom_fields" maxlength="60" placeholder="Наприклад: Номер автомобіля">
-                        <div class="form-hint">Підпис поля персоналізації. Поки покупець його не заповнить, товар не додається в кошик.</div>
-                    </div>
-                    <div class="form-group">
-                        <label>Максимум символів</label>
-                        <input type="number" name="pers_max" min="1" max="200" step="1" placeholder="40">
-                    </div>
-                    <div class="form-group">
-                        <label>Підказка під полем</label>
-                        <input type="text" name="pers_hint" maxlength="200" placeholder="Напр.: Кирилиця чи латиниця. Перевірю написання перед друком.">
-                    </div>
-                    <div class="form-group">
-                        <label>Приклад у полі</label>
-                        <input type="text" name="pers_placeholder" maxlength="60" placeholder="Напр.: AA 1234 BB">
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <label><input type="checkbox" name="pers_upper"> 🔠 Великими літерами (номер авто)</label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Фото товару</label>
-                    <div class="drag-drop" id="dragDrop">
-                        <div class="drag-drop-text">📸 Перетягни фото сюди або натисни для вибору</div>
-                        <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
-                    </div>
-                    <div class="photo-url-row">
-                        <input type="url" id="photoUrlInput" placeholder="Посилання на GIF/WebP (для анімації)">
-                        <button type="button" id="photoUrlBtn" onclick="uploadPhotoFromUrl()">Завантажити URL</button>
-                    </div>
-                    <div class="photo-url-hint">Ctrl+V з браузера вставляє лише перший кадр. Для анімації — завантаж файл або встав посилання.</div>
-                    <div class="photo-preview" id="photoPreview"></div>
-                </div>
-
-                <div class="form-group">
-                    <label>Відео (необовʼязково)</label>
-                    <div class="photo-url-row">
-                        <input type="url" name="video" id="videoUrlInput" placeholder="https://… — або завантаж файл">
-                        <button type="button" id="videoUploadBtn" onclick="document.getElementById('videoFileInput').click()">Завантажити</button>
-                    </div>
-                    <input type="file" id="videoFileInput" accept="video/mp4,video/quicktime,video/webm" style="display: none;" onchange="uploadProductVideo(this.files[0]); this.value = ''">
-                    <div class="photo-url-hint">MP4, MOV або WebM до 25 МБ. У галереї товару — останнім слайдом; магазин віддає легкий mp4.</div>
-                </div>
-
-                <div class="form-buttons">
+                <div class="dr-foot">
+                    <span id="productDirty" class="dr-dirty" role="status">Без змін</span>
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Скасувати</button>
                     <button type="submit" class="btn btn-primary">✅ Зберегти товар</button>
                 </div>
@@ -2856,36 +3055,69 @@
     </div>
 
     <div id="categoryModal" class="modal">
-        <div class="modal-content" style="max-width: 520px;">
-            <div class="modal-header">
-                <span id="categoryModalTitle">➕ Додати категорію</span>
-                <button class="btn btn-secondary" onclick="closeCategoryModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+        <div class="modal-content dr">
+            <div class="dr-head">
+                <span id="categoryModalTitle">➕ Нова категорія</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closeCategoryModal()" aria-label="Закрити">✕</button>
             </div>
-            <form id="categoryForm">
-                <div class="form-group required">
-                    <label>ID категорії</label>
-                    <input type="text" name="id" placeholder="Напр.: keychains" required>
-                    <div class="form-error">ID обов'язковий</div>
+            <form id="categoryForm" class="dr-form">
+                <div class="dr-body">
+                    <section class="dr-sec">
+                        <h3>Категорія</h3>
+                        <div class="form-group required">
+                            <label>Назва категорії</label>
+                            <input type="text" name="name" placeholder="Напр.: Брелки" maxlength="60" required autocomplete="off">
+                            <div class="form-error">Назва обов'язкова</div>
+                        </div>
+                        <div class="form-group required">
+                            <label>ID категорії</label>
+                            <input type="text" name="id" placeholder="Створюється з назви" maxlength="32" pattern="[a-z0-9][a-z0-9\-]*" required autocomplete="off" spellcheck="false">
+                            <div class="form-hint" id="catIdHint">Створюється з назви, після збереження не змінюється.</div>
+                            <div class="form-error">ID обов'язковий</div>
+                        </div>
+                        <div class="form-group required emoji-field-group">
+                            <label>Emoji</label>
+                            <div class="emoji-field">
+                                <input type="text" name="emoji" value="📦" required readonly class="emoji-input" autocomplete="off">
+                                <button type="button" class="emoji-trigger" aria-label="Обрати emoji">😀</button>
+                            </div>
+                            <div class="form-hint">Натисніть поле, щоб обрати emoji</div>
+                            <div class="form-error">Оберіть один emoji</div>
+                        </div>
+                    </section>
+
+                    <section class="dr-sec">
+                        <h3>На головній і в каталозі</h3>
+                        <div class="form-group">
+                            <label>Слот у швидких категоріях на головній</label>
+                            <select name="quickSlot">
+                                <option value="">Не показувати окремо</option>
+                                <option value="1">Слот 1</option>
+                                <option value="2">Слот 2</option>
+                                <option value="3">Слот 3</option>
+                                <option value="4">Слот 4</option>
+                            </select>
+                            <div class="form-hint" id="catSlotHint">Чотири слоти під пошуком. Якщо слот зайнятий, інша категорія його втратить.</div>
+                        </div>
+                        <div class="form-group">
+                            <div class="toggle-row">
+                                <span class="toggle-row-label">Показувати в магазині</span>
+                                <label class="switch" title="Показувати категорію покупцям">
+                                    <input type="checkbox" name="active" checked>
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-hint">Вимкнена категорія зникає з магазину, товари в ній лишаються.</div>
+                        </div>
+                    </section>
+
+                    <section class="dr-sec">
+                        <h3>Так виглядає в магазині</h3>
+                        <div id="categoryChipPreview" class="cat-chip-prev"></div>
+                    </section>
                 </div>
-                <div class="form-group required">
-                    <label>Назва категорії</label>
-                    <input type="text" name="name" placeholder="Напр.: Брелки" required>
-                    <div class="form-error">Назва обов'язкова</div>
-                </div>
-                <div class="form-group required emoji-field-group">
-                    <label>Emoji</label>
-                    <div class="emoji-field">
-                        <input type="text" name="emoji" value="📦" required readonly class="emoji-input" autocomplete="off">
-                        <button type="button" class="emoji-trigger" aria-label="Обрати emoji">😀</button>
-                    </div>
-                    <div class="form-hint">Натисніть поле, щоб обрати emoji</div>
-                    <div class="form-error">Оберіть один emoji</div>
-                </div>
-                <div class="form-group">
-                    <label>Порядок відображення</label>
-                    <input type="number" name="order" min="1" step="1">
-                </div>
-                <div class="form-buttons">
+                <div class="dr-foot">
+                    <span id="categoryDirty" class="dr-dirty" role="status">Без змін</span>
                     <button type="button" class="btn btn-secondary" onclick="closeCategoryModal()">Скасувати</button>
                     <button type="submit" class="btn btn-primary" id="categorySubmitBtn">✅ Зберегти категорію</button>
                 </div>
@@ -2894,38 +3126,68 @@
     </div>
 
     <div id="filamentModal" class="modal">
-        <div class="modal-content" style="max-width: 520px;">
-            <div class="modal-header">
-                <span id="filamentModalTitle">✏️ Редагувати філамент</span>
-                <button class="btn btn-secondary" onclick="closeFilamentModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+        <div class="modal-content dr">
+            <div class="dr-head">
+                <span id="filamentModalTitle">➕ Новий колір</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closeFilamentModal()" aria-label="Закрити">✕</button>
             </div>
-            <form id="filamentForm" action="javascript:void(0);" onsubmit="return false;">
-                <div class="form-group">
-                    <label>ID</label>
-                    <input type="text" name="id" readonly>
+            <form id="filamentForm" class="dr-form">
+                <div class="dr-body">
+                    <section class="dr-sec">
+                        <h3>Колір</h3>
+                        <div class="form-group required">
+                            <label>Назва кольору</label>
+                            <input type="text" name="name" placeholder="Напр.: Бірюзовий" maxlength="60" required autocomplete="off">
+                            <div class="form-error">Назва обов'язкова</div>
+                        </div>
+                        <div class="form-group required">
+                            <label>HEX колір</label>
+                            <div class="hex-field">
+                                <input type="color" name="hexPicker" value="#cccccc" aria-label="Обрати колір">
+                                <input type="text" name="hex" placeholder="#ffffff" maxlength="7" required autocomplete="off" spellcheck="false">
+                            </div>
+                            <div class="form-error">HEX у форматі #RGB або #RRGGBB</div>
+                        </div>
+                        <div class="form-group">
+                            <label>ID</label>
+                            <input type="text" name="id" readonly placeholder="Створюється з назви" aria-readonly="true">
+                        </div>
+                    </section>
+
+                    <section class="dr-sec">
+                        <h3>Властивості</h3>
+                        <div class="form-group">
+                            <div class="toggle-row">
+                                <span class="toggle-row-label">🌙 Світиться в темряві</span>
+                                <label class="switch" title="Колір світиться в темряві">
+                                    <input type="checkbox" name="glow">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-hint">Світні кольори пропонуються лише товарам з опцією «кольори, що світяться вночі».</div>
+                        </div>
+                        <div class="form-group">
+                            <div class="toggle-row">
+                                <span class="toggle-row-label" id="filamentAvailLabel">В наявності</span>
+                                <label class="switch" title="В наявності / Закінчився">
+                                    <input type="checkbox" name="available" checked>
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-hint">Колір, що закінчився, покупці не можуть обрати.</div>
+                        </div>
+                    </section>
+
+                    <section class="dr-sec">
+                        <h3>Так виглядає в магазині</h3>
+                        <div id="filamentPreview" class="fl-prev"></div>
+                    </section>
                 </div>
-                <div class="form-group required">
-                    <label>Назва філаменту</label>
-                    <input type="text" name="name" required>
-                    <div class="form-error">Назва обов'язкова</div>
-                </div>
-                <div class="form-group required">
-                    <label>HEX колір</label>
-                    <input type="text" name="hex" placeholder="#ffffff" required>
-                    <div class="form-error">HEX у форматі #RGB або #RRGGBB</div>
-                </div>
-                <div class="form-group">
-                    <div class="toggle-row">
-                        <span class="toggle-row-label">Доступність у каталозі</span>
-                        <label class="switch" title="Увімкнути/вимкнути доступність філаменту">
-                            <input type="checkbox" name="available">
-                            <span class="switch-slider"></span>
-                        </label>
-                    </div>
-                </div>
-                <div class="form-buttons">
+                <div class="dr-foot">
+                    <button type="button" class="btn btn-danger dr-del" id="filamentDeleteBtn" onclick="deleteFilament()" style="display:none;" aria-label="Видалити колір">🗑️<span class="dr-del-t"> Видалити</span></button>
+                    <span id="filamentDirty" class="dr-dirty" role="status">Без змін</span>
                     <button type="button" class="btn btn-secondary" onclick="closeFilamentModal()">Скасувати</button>
-                    <button type="submit" class="btn btn-primary" id="filamentSubmitBtn">✅ Зберегти філамент</button>
+                    <button type="submit" class="btn btn-primary" id="filamentSubmitBtn">✅ Зберегти колір</button>
                 </div>
             </form>
         </div>
@@ -3249,6 +3511,7 @@
         let currentPage = 'products';
         let uploadedPhotos = [];
         let productFormSnapshot = null;
+        let currentProductStatus = 'active';
         let allProducts = [];
         let activeFlags = new Set();
         let allOrders = [];
@@ -3449,6 +3712,10 @@
                 btn.textContent = '➕ Додати категорію';
                 btn.onclick = () => openCategoryModal();
                 btn.style.display = 'inline-flex';
+            } else if (currentPage === 'filaments') {
+                btn.textContent = '➕ Додати колір';
+                btn.onclick = () => openFilamentModal();
+                btn.style.display = 'inline-flex';
             } else if (currentPage === 'coupons') {
                 btn.textContent = '➕ Додати купон';
                 btn.onclick = () => openCouponModal();
@@ -3547,7 +3814,7 @@
             const currentFilter = document.getElementById('categoryFilter').value;
             menu.innerHTML = `
                 <button class="filter-option ${currentFilter === '' ? 'active' : ''}" data-value="" data-label="📦 Всі категорії" type="button" onclick="selectCategory('')"><span>📦 Всі категорії</span><span class="filter-check">✓</span></button>
-                ${allCategories.map(cat => `
+                ${activeCategories().map(cat => `
                     <button class="filter-option ${currentFilter === cat.id ? 'active' : ''}" data-value="${escapeAttr(cat.id)}" data-label="${escapeAttr(cat.emoji + ' ' + cat.name)}" type="button" onclick="selectCategory('${escapeAttr(cat.id)}')">
                         <span>${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}</span><span class="filter-check">✓</span>
                     </button>
@@ -3555,43 +3822,90 @@
             `;
         }
 
-        function renderCategorySelectOptions() {
+        function renderCategorySelectOptions(includeId = '') {
             const select = document.getElementById('productCategorySelect');
-            const currentValue = select.value;
-            select.innerHTML = '<option value="">Вибрати категорію...</option>' + allCategories.map(cat => `<option value="${escapeAttr(cat.id)}">${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}</option>`).join('');
+            const currentValue = select.value || includeId;
+            // Вимкнені категорії не пропонуємо, окрім тієї, в якій товар уже лежить
+            select.innerHTML = '<option value="">Вибрати категорію...</option>' + allCategories
+                .filter(cat => cat.active !== false || cat.id === includeId)
+                .map(cat => `<option value="${escapeAttr(cat.id)}">${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}${cat.active === false ? ' (вимкнена)' : ''}</option>`).join('');
             if (allCategories.some(cat => cat.id === currentValue)) {
                 select.value = currentValue;
             }
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // КАТЕГОРІЇ: список з порядком перетягуванням, показ/приховування, слот
+        // ═══════════════════════════════════════════════════════════
+
+        function activeCategories() {
+            return allCategories.filter(c => c.active !== false);
+        }
+
+        function categoryProductCount(categoryId) {
+            return adminProducts.reduce((n, p) => n + (p.cat === categoryId && productStatusOf(p) !== 'archive' ? 1 : 0), 0);
+        }
+
+        function sortedCategoriesList() {
+            return [...allCategories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+        }
+
         function renderCategoriesManager() {
             const list = document.getElementById('categoriesList');
-            const productCountByCategory = allProducts.reduce((acc, p) => {
-                acc[p.cat] = (acc[p.cat] || 0) + 1;
-                return acc;
-            }, {});
-            const sortedCategories = [...allCategories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+            const sortedCategories = sortedCategoriesList();
 
             if (!sortedCategories.length) {
                 list.innerHTML = '<div style="padding: 16px; background: var(--bg-section); border-radius: 10px;">Категорій ще немає.</div>';
                 return;
             }
 
-            list.innerHTML = sortedCategories.map((cat, idx) => `
-                <div class="category-row" data-category-row="${escapeAttr(cat.id)}">
-                    <div class="category-drag-handle" title="Перетягни для зміни порядку" onpointerdown="startCategoryDrag(event, '${escapeAttr(cat.id)}')">⋮⋮</div>
-                    <div>
-                        <div style="font-weight:700;">${escapeHtml(cat.emoji)} ${escapeHtml(cat.name)}</div>
-                        <div style="font-size:12px; color:var(--text-muted);">ID: ${escapeHtml(cat.id)} · Товарів: ${productCountByCategory[cat.id] || 0} · Порядок: ${cat.order ?? '—'}</div>
+            list.innerHTML = sortedCategories.map((cat, idx) => {
+                const n = categoryProductCount(cat.id);
+                const slot = Number.isInteger(cat.quickSlot)
+                    ? `<span class="cat-slot" title="Місце у швидких категоріях на головній">Слот ${cat.quickSlot}</span>`
+                    : '<span class="cat-slot none">Без слота</span>';
+                const id = escapeAttr(cat.id);
+                return `
+                <div class="category-row cat-row${cat.active === false ? ' is-off' : ''}" data-category-row="${id}">
+                    <div class="category-drag-handle" title="Перетягни для зміни порядку" role="button" aria-label="Перетягнути" onpointerdown="startCategoryDrag(event, '${id}')">⋮⋮</div>
+                    <div class="cat-emo">${escapeHtml(cat.emoji)}</div>
+                    <div style="min-width:0;">
+                        <div class="cat-name">${escapeHtml(cat.name)}</div>
+                        <div class="cat-sub">ID: ${escapeHtml(cat.id)} · ${n} ${pluralUa(n, 'товар', 'товари', 'товарів')}</div>
                     </div>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${escapeAttr(cat.id)}', -1)" style="padding:8px 10px;" ${idx === 0 ? 'disabled' : ''}>↑</button>
-                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${escapeAttr(cat.id)}', 1)" style="padding:8px 10px;" ${idx === sortedCategories.length - 1 ? 'disabled' : ''}>↓</button>
-                        <button class="btn btn-secondary" type="button" onclick="openCategoryModal('${escapeAttr(cat.id)}')" style="padding:8px 12px;">✏️</button>
-                        <button class="btn btn-danger" type="button" onclick="deleteCategory('${escapeAttr(cat.id)}')" style="padding:8px 12px;">🗑️</button>
+                    ${slot}
+                    <label class="cat-show" title="Показувати категорію в магазині">
+                        <span class="switch"><input type="checkbox" ${cat.active === false ? '' : 'checked'} onchange="toggleCategoryActive('${id}', this)"><span class="switch-slider"></span></span>
+                        <span>Показувати</span>
+                    </label>
+                    <div class="cat-actions">
+                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${id}', -1)" aria-label="Вище" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                        <button class="btn btn-secondary" type="button" onclick="moveCategoryInAllList('${id}', 1)" aria-label="Нижче" ${idx === sortedCategories.length - 1 ? 'disabled' : ''}>↓</button>
+                        <button class="btn btn-secondary" type="button" onclick="openCategoryModal('${id}')" aria-label="Редагувати">✏️</button>
+                        <button class="btn btn-danger" type="button" onclick="deleteCategory('${id}')" aria-label="Видалити">🗑️</button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
+        }
+
+        async function toggleCategoryActive(categoryId, input) {
+            const next = input.checked;
+            input.disabled = true;
+            try {
+                const res = await fetch(API_BASE + `/categories/${encodeURIComponent(categoryId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active: next })
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося змінити видимість');
+                showToast(next ? 'Категорію показано в магазині' : 'Категорію приховано з магазину', 'success');
+            } catch (e) {
+                input.checked = !next;
+                showToast(e.message || 'Помилка зміни видимості', 'error');
+            } finally {
+                await loadCategories();
+            }
         }
 
         function startCategoryDrag(event, categoryId) {
@@ -3601,6 +3915,7 @@
             row?.classList.add('dragging');
             window.addEventListener('pointermove', onCategoryDragMove);
             window.addEventListener('pointerup', onCategoryDragEnd, { once: true });
+            window.addEventListener('pointercancel', onCategoryDragEnd, { once: true });
         }
 
         function onCategoryDragMove(event) {
@@ -3623,70 +3938,44 @@
             categoryDragState = { draggingId: null, overId: null };
             if (!draggingId || !overId || draggingId === overId) return;
 
-            const sorted = [...allCategories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
-            const from = sorted.findIndex(c => c.id === draggingId);
-            const to = sorted.findIndex(c => c.id === overId);
+            const ids = sortedCategoriesList().map(c => c.id);
+            const from = ids.indexOf(draggingId);
+            const to = ids.indexOf(overId);
             if (from < 0 || to < 0 || from === to) return;
-
-            const reordered = [...sorted];
-            const [moved] = reordered.splice(from, 1);
-            reordered.splice(to, 0, moved);
-
-            try {
-                for (let i = 0; i < reordered.length; i++) {
-                    const cat = reordered[i];
-                    const nextOrder = i + 1;
-                    if (cat.order === nextOrder) continue;
-                    const res = await fetch(API_BASE + `/categories/${cat.id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Telegram-Init-Data': tgInitData
-                        },
-                        body: JSON.stringify({ order: nextOrder })
-                    });
-                    const result = await res.json();
-                    if (!res.ok || !result.ok) {
-                        throw new Error(result.error || `Не вдалося змінити порядок: ${cat.id}`);
-                    }
-                }
-                await loadCategories();
-                showToast('Порядок категорій оновлено ✅', 'success');
-            } catch (e) {
-                showToast(e.message || 'Помилка перетягування категорії', 'error');
-            }
+            const [moved] = ids.splice(from, 1);
+            ids.splice(to, 0, moved);
+            await applyCategoryOrder(ids);
         }
 
         async function moveCategoryInAllList(categoryId, direction) {
-            const sortedCategories = [...allCategories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
-            const index = sortedCategories.findIndex(cat => cat.id === categoryId);
-            const targetIndex = index + direction;
-            if (index < 0 || targetIndex < 0 || targetIndex >= sortedCategories.length) return;
+            const ids = sortedCategoriesList().map(c => c.id);
+            const index = ids.indexOf(categoryId);
+            const target = index + direction;
+            if (index < 0 || target < 0 || target >= ids.length) return;
+            [ids[index], ids[target]] = [ids[target], ids[index]];
+            await applyCategoryOrder(ids);
+        }
 
-            const source = sortedCategories[index];
-            const target = sortedCategories[targetIndex];
+        // Один запит замість N: PUT /api/categories/order. Список оновлюємо одразу, при помилці повертаємо з сервера.
+        async function applyCategoryOrder(ids) {
+            ids.forEach((id, i) => {
+                const cat = allCategories.find(c => c.id === id);
+                if (cat) cat.order = i + 1;
+            });
+            renderCategoriesManager();
             try {
-                const reqOpts = (order) => ({
+                const res = await fetch(API_BASE + '/categories/order', {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tgInitData
-                    },
-                    body: JSON.stringify({ order })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids })
                 });
-
-                const first = await fetch(API_BASE + `/categories/${source.id}`, reqOpts(target.order));
-                const firstResult = await first.json();
-                if (!first.ok || !firstResult.ok) throw new Error(firstResult.error || 'Не вдалося змінити порядок категорії');
-
-                const second = await fetch(API_BASE + `/categories/${target.id}`, reqOpts(source.order));
-                const secondResult = await second.json();
-                if (!second.ok || !secondResult.ok) throw new Error(secondResult.error || 'Не вдалося змінити порядок категорії');
-
-                await loadCategories();
-                showToast('Порядок категорій "Дивитися всі" оновлено ✅', 'success');
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося змінити порядок');
+                showToast('Порядок категорій збережено', 'success');
             } catch (e) {
                 showToast(e.message || 'Помилка зміни порядку категорій', 'error');
+            } finally {
+                await loadCategories();
             }
         }
 
@@ -3839,7 +4128,7 @@
 
         async function loadCategories() {
             try {
-                const res = await fetch(API_BASE + '/categories');
+                const res = await fetch(API_BASE + '/categories?includeInactive=true');
                 if (!res.ok) {
                     throw new Error(`Помилка категорій (${res.status})`);
                 }
@@ -3880,43 +4169,70 @@
             return /^#[0-9a-fA-F]{3,6}$/.test(String(hex || '')) ? hex : '#ccc';
         }
 
+        function isGlowFilamentClient(f) {
+            return typeof f?.glow === 'boolean' ? f.glow : String(f?.id || '').startsWith('luminous');
+        }
+
         function renderFilamentsManager() {
             const list = document.getElementById('filamentsList');
+            const summary = document.getElementById('filamentsSummary');
             if (!allFilaments.length) {
-                list.innerHTML = '<div style="padding: 16px; background: var(--bg-section); border-radius: 10px;">Філаменти не знайдені.</div>';
+                if (summary) summary.textContent = '';
+                list.innerHTML = '<div style="padding: 16px; background: var(--bg-section); border-radius: 10px; grid-column: 1 / -1;">Кольорів ще немає. Додай перший кнопкою «Колір».</div>';
                 return;
             }
+            const inStock = allFilaments.filter(f => f.available).length;
+            if (summary) summary.textContent = `${allFilaments.length} ${pluralUa(allFilaments.length, 'колір', 'кольори', 'кольорів')} · ${inStock} в наявності`;
 
-            const sortedFilaments = [...allFilaments].sort((a, b) => {
-                const aRank = a.available ? 0 : 1;
-                const bRank = b.available ? 0 : 1;
-                if (aRank !== bRank) return aRank - bRank;
-                return String(a.name || '').localeCompare(String(b.name || ''), 'uk');
-            });
-
-            list.innerHTML = sortedFilaments.map(f => {
-                const safeHex = safeHexColor(f.hex);
+            list.innerHTML = allFilaments.map(f => {
+                const hex = safeHexColor(f.hex);
+                const glow = isGlowFilamentClient(f);
+                const n = Number(f.used_by) || 0;
+                const id = escapeAttr(f.id);
                 return `
-                <div data-filament-id="${escapeAttr(f.id)}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${f.available ? '#d1fae5' : 'var(--border)'}; border-radius:12px; padding:14px 16px; background:${f.available ? 'var(--bg-card)' : 'var(--bg-surface-alt)'}; opacity:${f.available ? '1' : '0.7'};">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <span style="display:inline-block; width:20px; height:20px; border-radius:50%; border:1px solid var(--border-input); background:${safeHex}; box-shadow:${f.available ? '0 0 0 2px rgba(16,185,129,0.18)' : 'none'};"></span>
-                        <div>
-                            <div style="font-weight:700;">${escapeHtml(f.name)}</div>
-                            <div style="font-size:12px; color:var(--text-muted);">
-                                ID: ${escapeHtml(f.id)} · ${escapeHtml(safeHex)}
-                                ${String(f.id || '').startsWith('luminous') ? ' · 🌙 Світиться вночі' : ''}
+                <div class="fl-card${f.available ? '' : ' out'}" data-filament-id="${id}">
+                    <div class="fl-top">
+                        <span class="fl-dot${glow ? ' glow' : ''}" style="--c:${escapeAttr(hex)}"></span>
+                        <div style="min-width:0;">
+                            <div class="fl-name">${escapeHtml(f.name)}</div>
+                            <div class="fl-meta">
+                                <span>${escapeHtml(hex.toUpperCase())}</span>
+                                ${glow ? '<span class="fl-glow">🌙 світиться</span>' : ''}
+                                <span>${n ? `у ${n} ${pluralUa(n, 'товарі', 'товарах', 'товарах')}` : 'ніде не пропонується'}</span>
                             </div>
                         </div>
                     </div>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-size:12px; font-weight:700; padding:6px 10px; border-radius:999px; background:${f.available ? '#d1fae5' : 'var(--border)'}; color:${f.available ? '#065f46' : 'var(--text-toggle)'};">
-                            ${f.available ? 'В наявності' : 'Відсутній'}
-                        </span>
-                    <button class="btn btn-secondary" type="button" onclick="openFilamentModal('${escapeAttr(f.id)}')" style="padding:8px 12px;">✏️ Редагувати</button>
+                    <div class="fl-bottom">
+                        <label class="fl-avail${f.available ? '' : ' out'}" title="В наявності / Закінчився">
+                            <span class="switch"><input type="checkbox" ${f.available ? 'checked' : ''} onchange="toggleFilamentAvailable('${id}', this)"><span class="switch-slider"></span></span>
+                            <span>${f.available ? 'В наявності' : 'Закінчився'}</span>
+                        </label>
+                        <button class="btn btn-secondary" type="button" onclick="openFilamentModal('${id}')">✏️ Редагувати</button>
                     </div>
-                </div>
-            `;
+                </div>`;
             }).join('');
+        }
+
+        async function toggleFilamentAvailable(filamentId, input) {
+            const f = allFilaments.find(x => x.id === filamentId);
+            const next = input.checked;
+            input.disabled = true;
+            try {
+                const res = await fetch(API_BASE + `/filaments/${encodeURIComponent(filamentId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ available: next })
+                });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok || !result.ok) throw new Error(result.error || `Не вдалося змінити наявність (${res.status})`);
+                if (f) f.available = next;
+                showToast(`${f?.name || 'Колір'}: ${next ? 'в наявності' : 'закінчився'}`, 'success');
+            } catch (e) {
+                input.checked = !next;
+                showToast(e.message || 'Помилка зміни наявності', 'error');
+            } finally {
+                renderFilamentsManager();
+            }
         }
 
         async function loadFilaments() {
@@ -5164,6 +5480,7 @@
                 video: form.video.value.trim(),
                 stlLink: form.stlLink.value.trim(),
                 photos: [...uploadedPhotos],
+                status: form.status.value,
             };
 
             if (state.cat === 'custom') {
@@ -5226,12 +5543,90 @@
             document.getElementById('productUnsavedConfirm').classList.remove('visible');
         }
 
+        // ─── Редактор товару: живе превʼю, розрахунок знижки, «Є незбережені зміни» ───
+
+        function updatePriceCalc() {
+            const form = document.getElementById('productForm');
+            const host = document.getElementById('priceCalc');
+            if (!host) return;
+            const price = parseInt(form.price.value, 10);
+            const old = parseInt(form.oldPrice.value, 10);
+            if (form.contractPrice.checked || !(old > 0) || !Number.isFinite(price)) {
+                host.innerHTML = '';
+                return;
+            }
+            host.innerHTML = price < old
+                ? `<span class="ok">−${Math.round((1 - price / old) * 100)}%</span> · покупець економить ${old - price} ₴`
+                : '<span class="bad">Стара ціна має бути вищою за нову</span>';
+        }
+
+        function renderProductPreview() {
+            const host = document.getElementById('productPreview');
+            const meta = document.getElementById('productPreviewMeta');
+            if (!host) return;
+            const s = getProductFormState();
+            const price = parseInt(s.price, 10);
+            const hasSale = !s.contractPrice && s.oldPrice > 0 && Number.isFinite(price) && price < s.oldPrice;
+            const pct = hasSale ? Math.round((1 - price / s.oldPrice) * 100) : 0;
+            const cover = uploadedPhotos[0];
+
+            const badges = [
+                pct ? `<span class="pv-pill sale">−${pct}%</span>` : '',
+                s.hot ? '<span class="pv-pill hit">Хіт</span>' : '',
+                s.luminousFilamentChoice ? '<span class="pv-pill glow">Світиться</span>' : '',
+            ].filter(Boolean).slice(0, 2).join('');
+
+            const priceHtml = s.contractPrice
+                ? '<span class="pv-contract">Ціна після узгодження</span>'
+                : `<div class="pv-price-row">${hasSale ? `<span class="pv-old">${s.oldPrice} ₴</span>` : ''}<span class="pv-price${hasSale ? ' sale' : ''}">${Number.isFinite(price) ? price : 0} ₴</span></div>`;
+
+            host.innerHTML = `
+                <article class="pv-card">
+                    <div class="pv-thumb">
+                        ${cover ? `<img src="${escapeAttr(cover)}" alt="">` : `<span class="pv-emo">${escapeHtml(s.emoji || '📦')}</span>`}
+                        <div class="pv-badges">${badges}</div>
+                        <span class="pv-fav"><svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg></span>
+                    </div>
+                    <div class="pv-info">
+                        <div class="pv-name${s.name ? '' : ' ph'}">${escapeHtml(s.name || 'Назва товару')}</div>
+                        <div class="pv-mat${s.mat ? '' : ' ph'}">${escapeHtml(s.mat || 'Короткий рядок')}</div>
+                        <div class="pv-foot">${priceHtml}<span class="pv-add" aria-hidden="true">+</span></div>
+                    </div>
+                </article>`;
+
+            if (meta) {
+                const catMeta = s.cat ? getCategoryMeta(s.cat) : null;
+                const chips = [];
+                if (s.status && s.status !== 'active') chips.push(`<span class="pv-chip warn">${s.status === 'hidden' ? 'Прихований: покупці не бачать' : 'В архіві: покупці не бачать'}</span>`);
+                if (catMeta) chips.push(`<span class="pv-chip">${escapeHtml(catMeta.emoji || '')} ${escapeHtml(catMeta.name)}</span>`);
+                if (s.cat === 'custom') {
+                    const label = personalizationLabel(s.custom_fields);
+                    if (label) chips.push(`<span class="pv-chip">✍️ Покупець вводить: ${escapeHtml(label)}</span>`);
+                } else {
+                    if (s.filamentChoice) chips.push('<span class="pv-chip">🎨 Вибір кольору</span>');
+                    if (s.luminousFilamentChoice) chips.push('<span class="pv-chip">🌙 Світні кольори</span>');
+                    if (s.pinned) chips.push('<span class="pv-chip">📌 Закріплений</span>');
+                    if (s.gift) chips.push('<span class="pv-chip">🎁 Може бути подарунком</span>');
+                }
+                if (s.video) chips.push('<span class="pv-chip">🎬 Є відео</span>');
+                meta.innerHTML = chips.join('');
+            }
+        }
+
+        function onProductFormChange() {
+            updatePriceCalc();
+            renderProductPreview();
+            setDirtyUi('productDirty', hasProductFormChanges());
+        }
+
         function openAddModal() {
             currentProductId = null;
+            currentProductStatus = 'active';
             uploadedPhotos = [];
-            document.getElementById('modalTitle').textContent = '➕ Додати новий товар';
+            document.getElementById('modalTitle').textContent = '➕ Новий товар';
             const form = document.getElementById('productForm');
             form.reset();
+            form.status.value = 'active';
             renderCategorySelectOptions();
             
             // Очищаємо помилки валідації
@@ -5241,7 +5636,7 @@
                 if (input) input.classList.remove('error');
             });
             
-            document.getElementById('photoPreview').innerHTML = '';
+            updatePhotoPreview();
             updateCategoryFields();
             form.contractPrice.checked = false;
             toggleContractPriceFields();
@@ -5249,7 +5644,10 @@
             hideProductUnsavedConfirm();
             syncEmojiTrigger(form.emoji);
             captureProductFormSnapshot();
+            onProductFormChange();
             document.getElementById('modal').classList.add('active');
+            document.querySelector('#modal .dr-body').scrollTop = 0;
+            form.name.focus();
         }
 
         function closeModal(force = false) {
@@ -5267,10 +5665,85 @@
             productFormSnapshot = null;
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // ШУХЛЯДИ: категорія і колір (форма, превʼю, «Є незбережені зміни»)
+        // ═══════════════════════════════════════════════════════════
+
+        function formSnapshot(form) {
+            return JSON.stringify([...form.elements].filter(e => e.name).map(e => (e.type === 'checkbox' ? e.checked : e.value)));
+        }
+
+        function setDirtyUi(elementId, dirty) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            el.classList.toggle('on', dirty);
+            el.textContent = dirty ? 'Є незбережені зміни' : 'Без змін';
+        }
+
+        // Українська → латиниця (той самий принцип, що services/slugs.py); сервер усе одно перевіряє й робить ID унікальним
+        const UA_TRANSLIT = {
+            а: 'a', б: 'b', в: 'v', г: 'h', ґ: 'g', д: 'd', е: 'e', є: 'ie', ж: 'zh', з: 'z', и: 'y', і: 'i', ї: 'i', й: 'i',
+            к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch',
+            ш: 'sh', щ: 'shch', ь: '', ю: 'iu', я: 'ia', "'": '', '’': '', 'ʼ': '', ы: 'y', э: 'e', ё: 'io', ъ: ''
+        };
+        function slugifyUa(text, maxLen = 32) {
+            let out = '';
+            for (const ch of String(text || '').trim().toLowerCase()) {
+                if (Object.prototype.hasOwnProperty.call(UA_TRANSLIT, ch)) out += UA_TRANSLIT[ch];
+                else if (/[a-z0-9]/.test(ch)) out += ch;
+                else out += '-';
+            }
+            return out.replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, maxLen).replace(/-$/g, '');
+        }
+
+        let categoryFormSnapshot = null;
+        let categoryIdTouched = false;
+
+        function renderCategoryChipPreview() {
+            const form = document.getElementById('categoryForm');
+            const host = document.getElementById('categoryChipPreview');
+            if (!form || !host) return;
+            const name = form.name.value.trim() || 'Назва категорії';
+            const n = currentCategoryId ? categoryProductCount(currentCategoryId) : 0;
+            const off = !form.active.checked;
+            host.innerHTML = `
+                <span class="cat-chip active${off ? ' off' : ''}">${escapeHtml(form.emoji.value || '📦')} ${escapeHtml(name)} <small>${n}</small></span>
+                <span class="cat-chip${off ? ' off' : ''}">${escapeHtml(form.emoji.value || '📦')} ${escapeHtml(name)} <small>${n}</small></span>
+                ${off ? '<span class="pv-chip warn">Приховано: покупці не бачать</span>' : ''}`;
+        }
+
+        function updateCategorySlotHint() {
+            const form = document.getElementById('categoryForm');
+            const hint = document.getElementById('catSlotHint');
+            const slot = parseInt(form.quickSlot.value, 10);
+            const owner = Number.isInteger(slot) ? allCategories.find(c => c.quickSlot === slot && c.id !== currentCategoryId) : null;
+            hint.textContent = owner
+                ? `Слот ${slot} зараз у «${owner.name}» — вона його втратить.`
+                : 'Чотири слоти під пошуком на головній. Якщо слот зайнятий, інша категорія його втратить.';
+            hint.style.color = owner ? 'var(--amber)' : '';
+        }
+
+        function onCategoryFormChange(e) {
+            const form = document.getElementById('categoryForm');
+            if (e && e.target === form.name && !currentCategoryId && !categoryIdTouched) {
+                form.id.value = slugifyUa(form.name.value);
+            }
+            if (e && e.target === form.id) {
+                categoryIdTouched = true;
+                form.id.value = form.id.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+            }
+            renderCategoryChipPreview();
+            updateCategorySlotHint();
+            setDirtyUi('categoryDirty', categoryFormSnapshot !== null && formSnapshot(form) !== categoryFormSnapshot);
+        }
+
         function openCategoryModal(categoryId = null) {
             const form = document.getElementById('categoryForm');
             currentCategoryId = categoryId;
+            categoryIdTouched = false;
             form.reset();
+            form.querySelectorAll('.has-error').forEach(g => g.classList.remove('has-error'));
+            const idHint = document.getElementById('catIdHint');
 
             if (categoryId) {
                 const category = getCategoryMeta(categoryId);
@@ -5279,45 +5752,152 @@
                 form.id.readOnly = true;
                 form.name.value = category.name || '';
                 form.emoji.value = category.emoji || '📦';
-                syncEmojiTrigger(form.emoji);
-                form.order.value = category.order || '';
+                form.quickSlot.value = Number.isInteger(category.quickSlot) ? String(category.quickSlot) : '';
+                form.active.checked = category.active !== false;
+                idHint.textContent = 'ID не змінюється: на нього посилаються товари.';
             } else {
-                document.getElementById('categoryModalTitle').textContent = '➕ Додати категорію';
+                document.getElementById('categoryModalTitle').textContent = '➕ Нова категорія';
                 form.id.readOnly = false;
+                form.id.value = '';
+                form.active.checked = true;
+                idHint.textContent = 'Створюється з назви. Можна змінити вручну (латиниця, цифри, дефіс).';
             }
 
+            syncEmojiTrigger(form.emoji);
+            renderCategoryChipPreview();
+            updateCategorySlotHint();
+            categoryFormSnapshot = formSnapshot(form);
+            setDirtyUi('categoryDirty', false);
             document.getElementById('categoryModal').classList.add('active');
+            if (!categoryId) form.name.focus();
         }
 
-        function closeCategoryModal() {
-            currentCategoryId = null;
-            closeEmojiPicker();
-            document.getElementById('categoryModal').classList.remove('active');
-        }
-
-        function openFilamentModal(filamentId) {
-            const filament = allFilaments.find(f => f.id === filamentId);
-            if (!filament) {
-                showToast('Філамент не знайдено', 'error');
+        function closeCategoryModal(force = false) {
+            const modal = document.getElementById('categoryModal');
+            if (!force && modal.classList.contains('active') && categoryFormSnapshot !== null
+                && formSnapshot(document.getElementById('categoryForm')) !== categoryFormSnapshot) {
+                askConfirm('Є незбережені зміни. Закрити без збереження?').then(ok => { if (ok) closeCategoryModal(true); });
                 return;
             }
-
-            currentFilamentId = filamentId;
-            const form = document.getElementById('filamentForm');
-            form.id.value = filament.id || '';
-            form.name.value = filament.name || '';
-            form.hex.value = filament.hex || '#cccccc';
-            form.available.checked = Boolean(filament.available);
-            document.getElementById('filamentModal').classList.add('active');
+            currentCategoryId = null;
+            categoryFormSnapshot = null;
+            closeEmojiPicker();
+            modal.classList.remove('active');
         }
 
-        function closeFilamentModal() {
+        let filamentFormSnapshot = null;
+
+        function expandHex(hex) {
+            const m = /^#([0-9a-fA-F]{3})$/.exec(String(hex || '').trim());
+            return m ? '#' + m[1].split('').map(c => c + c).join('') : String(hex || '').trim();
+        }
+
+        function renderFilamentPreview() {
+            const form = document.getElementById('filamentForm');
+            const host = document.getElementById('filamentPreview');
+            if (!form || !host) return;
+            const valid = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(form.hex.value.trim());
+            const color = valid ? form.hex.value.trim() : '#cccccc';
+            const dots = `<span class="fl-dot${form.glow.checked ? ' glow' : ''}" style="--c:${escapeAttr(color)}"></span>`.repeat(3);
+            host.innerHTML = `
+                <div class="fl-prev-box">${dots}</div>
+                <div class="fl-prev-box dark">${dots}</div>
+                <div class="fl-prev-cap">${escapeHtml(form.name.value.trim() || 'Назва кольору')} · ${escapeHtml(color.toUpperCase())}${form.glow.checked ? ' · світиться в темряві (праворуч — у темряві)' : ''}${form.available.checked ? '' : ' · закінчився'}</div>`;
+            document.getElementById('filamentAvailLabel').textContent = form.available.checked ? 'В наявності' : 'Закінчився';
+        }
+
+        function onFilamentFormChange(e) {
+            const form = document.getElementById('filamentForm');
+            if (e && e.target === form.hexPicker) {
+                form.hex.value = form.hexPicker.value;
+            } else if (e && e.target === form.hex) {
+                let v = form.hex.value.trim();
+                if (v && !v.startsWith('#')) { v = '#' + v; form.hex.value = v; }
+                if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) form.hexPicker.value = expandHex(v).toLowerCase();
+            }
+            renderFilamentPreview();
+            setDirtyUi('filamentDirty', filamentFormSnapshot !== null && formSnapshot(form) !== filamentFormSnapshot);
+        }
+
+        function openFilamentModal(filamentId = null) {
+            const form = document.getElementById('filamentForm');
+            form.reset();
+            form.querySelectorAll('.has-error').forEach(g => g.classList.remove('has-error'));
+            const del = document.getElementById('filamentDeleteBtn');
+
+            if (filamentId) {
+                const filament = allFilaments.find(f => f.id === filamentId);
+                if (!filament) {
+                    showToast('Філамент не знайдено', 'error');
+                    return;
+                }
+                currentFilamentId = filamentId;
+                document.getElementById('filamentModalTitle').textContent = '✏️ Редагувати колір';
+                form.id.value = filament.id || '';
+                form.name.value = filament.name || '';
+                form.hex.value = filament.hex || '#cccccc';
+                form.glow.checked = isGlowFilamentClient(filament);
+                form.available.checked = Boolean(filament.available);
+                del.style.display = '';
+            } else {
+                currentFilamentId = null;
+                document.getElementById('filamentModalTitle').textContent = '➕ Новий колір';
+                form.id.value = '';
+                form.hex.value = '#cccccc';
+                form.available.checked = true;
+                del.style.display = 'none';
+            }
+            form.hexPicker.value = expandHex(form.hex.value).toLowerCase();
+            renderFilamentPreview();
+            filamentFormSnapshot = formSnapshot(form);
+            setDirtyUi('filamentDirty', false);
+            document.getElementById('filamentModal').classList.add('active');
+            if (!filamentId) form.name.focus();
+        }
+
+        function closeFilamentModal(force = false) {
+            const modal = document.getElementById('filamentModal');
+            if (!force && modal.classList.contains('active') && filamentFormSnapshot !== null
+                && formSnapshot(document.getElementById('filamentForm')) !== filamentFormSnapshot) {
+                askConfirm('Є незбережені зміни. Закрити без збереження?').then(ok => { if (ok) closeFilamentModal(true); });
+                return;
+            }
             currentFilamentId = null;
-            document.getElementById('filamentModal').classList.remove('active');
+            filamentFormSnapshot = null;
+            modal.classList.remove('active');
+        }
+
+        async function deleteFilament() {
+            const id = currentFilamentId;
+            const filament = allFilaments.find(f => f.id === id);
+            if (!id || !filament) return;
+            const btn = document.getElementById('filamentDeleteBtn');
+            const send = (force) => fetch(API_BASE + `/filaments/${encodeURIComponent(id)}${force ? '?force=1' : ''}`, { method: 'DELETE' });
+            try {
+                if (!(filament.used_by > 0) && !(await askConfirm(`Видалити колір «${filament.name}»?`))) return;
+                btn.disabled = true;
+                let res = await send(false);
+                let result = await res.json().catch(() => ({}));
+                if (res.status === 409) {
+                    const n = result.used_by || 0;
+                    const ok = await askConfirm(`Колір «${filament.name}» пропонується в ${n} ${pluralUa(n, 'товарі', 'товарах', 'товарах')}. Покупці його більше не побачать (минулі замовлення не зміняться). Видалити? Замість цього можна позначити «Закінчився».`);
+                    if (!ok) return;
+                    res = await send(true);
+                    result = await res.json().catch(() => ({}));
+                }
+                if (!res.ok || !result.ok) throw new Error(result.error || `Не вдалося видалити (${res.status})`);
+                showToast(`Колір «${filament.name}» видалено`, 'success');
+                closeFilamentModal(true);
+                await loadFilaments();
+            } catch (e) {
+                showToast(e.message || 'Помилка видалення кольору', 'error');
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         async function deleteCategory(categoryId) {
-            if (!confirm('Ви дійсно хочете видалити цю категорію?')) return;
+            if (!(await askConfirm('Видалити цю категорію? Дію не можна скасувати.'))) return;
             try {
                 const res = await fetch(API_BASE + `/categories/${categoryId}`, {
                     method: 'DELETE',
@@ -5356,11 +5936,13 @@
                 const product = await res.json();
 
                 currentProductId = id;
+                currentProductStatus = ['active', 'hidden', 'archive'].includes(product.status) ? product.status : 'active';
                 uploadedPhotos = [...(product.photos || [])];
-                document.getElementById('modalTitle').textContent = '✏️ Редагувати товар';
+                document.getElementById('modalTitle').textContent = `✏️ Редагувати товар #${id}`;
 
                 const form = document.getElementById('productForm');
-                renderCategorySelectOptions();
+                renderCategorySelectOptions(product.cat);
+                form.status.value = currentProductStatus;
                 form.name.value = product.name;
                 form.cat.value = product.cat;
                 form.emoji.value = product.emoji;
@@ -5390,7 +5972,9 @@
                 toggleFilamentChoiceFields();
                 hideProductUnsavedConfirm();
                 captureProductFormSnapshot();
+                onProductFormChange();
                 document.getElementById('modal').classList.add('active');
+                document.querySelector('#modal .dr-body').scrollTop = 0;
             } catch (e) {
                 showToast('Помилка завантаження товару', 'error');
             }
@@ -5628,6 +6212,7 @@
                 const data = await readUploadResponse(res);
                 if (data.ok) {
                     input.value = data.url;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
                     showToast('Відео завантажено ✅', 'success');
                 } else {
                     showToast('Помилка: ' + (data.error || 'Невідома помилка'), 'error');
@@ -5706,9 +6291,19 @@
             preview.innerHTML = uploadedPhotos.map((url, i) => `
                 <div class="preview-item" draggable="true" data-index="${i}">
                     <img src="${escapeAttr(url)}" alt="фото">
-                    <button type="button" class="remove" onclick="removePhoto(${i})">×</button>
+                    <button type="button" class="remove" onclick="removePhoto(${i})" aria-label="Прибрати фото">×</button>
+                    ${i === 0
+                        ? '<span class="cover-tag">Обкладинка</span>'
+                        : `<button type="button" class="cover-btn" onclick="movePhoto(${i}, 0)" title="Зробити обкладинкою" aria-label="Зробити обкладинкою">★</button>`}
                 </div>
             `).join('');
+
+            // Емодзі потрібне лише товару без фото; з фото поле ховаємо (значення лишається)
+            const emojiGroup = document.getElementById('productEmojiGroup');
+            if (emojiGroup) emojiGroup.style.display = uploadedPhotos.length ? 'none' : '';
+            const orderHint = document.getElementById('photoOrderHint');
+            if (orderHint) orderHint.style.display = uploadedPhotos.length > 1 ? '' : 'none';
+            onProductFormChange();
 
             // Додаємо drag and drop події
             const items = preview.querySelectorAll('.preview-item');
@@ -5914,6 +6509,8 @@
                 stlLink: form.stlLink.value.trim(),
                 photos: uploadedPhotos,
             };
+            const nextStatus = form.status.value;
+            if (!currentProductId && nextStatus !== 'active') data.status = nextStatus;
 
             if (data.video && !data.video.startsWith('https://')) {
                 showToast('Посилання на відео має починатися з https://', 'error');
@@ -5948,9 +6545,18 @@
                 });
 
                 if (res.ok) {
-                    showToast('Товар збережено ✅', 'success');
+                    // Статус змінюється окремим ендпоінтом (так само, як у меню «⋯» таблиці)
+                    let statusNote = '';
+                    if (currentProductId && nextStatus !== currentProductStatus) {
+                        try {
+                            await productApi(`/products/${currentProductId}/status`, 'PUT', { status: nextStatus });
+                        } catch (statusErr) {
+                            statusNote = ` Статус не змінено: ${statusErr.message}`;
+                        }
+                    }
+                    showToast(statusNote ? 'Товар збережено.' + statusNote : 'Товар збережено ✅', statusNote ? 'info' : 'success');
                     closeModal(true);
-                    loadProducts();
+                    loadProducts(true);
                 } else {
                     const err = await res.json();
                     showToast('Помилка: ' + (err.error || 'Невідома помилка'), 'error');
@@ -5964,20 +6570,32 @@
             }
         });
 
+        document.getElementById('categoryForm').addEventListener('input', onCategoryFormChange);
+        document.getElementById('categoryForm').addEventListener('change', onCategoryFormChange);
+        document.getElementById('filamentForm').addEventListener('input', onFilamentFormChange);
+        document.getElementById('filamentForm').addEventListener('change', onFilamentFormChange);
+        document.getElementById('productForm').addEventListener('input', onProductFormChange);
+        document.getElementById('productForm').addEventListener('change', onProductFormChange);
+
         document.getElementById('categoryForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const form = e.target;
             const submitBtn = document.getElementById('categorySubmitBtn');
+            const slot = parseInt(form.quickSlot.value, 10);
 
             const payload = {
-                id: form.id.value.trim().toLowerCase(),
                 name: form.name.value.trim(),
                 emoji: form.emoji.value.trim(),
-                order: form.order.value ? parseInt(form.order.value, 10) : allCategories.length + 1
+                quickSlot: Number.isInteger(slot) ? slot : null,
+                active: form.active.checked,
             };
+            if (!currentCategoryId) {
+                payload.id = form.id.value.trim().toLowerCase() || slugifyUa(payload.name);
+                payload.order = allCategories.length + 1;
+            }
 
-            if (!payload.id || !payload.name || !payload.emoji) {
-                showToast('Заповніть ID, назву та emoji', 'error');
+            if (!payload.name || !payload.emoji || (!currentCategoryId && !payload.id)) {
+                showToast('Заповніть назву, ID та emoji', 'error');
                 return;
             }
 
@@ -5991,13 +6609,10 @@
                 submitBtn.textContent = '⏳ Збереження...';
 
                 const method = currentCategoryId ? 'PUT' : 'POST';
-                const url = currentCategoryId ? API_BASE + `/categories/${currentCategoryId}` : API_BASE + '/categories';
+                const url = currentCategoryId ? API_BASE + `/categories/${encodeURIComponent(currentCategoryId)}` : API_BASE + '/categories';
                 const res = await fetch(url, {
                     method,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tgInitData
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
                 const result = await res.json();
@@ -6006,7 +6621,7 @@
                 }
 
                 showToast('Категорію збережено ✅', 'success');
-                closeCategoryModal();
+                closeCategoryModal(true);
                 await loadCategories();
                 filterProducts();
             } catch (e) {
@@ -6016,6 +6631,58 @@
                 submitBtn.textContent = '✅ Зберегти категорію';
             }
         });
+
+        document.getElementById('filamentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const submitBtn = document.getElementById('filamentSubmitBtn');
+            const payload = {
+                name: form.name.value.trim(),
+                hex: form.hex.value.trim(),
+                glow: form.glow.checked,
+                available: form.available.checked
+            };
+
+            if (!payload.name) {
+                showToast('Назва кольору обовʼязкова', 'error');
+                return;
+            }
+            if (!/^#([a-fA-F0-9]{3}|[a-fA-F0-9]{6})$/.test(payload.hex)) {
+                form.hex.closest('.form-group').classList.add('has-error');
+                showToast('HEX має бути у форматі #RGB або #RRGGBB', 'error');
+                return;
+            }
+            form.hex.closest('.form-group').classList.remove('has-error');
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '⏳ Збереження...';
+                const res = await fetch(currentFilamentId ? API_BASE + `/filaments/${encodeURIComponent(currentFilamentId)}` : API_BASE + '/filaments', {
+                    method: currentFilamentId ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                let result = {};
+                try {
+                    result = await res.json();
+                } catch (_) {
+                    throw new Error(`Помилка сервера (${res.status})`);
+                }
+                if (!res.ok || !result.ok) {
+                    throw new Error(result.error || `Не вдалося зберегти колір (${res.status})`);
+                }
+
+                showToast(currentFilamentId ? 'Колір оновлено ✅' : 'Колір додано ✅', 'success');
+                closeFilamentModal(true);
+                await loadFilaments();
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження кольору', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Зберегти колір';
+            }
+        });
+
 
         // ═══════════════════════════════════════════════════════════
         // Акції
@@ -6242,7 +6909,7 @@
             const current = select.value;
             select.innerHTML = '<option value="">Будь-яка категорія</option>'
                 + allCategories
-                    .filter(c => c.id !== 'custom')
+                    .filter(c => c.id !== 'custom' && c.active !== false)
                     .map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.emoji || '📦')} ${escapeHtml(c.name)}</option>`).join('');
             select.value = current;
         }
@@ -6489,63 +7156,6 @@
             }
         });
 
-        document.getElementById('filamentForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!currentFilamentId) return;
-
-            const form = e.target;
-            const submitBtn = document.getElementById('filamentSubmitBtn');
-            const editedFilamentId = currentFilamentId;
-            const previousScrollY = window.scrollY;
-            const payload = {
-                name: form.name.value.trim(),
-                hex: form.hex.value.trim(),
-                available: form.available.checked
-            };
-
-            if (!payload.name) {
-                showToast('Назва філаменту обовʼязкова', 'error');
-                return;
-            }
-            if (!/^#([a-fA-F0-9]{3}|[a-fA-F0-9]{6})$/.test(payload.hex)) {
-                showToast('HEX має бути у форматі #RGB або #RRGGBB', 'error');
-                return;
-            }
-
-            try {
-                submitBtn.disabled = true;
-                submitBtn.textContent = '⏳ Збереження...';
-                const res = await fetch(API_BASE + `/filaments/${encodeURIComponent(currentFilamentId)}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tgInitData
-                    },
-                    body: JSON.stringify(payload),
-                });
-                let result = {};
-                try {
-                    result = await res.json();
-                } catch (_) {
-                    throw new Error(`Помилка сервера (${res.status})`);
-                }
-                if (!res.ok || !result.ok) {
-                    throw new Error(result.error || `Не вдалося зберегти філамент (${res.status})`);
-                }
-
-                showToast('Філамент оновлено ✅', 'success');
-                closeFilamentModal();
-                await loadFilaments();
-                switchPage('filaments');
-                keepFilamentInView(editedFilamentId, previousScrollY);
-            } catch (e) {
-                showToast(e.message || 'Помилка збереження філаменту', 'error');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '✅ Зберегти філамент';
-            }
-        });
 
         // ═══════════════════════════════════════════════════════════
         // ЗАМОВЛЕННЯ
@@ -7568,6 +8178,16 @@
             const confirm = document.getElementById('productUnsavedConfirm');
             if (confirm.classList.contains('visible')) {
                 hideProductUnsavedConfirm();
+                return;
+            }
+
+            if (document.getElementById('filamentModal').classList.contains('active')) {
+                closeFilamentModal();
+                return;
+            }
+
+            if (document.getElementById('categoryModal').classList.contains('active')) {
+                closeCategoryModal();
                 return;
             }
 

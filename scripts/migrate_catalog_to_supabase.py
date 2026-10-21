@@ -105,13 +105,14 @@ def migrate(database_url: str, truncate: bool = False) -> None:
     for i, f in enumerate(load_json("filaments.json")):
         conn.execute(
             """
-            INSERT INTO filaments (id, name, hex, available, sort_order)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO filaments (id, name, hex, available, glow, sort_order)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name, hex = EXCLUDED.hex,
-                available = EXCLUDED.available, sort_order = EXCLUDED.sort_order
+                available = EXCLUDED.available, glow = EXCLUDED.glow, sort_order = EXCLUDED.sort_order
             """,
-            (f.get("id"), f.get("name"), f.get("hex"), bool(f.get("available")), i),
+            (f.get("id"), f.get("name"), f.get("hex"), bool(f.get("available")),
+             bool(f["glow"]) if f.get("glow") is not None else str(f.get("id") or "").startswith("luminous"), i),
         )
 
     sync_products_id_sequence(conn)
