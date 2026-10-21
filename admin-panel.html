@@ -2035,6 +2035,7 @@
             }
 
             #categoriesPage > div:first-child,
+            #collectionsPage > div:first-child,
             #filamentsPage > div:first-child,
             #couponsPage > div:first-child {
                 flex-direction: column !important;
@@ -2475,6 +2476,117 @@
         .category-row.drag-over { box-shadow: 0 0 0 3px rgba(42, 171, 238, .2); }
         .category-drag-handle { touch-action: none; }
 
+        /* ═══ ДОБІРКИ: список, шухляда, превʼю «Стопки», чипси в редакторі товару ═══ */
+        .ac-blue { --h: #2AABEE; --h-ink: #1E8FCB; }
+        .ac-orange { --h: #FF7A1A; --h-ink: #D85F00; }
+        .ac-violet { --h: #7C5CFF; --h-ink: #6445E8; }
+        .ac-green { --h: #1F9D55; --h-ink: #1F9D55; }
+        .ac-teal { --h: #0E9F8A; --h-ink: #0B7F6E; }
+        .ac-pink { --h: #E0459B; --h-ink: #C02E80; }
+        .ac-red { --h: #E5383B; --h-ink: #D13438; }
+        .ac-amber { --h: #C98A0B; --h-ink: #9A6A05; }
+        body.dark .ac-blue { --h-ink: #6CC4F5; }
+        body.dark .ac-orange { --h-ink: #FFA25E; }
+        body.dark .ac-violet { --h-ink: #AE9BFF; }
+        body.dark .ac-green { --h-ink: #4ADE80; }
+        body.dark .ac-teal { --h-ink: #4FD8C2; }
+        body.dark .ac-pink { --h-ink: #FF8CC6; }
+        body.dark .ac-red { --h-ink: #FF7B7E; }
+        body.dark .ac-amber { --h-ink: #F2C14E; }
+        .col-tile { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--h) 14%, var(--bg-card)); color: var(--h-ink); }
+        .col-tile .nav-svg { width: 20px; height: 20px; }
+        .col-list { margin-top: 16px; display: grid; gap: 12px; }
+        .category-row.col-row { display: grid; grid-template-columns: 32px 40px minmax(0, 1fr) auto auto 34px; align-items: center; gap: 12px; padding: 10px 14px; }
+        .col-row.is-off { opacity: .6; }
+        .col-row .col-sub { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+        .col-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+        .col-mode { font-size: 12px; font-weight: 700; color: var(--accent-text); background: var(--bg-tab-active); border-radius: 99px; padding: 3px 10px; white-space: nowrap; }
+        .col-count { font-size: 12px; color: var(--text-muted); }
+        .col-count b { color: var(--text-main); }
+        .col-count small { font-size: 11px; color: var(--text-faint); }
+        .col-count.warn { color: var(--amber); font-weight: 700; }
+        .col-row.drag-over, .col-sel-row.drag-over { box-shadow: 0 -3px 0 var(--accent); }
+        .col-row.drag-after, .col-sel-row.drag-after { box-shadow: 0 3px 0 var(--accent); }
+        .col-row.dragging, .col-sel-row.dragging { opacity: .55; }
+        .col-empty { padding: 28px 16px; text-align: center; color: var(--text-muted); background: var(--bg-card); border: 1px dashed var(--border); border-radius: 14px; }
+
+        .col-ico-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 8px; }
+        .col-ico { height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-section); color: var(--text-secondary); display: grid; place-items: center; cursor: pointer; padding: 0; }
+        .col-ico .nav-svg { width: 20px; height: 20px; }
+        .col-ico:hover { background: var(--bg-tab-active); }
+        .col-ico.on { border-color: var(--h-ink); color: var(--h-ink); background: color-mix(in srgb, var(--h) 14%, var(--bg-card)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--h) 35%, transparent); }
+        .col-sw-row { display: flex; flex-wrap: wrap; gap: 10px; }
+        .col-sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--bg-card); background: var(--h); cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--border); }
+        .col-sw.on { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--h); }
+        .col-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg-section); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+        .col-seg button { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-weight: 700; font-size: 14px; padding: 9px 10px; border-radius: 9px; cursor: pointer; }
+        .col-seg button.on { background: var(--bg-card); color: var(--accent-text); box-shadow: 0 1px 3px var(--shadow-card); }
+        .col-sub-h { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-faint); margin: 14px 0 8px; display: flex; align-items: center; gap: 8px; }
+        .col-sub-h:first-child { margin-top: 0; }
+        .col-sel-list, .col-pick-list { display: grid; gap: 6px; }
+        .col-pick-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; padding: 4px; background: var(--bg-section); gap: 2px; }
+        .col-sel-row, .col-pick { display: grid; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; background: var(--bg-card); border: 1px solid var(--border); min-width: 0; }
+        .col-sel-row { grid-template-columns: 30px 38px minmax(0, 1fr) 34px; }
+        .col-pick { grid-template-columns: 22px 38px minmax(0, 1fr) auto; border: 0; background: transparent; cursor: pointer; }
+        .col-pick:hover { background: var(--bg-card); }
+        .col-pick input { width: 18px; height: 18px; margin: 0; }
+        .col-th { width: 38px; height: 38px; border-radius: 9px; overflow: hidden; background: var(--bg-section); display: grid; place-items: center; font-size: 20px; flex: none; }
+        .col-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .col-pn { min-width: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; line-height: 1.25; }
+        .col-pn small { display: block; font-weight: 500; font-size: 11.5px; color: var(--text-muted); }
+        .col-pn .warn { color: var(--amber); font-weight: 700; }
+        .col-x { width: 34px; height: 34px; padding: 0; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-section); color: var(--text-secondary); cursor: pointer; font-size: 15px; }
+        .col-x:hover { background: var(--bg-tab-active); }
+        .col-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 190px); gap: 8px; margin-bottom: 8px; }
+        .col-tools input, .col-tools select { width: 100%; min-width: 0; }
+        .col-note { font-size: 12px; color: var(--text-muted); padding: 8px 6px; }
+        .col-rule { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-section); margin-bottom: 8px; cursor: pointer; }
+        .col-rule.on { border-color: var(--accent); background: var(--bg-tab-active); }
+        .col-rule input[type="radio"] { width: 18px; height: 18px; margin: 2px 0 0; }
+        .col-rule b { display: block; font-size: 14px; }
+        .col-rule small { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .col-rule-val { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 13px; }
+        .col-rule-val input[type="number"] { width: 92px; padding: 7px 10px; }
+        .col-rule-val label { display: inline-flex; align-items: center; gap: 6px; }
+        .col-match { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--bg-section); font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .col-match .col-th { width: 30px; height: 30px; font-size: 15px; }
+        .col-match .bad { color: var(--sale); font-weight: 600; font-size: 13px; }
+        .col-match .strip { display: flex; margin-left: auto; }
+        .col-match .strip .col-th { border: 2px solid var(--bg-section); border-radius: 50%; margin-left: -8px; }
+        .col-match .strip .col-th:first-child { margin-left: 0; }
+
+        /* Превʼю «Стопки» — як у магазині (index.html, .cl-stack) */
+        .col-stack { position: relative; width: 154px; min-height: 134px; padding: 12px; border-radius: 18px; display: grid; align-content: space-between; gap: 10px;
+            background: linear-gradient(150deg, color-mix(in srgb, var(--h) 10%, var(--bg-card)), var(--bg-card) 76%); box-shadow: 0 0 0 1px var(--border); }
+        .col-stack .top { display: flex; justify-content: space-between; align-items: flex-start; }
+        .col-stack .cnt { font-size: 11px; font-weight: 800; color: var(--h-ink); background: color-mix(in srgb, var(--h) 13%, var(--bg-card)); border-radius: 9px; padding: 3px 8px; font-variant-numeric: tabular-nums; }
+        .col-stack b { display: block; font-size: 14px; line-height: 1.15; font-weight: 800; letter-spacing: -.01em; overflow-wrap: anywhere; }
+        .col-stack b.ph { color: var(--text-faint); }
+        .col-stack .thumbs { display: flex; align-items: center; min-height: 28px; }
+        .col-stack .thumbs .t { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; border: 2px solid var(--bg-card); background: var(--bg-section); margin-left: -9px; display: grid; place-items: center; font-size: 13px; }
+        .col-stack .thumbs .t:first-child { margin-left: 0; }
+        .col-stack .thumbs .t img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .col-stack .thumbs i { font-style: normal; font-size: 11px; font-weight: 800; color: var(--text-muted); margin-left: 6px; }
+        .col-stack-desc { font-size: 12px; color: var(--text-muted); margin-top: 10px; overflow-wrap: anywhere; }
+
+        /* Чипси добірок у редакторі товару */
+        .col-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .col-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px; border-radius: 99px; font-size: 13px; font-weight: 700; color: var(--h-ink); background: color-mix(in srgb, var(--h) 13%, var(--bg-card)); border: 1px solid color-mix(in srgb, var(--h) 30%, transparent); }
+        .col-chip .nav-svg { width: 14px; height: 14px; }
+        .col-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; width: 22px; height: 22px; border-radius: 50%; font-size: 13px; line-height: 1; padding: 0; }
+        .col-chip button:hover { background: color-mix(in srgb, var(--h) 22%, transparent); }
+        .col-chips select { width: auto; max-width: 100%; padding: 6px 10px; border-radius: 99px; font-size: 13px; }
+
+        @media (max-width: 700px) {
+            .category-row.col-row { grid-template-columns: 30px 40px minmax(0, 1fr) 34px; row-gap: 10px; }
+            .col-row .col-meta { grid-column: 2 / -1; grid-row: 2; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; text-align: left; gap: 8px; }
+            .col-row .cat-show { grid-column: 2 / -1; grid-row: 3; justify-self: start; }
+            .col-row .col-menu { grid-column: 4; grid-row: 1; }
+            .col-tools { grid-template-columns: minmax(0, 1fr); }
+            .col-stack { width: 100%; max-width: 220px; }
+            #collectionsPage > div:first-child { flex-direction: column !important; align-items: stretch !important; }
+        }
+
         /* Філаменти */
         .fl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 16px; }
         .fl-card { display: flex; flex-direction: column; gap: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; min-width: 0; }
@@ -2557,6 +2669,7 @@
                 <div class="sb-group">Каталог</div>
                 <button class="page-tab sb-item" type="button" data-page="products" onclick="switchPage('products'); toggleSidebar(false)"><span class="sb-ico" data-icon="products" style="display:contents"></span>Товари<span class="sb-count" id="navCountProducts"></span></button>
                 <button class="page-tab sb-item" type="button" data-page="categories" onclick="switchPage('categories'); toggleSidebar(false)"><span class="sb-ico" data-icon="categories" style="display:contents"></span>Категорії</button>
+                <button class="page-tab sb-item" type="button" data-page="collections" onclick="switchPage('collections'); toggleSidebar(false)"><span class="sb-ico" data-icon="collections" style="display:contents"></span>Добірки</button>
                 <button class="page-tab sb-item" type="button" data-page="filaments" onclick="switchPage('filaments'); toggleSidebar(false)"><span class="sb-ico" data-icon="filaments" style="display:contents"></span>Філаменти</button>
                 <div class="sb-group">Маркетинг</div>
                 <button class="page-tab sb-item" type="button" data-page="promotions" onclick="switchPage('promotions'); toggleSidebar(false)"><span class="sb-ico" data-icon="promotions" style="display:contents"></span>Акції</button>
@@ -2772,6 +2885,14 @@
                         <button id="saveQuickCategoriesBtn" class="btn btn-primary" type="button" onclick="saveQuickCategories()" style="max-width:220px;" disabled>💾 Зберегти швидкі категорії</button>
                     </div>
                 </div>
+            </section>
+
+            <section id="collectionsPage" class="page-section">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <h2 style="font-size:20px;">📚 Добірки</h2>
+                </div>
+                <p class="pt-count" style="margin-top:8px;">Блок «Добірки» на головній магазину. Перетягни ⋮⋮, щоб змінити порядок. Порожню або вимкнену добірку покупці не бачать.</p>
+                <div id="collectionsList" class="col-list"></div>
             </section>
 
             <section id="filamentsPage" class="page-section">
@@ -3019,6 +3140,12 @@
                                 </div>
                             </section>
 
+                            <section class="dr-sec" aria-labelledby="secCollections">
+                                <h3 id="secCollections">Добірки <span class="dr-badge">ручні</span></h3>
+                                <div id="productCollections" class="col-chips"></div>
+                                <div class="form-hint" style="margin-top:10px;">Товар входить у вибрані ручні добірки (блок «Добірки» на головній). Автоматичні — за ціною, новинки, знижка — рахуються самі. Зберігається разом із товаром.</div>
+                            </section>
+
                             <section class="dr-sec" aria-labelledby="secInternal">
                                 <h3 id="secInternal">Внутрішнє <span class="dr-badge">видно лише адміну</span></h3>
                                 <div class="form-group">
@@ -3120,6 +3247,72 @@
                     <span id="categoryDirty" class="dr-dirty" role="status">Без змін</span>
                     <button type="button" class="btn btn-secondary" onclick="closeCategoryModal()">Скасувати</button>
                     <button type="submit" class="btn btn-primary" id="categorySubmitBtn">✅ Зберегти категорію</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="collectionModal" class="modal">
+        <div class="modal-content dr dr-wide">
+            <div class="dr-head">
+                <span id="collectionModalTitle">➕ Нова добірка</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closeCollectionModal()" aria-label="Закрити">✕</button>
+            </div>
+            <form id="collectionForm" class="dr-form" novalidate>
+                <div class="dr-body">
+                    <div class="dr-grid">
+                        <div class="dr-main col-form-scope ac-violet">
+                            <section class="dr-sec">
+                                <h3>Основне</h3>
+                                <div class="form-group required">
+                                    <label for="colName">Назва</label>
+                                    <input type="text" id="colName" maxlength="40" placeholder="Напр.: Подарунок до 150 ₴" autocomplete="off" oninput="this.closest('.form-group').classList.remove('has-error'); onCollectionText()">
+                                    <div class="form-error">Назва обов'язкова</div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="colDesc">Короткий опис</label>
+                                    <input type="text" id="colDesc" maxlength="120" placeholder="Напр.: Ідеї, що точно сподобаються" autocomplete="off" oninput="onCollectionText()">
+                                </div>
+                                <div class="form-group">
+                                    <label>Іконка</label>
+                                    <div id="colIconGrid" class="col-ico-grid"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Колір</label>
+                                    <div id="colColorRow" class="col-sw-row"></div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Склад</h3>
+                                <div id="colModeSeg" class="col-seg"></div>
+                                <div id="colManualPane"></div>
+                                <div id="colRulePane"></div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Показ</h3>
+                                <div class="toggle-row">
+                                    <span class="toggle-row-label">Показувати в магазині</span>
+                                    <label class="switch" title="Показувати добірку покупцям">
+                                        <input type="checkbox" id="colActive" checked onchange="onCollectionText()">
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="form-hint">Порядок добірок на головній змінюється перетягуванням у списку. Порожня добірка в магазині не показується. Приховані й архівні товари покупці не бачать, але з ручного списку не зникають.</div>
+                            </section>
+                        </div>
+
+                        <aside class="dr-preview" aria-label="Так виглядає в магазині">
+                            <div class="dr-prev-title">Так виглядає в магазині</div>
+                            <div id="colPreview"></div>
+                        </aside>
+                    </div>
+                </div>
+                <div class="dr-foot">
+                    <span id="collectionDirty" class="dr-dirty" role="status">Без змін</span>
+                    <button type="button" class="btn btn-secondary" onclick="closeCollectionModal()">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" id="collectionSubmitBtn">✅ Зберегти добірку</button>
                 </div>
             </form>
         </div>
@@ -3712,6 +3905,10 @@
                 btn.textContent = '➕ Додати категорію';
                 btn.onclick = () => openCategoryModal();
                 btn.style.display = 'inline-flex';
+            } else if (currentPage === 'collections') {
+                btn.textContent = '➕ Добірка';
+                btn.onclick = () => openCollectionModal();
+                btn.style.display = 'inline-flex';
             } else if (currentPage === 'filaments') {
                 btn.textContent = '➕ Додати колір';
                 btn.onclick = () => openFilamentModal();
@@ -3807,6 +4004,7 @@
             if (page === 'coupons') loadCoupons();
             if (page === 'promotions') loadPromotions();
             if (page === 'users') loadUsers();
+            if (page === 'collections') loadCollections();
         }
 
         function renderCategoryFilterMenu() {
@@ -4476,7 +4674,7 @@
         // ═══════════════════════════════════════════════════════════
 
         const PAGE_TITLES = {
-            overview: 'Огляд', orders: 'Замовлення', queue: 'Черга друку', products: 'Товари', categories: 'Категорії',
+            overview: 'Огляд', orders: 'Замовлення', queue: 'Черга друку', products: 'Товари', categories: 'Категорії', collections: 'Добірки',
             filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', users: 'Клієнти',
         };
 
@@ -4486,6 +4684,7 @@
             queue: '<path d="M6 9V2h12v7"/><rect x="2" y="9" width="20" height="9" rx="2"/><path d="M6 14h12v8H6z"/>',
             products: '<path d="M21 16V8l-9-5-9 5v8l9 5Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
             categories: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+            collections: '<path d="m12 2 10 5-10 5L2 7l10-5Z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/>',
             filaments: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6"/>',
             promotions: '<path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-9-1 2-2 3-4 3 0-2 0-4-1-6-3 3-5 7-5 12 0 4 3 7 7 7Z"/>',
             coupons: '<path d="M3 7a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4Z"/><path d="M13 5v2M13 11v2M13 17v2"/>',
@@ -5481,6 +5680,7 @@
                 stlLink: form.stlLink.value.trim(),
                 photos: [...uploadedPhotos],
                 status: form.status.value,
+                collections: [...productCollectionIds].sort(),
             };
 
             if (state.cat === 'custom') {
@@ -5636,6 +5836,7 @@
                 if (input) input.classList.remove('error');
             });
             
+            loadProductCollectionState(null);
             updatePhotoPreview();
             updateCategoryFields();
             form.contractPrice.checked = false;
@@ -5663,6 +5864,8 @@
             currentProductId = null;
             uploadedPhotos = [];
             productFormSnapshot = null;
+            productCollectionIds = [];
+            productCollectionsOrig = [];
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -5915,6 +6118,704 @@
             }
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // ДОБІРКИ (REDESIGN.md, розд. 4.11): список, порядок, шухляда, чипси в редакторі товару
+        // ═══════════════════════════════════════════════════════════
+
+        // Іконки — підмножина PATHS магазину (index.html, ICON_PATHS); ключі мають збігатися з ICONS у services/collections.py
+        const COLLECTION_ICONS = {
+            sparkle: ['Іскри', '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'],
+            tag: ['Ціна', '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/>'],
+            moonglow: ['Світиться', '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/><path d="M18 2v3M16.5 3.5h3"/>'],
+            gift: ['Подарунок', '<path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7ZM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/>'],
+            percent: ['Знижка', '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>'],
+            flame: ['Хіт', '<path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-9-1 2-2 3-4 3 0-2 0-4-1-6-3 3-5 7-5 12 0 4 3 7 7 7Z"/>'],
+            star: ['Зірка', '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1Z"/>'],
+            heart: ['Серце', '<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/>'],
+            home: ['Дім', '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>'],
+            cube: ['Куб', '<path d="M21 16V8l-9-5-9 5v8l9 5Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>'],
+            box: ['Коробка', '<path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/>'],
+            clock: ['Годинник', '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'],
+            pin: ['Закріплене', '<path d="M12 17v5M9 10.8V4h6v6.8l3 3.2H6Z"/>'],
+            wand: ['Магія', '<path d="m15 4-11 11 5 5 11-11Z"/><path d="M19 2v4M17 4h4"/>'],
+            truck: ['Доставка', '<path d="M2 6h11v10H2z"/><path d="M13 9h4l4 4v3h-8"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/>'],
+        };
+        const COLLECTION_COLORS = [
+            ['violet', 'Фіолетовий'], ['green', 'Зелений'], ['teal', 'Бірюзовий'], ['orange', 'Помаранчевий'],
+            ['red', 'Червоний'], ['pink', 'Рожевий'], ['amber', 'Бурштиновий'], ['blue', 'Синій'],
+        ];
+        const COLLECTION_RULES = [
+            { type: 'new', title: 'Новинки', hint: 'Додані за останні N днів' },
+            { type: 'price_max', title: 'Ціна до', hint: 'Договірні ціни не враховуються' },
+            { type: 'price_min', title: 'Ціна від', hint: 'Договірні ціни не враховуються' },
+            { type: 'glow', title: 'Світяться вночі', hint: 'Товари з кольорами, що світяться' },
+            { type: 'sale', title: 'Зі знижкою', hint: 'Є стара ціна, відсортовано за знижкою' },
+            { type: 'hits', title: 'Хіти продажів', hint: 'Найбільше продажів за 90 днів і позначені «Хіт»' },
+        ];
+        const COLLECTION_RULE_DEFAULTS = { days: 30, max_price: 100, exclude_custom: false, min_price: 300, limit: 12 };
+
+        let adminCollections = [];
+        let collectionsLoaded = false;
+        let collectionDraft = null;
+        let collectionSnapshot = null;
+        let collectionPreview = { count: 0, product_ids: [], error: '' };
+        let collectionPreviewTimer = null;
+        let collectionPreviewSeq = 0;
+        let collectionSearchText = '';
+
+        function colIcon(name) {
+            const entry = COLLECTION_ICONS[name] || COLLECTION_ICONS.sparkle;
+            return `<svg class="nav-svg" viewBox="0 0 24 24" aria-hidden="true">${entry[1]}</svg>`;
+        }
+
+        function colColor(c) {
+            return COLLECTION_COLORS.some(x => x[0] === c) ? c : 'blue';
+        }
+
+        function collectionById(id) {
+            return adminCollections.find(c => c.id === id) || null;
+        }
+
+        async function loadCollections() {
+            try {
+                const res = await fetch(API_BASE + '/admin/collections');
+                if (!res.ok) throw new Error(`Помилка завантаження (${res.status})`);
+                const data = await res.json();
+                adminCollections = Array.isArray(data.collections) ? data.collections : [];
+                collectionsLoaded = true;
+                renderCollectionsList();
+                renderProductCollections();
+            } catch (e) {
+                console.error('loadCollections error:', e);
+                showToast('Не вдалося завантажити добірки', 'error');
+            }
+        }
+
+        function productThumbHtml(p) {
+            const src = p && Array.isArray(p.photos) && p.photos[0];
+            if (src) return `<span class="col-th"><img src="${escapeAttr(src)}" alt="" loading="lazy"></span>`;
+            return `<span class="col-th">${escapeHtml((p && p.emoji) || '📦')}</span>`;
+        }
+
+        function adminProductById(id) {
+            return adminProducts.find(p => Number(p.id) === Number(id)) || null;
+        }
+
+        // ── Список ──
+        function collectionCountHtml(c) {
+            if (!c.count) return '<span class="col-count warn">0 товарів — у магазині не показується</span>';
+            const extra = c.hidden_count ? ` <small>(+${c.hidden_count} прихованих)</small>` : '';
+            return `<span class="col-count"><b>${c.count}</b> ${pluralUa(c.count, 'товар', 'товари', 'товарів')}${extra}</span>`;
+        }
+
+        function renderCollectionsList() {
+            const list = document.getElementById('collectionsList');
+            if (!list) return;
+            if (!adminCollections.length) {
+                list.innerHTML = collectionsLoaded
+                    ? '<div class="col-empty">Добірок ще немає. Створіть першу кнопкою «Добірка» вгорі.</div>'
+                    : '<div class="col-empty">Завантаження…</div>';
+                return;
+            }
+            list.innerHTML = adminCollections.map((c, idx) => {
+                const id = escapeAttr(c.id);
+                return `
+                <div class="category-row col-row ac-${colColor(c.color)}${c.active ? '' : ' is-off'}" data-col-row="${id}">
+                    <div class="category-drag-handle" title="Перетягни для зміни порядку" role="button" aria-label="Перетягнути" onpointerdown="startCollectionDrag(event)">⋮⋮</div>
+                    <span class="col-tile">${colIcon(c.icon)}</span>
+                    <div style="min-width:0;">
+                        <div class="cat-name">${escapeHtml(c.name)}</div>
+                        <div class="col-sub">${escapeHtml(c.description || 'Без опису')}</div>
+                    </div>
+                    <div class="col-meta">
+                        <span class="col-mode">${escapeHtml(c.label || (c.mode === 'manual' ? 'Вручну' : 'Авто'))}</span>
+                        ${collectionCountHtml(c)}
+                    </div>
+                    <label class="cat-show" title="Показувати добірку в магазині">
+                        <span class="switch"><input type="checkbox" ${c.active ? 'checked' : ''} onchange="toggleCollectionActive('${id}', this)"><span class="switch-slider"></span></span>
+                        <span>Показувати</span>
+                    </label>
+                    <details class="pt-menu col-menu" ontoggle="positionProductMenu(this)">
+                        <summary aria-label="Дії з добіркою">⋯</summary>
+                        <div class="pt-menu-list">
+                            <button type="button" onclick="closeProductMenus(); openCollectionModal('${id}')">Редагувати</button>
+                            <button type="button" ${idx === 0 ? 'disabled' : ''} onclick="closeProductMenus(); moveCollection('${id}', -1)">Вище</button>
+                            <button type="button" ${idx === adminCollections.length - 1 ? 'disabled' : ''} onclick="closeProductMenus(); moveCollection('${id}', 1)">Нижче</button>
+                            <button type="button" class="danger" onclick="closeProductMenus(); deleteCollection('${id}')">Видалити…</button>
+                        </div>
+                    </details>
+                </div>`;
+            }).join('');
+        }
+
+        async function collectionApi(path, method, body) {
+            const options = { method };
+            if (body !== undefined) {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify(body);
+            }
+            const res = await fetch(API_BASE + path, options);
+            let data = {};
+            try { data = await res.json(); } catch (_) { /* порожня відповідь */ }
+            if (!res.ok || data.ok === false) throw new Error(data.error || `Помилка (${res.status})`);
+            return data;
+        }
+
+        async function toggleCollectionActive(id, input) {
+            const next = input.checked;
+            input.disabled = true;
+            try {
+                await collectionApi(`/admin/collections/${encodeURIComponent(id)}`, 'PUT', { active: next });
+                showToast(next ? 'Добірку показано в магазині' : 'Добірку приховано з магазину', 'success');
+            } catch (e) {
+                input.checked = !next;
+                showToast(e.message || 'Не вдалося змінити видимість', 'error');
+            } finally {
+                await loadCollections();
+            }
+        }
+
+        async function applyCollectionOrder(ids) {
+            const byId = new Map(adminCollections.map(c => [c.id, c]));
+            adminCollections = ids.map(id => byId.get(id)).filter(Boolean);
+            renderCollectionsList();
+            try {
+                await collectionApi('/admin/collections/order', 'PUT', { ids });
+                showToast('Порядок добірок збережено', 'success');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося змінити порядок', 'error');
+            } finally {
+                await loadCollections();
+            }
+        }
+
+        async function moveCollection(id, direction) {
+            const ids = adminCollections.map(c => c.id);
+            const from = ids.indexOf(id);
+            const to = from + direction;
+            if (from < 0 || to < 0 || to >= ids.length) return;
+            [ids[from], ids[to]] = [ids[to], ids[from]];
+            await applyCollectionOrder(ids);
+        }
+
+        // Перетягування рядків вказівником (мишею й пальцем): ручка ⋮⋮ → лінія вставки → onDone(нові id)
+        function startSortDrag(event, opts) {
+            const dragRow = event.target.closest(opts.rowSel);
+            if (!dragRow) return;
+            event.preventDefault();
+            const container = opts.container;
+            const rows = () => [...container.querySelectorAll(opts.rowSel)];
+            const dragId = dragRow.getAttribute(opts.idAttr);
+            let overRow = null;
+            let after = false;
+            dragRow.classList.add('dragging');
+            const move = (e) => {
+                const el = document.elementFromPoint(e.clientX, e.clientY);
+                const row = el && el.closest ? el.closest(opts.rowSel) : null;
+                rows().forEach(r => r.classList.remove('drag-over', 'drag-after'));
+                if (row && container.contains(row) && row !== dragRow) {
+                    const rect = row.getBoundingClientRect();
+                    after = e.clientY > rect.top + rect.height / 2;
+                    overRow = row;
+                    row.classList.add(after ? 'drag-after' : 'drag-over');
+                } else {
+                    overRow = null;
+                }
+            };
+            const finish = (commit) => {
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onCancel);
+                const target = overRow;
+                const placeAfter = after;
+                const ids = rows().map(r => r.getAttribute(opts.idAttr));
+                rows().forEach(r => r.classList.remove('drag-over', 'drag-after', 'dragging'));
+                if (!commit || !target) return;
+                const from = ids.indexOf(dragId);
+                if (from < 0) return;
+                ids.splice(from, 1);
+                let to = ids.indexOf(target.getAttribute(opts.idAttr));
+                if (to < 0) return;
+                if (placeAfter) to += 1;
+                ids.splice(to, 0, dragId);
+                opts.onDone(ids);
+            };
+            const onUp = () => finish(true);
+            const onCancel = () => finish(false);
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', onUp);
+            window.addEventListener('pointercancel', onCancel);
+        }
+
+        function startCollectionDrag(event) {
+            startSortDrag(event, {
+                container: document.getElementById('collectionsList'),
+                rowSel: '[data-col-row]',
+                idAttr: 'data-col-row',
+                onDone: ids => applyCollectionOrder(ids),
+            });
+        }
+
+        async function deleteCollection(id) {
+            const c = collectionById(id);
+            if (!c) return;
+            if (!(await askConfirm(`Видалити добірку «${c.name}»? Товари лишаться в каталозі. Дію не можна скасувати.`))) return;
+            try {
+                await collectionApi(`/admin/collections/${encodeURIComponent(id)}`, 'DELETE');
+                showToast(`Добірку «${c.name}» видалено`, 'success');
+                if (collectionDraft && collectionDraft.id === id) closeCollectionModal(true);
+            } catch (e) {
+                showToast(e.message || 'Не вдалося видалити добірку', 'error');
+            } finally {
+                await loadCollections();
+            }
+        }
+
+        // ── Шухляда «Добірка» ──
+        function collectionRuleFromDraft() {
+            const d = collectionDraft;
+            const p = d.params;
+            switch (d.ruleType) {
+                case 'new': return { type: 'new', days: p.days };
+                case 'price_max': return { type: 'price_max', max_price: p.max_price, exclude_custom: !!p.exclude_custom };
+                case 'price_min': return { type: 'price_min', min_price: p.min_price };
+                case 'hits': return { type: 'hits', limit: p.limit };
+                default: return { type: d.ruleType };
+            }
+        }
+
+        function collectionPayload() {
+            const d = collectionDraft;
+            const out = {
+                name: d.name.trim(),
+                description: d.description.trim(),
+                icon: d.icon,
+                color: d.color,
+                active: !!d.active,
+                mode: d.mode,
+            };
+            if (d.mode === 'manual') out.product_ids = [...d.product_ids];
+            else out.rule = collectionRuleFromDraft();
+            return out;
+        }
+
+        function openCollectionModal(id = null) {
+            const c = id ? collectionById(id) : null;
+            if (id && !c) {
+                showToast('Добірку не знайдено', 'error');
+                return;
+            }
+            const rule = (c && c.rule) || {};
+            collectionDraft = {
+                id: c ? c.id : null,
+                name: c ? c.name : '',
+                description: c ? c.description : '',
+                icon: c ? c.icon : 'sparkle',
+                color: c ? colColor(c.color) : 'violet',
+                mode: c ? c.mode : 'manual',
+                active: c ? !!c.active : true,
+                product_ids: c && c.mode === 'manual' ? [...(c.product_ids || [])] : [],
+                ruleType: rule.type || 'price_max',
+                params: {
+                    ...COLLECTION_RULE_DEFAULTS,
+                    ...(rule.days != null ? { days: rule.days } : {}),
+                    ...(rule.max_price != null ? { max_price: rule.max_price } : {}),
+                    ...(rule.min_price != null ? { min_price: rule.min_price } : {}),
+                    ...(rule.limit != null ? { limit: rule.limit } : {}),
+                    exclude_custom: !!rule.exclude_custom,
+                },
+            };
+            collectionSearchText = '';
+            collectionPreview = { count: 0, product_ids: [], error: '' };
+            document.getElementById('collectionModalTitle').textContent = c ? '✏️ Редагувати добірку' : '➕ Нова добірка';
+            document.getElementById('colName').value = collectionDraft.name;
+            document.getElementById('colDesc').value = collectionDraft.description;
+            document.getElementById('colActive').checked = collectionDraft.active;
+            renderCollectionStaticParts();
+            collectionSnapshot = JSON.stringify(collectionPayload());
+            setDirtyUi('collectionDirty', false);
+            document.getElementById('collectionModal').classList.add('active');
+            document.querySelector('#collectionModal .dr-body').scrollTop = 0;
+            if (!c) document.getElementById('colName').focus();
+        }
+
+        function hasCollectionChanges() {
+            return collectionSnapshot !== null && collectionDraft && JSON.stringify(collectionPayload()) !== collectionSnapshot;
+        }
+
+        function closeCollectionModal(force = false) {
+            const modal = document.getElementById('collectionModal');
+            if (!force && modal.classList.contains('active') && hasCollectionChanges()) {
+                askConfirm('Є незбережені зміни. Закрити без збереження?').then(ok => { if (ok) closeCollectionModal(true); });
+                return;
+            }
+            collectionDraft = null;
+            collectionSnapshot = null;
+            clearTimeout(collectionPreviewTimer);
+            collectionPreviewSeq++;
+            modal.classList.remove('active');
+        }
+
+        function renderCollectionStaticParts() {
+            const d = collectionDraft;
+            const scope = document.getElementById('collectionModal');
+            scope.querySelectorAll('.col-form-scope').forEach(el => {
+                el.className = el.className.replace(/\bac-\w+\b/g, '').trim() + ` ac-${d.color}`;
+            });
+            document.getElementById('colIconGrid').innerHTML = Object.entries(COLLECTION_ICONS).map(([key, [label]]) =>
+                `<button type="button" class="col-ico${d.icon === key ? ' on' : ''}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" aria-pressed="${d.icon === key}" onclick="setCollectionIcon('${key}')">${colIcon(key)}</button>`
+            ).join('');
+            document.getElementById('colColorRow').innerHTML = COLLECTION_COLORS.map(([key, label]) =>
+                `<button type="button" class="col-sw ac-${key}${d.color === key ? ' on' : ''}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" aria-pressed="${d.color === key}" onclick="setCollectionColor('${key}')"></button>`
+            ).join('');
+            document.getElementById('colModeSeg').innerHTML = [['manual', 'Вручну'], ['auto', 'За правилом']].map(([key, label]) =>
+                `<button type="button" class="${d.mode === key ? 'on' : ''}" aria-pressed="${d.mode === key}" onclick="setCollectionMode('${key}')">${label}</button>`
+            ).join('');
+            document.getElementById('colManualPane').style.display = d.mode === 'manual' ? '' : 'none';
+            document.getElementById('colRulePane').style.display = d.mode === 'auto' ? '' : 'none';
+            if (d.mode === 'manual') renderCollectionManualPane();
+            else renderCollectionRulePane();
+            renderCollectionPreview();
+            if (d.mode === 'auto') scheduleCollectionPreview();
+        }
+
+        function touchCollection() {
+            if (!collectionDraft) return;
+            renderCollectionPreview();
+            setDirtyUi('collectionDirty', hasCollectionChanges());
+        }
+
+        function onCollectionText() {
+            if (!collectionDraft) return;
+            collectionDraft.name = document.getElementById('colName').value;
+            collectionDraft.description = document.getElementById('colDesc').value;
+            collectionDraft.active = document.getElementById('colActive').checked;
+            touchCollection();
+        }
+
+        function setCollectionIcon(key) {
+            collectionDraft.icon = key;
+            renderCollectionStaticParts();
+            touchCollection();
+        }
+
+        function setCollectionColor(key) {
+            collectionDraft.color = key;
+            renderCollectionStaticParts();
+            touchCollection();
+        }
+
+        function setCollectionMode(mode) {
+            if (collectionDraft.mode === mode) return;
+            collectionDraft.mode = mode;
+            renderCollectionStaticParts();
+            touchCollection();
+        }
+
+        // Ручний склад: вибрані (з порядком) і список для вибору з пошуком
+        function renderCollectionManualPane() {
+            document.getElementById('colManualPane').innerHTML = `
+                <div class="col-sub-h">Вибрані товари <span class="dr-badge" id="colSelCount">0</span></div>
+                <div id="colSelList" class="col-sel-list"></div>
+                <div class="col-sub-h">Додати товари</div>
+                <div class="col-tools">
+                    <input type="text" id="colSearch" placeholder="🔍 Пошук за назвою або ID" autocomplete="off" value="${escapeAttr(collectionSearchText)}" oninput="onCollectionSearch(this.value)">
+                    <select id="colCatAdd" onchange="addCollectionCategory(this)" aria-label="Додати всі з категорії">
+                        <option value="">Додати всі з категорії…</option>
+                        ${allCategories.filter(c => c.id !== 'custom' && c.active !== false).map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.emoji)} ${escapeHtml(c.name)} (${adminProducts.filter(p => p.cat === c.id && productStatusOf(p) === 'active').length})</option>`).join('')}
+                    </select>
+                </div>
+                <div id="colPickList" class="col-pick-list"></div>`;
+            renderCollectionSelected();
+            renderCollectionPicker();
+        }
+
+        function productStatusNote(p) {
+            const s = productStatusOf(p);
+            return s === 'hidden' ? '<span class="warn">прихований — покупці не бачать</span>' : s === 'archive' ? '<span class="warn">в архіві — покупці не бачать</span>' : '';
+        }
+
+        function renderCollectionSelected() {
+            const host = document.getElementById('colSelList');
+            if (!host || !collectionDraft) return;
+            const ids = collectionDraft.product_ids;
+            document.getElementById('colSelCount').textContent = String(ids.length);
+            if (!ids.length) {
+                host.innerHTML = '<div class="col-note">Поки нічого не вибрано. Відмітьте товари нижче — вони з’являться тут, і їх можна переставляти.</div>';
+                return;
+            }
+            host.innerHTML = ids.map(id => {
+                const p = adminProductById(id);
+                const note = p ? productStatusNote(p) : '<span class="warn">товару немає в каталозі</span>';
+                return `
+                <div class="col-sel-row" data-sel-id="${id}">
+                    <div class="category-drag-handle" title="Перетягни для зміни порядку" role="button" aria-label="Перетягнути" onpointerdown="startSelectedDrag(event)">⋮⋮</div>
+                    ${p ? productThumbHtml(p) : '<span class="col-th">❔</span>'}
+                    <div class="col-pn">${escapeHtml(p ? p.name : `Товар #${id}`)}<small>${p ? `${p.contractPrice ? 'договірна' : (p.price + ' ₴')} · ID ${id}` : `ID ${id}`} ${note}</small></div>
+                    <button type="button" class="col-x" aria-label="Прибрати з добірки" onclick="toggleCollectionProduct(${id}, false)">✕</button>
+                </div>`;
+            }).join('');
+        }
+
+        function startSelectedDrag(event) {
+            startSortDrag(event, {
+                container: document.getElementById('colSelList'),
+                rowSel: '[data-sel-id]',
+                idAttr: 'data-sel-id',
+                onDone: ids => {
+                    collectionDraft.product_ids = ids.map(Number);
+                    renderCollectionSelected();
+                    touchCollection();
+                },
+            });
+        }
+
+        function renderCollectionPicker() {
+            const host = document.getElementById('colPickList');
+            if (!host || !collectionDraft) return;
+            const needle = collectionSearchText.trim().toLowerCase();
+            const chosen = new Set(collectionDraft.product_ids.map(Number));
+            const pool = adminProducts.filter(p => productStatusOf(p) !== 'archive'
+                && (!needle || `${p.name} ${p.id}`.toLowerCase().includes(needle)));
+            const shown = pool.slice(0, 60);
+            if (!shown.length) {
+                host.innerHTML = `<div class="col-note">${adminProducts.length ? 'Нічого не знайдено' : 'Товари ще завантажуються…'}</div>`;
+                return;
+            }
+            host.innerHTML = shown.map(p => `
+                <label class="col-pick">
+                    <input type="checkbox" ${chosen.has(Number(p.id)) ? 'checked' : ''} onchange="toggleCollectionProduct(${p.id}, this.checked)">
+                    ${productThumbHtml(p)}
+                    <span class="col-pn">${escapeHtml(p.name)}<small>${escapeHtml(catLabelSafe(p.cat))} ${productStatusNote(p)}</small></span>
+                    <span class="col-count">${p.contractPrice ? 'договірна' : p.price + ' ₴'}</span>
+                </label>`).join('') + (pool.length > shown.length ? `<div class="col-note">Показано ${shown.length} з ${pool.length}. Уточніть пошук.</div>` : '');
+        }
+
+        function catLabelSafe(catId) {
+            const meta = getCategoryMeta(catId);
+            return `${meta.emoji || ''} ${meta.name || catId || ''}`.trim();
+        }
+
+        function onCollectionSearch(value) {
+            collectionSearchText = value;
+            renderCollectionPicker();
+        }
+
+        function toggleCollectionProduct(id, on) {
+            const ids = collectionDraft.product_ids.map(Number);
+            const at = ids.indexOf(Number(id));
+            if (on && at < 0) ids.push(Number(id));
+            if (!on && at >= 0) ids.splice(at, 1);
+            collectionDraft.product_ids = ids;
+            renderCollectionSelected();
+            renderCollectionPicker();
+            touchCollection();
+        }
+
+        function addCollectionCategory(select) {
+            const catId = select.value;
+            select.value = '';
+            if (!catId) return;
+            const have = new Set(collectionDraft.product_ids.map(Number));
+            const add = adminProducts.filter(p => p.cat === catId && productStatusOf(p) === 'active' && !have.has(Number(p.id)));
+            if (!add.length) {
+                showToast('У цій категорії немає нових товарів для додавання', 'info');
+                return;
+            }
+            collectionDraft.product_ids = collectionDraft.product_ids.concat(add.map(p => Number(p.id)));
+            renderCollectionSelected();
+            renderCollectionPicker();
+            touchCollection();
+            showToast(`Додано ${add.length} ${pluralUa(add.length, 'товар', 'товари', 'товарів')}`, 'success');
+        }
+
+        // Правила: готові пресети зі значеннями
+        function renderCollectionRulePane() {
+            const d = collectionDraft;
+            const p = d.params;
+            const numberInput = (key, min, max, suffix) =>
+                `<input type="number" min="${min}" max="${max}" step="1" value="${escapeAttr(p[key])}" oninput="onCollectionParam('${key}', this.value)" aria-label="${escapeAttr(suffix)}"> ${escapeHtml(suffix)}`;
+            const fields = {
+                new: () => `<div class="col-rule-val">Додані за останні ${numberInput('days', 1, 365, 'днів')}</div>`,
+                price_max: () => `<div class="col-rule-val">До ${numberInput('max_price', 1, 100000, '₴')}
+                    <label><input type="checkbox" ${p.exclude_custom ? 'checked' : ''} onchange="onCollectionParam('exclude_custom', this.checked)"> без індивідуальних</label></div>`,
+                price_min: () => `<div class="col-rule-val">Від ${numberInput('min_price', 1, 100000, '₴')}</div>`,
+                hits: () => `<div class="col-rule-val">Не більше ${numberInput('limit', 1, 48, 'товарів')}</div>`,
+            };
+            document.getElementById('colRulePane').innerHTML = COLLECTION_RULES.map(r => `
+                <label class="col-rule${d.ruleType === r.type ? ' on' : ''}">
+                    <input type="radio" name="colRuleType" value="${r.type}" ${d.ruleType === r.type ? 'checked' : ''} onchange="setCollectionRuleType('${r.type}')">
+                    <span><b>${escapeHtml(r.title)}</b><small>${escapeHtml(r.hint)}</small>${d.ruleType === r.type && fields[r.type] ? fields[r.type]() : ''}</span>
+                </label>`).join('') + '<div id="colMatch" class="col-match"></div>';
+            renderCollectionMatch();
+        }
+
+        function setCollectionRuleType(type) {
+            collectionDraft.ruleType = type;
+            renderCollectionRulePane();
+            scheduleCollectionPreview();
+            touchCollection();
+        }
+
+        function onCollectionParam(key, value) {
+            collectionDraft.params[key] = key === 'exclude_custom' ? !!value : value;
+            scheduleCollectionPreview();
+            touchCollection();
+        }
+
+        function renderCollectionMatch() {
+            const host = document.getElementById('colMatch');
+            if (!host) return;
+            const pv = collectionPreview;
+            if (pv.error) {
+                host.innerHTML = `<span class="bad">${escapeHtml(pv.error)}</span>`;
+                return;
+            }
+            const thumbs = (pv.product_ids || []).slice(0, 5).map(adminProductById).filter(Boolean);
+            host.innerHTML = `<span>Зараз підходить: ${pv.count} ${pluralUa(pv.count, 'товар', 'товари', 'товарів')}</span>
+                ${thumbs.length ? `<span class="strip">${thumbs.map(productThumbHtml).join('')}</span>` : ''}`;
+        }
+
+        function scheduleCollectionPreview() {
+            clearTimeout(collectionPreviewTimer);
+            if (!collectionDraft || collectionDraft.mode !== 'auto') return;
+            collectionPreviewTimer = setTimeout(fetchCollectionPreview, 250);
+        }
+
+        async function fetchCollectionPreview() {
+            if (!collectionDraft || collectionDraft.mode !== 'auto') return;
+            const seq = ++collectionPreviewSeq;
+            try {
+                const data = await collectionApi('/admin/collections/preview', 'POST', { mode: 'auto', rule: collectionRuleFromDraft() });
+                if (seq !== collectionPreviewSeq || !collectionDraft) return;
+                collectionPreview = { count: data.count || 0, product_ids: data.product_ids || [], error: '' };
+            } catch (e) {
+                if (seq !== collectionPreviewSeq || !collectionDraft) return;
+                collectionPreview = { count: 0, product_ids: [], error: e.message || 'Не вдалося порахувати' };
+            }
+            renderCollectionMatch();
+            renderCollectionPreview();
+        }
+
+        // Превʼю «Так виглядає в магазині»: картка «Стопка» як на головній
+        function renderCollectionPreview() {
+            const host = document.getElementById('colPreview');
+            if (!host || !collectionDraft) return;
+            const d = collectionDraft;
+            let visible;
+            let count;
+            if (d.mode === 'manual') {
+                visible = d.product_ids.map(adminProductById).filter(p => p && productStatusOf(p) === 'active');
+                count = visible.length;
+            } else {
+                visible = (collectionPreview.product_ids || []).map(adminProductById).filter(Boolean);
+                count = collectionPreview.error ? 0 : collectionPreview.count;
+            }
+            const pics = visible.filter(p => Array.isArray(p.photos) && p.photos.length).slice(0, 3);
+            const notes = [];
+            if (!d.active) notes.push('<span class="pv-chip warn">Вимкнена: покупці не бачать</span>');
+            if (!count) notes.push('<span class="pv-chip warn">0 товарів — у магазині не показується</span>');
+            notes.push(`<span class="pv-chip">${d.mode === 'manual' ? 'Склад вручну' : 'Склад за правилом'}</span>`);
+            host.innerHTML = `
+                <div class="col-stack col-form-scope ac-${d.color}">
+                    <span class="top"><span class="col-tile">${colIcon(d.icon)}</span><span class="cnt">${count}</span></span>
+                    <b class="${d.name.trim() ? '' : 'ph'}">${escapeHtml(d.name.trim() || 'Назва добірки')}</b>
+                    <span class="thumbs">${pics.map(p => `<span class="t"><img src="${escapeAttr(p.photos[0])}" alt=""></span>`).join('')}${count > pics.length ? `<i>+${count - pics.length}</i>` : ''}</span>
+                </div>
+                ${d.description.trim() ? `<div class="col-stack-desc">${escapeHtml(d.description.trim())}</div>` : ''}
+                <div class="pv-meta">${notes.join('')}</div>`;
+        }
+
+        async function saveCollection(event) {
+            event.preventDefault();
+            if (!collectionDraft) return;
+            const payload = collectionPayload();
+            if (!payload.name) {
+                document.getElementById('colName').closest('.form-group').classList.add('has-error');
+                showToast('Вкажіть назву добірки', 'error');
+                return;
+            }
+            const btn = document.getElementById('collectionSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Збереження...';
+            try {
+                const id = collectionDraft.id;
+                await collectionApi(id ? `/admin/collections/${encodeURIComponent(id)}` : '/admin/collections', id ? 'PUT' : 'POST', payload);
+                showToast(id ? 'Добірку збережено ✅' : 'Добірку створено ✅', 'success');
+                closeCollectionModal(true);
+                await loadCollections();
+            } catch (e) {
+                showToast(e.message || 'Не вдалося зберегти добірку', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '✅ Зберегти добірку';
+            }
+        }
+
+        // ── Секція «Добірки» в редакторі товару: ручні добірки, чипси зберігаються разом із товаром ──
+        let productCollectionIds = [];
+        let productCollectionsOrig = [];
+
+        function manualCollections() {
+            return adminCollections.filter(c => c.mode === 'manual');
+        }
+
+        function renderProductCollections() {
+            const host = document.getElementById('productCollections');
+            if (!host) return;
+            const manual = manualCollections();
+            const chosen = productCollectionIds.map(id => collectionById(id)).filter(Boolean);
+            const free = manual.filter(c => !productCollectionIds.includes(c.id));
+            const chips = chosen.map(c => `
+                <span class="col-chip ac-${colColor(c.color)}">${colIcon(c.icon)}${escapeHtml(c.name)}${c.active ? '' : ' (вимкнена)'}
+                    <button type="button" aria-label="Прибрати з добірки «${escapeAttr(c.name)}»" onclick="removeProductCollection('${escapeAttr(c.id)}')">✕</button></span>`).join('');
+            const select = free.length
+                ? `<select id="productCollectionAdd" aria-label="Додати в добірку" onchange="addProductCollection(this)">
+                       <option value="">＋ Додати в добірку…</option>
+                       ${free.map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.name)}${c.active ? '' : ' (вимкнена)'}</option>`).join('')}
+                   </select>`
+                : '';
+            const hint = !manual.length
+                ? (collectionsLoaded ? 'Ручних добірок ще немає — створіть їх на сторінці «Добірки».' : 'Завантаження добірок…')
+                : (!chosen.length && !free.length ? '' : '');
+            host.innerHTML = `${chips}${select}${hint ? `<span class="form-hint" style="margin:0">${escapeHtml(hint)}</span>` : ''}`;
+        }
+
+        function addProductCollection(select) {
+            const id = select.value;
+            if (id && !productCollectionIds.includes(id)) productCollectionIds.push(id);
+            renderProductCollections();
+            onProductFormChange();
+        }
+
+        function removeProductCollection(id) {
+            productCollectionIds = productCollectionIds.filter(x => x !== id);
+            renderProductCollections();
+            onProductFormChange();
+        }
+
+        async function loadProductCollectionState(productId) {
+            // Новий товар — порожньо; існуючий — актуальні ручні добірки з сервера
+            productCollectionIds = [];
+            if (productId) {
+                try {
+                    const data = await collectionApi(`/admin/products/${productId}/collections`, 'GET');
+                    productCollectionIds = Array.isArray(data.collections) ? data.collections : [];
+                } catch (e) {
+                    showToast('Не вдалося завантажити добірки товару', 'error');
+                }
+            }
+            productCollectionsOrig = [...productCollectionIds];
+            if (!collectionsLoaded) loadCollections();
+            renderProductCollections();
+        }
+
+        function productCollectionsChanged() {
+            return JSON.stringify([...productCollectionIds].sort()) !== JSON.stringify([...productCollectionsOrig].sort());
+        }
+
+        document.getElementById('collectionForm').addEventListener('submit', saveCollection);
+
         function updateCategoryFields() {
             const cat = document.querySelector('select[name="cat"]').value;
             document.getElementById('standardFields').style.display = cat === 'custom' ? 'none' : 'block';
@@ -5966,6 +6867,7 @@
                     form.luminousFilamentChoice.checked = !!product.luminousFilamentChoice;
                 }
 
+                await loadProductCollectionState(id);
                 updatePhotoPreview();
                 updateCategoryFields();
                 toggleContractPriceFields();
@@ -6545,6 +7447,8 @@
                 });
 
                 if (res.ok) {
+                    const saved = await res.json().catch(() => ({}));
+                    const savedId = currentProductId || saved.id;
                     // Статус змінюється окремим ендпоінтом (так само, як у меню «⋯» таблиці)
                     let statusNote = '';
                     if (currentProductId && nextStatus !== currentProductStatus) {
@@ -6552,6 +7456,14 @@
                             await productApi(`/products/${currentProductId}/status`, 'PUT', { status: nextStatus });
                         } catch (statusErr) {
                             statusNote = ` Статус не змінено: ${statusErr.message}`;
+                        }
+                    }
+                    if (savedId && productCollectionsChanged()) {
+                        try {
+                            await productApi(`/admin/products/${savedId}/collections`, 'PUT', { collections: productCollectionIds });
+                            if (collectionsLoaded) loadCollections();
+                        } catch (collErr) {
+                            statusNote += ` Добірки не збережено: ${collErr.message}`;
                         }
                     }
                     showToast(statusNote ? 'Товар збережено.' + statusNote : 'Товар збережено ✅', statusNote ? 'info' : 'success');
@@ -8186,6 +9098,11 @@
                 return;
             }
 
+            if (document.getElementById('collectionModal').classList.contains('active')) {
+                closeCollectionModal();
+                return;
+            }
+
             if (document.getElementById('categoryModal').classList.contains('active')) {
                 closeCategoryModal();
                 return;
@@ -8231,6 +9148,12 @@
         document.getElementById('categoryModal').addEventListener('click', (e) => {
             if (e.target.id === 'categoryModal') {
                 closeCategoryModal();
+            }
+        });
+
+        document.getElementById('collectionModal').addEventListener('click', (e) => {
+            if (e.target.id === 'collectionModal') {
+                closeCollectionModal();
             }
         });
 

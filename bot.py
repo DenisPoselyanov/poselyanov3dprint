@@ -133,7 +133,18 @@ from services.coupons import (
     set_coupon_active,
     update_coupon,
 )
-from services.collections import public_collections
+from services.collections import (
+    create_collection,
+    delete_collection,
+    list_admin_collections,
+    preview_collection,
+    product_collection_ids,
+    reorder_collections,
+    set_collection_products,
+    set_product_collections,
+    update_collection,
+    visible_collections,
+)
 from services.db_utils import init_db, row_to_dict as _row_to_dict
 from services.events import EVENT_TYPES, FUNNEL_EVENT_TYPES, popular_searches, record_funnel_event, record_search
 from services.hits import bought_together, top_selling_products
@@ -3464,7 +3475,104 @@ async def handle_get_hits(request: web.Request):
 
 async def handle_get_collections(request: web.Request):
     """Активні добірки для головної («Стопка»)."""
-    return web.json_response({"collections": await run_db(public_collections)}, headers=cors_headers(request))
+    return web.json_response({"collections": await run_db(visible_collections)}, headers=cors_headers(request))
+
+
+def _collection_response(request: web.Request, result: dict, ok_status: int = 200):
+    status = ok_status if result.get("ok") else (404 if result.get("not_found") else 400)
+    return web.json_response(result, status=status, headers=cors_headers(request))
+
+
+async def handle_get_admin_collections(request: web.Request):
+    """Усі добірки (і вимкнені) для адмінки: склад, режим, кількість товарів, що бачить покупець."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    return web.json_response({"collections": await run_db(list_admin_collections)}, headers=cors_headers(request))
+
+
+async def handle_create_collection(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    return _collection_response(request, await run_db(create_collection, data), 201)
+
+
+async def handle_update_collection(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    return _collection_response(request, await run_db(update_collection, request.match_info.get("id", ""), data))
+
+
+async def handle_delete_collection(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    return _collection_response(request, await run_db(delete_collection, request.match_info.get("id", "")))
+
+
+async def handle_reorder_collections(request: web.Request):
+    """Порядок добірок: {"ids": ["new", "glow", …]}."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    return _collection_response(request, await run_db(reorder_collections, data.get("ids")))
+
+
+async def handle_preview_collection(request: web.Request):
+    """«Зараз підходить: N товарів» для форми добірки: {mode, rule | product_ids}."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    return _collection_response(request, await run_db(preview_collection, data))
+
+
+async def handle_set_collection_products(request: web.Request):
+    """Упорядкований склад ручної добірки: {"product_ids": [3, 1, 2]}."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    return _collection_response(
+        request, await run_db(set_collection_products, request.match_info.get("id", ""), data.get("product_ids"))
+    )
+
+
+async def handle_get_product_collections(request: web.Request):
+    """ID ручних добірок товару (секція «Добірки» в редакторі)."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    ids = await run_db(product_collection_ids, _product_id_param(request))
+    return web.json_response({"ok": True, "collections": ids}, headers=cors_headers(request))
+
+
+async def handle_set_product_collections(request: web.Request):
+    """Ручні добірки товару: {"collections": ["gift-ideas", …]}."""
+    denied = await _admin_guard(request)
+    if denied:
+        return denied
+    data, bad = await _json_body(request)
+    if bad:
+        return bad
+    return _collection_response(
+        request, await run_db(set_product_collections, _product_id_param(request), data.get("collections"))
+    )
 
 
 async def handle_get_popular_searches(request: web.Request):
