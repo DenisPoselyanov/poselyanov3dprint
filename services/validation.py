@@ -15,7 +15,7 @@ from catalog_store import (
 )
 from services.coupons import check_coupon
 from services.pricing import split_discounts
-from services.promotions import compute_order_raw_discount
+from services.promotions import best_order_promotion, compute_order_raw_discount, free_shipping_promotion
 
 CUSTOM_VALUE_MAX = 300
 _NOTE_SEPARATOR = " · побажання:"
@@ -93,6 +93,7 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         return False, "Порожній кошик"
 
     subtotal = 0
+    cat_totals: dict[str, int] = {}
     normalized = []
     seen_line_keys: set[tuple] = set()
 
@@ -157,6 +158,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
 
         if not is_contract:
             subtotal += price * qty
+            cat_key = str(product.get("cat") or "")
+            cat_totals[cat_key] = cat_totals.get(cat_key, 0) + price * qty
         personalization, personalization_note = split_personalization(custom_value)
         normalized.append(
             {
@@ -184,11 +187,13 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         raw_coupon = int(coupon_result.get("raw_discount", coupon_result.get("discount", 0)))
         stack = bool(coupon_result.get("stacks_with_promotion"))
 
-    raw_promotion = compute_order_raw_discount(subtotal)
+    raw_promotion = compute_order_raw_discount(subtotal, cat_totals)
+    best_promo = best_order_promotion(subtotal, cat_totals)[0] if raw_promotion > 0 else None
     discount, promotion_discount = split_discounts(
         subtotal, raw_coupon, raw_promotion, stack=stack
     )
     server_total = max(0, subtotal - discount - promotion_discount)
+    free_ship = free_shipping_promotion(subtotal)
 
     if server_total != int(client_total):
         return False, f"Сума не збігається (клієнт {client_total}, сервер {server_total})"
@@ -199,5 +204,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         "coupon_discount": discount,
         "promotion_discount": promotion_discount,
         "total_price": server_total,
+        # Акція, що дала знижку (для orders.promotion_id і статистики акцій) та акція безкоштовної доставки
+        "promotion_id": best_promo["id"] if best_promo and promotion_discount > 0 else "",
+        "free_ship_promotion_id": free_ship["id"] if free_ship else "",
         "price_pending": 1 if any(i.get("is_contract_price") for i in normalized) else 0,
     }

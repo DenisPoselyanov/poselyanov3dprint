@@ -2476,6 +2476,134 @@
         .category-row.drag-over { box-shadow: 0 0 0 3px rgba(42, 171, 238, .2); }
         .category-drag-handle { touch-action: none; }
 
+        /* ═══ АКЦІЇ І КУПОНИ (етап 5, слайс 5) ═══ */
+        .pr-list { margin-top: 12px; display: grid; gap: 14px; }
+        .pr-card { display: grid; grid-template-columns: minmax(0, 330px) minmax(0, 1fr); gap: 16px; padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-card); cursor: pointer; }
+        .pr-card:hover { border-color: var(--border-input, var(--border)); box-shadow: 0 2px 10px var(--shadow-card); }
+        .pr-card.is-off .pbn, .pr-card.is-ended .pbn { filter: grayscale(.7); opacity: .75; }
+        .pr-info { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+        .pr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .pr-name { font-weight: 800; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+        .pr-type { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+        .pr-pill { font-size: 11.5px; font-weight: 800; padding: 3px 10px; border-radius: 99px; background: var(--bg-section); color: var(--text-muted); white-space: nowrap; }
+        .pr-pill.active { background: color-mix(in srgb, var(--green) 14%, var(--bg-card)); color: var(--green); }
+        .pr-pill.scheduled { background: color-mix(in srgb, var(--amber) 16%, var(--bg-card)); color: var(--amber); }
+        .pr-pill.off, .pr-pill.ended { background: var(--bg-section); color: var(--text-muted); }
+        .pr-cond { font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+        .pr-sched { font-size: 12px; color: var(--text-muted); }
+        .pr-res { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 9px 12px; border-radius: 12px; background: var(--bg-section); font-size: 12.5px; color: var(--text-muted); }
+        .pr-res b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+        .pr-res .none { color: var(--text-faint); }
+        .pr-foot { display: flex; align-items: center; gap: 10px; margin-top: auto; flex-wrap: wrap; }
+        .pr-foot .btn { padding: 7px 12px; }
+        .pr-foot .pr-sw { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-right: auto; }
+        .pr-sale { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border: 1px dashed var(--border); border-radius: 14px; background: var(--bg-card); margin-top: 14px; }
+        .pr-sale-ico { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; font-size: 20px; background: color-mix(in srgb, var(--sale) 12%, var(--bg-card)); flex: none; }
+        .pr-sale-t { min-width: 0; flex: 1 1 220px; }
+        .pr-sale-t b { display: block; font-size: 14px; }
+        .pr-sale-t small { color: var(--text-muted); font-size: 12.5px; }
+
+        /* Банер акції — копія вигляду в магазині (hero-card) */
+        .pbn { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; border-radius: 18px; padding: 14px 14px 14px 16px; min-height: 128px; color: var(--text-main); text-align: left; overflow: hidden;
+            background: linear-gradient(135deg, color-mix(in srgb, var(--h, #2AABEE) 9%, var(--bg-card)) 0%, var(--bg-card) 72%); box-shadow: 0 0 0 1px var(--border); }
+        .pbn.deal { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+        .pbn .eyebrow { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--h-ink, #1E8FCB); min-width: 0; }
+        .pbn .eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--h, #2AABEE); flex: none; }
+        .pbn h4 { margin: 5px 0 4px; font-size: 17px; line-height: 1.15; font-weight: 800; letter-spacing: -.015em; overflow-wrap: anywhere; }
+        .pbn p { margin: 0; font-size: 12.5px; color: var(--text-secondary); overflow-wrap: anywhere; }
+        .pbn .ico { width: 48px; height: 48px; border-radius: 15px; background: color-mix(in srgb, var(--h, #2AABEE) 13%, var(--bg-card)); display: grid; place-items: center; align-self: start; font-size: 24px; }
+        .pbn .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; min-width: 0; }
+        .pbn .tm { display: inline-flex; align-items: center; gap: 3px; font-weight: 800; font-size: 11.5px; color: var(--text-muted); }
+        .pbn .tm b { background: color-mix(in srgb, var(--h, #2AABEE) 11%, var(--bg-card)); color: var(--h-ink, #1E8FCB); border-radius: 6px; padding: 3px 6px; font-variant-numeric: tabular-nums; }
+        .pbn .dm { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
+        .pbn .dm h4 { margin: 0 0 3px; }
+        .pbn .dv { min-width: 84px; height: 62px; padding: 0 14px 8px; border-radius: 13px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--h, #2AABEE) 14%, var(--bg-card)); color: var(--h-ink, #1E8FCB); font-weight: 900; letter-spacing: -.04em; font-variant-numeric: tabular-nums; position: relative; }
+        .pbn .dv b { font-size: 28px; line-height: 1; }
+        .pbn .dv span { font-size: 16px; margin-left: 1px; align-self: flex-start; margin-top: 12px; }
+        .pbn .dv::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 9px; border-top: 1.5px dashed color-mix(in srgb, var(--h, #2AABEE) 40%, transparent); }
+        .pbn .foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+        .pbn .prog { flex: 1; height: 6px; border-radius: 9px; background: color-mix(in srgb, var(--h, #2AABEE) 12%, var(--bg-section)); overflow: hidden; }
+        .pbn .prog i { display: block; height: 100%; background: var(--h, #2AABEE); border-radius: 9px; }
+        .pbn .foot small { font-size: 12px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; }
+
+        /* Шухляда акції */
+        .pr-presets { display: grid; gap: 12px; }
+        .pr-pgroup h5 { margin: 0 0 6px; font-size: 11.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-faint); }
+        .pr-pchips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pr-pchip { border: 1px solid var(--border); background: var(--bg-section); color: var(--text-main); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-align: left; }
+        .pr-pchip:hover { background: var(--bg-tab-active); }
+        .pr-pchip.on { border-color: var(--accent); background: var(--bg-tab-active); color: var(--accent-text); }
+        .pr-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+        .pr-type-card { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-section); color: var(--text-main); font: inherit; cursor: pointer; min-width: 0; }
+        .pr-type-card .ti { font-size: 20px; line-height: 1; }
+        .pr-type-card b { font-size: 13px; line-height: 1.2; overflow-wrap: anywhere; }
+        .pr-type-card small { font-size: 11.5px; color: var(--text-muted); line-height: 1.25; }
+        .pr-type-card.on { border-color: var(--accent); background: var(--bg-tab-active); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+        .pr-sum { margin-top: 12px; padding: 11px 13px; border-radius: 12px; background: var(--bg-section); font-size: 13.5px; font-weight: 700; line-height: 1.4; }
+        .pr-sum.bad { color: var(--sale); }
+        .pr-catchips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pr-catchip { border: 1px solid var(--border); background: var(--bg-section); color: var(--text-main); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .pr-catchip.on { border-color: var(--accent); background: var(--bg-tab-active); color: var(--accent-text); }
+        .pr-sw-auto { width: auto; height: 34px; border-radius: 99px; padding: 0 12px; font-size: 12px; font-weight: 700; color: var(--text-muted); background: var(--bg-section); border: 1px solid var(--border); }
+        .pr-sw-auto.on { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--accent); }
+        .pr-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .pr-dates input { width: 100%; min-width: 0; }
+
+        /* Купони — «квиток» */
+        .cp-list { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); gap: 14px; }
+        .cp-card { --h: #2AABEE; --h-ink: #1E8FCB; position: relative; display: grid; grid-template-columns: 108px minmax(0, 1fr); border-radius: 16px; border: 1px solid var(--border); background: var(--bg-card); cursor: pointer; overflow: hidden; }
+        .cp-card:hover { box-shadow: 0 2px 10px var(--shadow-card); }
+        .cp-card.is-dim { --h: #8a94a0; --h-ink: #6b7480; }
+        .cp-card.is-dim .cp-body { opacity: .75; }
+        .cp-val { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 14px 8px; text-align: center; color: var(--h-ink); background: color-mix(in srgb, var(--h) 13%, var(--bg-card)); border-right: 2px dashed color-mix(in srgb, var(--h) 45%, transparent); }
+        .cp-val b { font-size: 26px; line-height: 1; font-weight: 900; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+        .cp-val small { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+        .cp-val::before, .cp-val::after { content: ''; position: absolute; right: -9px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg-page); box-shadow: inset 0 0 0 1px var(--border); }
+        .cp-val::before { top: -9px; }
+        .cp-val::after { bottom: -9px; }
+        .cp-body { min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+        .cp-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .cp-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 800; font-size: 16px; letter-spacing: .03em; overflow-wrap: anywhere; }
+        .cp-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .cp-chip { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--bg-section); color: var(--text-secondary); white-space: nowrap; }
+        .cp-chip.warn { background: color-mix(in srgb, var(--amber) 15%, var(--bg-card)); color: var(--amber); }
+        .cp-use { font-size: 12.5px; color: var(--text-muted); }
+        .cp-use b { color: var(--text-main); }
+        .cp-bar { height: 5px; border-radius: 9px; background: var(--bg-section); overflow: hidden; margin-top: 5px; }
+        .cp-bar i { display: block; height: 100%; background: var(--h); border-radius: 9px; }
+        .cp-link { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .cp-link code { flex: 1; min-width: 0; font-size: 11.5px; color: var(--text-muted); background: var(--bg-section); border-radius: 8px; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cp-link .btn { padding: 6px 10px; font-size: 12.5px; flex: none; }
+        .cp-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .cp-foot .cp-sw { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-right: auto; }
+        .cp-foot .btn { padding: 6px 10px; font-size: 13px; }
+        .cp-code-row { display: flex; gap: 8px; }
+        .cp-code-row input { flex: 1; min-width: 0; text-transform: uppercase; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; letter-spacing: .04em; }
+        .cp-id-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        .cp-id-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 10px; border-radius: 99px; background: var(--bg-tab-active); color: var(--accent-text); font-size: 13px; font-weight: 700; }
+        .cp-id-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; width: 22px; height: 22px; border-radius: 50%; font-size: 13px; padding: 0; line-height: 1; }
+        .cp-id-chip button:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+        .cp-add-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .cp-add-row input { flex: 1 1 140px; min-width: 0; }
+        .cp-linkbox { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+        .cp-linkbox code { flex: 1; min-width: 0; font-size: 12px; background: var(--bg-section); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; }
+        .cp-add-row input, #cpPickSearch { padding: 12px; border: 2px solid var(--border-input); border-radius: 8px; font-size: 14px; font-family: inherit; background: var(--bg-input); color: var(--text-main); box-sizing: border-box; }
+        .cp-add-row input:focus, #cpPickSearch:focus { outline: none; border-color: var(--accent); }
+        .cp-pick-list { display: grid; gap: 4px; max-height: 50vh; overflow-y: auto; margin-top: 10px; }
+        .cp-pick { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); cursor: pointer; text-align: left; font: inherit; color: var(--text-main); width: 100%; }
+        .cp-pick:hover { background: var(--bg-tab-active); }
+        .cp-pick small { display: block; font-size: 11.5px; color: var(--text-muted); }
+        .cp-pick .on { color: var(--green); font-weight: 800; }
+        .modal.layer-top { z-index: 1100; }
+
+        @media (max-width: 720px) {
+            .pr-card { grid-template-columns: minmax(0, 1fr); }
+            .pr-types { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .pr-dates { grid-template-columns: 1fr; gap: 0; }
+            .cp-card { grid-template-columns: 92px minmax(0, 1fr); }
+            .cp-val b { font-size: 22px; }
+        }
+
         /* ═══ ДОБІРКИ: список, шухляда, превʼю «Стопки», чипси в редакторі товару ═══ */
         .ac-blue { --h: #2AABEE; --h-ink: #1E8FCB; }
         .ac-orange { --h: #FF7A1A; --h-ink: #D85F00; }
@@ -2979,17 +3107,18 @@
             </section>
 
             <section id="couponsPage" class="page-section">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                     <h2 style="font-size:20px; margin:0;">🎟️ Купони</h2>
                     <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
                         <input type="checkbox" id="couponsActiveOnlyFilter" onchange="renderCouponsManager()">
                         Лише активні
                     </label>
                 </div>
+                <p class="pt-count" style="margin-top:8px;">Тап по купону — редагування. Посилання відкриває магазин і одразу застосовує купон.</p>
                 <div id="couponsLoading" class="loading" style="display:none;">
                     <div class="spinner"></div>
                 </div>
-                <div id="couponsList" style="display:grid; gap:12px;"></div>
+                <div id="couponsList" class="cp-list"></div>
                 <div id="couponsEmpty" class="empty-state" style="display:none;">
                     <div class="empty-state-icon">🎟️</div>
                     <p>Купонів ще немає</p>
@@ -2998,18 +3127,15 @@
             </section>
 
             <section id="promotionsPage" class="page-section">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                     <h2 style="font-size:20px; margin:0;">🔥 Акції</h2>
-                    <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
-                        <input type="checkbox" id="promotionsActiveOnlyFilter" onchange="renderPromotionsManager()">
-                        Лише активні
-                    </label>
+                    <button class="btn btn-secondary" type="button" onclick="loadPromotions()">🔄 Оновити</button>
                 </div>
-                <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+                <p class="pt-count" style="margin-top:8px;">
                     Перемикач вмикає/вимикає акцію одразу — і в каталозі, і при розрахунку суми замовлення.
                     Якщо активних знижкових акцій кілька, застосовується найвигідніша для клієнта.
-                </div>
-                <div style="border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:16px; background:var(--bg-surface-alt);">
+                </p>
+                <div style="border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:12px 0; background:var(--bg-surface-alt);">
                     <div class="toggle-row">
                         <span class="toggle-row-label">🔥 + 🏷️ Дозволити сумування купонів з акціями</span>
                         <label class="switch" title="Глобальний перемикач сумування">
@@ -3030,15 +3156,17 @@
                         Рахуються замовлення, які ти прийняв у роботу (не нові, не «під питанням» і не скасовані).
                     </div>
                 </div>
+                <div id="promotionsTabs" class="orders-tabs"></div>
                 <div id="promotionsLoading" class="loading" style="display:none;">
                     <div class="spinner"></div>
                 </div>
-                <div id="promotionsList" style="display:grid; gap:12px;"></div>
+                <div id="promotionsList" class="pr-list"></div>
                 <div id="promotionsEmpty" class="empty-state" style="display:none;">
                     <div class="empty-state-icon">🔥</div>
                     <p>Акцій ще немає</p>
                     <button class="btn btn-primary" type="button" onclick="openPromotionModal()">➕ Додати акцію</button>
                 </div>
+                <div id="promoSaleBlock" class="pr-sale"></div>
             </section>
         </div>
         </div>
@@ -3542,80 +3670,109 @@
     </div>
 
     <div id="couponModal" class="modal">
-        <div class="modal-content" style="max-width: 520px;">
-            <div class="modal-header">
-                <span id="couponModalTitle">➕ Додати купон</span>
-                <button class="btn btn-secondary" onclick="closeCouponModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+        <div class="modal-content dr dr-wide">
+            <div class="dr-head">
+                <span id="couponModalTitle">➕ Новий купон</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closeCouponModal()" aria-label="Закрити">✕</button>
             </div>
-            <form id="couponForm">
-                <div class="form-group required">
-                    <label>Код купона</label>
-                    <input type="text" name="code" placeholder="Напр.: ЛІТО" required>
-                    <div class="form-error">Код обов'язковий</div>
-                </div>
-                <div class="form-group required">
-                    <label>Тип знижки</label>
-                    <select name="type" required>
-                        <option value="percent">Відсоток (%)</option>
-                        <option value="fixed">Фіксована сума (₴)</option>
-                    </select>
-                </div>
-                <div class="form-group required">
-                    <label>Значення</label>
-                    <input type="number" name="value" required min="1" step="1">
-                    <div class="form-error">Значення обов'язкове</div>
-                </div>
-                <div class="form-group">
-                    <label>Мін. сума замовлення (₴)</label>
-                    <input type="number" name="min_order" min="0" step="1" value="0">
-                </div>
-                <div class="form-group">
-                    <label>Макс. використань (0 = безліміт)</label>
-                    <input type="number" name="uses_max" min="0" step="1" value="0">
-                </div>
-                <div class="form-group">
-                    <label class="checkbox-group" style="display:block;">
-                        <label><input type="checkbox" name="one_per_user"> Одноразовий (1 користувач — 1 раз)</label>
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label class="checkbox-group" style="display:block;">
-                        <label><input type="checkbox" name="stackable" id="couponStackable"> 🔥 Сумувати з акційною знижкою</label>
-                    </label>
-                    <small id="couponStackableHint" style="color:var(--text-muted); display:block; margin-top:6px;">
-                        За замовчуванням промокод <b>замінює</b> автоматичну акційну знижку.
-                        З галочкою знижки <b>додаються</b>: обидві рахуються від суми кошика.
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label class="checkbox-group" style="display:block;">
-                        <label><input type="checkbox" name="require_channel_sub"> 📢 Лише для підписників каналу</label>
-                    </label>
-                    <input type="text" name="sub_channel_id" placeholder="@channel або -1001589686948 (порожнє = канал за замовчуванням)" style="margin-top:8px;">
-                    <small style="color:var(--text-muted); display:block; margin-top:6px;">
-                        Код побачать у «Мої купони» та зможуть застосувати лише підписники цього каналу/групи.
-                        Порожнє поле — діє канал із <code>SUBSCRIPTION_CHANNEL</code> (ENV). Бот має бути учасником/адміном каналу.
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label>Термін дії</label>
-                    <input type="date" name="expires_at">
-                </div>
-                <div class="form-group">
-                    <label>Telegram ID (доступ лише для цих користувачів)</label>
-                    <textarea name="allowed_user_ids" rows="4" placeholder="Один ID на рядок або через кому&#10;Напр.: 123456789&#10;987654321"></textarea>
-                    <small style="color:var(--text-muted); display:block; margin-top:6px;">Залиште порожнім для публічного купона. Код зможуть застосувати лише вказані Telegram ID.</small>
-                </div>
-                <div class="form-group">
-                    <div class="toggle-row">
-                        <span class="toggle-row-label">Активний</span>
-                        <label class="switch" title="Увімкнути/вимкнути купон">
-                            <input type="checkbox" name="active" checked>
-                            <span class="switch-slider"></span>
-                        </label>
+            <form id="couponForm" class="dr-form" novalidate>
+                <div class="dr-body">
+                    <div class="dr-grid">
+                        <div class="dr-main">
+                            <section class="dr-sec">
+                                <h3>Код</h3>
+                                <div class="form-group required">
+                                    <div class="cp-code-row">
+                                        <input type="text" id="cpCode" maxlength="32" placeholder="Напр.: ЛІТО10" autocomplete="off" spellcheck="false" oninput="this.closest('.form-group').classList.remove('has-error'); onCouponField()">
+                                        <button type="button" class="btn btn-secondary" id="cpGenBtn" onclick="generateCouponCode()">🎲 Згенерувати</button>
+                                    </div>
+                                    <div class="form-error">Код обов'язковий</div>
+                                    <div class="form-hint">Клієнт вводить його в кошику. Регістр не важливий. Код не можна змінити після створення.</div>
+                                </div>
+                                <div class="form-group" id="cpLinkGroup" style="display:none;">
+                                    <label>Посилання в магазин</label>
+                                    <div class="cp-linkbox"><code id="cpLinkText"></code><button type="button" class="btn btn-secondary" onclick="copyCouponLink(currentCouponCode)">📋 Копіювати</button></div>
+                                    <div class="form-hint">Відкриває магазин і застосовує купон, щойно в кошику з'являється товар.</div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Знижка</h3>
+                                <div id="cpTypeSeg" class="col-seg"></div>
+                                <div class="dr-row">
+                                    <div class="form-group required">
+                                        <label id="cpValueLabel" for="cpValue">Розмір знижки (%)</label>
+                                        <input type="number" id="cpValue" min="1" step="1" inputmode="numeric" oninput="this.closest('.form-group').classList.remove('has-error'); onCouponField()">
+                                        <div class="form-error">Вкажи значення більше 0</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="cpMin">Мінімальна сума (₴)</label>
+                                        <input type="number" id="cpMin" min="0" step="1" value="0" inputmode="numeric" oninput="onCouponField()">
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Обмеження</h3>
+                                <div class="dr-row">
+                                    <div class="form-group">
+                                        <label for="cpUsesMax">Скільки разів можна використати</label>
+                                        <input type="number" id="cpUsesMax" min="0" step="1" value="0" inputmode="numeric" oninput="onCouponField()">
+                                        <div class="form-hint">0 — без ліміту.</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="cpExpires">Діє до</label>
+                                        <input type="date" id="cpExpires" oninput="onCouponField()">
+                                    </div>
+                                </div>
+                                <div class="toggle-row" style="margin-bottom:8px;">
+                                    <span class="toggle-row-label">Один раз на клієнта</span>
+                                    <label class="switch"><input type="checkbox" id="cpOnce" onchange="onCouponField()"><span class="switch-slider"></span></label>
+                                </div>
+                                <div class="toggle-row">
+                                    <span class="toggle-row-label">🔥 Сумувати з акційною знижкою</span>
+                                    <label class="switch"><input type="checkbox" id="cpStack" onchange="onCouponField()"><span class="switch-slider"></span></label>
+                                </div>
+                                <div class="form-hint" id="couponStackableHint">Без галочки промокод <b>замінює</b> автоматичну акційну знижку. З галочкою знижки <b>додаються</b>: обидві рахуються від суми кошика.</div>
+                                <div class="toggle-row" style="margin-top:8px;">
+                                    <span class="toggle-row-label">📢 Лише для підписників каналу</span>
+                                    <label class="switch"><input type="checkbox" id="cpChanOn" onchange="onCouponField()"><span class="switch-slider"></span></label>
+                                </div>
+                                <div class="form-group" id="cpChanGroup" style="display:none; margin-top:8px;">
+                                    <input type="text" id="cpChan" placeholder="@channel або -1001589686948 (порожнє = канал за замовчуванням)" autocomplete="off" oninput="onCouponField()">
+                                    <div class="form-hint">Бот має бути учасником/адміном каналу. Порожнє поле — діє канал із <code>SUBSCRIPTION_CHANNEL</code> (ENV).</div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Для кого</h3>
+                                <div id="cpIdChips" class="cp-id-chips"></div>
+                                <div class="cp-add-row">
+                                    <input type="text" id="cpIdInput" inputmode="numeric" placeholder="Telegram ID" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();addCouponIdFromInput();}">
+                                    <button type="button" class="btn btn-secondary" onclick="addCouponIdFromInput()">➕ Додати</button>
+                                    <button type="button" class="btn btn-secondary" onclick="openCouponClientPicker('draft')">👥 Обрати клієнта</button>
+                                </div>
+                                <div class="form-hint" id="cpIdHint">Порожньо — купон публічний. Якщо додати ID, код зможуть застосувати лише ці клієнти (і вони побачать його в «Мої купони»).</div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Показ</h3>
+                                <div class="toggle-row">
+                                    <span class="toggle-row-label">Активний</span>
+                                    <label class="switch" title="Увімкнути/вимкнути купон"><input type="checkbox" id="cpActive" checked onchange="onCouponField()"><span class="switch-slider"></span></label>
+                                </div>
+                            </section>
+                        </div>
+
+                        <aside class="dr-preview" aria-label="Так виглядає в «Мої купони»">
+                            <div class="dr-prev-title">Так виглядає в «Мої купони»</div>
+                            <div id="cpPreview"></div>
+                        </aside>
                     </div>
                 </div>
-                <div class="form-buttons">
+                <div class="dr-foot">
+                    <button type="button" class="btn btn-danger dr-del" id="cpDeleteBtn" onclick="deleteCoupon(currentCouponCode)" style="display:none;" aria-label="Видалити купон">🗑️<span class="dr-del-t"> Видалити</span></button>
+                    <span id="couponDirty" class="dr-dirty" role="status">Без змін</span>
                     <button type="button" class="btn btn-secondary" onclick="closeCouponModal()">Скасувати</button>
                     <button type="submit" class="btn btn-primary" id="couponSubmitBtn">✅ Зберегти купон</button>
                 </div>
@@ -3623,121 +3780,178 @@
         </div>
     </div>
 
-    <div id="addCouponUserModal" class="modal">
-        <div class="modal-content" style="max-width: 420px;">
-            <div class="modal-header">
-                <span id="addCouponUserModalTitle">➕ Додати учня до купона</span>
-                <button class="btn btn-secondary" onclick="closeAddCouponUserModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+    <div id="addCouponUserModal" class="modal layer-top">
+        <div class="modal-content dr">
+            <div class="dr-head">
+                <span id="addCouponUserModalTitle">👥 Клієнти</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closeAddCouponUserModal()" aria-label="Закрити">✕</button>
             </div>
-            <form id="addCouponUserForm">
-                <div class="form-group required">
-                    <label>Telegram user ID</label>
-                    <input type="number" name="user_id" min="1" step="1" required placeholder="123456789">
+            <form id="addCouponUserForm" class="dr-form" novalidate>
+                <div class="dr-body">
+                    <section class="dr-sec">
+                        <h3>За Telegram ID</h3>
+                        <div class="cp-add-row">
+                            <input type="number" id="cpPickId" min="1" step="1" inputmode="numeric" placeholder="123456789">
+                            <button type="submit" class="btn btn-primary" id="addCouponUserSubmitBtn">✅ Додати</button>
+                        </div>
+                    </section>
+                    <section class="dr-sec">
+                        <h3>Серед клієнтів бота</h3>
+                        <input type="search" id="cpPickSearch" placeholder="🔍 Імʼя, @username або ID" autocomplete="off" oninput="onCouponClientSearch(this.value)" style="width:100%;">
+                        <div id="cpPickList" class="cp-pick-list"></div>
+                    </section>
                 </div>
-                <div class="form-buttons">
-                    <button type="button" class="btn btn-secondary" onclick="closeAddCouponUserModal()">Скасувати</button>
-                    <button type="submit" class="btn btn-primary" id="addCouponUserSubmitBtn">✅ Додати</button>
+                <div class="dr-foot">
+                    <span class="dr-dirty" id="cpPickInfo"></span>
+                    <button type="button" class="btn btn-secondary" onclick="closeAddCouponUserModal()">Готово</button>
                 </div>
             </form>
         </div>
     </div>
 
     <div id="promotionModal" class="modal">
-        <div class="modal-content" style="max-width: 560px;">
-            <div class="modal-header">
-                <span id="promotionModalTitle">➕ Додати акцію</span>
-                <button class="btn btn-secondary" onclick="closePromotionModal()" style="margin-left: auto; padding: 8px 12px;">✕</button>
+        <div class="modal-content dr dr-wide">
+            <div class="dr-head">
+                <span id="promotionModalTitle">➕ Нова акція</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closePromotionModal()" aria-label="Закрити">✕</button>
             </div>
-            <form id="promotionForm">
-                <div class="form-group" id="promotionPresetGroup">
-                    <label>Готовий шаблон</label>
-                    <select id="promotionPresetSelect" onchange="applyPromotionPreset(this.value)">
-                        <option value="">— Створити з нуля —</option>
-                    </select>
-                    <small style="color:var(--text-muted); display:block; margin-top:6px;">Заповнить поля за одну секунду. Далі можна змінити будь-що.</small>
-                </div>
-                <div class="form-group required">
-                    <label>ID акції (латиницею)</label>
-                    <input type="text" name="promo_id" placeholder="напр.: winter_15" required pattern="[a-zA-Z0-9_]{2,40}">
-                    <div class="form-error">Латиниця, цифри та _ (2–40 символів)</div>
-                </div>
-                <div class="form-group required">
-                    <label>Тип акції</label>
-                    <select name="type" required onchange="updatePromotionTypeFields()">
-                        <option value="order_percent">💸 Знижка % на всю суму</option>
-                        <option value="order_fixed">💵 Знижка ₴ на всю суму</option>
-                        <option value="gift_threshold">🎁 Подарунок за N товарів</option>
-                        <option value="info">📣 Банер без автоматичної знижки</option>
-                    </select>
-                </div>
-                <div class="form-group required">
-                    <label>Назва (заголовок картки)</label>
-                    <input type="text" name="promo_title" required placeholder="напр.: −15% на зимову колекцію">
-                    <div class="form-error">Назва обов'язкова</div>
-                </div>
-                <div class="form-group">
-                    <label>Опис (підзаголовок картки)</label>
-                    <input type="text" name="subtitle" placeholder="Коротко про умови акції">
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <div class="form-group">
-                        <label>Emoji</label>
-                        <input type="text" name="emoji" value="🔥" maxlength="8">
+            <form id="promotionForm" class="dr-form" novalidate>
+                <div class="dr-body">
+                    <div class="dr-grid">
+                        <div class="dr-main">
+                            <section class="dr-sec" id="prPresetSec">
+                                <h3>Шаблон <span class="dr-badge">за бажанням</span></h3>
+                                <div id="prPresets" class="pr-presets"></div>
+                                <div class="form-hint">Заповнить поля за секунду. Далі можна змінити будь-що.</div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Тип акції</h3>
+                                <div id="prTypes" class="pr-types"></div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Вигляд</h3>
+                                <div class="form-group required">
+                                    <label for="prTitle">Назва (заголовок картки)</label>
+                                    <input type="text" id="prTitle" maxlength="80" placeholder="Напр.: −15% на зимову колекцію" autocomplete="off" oninput="this.closest('.form-group').classList.remove('has-error'); onPromoField()">
+                                    <div class="form-error">Назва обов'язкова</div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="prSub">Опис (підзаголовок)</label>
+                                    <input type="text" id="prSub" maxlength="140" placeholder="Коротко про умови акції" autocomplete="off" oninput="onPromoField()">
+                                </div>
+                                <div class="dr-row">
+                                    <div class="form-group">
+                                        <label for="prEmoji">Emoji</label>
+                                        <input type="text" id="prEmoji" maxlength="8" value="🔥" autocomplete="off" oninput="onPromoField()">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="prBadge">Бейдж (напр. −10%)</label>
+                                        <input type="text" id="prBadge" maxlength="16" placeholder="необов'язково" autocomplete="off" oninput="onPromoField()">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Колір банера</label>
+                                    <div id="prAccentRow" class="col-sw-row"></div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Умови</h3>
+                                <div class="dr-row" data-types="order_percent order_fixed cat_percent">
+                                    <div class="form-group required">
+                                        <label for="prValue" id="prValueLabel">Розмір знижки (%)</label>
+                                        <input type="number" id="prValue" min="1" step="1" inputmode="numeric" oninput="this.closest('.form-group').classList.remove('has-error'); onPromoField()">
+                                        <div class="form-error">Вкажи значення більше 0</div>
+                                    </div>
+                                    <div class="form-group" id="prMinGroup">
+                                        <label for="prMin">Мінімальна сума замовлення (₴)</label>
+                                        <input type="number" id="prMin" min="0" step="1" value="0" inputmode="numeric" oninput="onPromoField()">
+                                        <div class="form-hint">0 — діє на будь-яку суму.</div>
+                                    </div>
+                                </div>
+                                <div class="form-group" data-types="cat_percent">
+                                    <label>Категорії зі знижкою</label>
+                                    <div id="prCatChips" class="pr-catchips"></div>
+                                    <div class="form-hint">Знижка рахується лише від вартості товарів цих категорій.</div>
+                                </div>
+                                <div data-types="free_ship">
+                                    <div class="form-group">
+                                        <label for="prMinShip">Безкоштовно від суми (₴)</label>
+                                        <input type="number" id="prMinShip" min="0" step="1" value="0" inputmode="numeric" oninput="onPromoField()">
+                                        <div class="form-hint">0 — для всіх замовлень. Доставка в магазині без ціни (за тарифами перевізника), тож це позначка «безкоштовно» в кошику.</div>
+                                    </div>
+                                </div>
+                                <div data-types="gift_threshold">
+                                    <div class="form-group">
+                                        <label for="prCat">Категорія товарів для подарунка</label>
+                                        <select id="prCat" onchange="onPromoField()"><option value="">Будь-яка категорія</option></select>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="form-group required">
+                                            <label for="prMinItems">Скільки різних товарів потрібно</label>
+                                            <input type="number" id="prMinItems" min="1" step="1" value="3" inputmode="numeric" oninput="onPromoField()">
+                                        </div>
+                                        <div class="form-group required">
+                                            <label for="prMaxGift">Макс. ціна подарунка (₴)</label>
+                                            <input type="number" id="prMaxGift" min="1" step="1" value="100" inputmode="numeric" oninput="onPromoField()">
+                                        </div>
+                                    </div>
+                                    <div class="form-hint">Подарунком може стати товар з галочкою «🎁 Може бути подарунком» і ціною не вище цієї.</div>
+                                </div>
+                                <div class="form-hint" data-types="info">Банер без автоматичного ефекту: показується в магазині, але ціну не змінює (промокод, умови доставки тощо).</div>
+                                <div id="prSummary" class="pr-sum"></div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Розклад</h3>
+                                <div class="pr-dates">
+                                    <div class="form-group">
+                                        <label for="prStart">Початок</label>
+                                        <input type="datetime-local" id="prStart" oninput="onPromoField()">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="prEnd">Завершення</label>
+                                        <input type="datetime-local" id="prEnd" oninput="onPromoField()">
+                                    </div>
+                                </div>
+                                <div class="form-hint">Порожньо — без обмежень за датою.</div>
+                                <div class="toggle-row" style="margin-top:10px;">
+                                    <span class="toggle-row-label">⏱ Показувати таймер до кінця</span>
+                                    <label class="switch"><input type="checkbox" id="prTimer" checked onchange="onPromoField()"><span class="switch-slider"></span></label>
+                                </div>
+                                <div class="form-hint">Таймер зʼявляється в банері, коли до завершення лишається менше 30 днів.</div>
+                                <div class="form-group" style="margin-top:12px;">
+                                    <label for="prPriority">Порядок показу</label>
+                                    <input type="number" id="prPriority" min="0" step="1" value="100" inputmode="numeric" oninput="onPromoField()">
+                                    <div class="form-hint">Менше число — вище в списку акцій у застосунку.</div>
+                                </div>
+                                <div class="toggle-row">
+                                    <span class="toggle-row-label">Активна</span>
+                                    <label class="switch" title="Увімкнути/вимкнути акцію"><input type="checkbox" id="prActive" checked onchange="onPromoField()"><span class="switch-slider"></span></label>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec" id="prIdSec">
+                                <h3>Технічне</h3>
+                                <div class="form-group required">
+                                    <label for="prId">ID акції (латиницею)</label>
+                                    <input type="text" id="prId" maxlength="40" placeholder="створюється з назви" autocomplete="off" spellcheck="false" oninput="promoIdTouched = true; this.closest('.form-group').classList.remove('has-error'); onPromoField()">
+                                    <div class="form-error">Латиниця, цифри та _ (2–40 символів)</div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <aside class="dr-preview" aria-label="Так виглядає в магазині">
+                            <div class="dr-prev-title">Так виглядає в магазині</div>
+                            <div id="prPreview"></div>
+                        </aside>
                     </div>
-                    <div class="form-group">
-                        <label>Бейдж (напр. −10%)</label>
-                        <input type="text" name="badge" maxlength="16" placeholder="необов'язково">
-                    </div>
                 </div>
-                <div class="form-group promo-field promo-field-value">
-                    <label id="promotionValueLabel">Розмір знижки</label>
-                    <input type="number" name="value" min="0" step="1" value="10">
-                </div>
-                <div class="form-group promo-field promo-field-min-order">
-                    <label>Мінімальна сума замовлення (₴)</label>
-                    <input type="number" name="min_order" min="0" step="1" value="0">
-                    <small style="color:var(--text-muted); display:block; margin-top:6px;">0 — акція діє на будь-яку суму.</small>
-                </div>
-                <div class="form-group promo-field promo-field-gift">
-                    <label>Категорія товарів для подарунка</label>
-                    <select name="category" id="promotionCategorySelect">
-                        <option value="">Будь-яка категорія</option>
-                    </select>
-                </div>
-                <div class="form-group promo-field promo-field-gift">
-                    <label>Скільки різних товарів потрібно</label>
-                    <input type="number" name="min_items" min="0" step="1" value="3">
-                </div>
-                <div class="form-group promo-field promo-field-gift">
-                    <label>Максимальна ціна подарунка (₴)</label>
-                    <input type="number" name="max_gift_price" min="0" step="1" value="100">
-                    <small style="color:var(--text-muted); display:block; margin-top:6px;">Подарунком може стати товар з галочкою «🎁 Може бути подарунком» і ціною не вище цієї.</small>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <div class="form-group">
-                        <label>Старт (необов'язково)</label>
-                        <input type="date" name="starts_at">
-                    </div>
-                    <div class="form-group">
-                        <label>Завершення (необов'язково)</label>
-                        <input type="date" name="ends_at">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Порядок показу</label>
-                    <input type="number" name="priority" min="0" step="1" value="100">
-                    <small style="color:var(--text-muted); display:block; margin-top:6px;">Менше число — вище в списку акцій у застосунку.</small>
-                </div>
-                <div class="form-group">
-                    <div class="toggle-row">
-                        <span class="toggle-row-label">Активна</span>
-                        <label class="switch" title="Увімкнути/вимкнути акцію">
-                            <input type="checkbox" name="active" checked>
-                            <span class="switch-slider"></span>
-                        </label>
-                    </div>
-                </div>
-                <div class="form-buttons">
+                <div class="dr-foot">
+                    <button type="button" class="btn btn-danger dr-del" id="prDeleteBtn" onclick="deletePromotion(currentPromotionId)" style="display:none;" aria-label="Видалити акцію">🗑️<span class="dr-del-t"> Видалити</span></button>
+                    <span id="promotionDirty" class="dr-dirty" role="status">Без змін</span>
                     <button type="button" class="btn btn-secondary" onclick="closePromotionModal()">Скасувати</button>
                     <button type="submit" class="btn btn-primary" id="promotionSubmitBtn">✅ Зберегти акцію</button>
                 </div>
@@ -4970,6 +5184,15 @@
             }
         });
 
+        // ═══ КУПОНИ: «квиток» у списку + шухляда ═══
+        const COUPON_BOT = 'poselyanov3dprint_bot';
+        let couponDraft = null;
+        let couponSnapshot = null;
+        let couponPickMode = 'draft';
+        let couponPickTimer = null;
+        let couponPickSeq = 0;
+        let couponPickUsers = [];
+
         function formatCouponDiscount(coupon) {
             return coupon.type === 'percent' ? `${coupon.value}%` : `${coupon.value} ₴`;
         }
@@ -4980,100 +5203,104 @@
             return raw.includes('T') ? raw.split('T')[0] : raw.slice(0, 10);
         }
 
-        function parseAllowedUserIdsInput(raw) {
-            if (!raw || !String(raw).trim()) return [];
-            const parts = String(raw).split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
-            const ids = [];
-            const seen = new Set();
-            for (const part of parts) {
-                const uid = parseInt(part, 10);
-                if (uid > 0 && !seen.has(uid)) {
-                    seen.add(uid);
-                    ids.push(uid);
-                }
-            }
-            return ids;
+        function couponExpiresDate(expiresAt) {
+            const iso = formatCouponExpires(expiresAt);
+            return iso ? promoParseDate(`${iso}T23:59:59`) : null;
         }
 
-        function formatAllowedUserIdsForInput(ids) {
-            if (!Array.isArray(ids) || !ids.length) return '';
-            return ids.join('\n');
+        function couponDmy(expiresAt) {
+            const iso = formatCouponExpires(expiresAt);
+            return iso ? iso.split('-').reverse().join('.') : '';
         }
 
-        function formatCouponMeta(coupon) {
-            const parts = [];
-            if (coupon.min_order) parts.push(`мін. ${coupon.min_order} ₴`);
-            const exp = formatCouponExpires(coupon.expires_at);
-            if (exp) parts.push(`до ${exp}`);
-            if (coupon.one_per_user) parts.push('одноразовий');
-            const allowed = coupon.allowed_user_ids || [];
-            if (allowed.length === 1) {
-                parts.push('доступ лише для: 1 користувача');
-            } else if (allowed.length) {
-                parts.push(`доступ лише для: ${allowed.length} користувачів`);
-            } else if (coupon.personal_user_id) {
-                parts.push(`доступ лише для ID ${coupon.personal_user_id}`);
-            }
-            if (coupon.require_channel_sub) {
-                parts.push(coupon.sub_channel_id
-                    ? `📢 підписники ${coupon.sub_channel_id}`
-                    : '📢 лише підписники каналу');
-            }
-            return parts.join(' · ');
+        // Посилання, що відкриває магазин із застосованим купоном. Telegram приймає в start_param
+        // лише A-Z a-z 0-9 _ - ; для кирилиці посилання не існує.
+        function couponLinkFor(code) {
+            const c = String(code || '').trim().toUpperCase();
+            return /^[A-Za-z0-9_-]{2,32}$/.test(c) ? `https://t.me/${COUPON_BOT}?startapp=coupon_${c}` : '';
+        }
+
+        function couponStatusOf(c) {
+            if (!c.active) return 'off';
+            const exp = couponExpiresDate(c.expires_at);
+            if (exp && exp.getTime() < Date.now()) return 'expired';
+            if (Number(c.uses_max) > 0 && Number(c.uses_count) >= Number(c.uses_max)) return 'exhausted';
+            return 'active';
+        }
+        const COUPON_STATUS_LABEL = { active: 'Активний', off: 'Вимкнено', expired: 'Прострочено', exhausted: 'Вичерпано' };
+
+        function couponChips(c) {
+            const chips = [];
+            if (c.min_order) chips.push(`від ${formatMoney(c.min_order)}`);
+            const exp = couponDmy(c.expires_at);
+            if (exp) chips.push(`до ${exp}`);
+            if (c.one_per_user) chips.push('один раз');
+            if (c.stackable) chips.push(couponStackingEnabled ? '🔥 сумується з акцією' : '🔥 з акцією (вимк. глобально)');
+            if (c.require_channel_sub) chips.push(c.sub_channel_id ? `📢 підписникам ${c.sub_channel_id}` : '📢 лише підписникам');
+            const ids = c.allowed_user_ids || (c.personal_user_id ? [c.personal_user_id] : []);
+            if (ids.length) chips.push(`👤 лише для ${ids.length} ${pluralUa(ids.length, 'клієнта', 'клієнтів', 'клієнтів')}`);
+            return chips;
+        }
+
+        // Квиток купона: зліва значення, справа код і умови. extra — блоки лише для списку.
+        function couponTicketHtml(c, extra = '') {
+            const st = couponStatusOf(c);
+            const value = c.type === 'percent' ? `−${Number(c.value) || 0}%` : `−${Number(c.value) || 0} ₴`;
+            const chips = couponChips(c);
+            return `
+                <div class="cp-val"><b>${escapeHtml(value)}</b><small>знижка</small></div>
+                <div class="cp-body">
+                    <div class="cp-top"><span class="cp-code">${escapeHtml(String(c.code || '').toUpperCase() || 'КОД')}</span><span class="pr-pill ${st === 'active' ? 'active' : st === 'off' ? 'off' : 'scheduled'}">${COUPON_STATUS_LABEL[st]}</span></div>
+                    <div class="cp-chips">${chips.length ? chips.map(t => `<span class="cp-chip">${escapeHtml(t)}</span>`).join('') : '<span class="cp-chip">без умов</span>'}</div>
+                    ${extra}
+                </div>`;
+        }
+
+        function couponCardHtml(c) {
+            const st = couponStatusOf(c);
+            const tone = c.type === 'percent' ? 'ac-blue' : 'ac-green';
+            const used = Number(c.uses_count || 0);
+            const max = Number(c.uses_max || 0);
+            const usedTxt = max ? `<b>${used} з ${max}</b>` : `<b>${used}</b> (без ліміту)`;
+            const bar = max ? `<div class="cp-bar"><i style="width:${Math.min(100, used / max * 100)}%"></i></div>` : '';
+            const revenue = Number(c.revenue || 0);
+            const link = c.link !== undefined ? c.link : couponLinkFor(c.code);
+            const code = escapeAttr(c.code);
+            const body = `
+                <div class="cp-use">Використано ${usedTxt}${revenue ? ` · принесло <b>${formatMoney(revenue)}</b>` : used ? ' · виторгу поки немає' : ''}${bar}</div>
+                ${link
+                    ? `<div class="cp-link"><code title="${escapeAttr(link)}">${escapeHtml(link)}</code><button type="button" class="btn btn-secondary" onclick="copyCouponLink(this.closest('[data-code]').dataset.code)">📋 Копіювати</button></div>`
+                    : '<div class="cp-use">Посилання недоступне: для нього код має бути латиницею, цифрами, _ або -.</div>'}
+                <div class="cp-foot">
+                    <label class="cp-sw" title="Увімкнути/вимкнути купон">
+                        <span class="switch"><input type="checkbox" ${c.active ? 'checked' : ''} onchange="toggleCouponActive(this.closest('[data-code]').dataset.code, this.checked)"><span class="switch-slider"></span></span>
+                        ${c.active ? 'Увімкнений' : 'Вимкнений'}
+                    </label>
+                    <button class="btn btn-secondary" type="button" onclick="openCouponClientPicker('direct', this.closest('[data-code]').dataset.code)" title="Додати Telegram ID">👤 Клієнт</button>
+                    <button class="btn btn-secondary" type="button" onclick="deleteCoupon(this.closest('[data-code]').dataset.code)" aria-label="Видалити купон">🗑️</button>
+                </div>`;
+            const ticket = couponTicketHtml(c, body);
+            return `<div class="cp-card ${tone}${st === 'active' ? '' : ' is-dim'}" data-code="${code}" onclick="couponCardClick(event, this)">${ticket}</div>`;
+        }
+
+        function couponCardClick(event, el) {
+            if (event.target.closest('.cp-foot, .cp-link')) return;
+            openCouponModal(el.dataset.code);
         }
 
         function renderCouponsManager() {
             const list = document.getElementById('couponsList');
             const empty = document.getElementById('couponsEmpty');
             const activeOnly = document.getElementById('couponsActiveOnlyFilter')?.checked;
-            const coupons = activeOnly
-                ? allCoupons.filter(c => c.active)
-                : [...allCoupons];
-
+            const coupons = activeOnly ? allCoupons.filter(c => c.active) : [...allCoupons];
             updateHeaderStat();
-
             if (!coupons.length) {
-                list.innerHTML = '';
+                list.innerHTML = allCoupons.length && activeOnly ? '<div class="col-empty">Активних купонів немає.</div>' : '';
                 empty.style.display = allCoupons.length ? 'none' : 'block';
-                if (allCoupons.length && activeOnly) {
-                    list.innerHTML = '<div style="padding: 16px; background: var(--bg-section); border-radius: 10px;">Активних купонів немає.</div>';
-                }
                 return;
             }
-
             empty.style.display = 'none';
-            list.innerHTML = coupons.map(c => {
-                const active = !!c.active;
-                const usesCount = Number(c.uses_count || 0);
-                const usesMax = Number(c.uses_max || 0);
-                const usesStr = usesMax ? `${usesCount}/${usesMax}` : `${usesCount}/∞`;
-                const meta = formatCouponMeta(c);
-                return `
-                <div data-coupon-code="${escapeAttr(c.code)}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${active ? '#dbeafe' : 'var(--border)'}; border-radius:12px; padding:14px 16px; background:${active ? 'var(--bg-card)' : 'var(--bg-surface-alt)'}; opacity:${active ? '1' : '0.75'};">
-                    <div style="min-width:0; flex:1;">
-                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                            <div style="font-weight:700; font-size:16px;">${escapeHtml(c.code)}</div>
-                            <span style="font-size:12px; font-weight:700; padding:6px 10px; border-radius:999px; background:${active ? '#dbeafe' : 'var(--border)'}; color:${active ? '#1e40af' : 'var(--text-toggle)'};">
-                                ${active ? 'Активний' : 'Вимкнено'}
-                            </span>
-                            <span style="font-size:13px; font-weight:700;">${escapeHtml(formatCouponDiscount(c))}</span>
-                            ${c.stackable ? `<span style="font-size:11px; font-weight:700; padding:5px 9px; border-radius:999px; background:${couponStackingEnabled ? '#ffedd5' : 'var(--border)'}; color:${couponStackingEnabled ? '#c2410c' : 'var(--text-toggle)'};" title="${couponStackingEnabled ? 'Знижка купона додається до акційної' : 'Сумування вимкнене глобально — на вкладці «Акції»'}">🔥 + акція${couponStackingEnabled ? '' : ' (вимк.)'}</span>` : ''}
-                        </div>
-                        <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
-                            Використань: ${usesStr}${meta ? ` · ${escapeHtml(meta)}` : ''}
-                        </div>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                        <label class="switch" title="Увімкнути/вимкнути купон">
-                            <input type="checkbox" ${active ? 'checked' : ''} onchange="toggleCouponActive('${escapeAttr(c.code)}', this.checked)">
-                            <span class="switch-slider"></span>
-                        </label>
-                        <button class="btn btn-secondary" type="button" onclick="openAddCouponUserModal('${escapeAttr(c.code)}')" style="padding:8px 12px;" title="Додати Telegram ID">➕</button>
-                        <button class="btn btn-secondary" type="button" onclick="openCouponModal('${escapeAttr(c.code)}')" style="padding:8px 12px;">✏️</button>
-                        <button class="btn btn-danger" type="button" onclick="deleteCoupon('${escapeAttr(c.code)}')" style="padding:8px 12px;">🗑️</button>
-                    </div>
-                </div>`;
-            }).join('');
+            list.innerHTML = coupons.map(couponCardHtml).join('');
         }
 
         async function loadCoupons() {
@@ -5093,63 +5320,316 @@
             }
         }
 
-        function openCouponModal(code = null) {
-            const form = document.getElementById('couponForm');
-            currentCouponCode = code;
-            form.reset();
-            form.active.checked = true;
-            form.min_order.value = '0';
-            form.uses_max.value = '0';
-            renderCouponStackingToggle();
-
-            if (code) {
-                const coupon = allCoupons.find(c => c.code === code);
-                if (!coupon) {
-                    showToast('Купон не знайдено', 'error');
-                    return;
+        async function copyText(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (_) {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    const ok = document.execCommand('copy');
+                    ta.remove();
+                    return ok;
+                } catch (__) {
+                    return false;
                 }
-                document.getElementById('couponModalTitle').textContent = '✏️ Редагувати купон';
-                form.code.value = coupon.code;
-                form.code.readOnly = true;
-                form.type.value = coupon.type;
-                form.value.value = coupon.value;
-                form.min_order.value = coupon.min_order || 0;
-                form.uses_max.value = coupon.uses_max || 0;
-                form.one_per_user.checked = !!coupon.one_per_user;
-                form.stackable.checked = !!coupon.stackable;
-                form.require_channel_sub.checked = !!coupon.require_channel_sub;
-                form.sub_channel_id.value = coupon.sub_channel_id || '';
-                form.expires_at.value = formatCouponExpires(coupon.expires_at);
-                form.allowed_user_ids.value = formatAllowedUserIdsForInput(
-                    coupon.allowed_user_ids || (coupon.personal_user_id ? [coupon.personal_user_id] : [])
-                );
-                form.active.checked = !!coupon.active;
-            } else {
-                document.getElementById('couponModalTitle').textContent = '➕ Додати купон';
-                form.code.readOnly = false;
             }
+        }
 
+        async function copyCouponLink(code) {
+            const c = allCoupons.find(x => x.code === code);
+            const link = (c && c.link) || couponLinkFor(code);
+            if (!link) { showToast('Для цього коду посилання недоступне: потрібна латиниця, цифри, _ або -', 'error'); return; }
+            const ok = await copyText(link);
+            showToast(ok ? 'Посилання скопійовано 📋' : 'Не вдалося скопіювати — виділи посилання вручну', ok ? 'success' : 'error');
+        }
+
+        function generateCouponCode() {
+            const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            const buf = new Uint32Array(7);
+            (window.crypto || { getRandomValues: a => a.map(() => Math.random() * 4294967296) }).getRandomValues(buf);
+            buf.forEach(n => { code += alphabet[n % alphabet.length]; });
+            const input = document.getElementById('cpCode');
+            input.value = code;
+            input.closest('.form-group').classList.remove('has-error');
+            onCouponField();
+        }
+
+        // ── Шухляда «Купон» ──
+        function couponBlank() {
+            return { code: '', type: 'percent', value: 10, min_order: 0, uses_max: 0, expires: '', once: false, stack: false, chan_on: false, chan: '', ids: [], active: true };
+        }
+
+        function couponPayload() {
+            const d = couponDraft;
+            return {
+                code: d.code.trim().toUpperCase(), type: d.type,
+                value: parseInt(d.value, 10) || 0, min_order: parseInt(d.min_order, 10) || 0,
+                uses_max: Math.max(0, parseInt(d.uses_max, 10) || 0),
+                one_per_user: !!d.once, stackable: !!d.stack,
+                require_channel_sub: !!d.chan_on, sub_channel_id: d.chan_on ? (d.chan.trim() || null) : null,
+                expires_at: d.expires || null, allowed_user_ids: [...d.ids], active: !!d.active,
+            };
+        }
+
+        function couponReadInputs() {
+            const d = couponDraft;
+            const val = id => document.getElementById(id).value;
+            d.code = val('cpCode').toUpperCase();
+            d.value = val('cpValue'); d.min_order = val('cpMin'); d.uses_max = val('cpUsesMax');
+            d.expires = val('cpExpires'); d.chan = val('cpChan');
+            d.once = document.getElementById('cpOnce').checked;
+            d.stack = document.getElementById('cpStack').checked;
+            d.chan_on = document.getElementById('cpChanOn').checked;
+            d.active = document.getElementById('cpActive').checked;
+        }
+
+        function couponFillInputs() {
+            const d = couponDraft;
+            const set = (id, v) => { document.getElementById(id).value = v; };
+            set('cpCode', d.code); set('cpValue', d.value); set('cpMin', d.min_order); set('cpUsesMax', d.uses_max);
+            set('cpExpires', d.expires); set('cpChan', d.chan);
+            document.getElementById('cpOnce').checked = !!d.once;
+            document.getElementById('cpStack').checked = !!d.stack;
+            document.getElementById('cpChanOn').checked = !!d.chan_on;
+            document.getElementById('cpActive').checked = !!d.active;
+        }
+
+        function hasCouponChanges() {
+            return couponSnapshot !== null && couponDraft && JSON.stringify(couponPayload()) !== couponSnapshot;
+        }
+
+        function renderCouponDraftParts() {
+            const d = couponDraft;
+            document.getElementById('cpTypeSeg').innerHTML = [['percent', 'Відсоток %'], ['fixed', 'Сума ₴']].map(([key, label]) =>
+                `<button type="button" class="${d.type === key ? 'on' : ''}" aria-pressed="${d.type === key}" onclick="setCouponType('${key}')">${label}</button>`).join('');
+            document.getElementById('cpValueLabel').textContent = d.type === 'fixed' ? 'Розмір знижки (₴)' : 'Розмір знижки (%)';
+            document.getElementById('cpChanGroup').style.display = d.chan_on ? '' : 'none';
+            document.getElementById('cpIdChips').innerHTML = d.ids.map(id =>
+                `<span class="cp-id-chip">${id}<button type="button" aria-label="Прибрати ${id}" onclick="removeCouponId(${id})">✕</button></span>`).join('');
+            document.getElementById('cpIdHint').textContent = d.ids.length
+                ? `Код зможуть застосувати лише ${d.ids.length} ${pluralUa(d.ids.length, 'клієнт', 'клієнти', 'клієнтів')} — і побачать його в «Мої купони».`
+                : 'Порожньо — купон публічний. Якщо додати ID, код зможуть застосувати лише ці клієнти (і вони побачать його в «Мої купони»).';
+            const hint = document.getElementById('couponStackableHint');
+            hint.querySelector('.stacking-off-warning')?.remove();
+            if (!couponStackingEnabled) {
+                hint.insertAdjacentHTML('beforeend', '<span class="stacking-off-warning" style="display:block; margin-top:6px; color:#c2410c;">⚠️ Сумування зараз вимкнене глобально — увімкни його на вкладці «🔥 Акції», інакше галочка не діятиме.</span>');
+            }
+            const existing = currentCouponCode ? allCoupons.find(c => c.code === currentCouponCode) : null;
+            const linkGroup = document.getElementById('cpLinkGroup');
+            const link = existing ? ((existing.link !== undefined ? existing.link : couponLinkFor(existing.code))) : '';
+            linkGroup.style.display = existing ? '' : 'none';
+            document.getElementById('cpLinkText').textContent = link || 'Недоступне: код має бути латиницею, цифрами, _ або -';
+            const preview = {
+                ...(existing || {}), ...couponPayload(), code: couponPayload().code || 'КОД',
+                uses_count: existing ? existing.uses_count : 0,
+            };
+            const tone = preview.type === 'percent' ? 'ac-blue' : 'ac-green';
+            const st = couponStatusOf(preview);
+            document.getElementById('cpPreview').innerHTML = `<div class="cp-card ${tone}${st === 'active' ? '' : ' is-dim'}" style="cursor:default;">${couponTicketHtml(preview)}</div>`;
+            setDirtyUi('couponDirty', hasCouponChanges());
+        }
+
+        function onCouponField() {
+            if (!couponDraft) return;
+            couponReadInputs();
+            renderCouponDraftParts();
+        }
+
+        function setCouponType(type) {
+            couponReadInputs();
+            couponDraft.type = type;
+            renderCouponDraftParts();
+        }
+
+        function addCouponIdFromInput() {
+            const input = document.getElementById('cpIdInput');
+            const ids = String(input.value).split(/[\s,;]+/).map(s => parseInt(s, 10)).filter(n => n > 0);
+            if (!ids.length) { showToast('Вкажи коректний Telegram ID', 'error'); return; }
+            ids.forEach(id => { if (!couponDraft.ids.includes(id)) couponDraft.ids.push(id); });
+            input.value = '';
+            onCouponField();
+        }
+
+        function removeCouponId(id) {
+            couponDraft.ids = couponDraft.ids.filter(x => x !== id);
+            onCouponField();
+        }
+
+        function openCouponModal(code = null) {
+            const c = code ? allCoupons.find(x => x.code === code) : null;
+            if (code && !c) {
+                showToast('Купон не знайдено', 'error');
+                return;
+            }
+            currentCouponCode = c ? c.code : null;
+            couponDraft = c ? {
+                code: c.code, type: c.type, value: c.value, min_order: c.min_order || 0, uses_max: c.uses_max || 0,
+                expires: formatCouponExpires(c.expires_at), once: !!c.one_per_user, stack: !!c.stackable,
+                chan_on: !!c.require_channel_sub, chan: c.sub_channel_id || '',
+                ids: [...(c.allowed_user_ids || (c.personal_user_id ? [c.personal_user_id] : []))],
+                active: !!c.active,
+            } : couponBlank();
+            document.querySelectorAll('#couponForm .form-group.has-error').forEach(g => g.classList.remove('has-error'));
+            document.getElementById('couponModalTitle').textContent = c ? '✏️ Редагувати купон' : '➕ Новий купон';
+            document.getElementById('cpCode').readOnly = !!c;
+            document.getElementById('cpGenBtn').style.display = c ? 'none' : '';
+            document.getElementById('cpDeleteBtn').style.display = c ? '' : 'none';
+            couponFillInputs();
+            couponSnapshot = null;
+            renderCouponDraftParts();
+            couponSnapshot = JSON.stringify(couponPayload());
+            setDirtyUi('couponDirty', false);
             document.getElementById('couponModal').classList.add('active');
+            document.querySelector('#couponModal .dr-body').scrollTop = 0;
+            if (!c) document.getElementById('cpCode').focus();
         }
 
-        function closeCouponModal() {
-            document.getElementById('couponModal').classList.remove('active');
+        function closeCouponModal(force = false) {
+            const modal = document.getElementById('couponModal');
+            if (!force && modal.classList.contains('active') && hasCouponChanges()) {
+                askConfirm('Є незбережені зміни. Закрити без збереження?').then(ok => { if (ok) closeCouponModal(true); });
+                return;
+            }
+            closeAddCouponUserModal();
+            modal.classList.remove('active');
             currentCouponCode = null;
-            const form = document.getElementById('couponForm');
-            form.code.readOnly = false;
+            couponDraft = null;
+            couponSnapshot = null;
         }
 
-        function openAddCouponUserModal(code) {
-            addCouponUserTargetCode = code;
-            const form = document.getElementById('addCouponUserForm');
-            form.reset();
-            document.getElementById('addCouponUserModalTitle').textContent = `➕ Додати учня до ${code}`;
+        function couponValidate(p) {
+            const bad = (id, msg) => {
+                const el = document.getElementById(id);
+                el?.closest('.form-group')?.classList.add('has-error');
+                el?.focus();
+                return msg;
+            };
+            if (!p.code) return bad('cpCode', 'Вкажи код купона');
+            if (!(p.value > 0)) return bad('cpValue', 'Вкажи коректне значення знижки');
+            if (p.type === 'percent' && p.value > 100) return bad('cpValue', 'Відсоткова знижка не може перевищувати 100');
+            return '';
+        }
+
+        async function saveCoupon() {
+            if (!couponDraft) return;
+            couponReadInputs();
+            const payload = couponPayload();
+            const err = couponValidate(payload);
+            if (err) { showToast(err, 'error'); return; }
+            const submitBtn = document.getElementById('couponSubmitBtn');
+            const editing = !!currentCouponCode;
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '⏳ Збереження...';
+                const res = await fetch(editing ? API_BASE + `/coupons/${encodeURIComponent(currentCouponCode)}` : API_BASE + '/coupons', {
+                    method: editing ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                    body: JSON.stringify(payload),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти купон');
+                showToast(editing ? 'Купон оновлено ✅' : buildCouponCreatedToast(result), 'success');
+                closeCouponModal(true);
+                await loadCoupons();
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження купона', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Зберегти купон';
+            }
+        }
+
+        document.getElementById('couponForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            saveCoupon();
+        });
+
+        // ── Шар «Клієнти» (вибір Telegram ID): з шухляди купона (draft) або прямо з картки (direct) ──
+        function openCouponClientPicker(mode, code = null) {
+            couponPickMode = mode;
+            addCouponUserTargetCode = mode === 'direct' ? code : null;
+            document.getElementById('addCouponUserModalTitle').textContent = mode === 'direct' ? `👥 Клієнт для ${code}` : '👥 Обрати клієнта';
+            document.getElementById('cpPickId').value = '';
+            document.getElementById('cpPickSearch').value = '';
+            updateCouponPickInfo();
             document.getElementById('addCouponUserModal').classList.add('active');
+            loadCouponClients('');
         }
 
         function closeAddCouponUserModal() {
             document.getElementById('addCouponUserModal').classList.remove('active');
             addCouponUserTargetCode = null;
+        }
+
+        function couponPickedIds() {
+            if (couponPickMode === 'draft') return couponDraft ? couponDraft.ids : [];
+            const c = allCoupons.find(x => x.code === addCouponUserTargetCode);
+            return c ? (c.allowed_user_ids || (c.personal_user_id ? [c.personal_user_id] : [])) : [];
+        }
+
+        function updateCouponPickInfo() {
+            const n = couponPickedIds().length;
+            document.getElementById('cpPickInfo').textContent = n ? `Обрано: ${n}` : '';
+        }
+
+        function onCouponClientSearch(value) {
+            clearTimeout(couponPickTimer);
+            couponPickTimer = setTimeout(() => loadCouponClients(value.trim()), 250);
+        }
+
+        async function loadCouponClients(query) {
+            const host = document.getElementById('cpPickList');
+            const seq = ++couponPickSeq;
+            host.innerHTML = '<div class="col-note">Завантаження…</div>';
+            try {
+                const params = new URLSearchParams({ search: query, limit: '20', offset: '0' });
+                const res = await fetch(`${API_BASE}/admin/users?${params.toString()}`);
+                if (!res.ok) throw new Error('Не вдалося завантажити клієнтів');
+                const data = await res.json();
+                if (seq !== couponPickSeq) return;
+                couponPickUsers = data.users || [];
+                renderCouponClients();
+            } catch (e) {
+                if (seq === couponPickSeq) host.innerHTML = `<div class="col-note">${escapeHtml(e.message || 'Помилка')}</div>`;
+            }
+        }
+        function renderCouponClients() {
+            const host = document.getElementById('cpPickList');
+            const picked = new Set(couponPickedIds());
+            if (!couponPickUsers.length) { host.innerHTML = '<div class="col-note">Нікого не знайдено.</div>'; return; }
+            host.innerHTML = couponPickUsers.map(u => {
+                const name = u.name || u.username || `ID ${u.id}`;
+                const handle = u.username ? `@${String(u.username).replace(/^@/, '')} · ` : '';
+                return `<button type="button" class="cp-pick" data-uid="${escapeAttr(u.id)}" onclick="pickCouponClient(${Number(u.id)})">
+                    <span><b>${escapeHtml(name)}</b><small>${escapeHtml(handle)}ID ${escapeHtml(u.id)}</small></span>
+                    ${picked.has(Number(u.id)) ? '<span class="on">✓ додано</span>' : '<span>＋</span>'}
+                </button>`;
+            }).join('');
+        }
+
+        async function pickCouponClient(uid) {
+            if (!(uid > 0)) return;
+            if (couponPickMode === 'draft') {
+                if (!couponDraft) return;
+                const i = couponDraft.ids.indexOf(uid);
+                if (i >= 0) couponDraft.ids.splice(i, 1);
+                else couponDraft.ids.push(uid);
+                onCouponField();
+                updateCouponPickInfo();
+                renderCouponClients();
+                return;
+            }
+            try {
+                await addCouponUserSubmit(uid);
+            } catch (err) {
+                showToast(err.message || 'Помилка додавання користувача', 'error');
+            }
         }
 
         async function addCouponUserSubmit(userId) {
@@ -5158,10 +5638,7 @@
                 API_BASE + `/coupons/${encodeURIComponent(addCouponUserTargetCode)}/allowed-users`,
                 {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tgInitData,
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
                     body: JSON.stringify({ user_ids: [userId] }),
                 }
             );
@@ -5171,29 +5648,50 @@
             }
             let msg = `ID ${userId} додано до купона ✅`;
             const n = result.notifications || {};
-            const notified = n.users_notified || [];
-            const failed = n.users_failed || [];
-            if (notified.length) msg += ' · повідомлення надіслано';
-            if (failed.length) msg += ' · повідомлення не доставлено';
+            if ((n.users_notified || []).length) msg += ' · повідомлення надіслано';
+            if ((n.users_failed || []).length) msg += ' · повідомлення не доставлено';
             showToast(msg, 'success');
-            closeAddCouponUserModal();
             await loadCoupons();
+            updateCouponPickInfo();
+            renderCouponClients();
         }
+
+        document.getElementById('addCouponUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userId = parseInt(document.getElementById('cpPickId').value, 10);
+            if (!userId || userId <= 0) {
+                showToast('Вкажи коректний Telegram user ID', 'error');
+                return;
+            }
+            if (couponPickMode === 'draft') {
+                if (couponDraft && !couponDraft.ids.includes(userId)) couponDraft.ids.push(userId);
+                document.getElementById('cpPickId').value = '';
+                onCouponField();
+                updateCouponPickInfo();
+                renderCouponClients();
+                return;
+            }
+            const submitBtn = document.getElementById('addCouponUserSubmitBtn');
+            try {
+                submitBtn.disabled = true;
+                await addCouponUserSubmit(userId);
+                document.getElementById('cpPickId').value = '';
+            } catch (err) {
+                showToast(err.message || 'Помилка додавання користувача', 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
 
         async function toggleCouponActive(code, active) {
             try {
                 const res = await fetch(API_BASE + `/coupons/${encodeURIComponent(code)}`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tgInitData
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
                     body: JSON.stringify({ active }),
                 });
                 const result = await res.json();
-                if (!res.ok || !result.ok) {
-                    throw new Error(result.error || 'Не вдалося оновити купон');
-                }
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося оновити купон');
                 await loadCoupons();
                 showToast(active ? 'Купон увімкнено ✅' : 'Купон вимкнено', 'success');
             } catch (e) {
@@ -5203,17 +5701,17 @@
         }
 
         async function deleteCoupon(code) {
-            if (!confirm(`Видалити купон ${code}? Цю дію не можна скасувати.`)) return;
+            if (!code) return;
+            if (!(await askConfirm(`Видалити купон ${code}? Цю дію не можна скасувати.`))) return;
             try {
                 const res = await fetch(API_BASE + `/coupons/${encodeURIComponent(code)}`, {
                     method: 'DELETE',
                     headers: { 'X-Telegram-Init-Data': tgInitData },
                 });
                 const result = await res.json();
-                if (!res.ok || !result.ok) {
-                    throw new Error(result.error || 'Не вдалося видалити купон');
-                }
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося видалити купон');
                 showToast('Купон видалено ✅', 'success');
+                if (currentCouponCode === code) closeCouponModal(true);
                 await loadCoupons();
             } catch (e) {
                 showToast(e.message || 'Помилка видалення купона', 'error');
@@ -7688,109 +8186,264 @@
         const PROMO_TYPE_LABELS = {
             order_percent: '💸 Знижка %',
             order_fixed: '💵 Знижка ₴',
+            cat_percent: '🏷️ % на категорію',
             gift_threshold: '🎁 Подарунок',
+            free_ship: '🚚 Безкоштовна доставка',
             info: '📣 Банер',
         };
+        const PROMO_TYPE_CARDS = [
+            ['order_percent', '💸', 'Знижка %', 'На всю суму від порогу'],
+            ['order_fixed', '💵', 'Знижка ₴', 'Фіксована сума від порогу'],
+            ['cat_percent', '🏷️', '% на категорію', 'Лише товари обраних категорій'],
+            ['gift_threshold', '🎁', 'Подарунок', 'За N різних товарів'],
+            ['free_ship', '🚚', 'Безкоштовна доставка', 'Від суми або для всіх'],
+            ['info', '📣', 'Банер', 'Без автоматичного ефекту'],
+        ];
+        // Колір банера за замовчуванням — той самий, що підставляє магазин (index.html)
+        const PROMO_DEFAULT_ACCENT = { gift_threshold: 'orange', order_percent: 'blue', order_fixed: 'blue', cat_percent: 'blue', free_ship: 'green', info: 'green' };
+        const PROMO_ACCENT_TOKENS = ['blue', 'orange', 'violet', 'green', 'teal', 'pink', 'red', 'amber'];
+        const PROMO_TABS = [
+            { key: 'all', label: 'Усі' },
+            { key: 'active', label: 'Діють' },
+            { key: 'scheduled', label: 'Заплановані' },
+            { key: 'ended', label: 'Завершені' },
+            { key: 'off', label: 'Вимкнені' },
+        ];
+        const PROMO_STATUS_LABEL = { active: 'Діє', scheduled: 'Заплановано', ended: 'Завершено', off: 'Вимкнено' };
+        const PROMO_VALUE_TYPES = ['order_percent', 'order_fixed', 'cat_percent'];
+        let promoTab = 'all';
+        let promoDraft = null;
+        let promoSnapshot = null;
+        let promoIdTouched = false;
+        let promoLastPreset = '';
 
-        // Готові шаблони акцій — швидкий старт із файлу ПРОМО-ІДЕЇ.md
+        // Готові шаблони акцій: 16 штук у чотирьох групах
+        const PROMO_PRESET_GROUPS = [
+            ['base', 'Базові'], ['holiday', 'Свята'], ['season', 'Сезонні'], ['info', 'Інформаційні'],
+        ];
         const PROMO_PRESETS = [
-            { key: 'order_10', label: '−10% від 500 ₴ (базова)', data: { id: 'order_10_percent', type: 'order_percent', title: '−10% на замовлення', subtitle: 'При замовленні від 500 ₴ отримай знижку 10% на всю суму', emoji: '🔖', badge: '−10%', value: 10, min_order: 500, priority: 20 } },
-            { key: 'gift_3_toys', label: 'Подарунок за 3 брелки (базова)', data: { id: 'gift_3_toys', type: 'gift_threshold', title: 'Безкоштовний подарунок', subtitle: 'Додай 3+ брелки в кошик і обери подарунок на свій смак', emoji: '🎁', badge: '', category: 'key', min_items: 3, max_gift_price: 100, priority: 10 } },
-            { key: 'first_order', label: 'Знижка на перше замовлення −50 ₴', data: { id: 'first_order_50', type: 'order_fixed', title: '−50 ₴ на перше замовлення', subtitle: 'Знайомимось! Мінус 50 ₴ на замовлення від 300 ₴', emoji: '👋', badge: '−50 ₴', value: 50, min_order: 300, priority: 15 } },
-            { key: 'big_cart', label: 'Великий кошик −15% від 1000 ₴', data: { id: 'big_cart_15', type: 'order_percent', title: '−15% на великі замовлення', subtitle: 'Замовляй від 1000 ₴ і отримуй 15% знижки', emoji: '📦', badge: '−15%', value: 15, min_order: 1000, priority: 25 } },
-            { key: 'newyear', label: '🎄 Новорічна −20%', data: { id: 'newyear_20', type: 'order_percent', title: '🎄 Новорічна знижка −20%', subtitle: 'Готуємось до свят: −20% на замовлення від 600 ₴', emoji: '🎄', badge: '−20%', value: 20, min_order: 600, priority: 5 } },
-            { key: 'nikolay', label: '🎅 Подарунок до Миколая', data: { id: 'st_nicholas_gift', type: 'gift_threshold', title: '🎅 Подарунок від Миколая', subtitle: 'Обери 2+ іграшки — і Миколай додасть подарунок у кошик', emoji: '🎅', badge: '', category: 'toy', min_items: 2, max_gift_price: 120, priority: 5 } },
-            { key: 'valentine', label: '💝 День закоханих −14%', data: { id: 'valentine_14', type: 'order_percent', title: '💝 −14% до Дня закоханих', subtitle: 'Знижка 14% на все з 10 по 14 лютого', emoji: '💝', badge: '−14%', value: 14, min_order: 0, priority: 5 } },
-            { key: 'march8', label: '🌷 8 березня −10%', data: { id: 'spring_8_march', type: 'order_percent', title: '🌷 Весняна знижка −10%', subtitle: 'Даруй приємне: −10% на всі замовлення', emoji: '🌷', badge: '−10%', value: 10, min_order: 0, priority: 5 } },
-            { key: 'school', label: '🎒 До школи −12%', data: { id: 'back_to_school', type: 'order_percent', title: '🎒 До школи −12%', subtitle: 'Органайзери, брелки та дрібнички зі знижкою 12%', emoji: '🎒', badge: '−12%', value: 12, min_order: 400, priority: 8 } },
-            { key: 'summer', label: '☀️ Літня −10% від 400 ₴', data: { id: 'summer_10', type: 'order_percent', title: '☀️ Літня знижка −10%', subtitle: 'Спекотні ціни: −10% на замовлення від 400 ₴', emoji: '☀️', badge: '−10%', value: 10, min_order: 400, priority: 8 } },
-            { key: 'halloween', label: '🎃 Хелловін −13%', data: { id: 'halloween_13', type: 'order_percent', title: '🎃 Моторошна знижка −13%', subtitle: 'Тільки в жовтні: −13% на все', emoji: '🎃', badge: '−13%', value: 13, min_order: 0, priority: 5 } },
-            { key: 'weekend', label: '🎉 Знижка вихідного дня −10%', data: { id: 'weekend_10', type: 'order_percent', title: '🎉 Знижка вихідного дня', subtitle: 'Вмикай на вихідні: −10% на замовлення від 300 ₴', emoji: '🎉', badge: '−10%', value: 10, min_order: 300, priority: 12 } },
-            { key: 'gift_any_4', label: 'Подарунок за 4 будь-які товари', data: { id: 'gift_any_4', type: 'gift_threshold', title: 'Четвертий товар — подарунок', subtitle: 'Збери 4 різні товари в кошику й обери подарунок', emoji: '🎁', badge: '', category: '', min_items: 4, max_gift_price: 150, priority: 12 } },
-            { key: 'free_delivery', label: '🚚 Безкоштовна доставка від 700 ₴', data: { id: 'free_delivery_700', type: 'info', title: '🚚 Безкоштовна доставка', subtitle: 'Ми оплачуємо Нову пошту при замовленні від 700 ₴', emoji: '🚚', badge: '', priority: 30 } },
-            { key: 'review', label: '⭐ Відгук = купон', data: { id: 'review_bonus', type: 'info', title: '⭐ Відгук — і купон твій', subtitle: 'Надішли фото товару у відгуку і отримай персональний купон −50 ₴', emoji: '⭐', badge: '', priority: 35 } },
-            { key: 'birthday', label: '🎂 Подарунок на день народження', data: { id: 'birthday_gift', type: 'info', title: '🎂 Твій день народження', subtitle: 'Напиши нам у місяць свого дня народження — надішлемо персональний купон', emoji: '🎂', badge: '', priority: 35 } },
+            { key: 'order_10', group: 'base', label: '−10% від 500 ₴', data: { id: 'order_10_percent', type: 'order_percent', title: '−10% на замовлення', subtitle: 'При замовленні від 500 ₴ отримай знижку 10% на всю суму', emoji: '🔖', badge: '−10%', value: 10, min_order: 500, priority: 20 } },
+            { key: 'gift_3_toys', group: 'base', label: 'Подарунок за 3 брелки', accent: 'orange', data: { id: 'gift_3_toys', type: 'gift_threshold', title: 'Безкоштовний подарунок', subtitle: 'Додай 3+ брелки в кошик і обери подарунок на свій смак', emoji: '🎁', badge: '', category: 'key', min_items: 3, max_gift_price: 100, priority: 10 } },
+            { key: 'first_order', group: 'base', label: '−50 ₴ на перше замовлення', data: { id: 'first_order_50', type: 'order_fixed', title: '−50 ₴ на перше замовлення', subtitle: 'Знайомимось! Мінус 50 ₴ на замовлення від 300 ₴', emoji: '👋', badge: '−50 ₴', value: 50, min_order: 300, priority: 15 } },
+            { key: 'big_cart', group: 'base', label: 'Великий кошик −15% від 1000 ₴', data: { id: 'big_cart_15', type: 'order_percent', title: '−15% на великі замовлення', subtitle: 'Замовляй від 1000 ₴ і отримуй 15% знижки', emoji: '📦', badge: '−15%', value: 15, min_order: 1000, priority: 25 } },
+            { key: 'gift_any_4', group: 'base', label: 'Подарунок за 4 будь-які товари', accent: 'orange', data: { id: 'gift_any_4', type: 'gift_threshold', title: 'Четвертий товар — подарунок', subtitle: 'Збери 4 різні товари в кошику й обери подарунок', emoji: '🎁', badge: '', category: '', min_items: 4, max_gift_price: 150, priority: 12 } },
+            { key: 'free_delivery', group: 'base', label: '🚚 Безкоштовна доставка від 700 ₴', accent: 'teal', data: { id: 'free_delivery_700', type: 'free_ship', title: '🚚 Безкоштовна доставка', subtitle: 'Ми оплачуємо доставку при замовленні від 700 ₴', emoji: '🚚', badge: '', min_order: 700, priority: 30 } },
+            { key: 'newyear', group: 'holiday', label: '🎄 Новорічна −20%', accent: 'green', data: { id: 'newyear_20', type: 'order_percent', title: '🎄 Новорічна знижка −20%', subtitle: 'Готуємось до свят: −20% на замовлення від 600 ₴', emoji: '🎄', badge: '−20%', value: 20, min_order: 600, priority: 5 } },
+            { key: 'nikolay', group: 'holiday', label: '🎅 Подарунок до Миколая', accent: 'red', data: { id: 'st_nicholas_gift', type: 'gift_threshold', title: '🎅 Подарунок від Миколая', subtitle: 'Обери 2+ іграшки — і Миколай додасть подарунок у кошик', emoji: '🎅', badge: '', category: 'toy', min_items: 2, max_gift_price: 120, priority: 5 } },
+            { key: 'valentine', group: 'holiday', label: '💝 День закоханих −14%', accent: 'pink', data: { id: 'valentine_14', type: 'order_percent', title: '💝 −14% до Дня закоханих', subtitle: 'Знижка 14% на все з 10 по 14 лютого', emoji: '💝', badge: '−14%', value: 14, min_order: 0, priority: 5 } },
+            { key: 'march8', group: 'holiday', label: '🌷 8 березня −10%', accent: 'pink', data: { id: 'spring_8_march', type: 'order_percent', title: '🌷 Весняна знижка −10%', subtitle: 'Даруй приємне: −10% на всі замовлення', emoji: '🌷', badge: '−10%', value: 10, min_order: 0, priority: 5 } },
+            { key: 'halloween', group: 'holiday', label: '🎃 Хелловін −13%', accent: 'orange', data: { id: 'halloween_13', type: 'order_percent', title: '🎃 Моторошна знижка −13%', subtitle: 'Тільки в жовтні: −13% на все', emoji: '🎃', badge: '−13%', value: 13, min_order: 0, priority: 5 } },
+            { key: 'school', group: 'season', label: '🎒 До школи −12%', data: { id: 'back_to_school', type: 'order_percent', title: '🎒 До школи −12%', subtitle: 'Органайзери, брелки та дрібнички зі знижкою 12%', emoji: '🎒', badge: '−12%', value: 12, min_order: 400, priority: 8 } },
+            { key: 'summer', group: 'season', label: '☀️ Літня −10% від 400 ₴', accent: 'amber', data: { id: 'summer_10', type: 'order_percent', title: '☀️ Літня знижка −10%', subtitle: 'Спекотні ціни: −10% на замовлення від 400 ₴', emoji: '☀️', badge: '−10%', value: 10, min_order: 400, priority: 8 } },
+            { key: 'weekend', group: 'season', label: '🎉 Знижка вихідного дня −10%', accent: 'violet', data: { id: 'weekend_10', type: 'order_percent', title: '🎉 Знижка вихідного дня', subtitle: 'Вмикай на вихідні: −10% на замовлення від 300 ₴', emoji: '🎉', badge: '−10%', value: 10, min_order: 300, priority: 12 } },
+            { key: 'review', group: 'info', label: '⭐ Відгук = купон', data: { id: 'review_bonus', type: 'info', title: '⭐ Відгук — і купон твій', subtitle: 'Надішли фото товару у відгуку і отримай персональний купон −50 ₴', emoji: '⭐', badge: '', priority: 35 } },
+            { key: 'birthday', group: 'info', label: '🎂 Подарунок на день народження', data: { id: 'birthday_gift', type: 'info', title: '🎂 Твій день народження', subtitle: 'Напиши нам у місяць свого дня народження — надішлемо персональний купон', emoji: '🎂', badge: '', priority: 35 } },
         ];
 
-        function formatPromotionMeta(p) {
-            const parts = [];
-            if (p.type === 'order_percent') parts.push(`−${p.value}% на суму`);
-            if (p.type === 'order_fixed') parts.push(`−${p.value} ₴ на суму`);
-            if (p.type === 'order_percent' || p.type === 'order_fixed') {
-                parts.push(p.min_order ? `від ${p.min_order} ₴` : 'без мінімальної суми');
+        // Дата з API: «2026-10-03 04:06:59», ISO або «2026-10-03»; без часового поясу — UTC (як у магазині)
+        function promoParseDate(value) {
+            if (!value) return null;
+            let s = String(value).trim().replace(' ', 'T');
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) s += 'T00:00:00';
+            if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) s += 'Z';
+            const d = new Date(s);
+            return Number.isNaN(d.getTime()) ? null : d;
+        }
+
+        function promoToLocalInput(d) {
+            if (!d) return '';
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+        }
+
+        function promoFmtDate(d) {
+            if (!d) return '';
+            const p = n => String(n).padStart(2, '0');
+            const date = `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+            return d.getHours() || d.getMinutes() ? `${date} ${p(d.getHours())}:${p(d.getMinutes())}` : date;
+        }
+
+        function promoStatusOf(p) {
+            if (!p.active) return 'off';
+            const now = Date.now();
+            const s = promoParseDate(p.starts_at);
+            const e = promoParseDate(p.ends_at);
+            if (s && now < s.getTime()) return 'scheduled';
+            if (e && now > e.getTime()) return 'ended';
+            return 'active';
+        }
+
+        function promoCatNames(cats) {
+            const list = Array.isArray(cats) ? cats : String(cats || '').split(',');
+            return list.map(s => String(s).trim()).filter(Boolean)
+                .map(id => allCategories.find(c => c.id === id)?.name || id);
+        }
+
+        function promoTimerText(end) {
+            const left = end.getTime() - Date.now();
+            if (!(left > 0) || left > 30 * 864e5) return '';
+            const d = Math.floor(left / 864e5);
+            const h = Math.floor(left % 864e5 / 36e5);
+            const m = Math.floor(left % 36e5 / 6e4);
+            return `⏱ ${d ? `<b>${d}д</b>` : ''}<b>${h}г</b><b>${String(m).padStart(2, '0')}хв</b>`;
+        }
+
+        // Умова акції одним реченням
+        function promoCondition(p) {
+            const min = p.min_order ? ` від ${formatMoney(p.min_order)}` : '';
+            switch (p.type) {
+                case 'order_percent': return `−${p.value}% на все замовлення${min}`;
+                case 'order_fixed': return `−${formatMoney(p.value)} на замовлення${min}`;
+                case 'cat_percent': return `−${p.value}% на ${promoCatNames(p.category).join(', ') || 'категорії'}${min}`;
+                case 'gift_threshold': {
+                    const cat = p.category ? promoCatNames(p.category).join(', ') : 'будь-яка категорія';
+                    return `${p.min_items}+ різних товарів (${cat}) → подарунок до ${formatMoney(p.max_gift_price)}`;
+                }
+                case 'free_ship': return p.min_order ? `Безкоштовна доставка від ${formatMoney(p.min_order)}` : 'Безкоштовна доставка для всіх замовлень';
+                default: return 'Банер без автоматичної знижки';
             }
+        }
+
+        function promoSchedule(p) {
+            const s = promoParseDate(p.starts_at);
+            const e = promoParseDate(p.ends_at);
+            let txt = 'Без обмежень за датою';
+            if (s && e) txt = `${promoFmtDate(s)} — ${promoFmtDate(e)}`;
+            else if (s) txt = `з ${promoFmtDate(s)}`;
+            else if (e) txt = `до ${promoFmtDate(e)}`;
+            const timer = e && p.show_timer !== false ? ' · ⏱ таймер' : '';
+            return `📅 ${txt}${timer}`;
+        }
+
+        // Банер так само, як у магазині (hero-card). p — збережена акція або чернетка.
+        function promoBannerHtml(p) {
+            const acc = PROMO_ACCENT_TOKENS.includes(p.accent) ? p.accent : (PROMO_DEFAULT_ACCENT[p.type] || 'blue');
+            const title = escapeHtml(p.title || 'Назва акції');
+            const sub = escapeHtml(p.subtitle || '');
+            const end = promoParseDate(p.ends_at);
+            const timer = p.show_timer !== false && end ? promoTimerText(end) : '';
             if (p.type === 'gift_threshold') {
-                const cat = p.category ? (allCategories.find(c => c.id === p.category)?.name || p.category) : 'будь-яка категорія';
-                parts.push(`${p.min_items}+ товарів · ${cat}`);
-                parts.push(`подарунок до ${p.max_gift_price} ₴`);
+                const need = Number(p.min_items) || 0;
+                const cat = p.category ? promoCatNames(p.category).join(', ').toLowerCase() : '';
+                return `<div class="pbn ac-${acc}">
+                    <div><div class="eyebrow">Подарунок${cat ? ` · ${escapeHtml(cat)}` : ''}</div><h4>${title}</h4><p>${sub}</p></div>
+                    <div class="ico">🎁</div>
+                    ${need ? `<div class="foot"><div class="prog"><i style="width:0%"></i></div><small><b>0</b> з ${need} у кошику</small></div>` : ''}
+                </div>`;
             }
-            const period = formatPromotionPeriod(p);
-            if (period) parts.push(period);
-            return parts.join(' · ');
+            if (PROMO_VALUE_TYPES.includes(p.type)) {
+                const min = Number(p.min_order) || 0;
+                const isCat = p.type === 'cat_percent';
+                const val = p.type === 'order_fixed' ? `<b>−${Number(p.value) || 0}</b><span>₴</span>` : `<b>−${Number(p.value) || 0}</b><span>%</span>`;
+                const catNames = isCat ? promoCatNames(p.category).join(', ') : '';
+                const head = isCat ? escapeHtml(catNames || p.title || 'Категорії') : (min ? `Від ${formatMoney(min)} у кошику` : title);
+                const line = isCat && min ? `Від ${formatMoney(min)} у кошику` : 'Рахується автоматично, без промокоду';
+                return `<div class="pbn deal ac-${acc}">
+                    <div class="top"><span class="eyebrow">${isCat ? 'Знижка на категорію' : 'Знижка на все'}</span>${timer ? `<span class="tm">${timer}</span>` : ''}</div>
+                    <div class="dm"><div class="dv">${val}</div><div><h4>${head}</h4><p>${line}</p></div></div>
+                    ${min ? `<div class="foot"><div class="prog"><i style="width:0%"></i></div><small>Ще <b>${formatMoney(min)}</b></small></div>` : ''}
+                </div>`;
+            }
+            return `<div class="pbn ac-${acc}">
+                <div><div class="eyebrow">${escapeHtml(p.badge || 'Акція')}</div><h4>${title}</h4><p>${sub}</p></div>
+                <div class="ico">${escapeHtml(p.emoji || '🔥')}</div>
+            </div>`;
         }
 
-        function formatPromotionPeriod(p) {
-            const fmt = (v) => String(v).slice(0, 10).split('-').reverse().join('.');
-            if (p.starts_at && p.ends_at) return `${fmt(p.starts_at)}–${fmt(p.ends_at)}`;
-            if (p.starts_at) return `з ${fmt(p.starts_at)}`;
-            if (p.ends_at) return `до ${fmt(p.ends_at)}`;
-            return '';
+        function promoResultHtml(p) {
+            const st = p.stats || { orders: 0, revenue: 0, discount: 0, gifts: 0 };
+            if (!st.orders) return '<span class="none">Поки без замовлень з цією акцією</span>';
+            const parts = [
+                `<span>Замовлень: <b>${st.orders}</b></span>`,
+                `<span>Виторг: <b>${formatMoney(st.revenue)}</b></span>`,
+            ];
+            if (st.discount) parts.push(`<span>Знижок видано: <b>${formatMoney(st.discount)}</b></span>`);
+            if (st.gifts) parts.push(`<span>Подарунків: <b>${st.gifts}</b></span>`);
+            return parts.join('');
         }
 
-        function isPromotionRunningNow(p) {
-            if (!p.active) return false;
-            const now = new Date();
-            if (p.starts_at && new Date(p.starts_at) > now) return false;
-            if (p.ends_at && new Date(p.ends_at) < now) return false;
-            return true;
+        function promoCardHtml(p) {
+            const st = promoStatusOf(p);
+            const id = escapeAttr(p.id);
+            return `
+            <div class="pr-card is-${st}" data-promotion-id="${id}" onclick="promoCardClick(event, this)">
+                <div>${promoBannerHtml(p)}</div>
+                <div class="pr-info">
+                    <div class="pr-head">
+                        <span class="pr-pill ${st}">${PROMO_STATUS_LABEL[st]}</span>
+                        <span class="pr-type">${escapeHtml(PROMO_TYPE_LABELS[p.type] || p.type)}</span>
+                    </div>
+                    <div class="pr-name">${escapeHtml(p.title || p.id)}</div>
+                    <div class="pr-cond">${escapeHtml(promoCondition(p))}</div>
+                    <div class="pr-sched">${escapeHtml(promoSchedule(p))}</div>
+                    <div class="pr-res">${promoResultHtml(p)}</div>
+                    <div class="pr-foot">
+                        <label class="pr-sw" title="Увімкнути/вимкнути акцію">
+                            <span class="switch"><input type="checkbox" ${p.active ? 'checked' : ''} onchange="togglePromotionActive(this.closest('[data-promotion-id]').dataset.promotionId, this.checked)"><span class="switch-slider"></span></span>
+                            ${p.active ? 'Увімкнена' : 'Вимкнена'}
+                        </label>
+                        <button class="btn btn-secondary" type="button" onclick="openPromotionModal(this.closest('[data-promotion-id]').dataset.promotionId)">✏️ Редагувати</button>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function promoCardClick(event, el) {
+            if (event.target.closest('.pr-foot')) return;
+            openPromotionModal(el.dataset.promotionId);
+        }
+
+        function setPromoTab(key) {
+            if (promoTab === key) return;
+            promoTab = key;
+            renderPromotionsManager();
+        }
+
+        function renderPromoSaleBlock() {
+            const host = document.getElementById('promoSaleBlock');
+            if (!host) return;
+            const n = adminProducts.filter(p => productStatusOf(p) === 'active' && !p.contractPrice && p.oldPrice && p.oldPrice > p.price).length;
+            host.innerHTML = `
+                <div class="pr-sale-ico">🏷️</div>
+                <div class="pr-sale-t">
+                    <b>Знижки на окремі товари</b>
+                    <small>${n ? `${n} ${pluralUa(n, 'товар', 'товари', 'товарів')} зі старою ціною` : 'Товарів зі старою ціною немає'}. Така знижка не залежить від акцій — стару ціну задають у картці товару.</small>
+                </div>
+                <button class="btn btn-secondary" type="button" onclick="openProductsOnSale()">Показати в «Товарах»</button>`;
+        }
+
+        function openProductsOnSale() {
+            switchPage('products');
+            if (!activeFlags.has('sale')) toggleFlagFilter('sale');
         }
 
         function renderPromotionsManager() {
             const list = document.getElementById('promotionsList');
             const empty = document.getElementById('promotionsEmpty');
+            const tabs = document.getElementById('promotionsTabs');
             if (!list || !empty) return;
-            const activeOnly = document.getElementById('promotionsActiveOnlyFilter')?.checked;
-            const promotions = activeOnly ? allPromotions.filter(p => p.active) : [...allPromotions];
 
             updateHeaderStat();
+            const counts = { all: allPromotions.length, active: 0, scheduled: 0, ended: 0, off: 0 };
+            allPromotions.forEach(p => { counts[promoStatusOf(p)] += 1; });
+            if (tabs) {
+                tabs.innerHTML = PROMO_TABS.map(t => `
+                    <button type="button" class="orders-tab${promoTab === t.key ? ' active' : ''}" onclick="setPromoTab('${t.key}')">
+                        ${t.label} <span class="orders-tab-n">${counts[t.key] || 0}</span>
+                    </button>`).join('');
+            }
+            renderPromoSaleBlock();
 
+            const promotions = promoTab === 'all' ? allPromotions : allPromotions.filter(p => promoStatusOf(p) === promoTab);
             if (!promotions.length) {
-                list.innerHTML = allPromotions.length && activeOnly
-                    ? '<div style="padding: 16px; background: var(--bg-section); border-radius: 10px;">Активних акцій немає.</div>'
+                list.innerHTML = allPromotions.length
+                    ? '<div class="col-empty">У цій вкладці акцій немає.</div>'
                     : '';
                 empty.style.display = allPromotions.length ? 'none' : 'block';
                 return;
             }
-
             empty.style.display = 'none';
-            list.innerHTML = promotions.map(p => {
-                const active = !!p.active;
-                const running = isPromotionRunningNow(p);
-                let stateLabel = 'Вимкнено';
-                if (active) stateLabel = running ? 'Активна' : 'Чекає дати';
-                return `
-                <div data-promotion-id="${escapeAttr(p.id)}" style="display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid ${running ? '#fed7aa' : 'var(--border)'}; border-radius:12px; padding:14px 16px; background:${running ? 'var(--bg-card)' : 'var(--bg-surface-alt)'}; opacity:${active ? '1' : '0.75'};">
-                    <div style="min-width:0; flex:1;">
-                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                            <div style="font-weight:700; font-size:16px;">${escapeHtml(p.emoji || '🔥')} ${escapeHtml(p.title)}</div>
-                            <span style="font-size:12px; font-weight:700; padding:6px 10px; border-radius:999px; background:${running ? '#ffedd5' : 'var(--border)'}; color:${running ? '#9a3412' : 'var(--text-toggle)'};">${stateLabel}</span>
-                            <span style="font-size:12px; font-weight:700; color:var(--text-muted);">${escapeHtml(PROMO_TYPE_LABELS[p.type] || p.type)}</span>
-                        </div>
-                        <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
-                            ${escapeHtml(formatPromotionMeta(p))}
-                        </div>
-                        ${p.subtitle ? `<div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${escapeHtml(p.subtitle)}</div>` : ''}
-                    </div>
-                    <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                        <label class="switch" title="Увімкнути/вимкнути акцію">
-                            <input type="checkbox" ${active ? 'checked' : ''} onchange="togglePromotionActive('${escapeAttr(p.id)}', this.checked)">
-                            <span class="switch-slider"></span>
-                        </label>
-                        <button class="btn btn-secondary" type="button" onclick="openPromotionModal('${escapeAttr(p.id)}')" style="padding:8px 12px;">✏️</button>
-                        <button class="btn btn-danger" type="button" onclick="deletePromotion('${escapeAttr(p.id)}')" style="padding:8px 12px;">🗑️</button>
-                    </div>
-                </div>`;
-            }).join('');
+            list.innerHTML = promotions.map(promoCardHtml).join('');
         }
 
         function renderCouponStackingToggle() {
@@ -7885,6 +8538,7 @@
                 allPromotions = await res.json();
                 await loadSettings();
                 renderPromotionsManager();
+                if (!adminProducts.length) loadProducts().then(renderPromoSaleBlock).catch(() => {});
             } catch (e) {
                 console.error('loadPromotions error:', e);
                 showToast('Помилка завантаження акцій', 'error');
@@ -7893,117 +8547,346 @@
             }
         }
 
-        function renderPromotionPresetOptions() {
-            const select = document.getElementById('promotionPresetSelect');
-            if (!select) return;
-            select.innerHTML = '<option value="">— Створити з нуля —</option>'
-                + PROMO_PRESETS.map(p => `<option value="${escapeAttr(p.key)}">${escapeHtml(p.label)}</option>`).join('');
+        // ── Шухляда «Акція» ──
+        function promoBlank() {
+            return {
+                id: '', type: 'order_percent', title: '', subtitle: '', emoji: '🔥', badge: '',
+                value: 10, min_order: 0, min_ship: 0, cats: [], category: '', min_items: 3, max_gift_price: 100,
+                starts_local: '', ends_local: '', show_timer: true, priority: 100, active: true, accent: '',
+            };
         }
 
-        function renderPromotionCategoryOptions() {
-            const select = document.getElementById('promotionCategorySelect');
-            if (!select) return;
-            const current = select.value;
-            select.innerHTML = '<option value="">Будь-яка категорія</option>'
-                + allCategories
-                    .filter(c => c.id !== 'custom' && c.active !== false)
-                    .map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.emoji || '📦')} ${escapeHtml(c.name)}</option>`).join('');
-            select.value = current;
+        function promoDraftFromPromo(p) {
+            const cats = p.type === 'cat_percent' ? String(p.category || '').split(',').map(s => s.trim()).filter(Boolean) : [];
+            return {
+                id: p.id, type: p.type, title: p.title || '', subtitle: p.subtitle || '',
+                emoji: p.emoji || '🔥', badge: p.badge || '',
+                value: p.value || (PROMO_VALUE_TYPES.includes(p.type) ? 10 : 0),
+                min_order: p.type === 'free_ship' ? 0 : (p.min_order || 0),
+                min_ship: p.type === 'free_ship' ? (p.min_order || 0) : 0,
+                cats, category: p.type === 'gift_threshold' ? (p.category || '') : '',
+                min_items: p.min_items || 3, max_gift_price: p.max_gift_price || 100,
+                starts_local: promoToLocalInput(promoParseDate(p.starts_at)),
+                ends_local: promoToLocalInput(promoParseDate(p.ends_at)),
+                show_timer: p.show_timer !== false, priority: p.priority ?? 100,
+                active: !!p.active, accent: PROMO_ACCENT_TOKENS.includes(p.accent) ? p.accent : '',
+            };
         }
 
-        function updatePromotionTypeFields() {
-            const form = document.getElementById('promotionForm');
-            if (!form) return;
-            const type = form.type.value;
-            const showValue = type === 'order_percent' || type === 'order_fixed';
-            const showGift = type === 'gift_threshold';
+        // Дані для банера/підсумку (у форматі збереженої акції)
+        function promoAsPromotion(d) {
+            const isFree = d.type === 'free_ship';
+            return {
+                id: d.id, type: d.type, title: d.title, subtitle: d.subtitle, emoji: d.emoji, badge: d.badge,
+                value: d.value, min_order: isFree ? d.min_ship : d.min_order,
+                category: d.type === 'cat_percent' ? d.cats.join(',') : d.category,
+                min_items: d.min_items, max_gift_price: d.max_gift_price,
+                starts_at: d.starts_local ? new Date(d.starts_local).toISOString() : '',
+                ends_at: d.ends_local ? new Date(d.ends_local).toISOString() : '',
+                show_timer: d.show_timer, accent: d.accent, active: d.active, priority: d.priority,
+            };
+        }
 
-            form.querySelectorAll('.promo-field-value').forEach(el => el.style.display = showValue ? '' : 'none');
-            form.querySelectorAll('.promo-field-min-order').forEach(el => el.style.display = showValue ? '' : 'none');
-            form.querySelectorAll('.promo-field-gift').forEach(el => el.style.display = showGift ? '' : 'none');
-
-            const valueLabel = document.getElementById('promotionValueLabel');
-            if (valueLabel) {
-                valueLabel.textContent = type === 'order_fixed' ? 'Розмір знижки (₴)' : 'Розмір знижки (%)';
+        function promoPayload() {
+            const d = promoDraft;
+            const p = promoAsPromotion(d);
+            const t = d.type;
+            const out = {
+                id: d.id.trim().toLowerCase(), type: t, title: d.title.trim(), subtitle: d.subtitle.trim(),
+                emoji: d.emoji.trim() || '🔥', badge: d.badge.trim(),
+                value: 0, min_order: 0, category: '', min_items: 0, max_gift_price: 0,
+                priority: Math.max(0, parseInt(d.priority, 10) || 0),
+                starts_at: p.starts_at || null, ends_at: p.ends_at || null,
+                accent: d.accent || '', show_timer: !!d.show_timer, active: !!d.active,
+            };
+            if (PROMO_VALUE_TYPES.includes(t)) { out.value = parseInt(d.value, 10) || 0; out.min_order = parseInt(d.min_order, 10) || 0; }
+            if (t === 'cat_percent') out.category = d.cats.join(',');
+            if (t === 'free_ship') out.min_order = parseInt(d.min_ship, 10) || 0;
+            if (t === 'gift_threshold') {
+                out.category = d.category || '';
+                out.min_items = parseInt(d.min_items, 10) || 0;
+                out.max_gift_price = parseInt(d.max_gift_price, 10) || 0;
             }
+            return out;
+        }
+
+        function promoUniqueId(base) {
+            let id = String(base || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 36);
+            if (id.length < 2) id = 'promo';
+            const taken = new Set(allPromotions.map(p => p.id));
+            if (!taken.has(id)) return id;
+            let n = 2;
+            while (taken.has(`${id}_${n}`)) n += 1;
+            return `${id}_${n}`;
+        }
+
+        function promoFillInputs() {
+            const d = promoDraft;
+            const set = (id, v) => { document.getElementById(id).value = v; };
+            set('prId', d.id); set('prTitle', d.title); set('prSub', d.subtitle);
+            set('prEmoji', d.emoji); set('prBadge', d.badge);
+            set('prValue', d.value || ''); set('prMin', d.min_order); set('prMinShip', d.min_ship);
+            set('prMinItems', d.min_items); set('prMaxGift', d.max_gift_price);
+            set('prStart', d.starts_local); set('prEnd', d.ends_local); set('prPriority', d.priority);
+            document.getElementById('prTimer').checked = !!d.show_timer;
+            document.getElementById('prActive').checked = !!d.active;
+            renderPromoCategorySelect();
+            document.getElementById('prCat').value = d.category || '';
+        }
+
+        function renderPromoCategorySelect() {
+            const select = document.getElementById('prCat');
+            select.innerHTML = '<option value="">Будь-яка категорія</option>'
+                + allCategories.filter(c => c.id !== 'custom' && c.active !== false)
+                    .map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.emoji || '📦')} ${escapeHtml(c.name)}</option>`).join('');
+        }
+
+        function promoReadInputs() {
+            const d = promoDraft;
+            const val = id => document.getElementById(id).value;
+            d.title = val('prTitle'); d.subtitle = val('prSub'); d.emoji = val('prEmoji'); d.badge = val('prBadge');
+            d.value = parseInt(val('prValue'), 10) || 0;
+            d.min_order = parseInt(val('prMin'), 10) || 0;
+            d.min_ship = parseInt(val('prMinShip'), 10) || 0;
+            d.min_items = parseInt(val('prMinItems'), 10) || 0;
+            d.max_gift_price = parseInt(val('prMaxGift'), 10) || 0;
+            d.category = val('prCat');
+            d.starts_local = val('prStart'); d.ends_local = val('prEnd');
+            d.priority = parseInt(val('prPriority'), 10) || 0;
+            d.show_timer = document.getElementById('prTimer').checked;
+            d.active = document.getElementById('prActive').checked;
+            if (!currentPromotionId && !promoIdTouched) {
+                const slug = slugifyUa(d.title, 36).replace(/-/g, '_');
+                d.id = slug ? promoUniqueId(slug) : '';
+                document.getElementById('prId').value = d.id;
+            } else {
+                d.id = val('prId');
+            }
+        }
+
+        function promoSummaryInfo() {
+            const d = promoDraft;
+            const min = d.type === 'free_ship' ? d.min_ship : d.min_order;
+            const minTxt = min > 0 ? ` від ${formatMoney(min)}` : '';
+            const sample = Math.max(min, 500);
+            switch (d.type) {
+                case 'order_percent': {
+                    if (!(d.value >= 1 && d.value <= 100)) return { bad: true, text: 'Вкажи відсоток від 1 до 100.' };
+                    const off = Math.floor(sample * d.value / 100);
+                    return { text: `Клієнт отримає −${d.value}% на все замовлення${minTxt}. Напр.: кошик на ${formatMoney(sample)} → −${formatMoney(off)}, до сплати ≈ ${formatMoney(sample - off)}.` };
+                }
+                case 'order_fixed': {
+                    if (!(d.value > 0)) return { bad: true, text: 'Вкажи суму знижки.' };
+                    return { text: `Клієнт отримає −${formatMoney(d.value)} на замовлення${minTxt}. Напр.: кошик на ${formatMoney(sample)} → до сплати ≈ ${formatMoney(Math.max(0, sample - d.value))}.` };
+                }
+                case 'cat_percent': {
+                    if (!(d.value >= 1 && d.value <= 100)) return { bad: true, text: 'Вкажи відсоток від 1 до 100.' };
+                    if (!d.cats.length) return { bad: true, text: 'Обери хоча б одну категорію.' };
+                    return { text: `−${d.value}% лише на товари: ${promoCatNames(d.cats).join(', ')}${minTxt ? `, коли кошик${minTxt}` : ''}. Решта товарів — за звичайною ціною.` };
+                }
+                case 'gift_threshold': {
+                    if (!(d.min_items >= 1)) return { bad: true, text: 'Вкажи, скільки товарів потрібно для подарунка.' };
+                    if (!(d.max_gift_price >= 1)) return { bad: true, text: 'Вкажи максимальну ціну подарунка.' };
+                    const cat = d.category ? `з категорії «${promoCatNames([d.category])[0]}»` : 'будь-яких категорій';
+                    return { text: `Клієнт збирає ${d.min_items} різних товарів ${cat} — і обирає подарунок до ${formatMoney(d.max_gift_price)} безкоштовно.` };
+                }
+                case 'free_ship':
+                    return { text: min > 0 ? `Доставка безкоштовна для замовлень${minTxt}. У кошику зʼявиться позначка «безкоштовно · акція».` : 'Доставка безкоштовна для всіх замовлень. У кошику зʼявиться позначка «безкоштовно · акція».' };
+                default:
+                    return { text: 'Це лише банер: показується в магазині, але ціну не змінює.' };
+            }
+        }
+
+        function renderPromoDynamic() {
+            const d = promoDraft;
+            document.getElementById('prPreview').innerHTML = promoBannerHtml(promoAsPromotion(d));
+            const sum = promoSummaryInfo();
+            const sumEl = document.getElementById('prSummary');
+            sumEl.textContent = sum.text;
+            sumEl.classList.toggle('bad', !!sum.bad);
+            setDirtyUi('promotionDirty', hasPromoChanges());
+        }
+
+        function renderPromoStatic() {
+            const d = promoDraft;
+            document.querySelectorAll('#promotionForm [data-types]').forEach(el => {
+                el.style.display = el.dataset.types.split(' ').includes(d.type) ? '' : 'none';
+            });
+            document.getElementById('prValueLabel').textContent = d.type === 'order_fixed' ? 'Розмір знижки (₴)' : 'Розмір знижки (%)';
+            document.getElementById('prTypes').innerHTML = PROMO_TYPE_CARDS.map(([key, icon, title, hint]) => `
+                <button type="button" class="pr-type-card${d.type === key ? ' on' : ''}" aria-pressed="${d.type === key}" onclick="setPromoType('${key}')">
+                    <span class="ti">${icon}</span><b>${title}</b><small>${hint}</small>
+                </button>`).join('');
+            const auto = PROMO_DEFAULT_ACCENT[d.type] || 'blue';
+            document.getElementById('prAccentRow').innerHTML =
+                `<button type="button" class="col-sw pr-sw-auto${d.accent ? '' : ' on'}" aria-pressed="${!d.accent}" onclick="setPromoAccent('')" title="За типом акції">Авто</button>`
+                + COLLECTION_COLORS.map(([key, label]) =>
+                    `<button type="button" class="col-sw ac-${key}${d.accent === key ? ' on' : ''}" title="${escapeAttr(label)}${key === auto && !d.accent ? ' (авто)' : ''}" aria-label="${escapeAttr(label)}" aria-pressed="${d.accent === key}" onclick="setPromoAccent('${key}')"></button>`
+                ).join('');
+            document.getElementById('prCatChips').innerHTML = allCategories
+                .filter(c => c.id !== 'custom' && c.active !== false)
+                .map(c => `<button type="button" class="pr-catchip${d.cats.includes(c.id) ? ' on' : ''}" aria-pressed="${d.cats.includes(c.id)}" onclick="togglePromoCat('${escapeAttr(c.id)}')">${escapeHtml(c.emoji || '📦')} ${escapeHtml(c.name)}</button>`).join('')
+                || '<span class="form-hint">Категорій ще немає.</span>';
+            const presetHost = document.getElementById('prPresets');
+            if (presetHost && !currentPromotionId) {
+                presetHost.innerHTML = PROMO_PRESET_GROUPS.map(([g, gl]) => `
+                    <div class="pr-pgroup"><h5>${gl}</h5><div class="pr-pchips">${
+                        PROMO_PRESETS.filter(p => p.group === g).map(p =>
+                            `<button type="button" class="pr-pchip${promoLastPreset === p.key ? ' on' : ''}" aria-pressed="${promoLastPreset === p.key}" onclick="applyPromotionPreset('${p.key}')">${escapeHtml(p.label)}</button>`).join('')
+                    }</div></div>`).join('');
+            }
+            renderPromoDynamic();
+        }
+
+        function hasPromoChanges() {
+            return promoSnapshot !== null && promoDraft && JSON.stringify(promoPayload()) !== promoSnapshot;
+        }
+
+        function onPromoField() {
+            if (!promoDraft) return;
+            promoReadInputs();
+            renderPromoDynamic();
+        }
+
+        function setPromoType(type) {
+            if (promoDraft.type === type) return;
+            promoReadInputs();
+            promoDraft.type = type;
+            if (PROMO_VALUE_TYPES.includes(type) && !promoDraft.value) promoDraft.value = type === 'order_fixed' ? 50 : 10;
+            renderPromoStatic();
+        }
+
+        function setPromoAccent(key) {
+            promoReadInputs();
+            promoDraft.accent = key;
+            renderPromoStatic();
+        }
+
+        function togglePromoCat(id) {
+            promoReadInputs();
+            const i = promoDraft.cats.indexOf(id);
+            if (i >= 0) promoDraft.cats.splice(i, 1);
+            else promoDraft.cats.push(id);
+            renderPromoStatic();
         }
 
         function applyPromotionPreset(key) {
-            if (!key) return;
             const preset = PROMO_PRESETS.find(p => p.key === key);
-            if (!preset) return;
-            const form = document.getElementById('promotionForm');
+            if (!preset || currentPromotionId) return;
             const d = preset.data;
-            form.promo_id.value = d.id || '';
-            form.type.value = d.type || 'order_percent';
-            form.promo_title.value = d.title || '';
-            form.subtitle.value = d.subtitle || '';
-            form.emoji.value = d.emoji || '🔥';
-            form.badge.value = d.badge || '';
-            form.value.value = d.value ?? 0;
-            form.min_order.value = d.min_order ?? 0;
-            form.category.value = d.category || '';
-            form.min_items.value = d.min_items ?? 0;
-            form.max_gift_price.value = d.max_gift_price ?? 0;
-            form.priority.value = d.priority ?? 100;
-            updatePromotionTypeFields();
+            promoLastPreset = key;
+            const blank = promoBlank();
+            promoDraft = {
+                ...blank,
+                type: d.type, title: d.title || '', subtitle: d.subtitle || '', emoji: d.emoji || '🔥', badge: d.badge || '',
+                value: d.value ?? (PROMO_VALUE_TYPES.includes(d.type) ? 10 : 0),
+                min_order: d.type === 'free_ship' ? 0 : (d.min_order ?? 0),
+                min_ship: d.type === 'free_ship' ? (d.min_order ?? 0) : 0,
+                category: d.type === 'gift_threshold' ? (d.category || '') : '',
+                min_items: d.min_items ?? 3, max_gift_price: d.max_gift_price ?? 100,
+                priority: d.priority ?? 100, accent: preset.accent || '',
+                id: promoUniqueId(d.id),
+            };
+            promoIdTouched = true;
+            promoFillInputs();
+            renderPromoStatic();
         }
 
         function openPromotionModal(promoId = null) {
-            const form = document.getElementById('promotionForm');
-            currentPromotionId = promoId;
-            form.reset();
-            renderPromotionPresetOptions();
-            renderPromotionCategoryOptions();
-            document.getElementById('promotionPresetSelect').value = '';
-            form.active.checked = true;
-
-            const presetGroup = document.getElementById('promotionPresetGroup');
-            if (promoId) {
-                const promo = allPromotions.find(p => p.id === promoId);
-                if (!promo) {
-                    showToast('Акцію не знайдено', 'error');
-                    return;
-                }
-                document.getElementById('promotionModalTitle').textContent = '✏️ Редагувати акцію';
-                if (presetGroup) presetGroup.style.display = 'none';
-                form.promo_id.value = promo.id;
-                form.promo_id.readOnly = true;
-                form.type.value = promo.type;
-                form.promo_title.value = promo.title || '';
-                form.subtitle.value = promo.subtitle || '';
-                form.emoji.value = promo.emoji || '🔥';
-                form.badge.value = promo.badge || '';
-                form.value.value = promo.value || 0;
-                form.min_order.value = promo.min_order || 0;
-                form.category.value = promo.category || '';
-                form.min_items.value = promo.min_items || 0;
-                form.max_gift_price.value = promo.max_gift_price || 0;
-                form.priority.value = promo.priority ?? 100;
-                form.starts_at.value = promo.starts_at ? String(promo.starts_at).slice(0, 10) : '';
-                form.ends_at.value = promo.ends_at ? String(promo.ends_at).slice(0, 10) : '';
-                form.active.checked = !!promo.active;
-            } else {
-                document.getElementById('promotionModalTitle').textContent = '➕ Додати акцію';
-                if (presetGroup) presetGroup.style.display = '';
-                form.promo_id.readOnly = false;
-                form.emoji.value = '🔥';
-                form.value.value = 10;
-                form.min_order.value = 0;
-                form.min_items.value = 3;
-                form.max_gift_price.value = 100;
-                form.priority.value = 100;
+            const promo = promoId ? allPromotions.find(p => p.id === promoId) : null;
+            if (promoId && !promo) {
+                showToast('Акцію не знайдено', 'error');
+                return;
             }
-
-            updatePromotionTypeFields();
+            currentPromotionId = promo ? promo.id : null;
+            promoIdTouched = !!promo;
+            promoLastPreset = '';
+            promoDraft = promo ? promoDraftFromPromo(promo) : promoBlank();
+            document.querySelectorAll('#promotionForm .form-group.has-error').forEach(g => g.classList.remove('has-error'));
+            document.getElementById('promotionModalTitle').textContent = promo ? '✏️ Редагувати акцію' : '➕ Нова акція';
+            document.getElementById('prPresetSec').style.display = promo ? 'none' : '';
+            document.getElementById('prDeleteBtn').style.display = promo ? '' : 'none';
+            document.getElementById('prId').readOnly = !!promo;
+            promoFillInputs();
+            promoSnapshot = null;
+            renderPromoStatic();
+            promoSnapshot = JSON.stringify(promoPayload());
+            setDirtyUi('promotionDirty', false);
             document.getElementById('promotionModal').classList.add('active');
+            document.querySelector('#promotionModal .dr-body').scrollTop = 0;
+            if (!promo) document.getElementById('prTitle').focus();
         }
 
-        function closePromotionModal() {
-            document.getElementById('promotionModal').classList.remove('active');
+        function closePromotionModal(force = false) {
+            const modal = document.getElementById('promotionModal');
+            if (!force && modal.classList.contains('active') && hasPromoChanges()) {
+                askConfirm('Є незбережені зміни. Закрити без збереження?').then(ok => { if (ok) closePromotionModal(true); });
+                return;
+            }
+            modal.classList.remove('active');
             currentPromotionId = null;
-            document.getElementById('promotionForm').promo_id.readOnly = false;
+            promoDraft = null;
+            promoSnapshot = null;
         }
+
+        function promoValidate(payload) {
+            const bad = (id, msg) => {
+                const el = document.getElementById(id);
+                el?.closest('.form-group')?.classList.add('has-error');
+                el?.focus();
+                return msg;
+            };
+            if (!payload.title) return bad('prTitle', 'Вкажи назву акції');
+            if (!/^[a-z0-9_]{2,40}$/.test(payload.id)) return bad('prId', 'ID акції: латиниця, цифри та _ (2–40 символів)');
+            const t = payload.type;
+            if (t === 'order_percent' || t === 'cat_percent') {
+                if (!(payload.value >= 1 && payload.value <= 100)) return bad('prValue', 'Відсоток знижки має бути від 1 до 100');
+            }
+            if (t === 'order_fixed' && !(payload.value > 0)) return bad('prValue', 'Сума знижки має бути більшою за 0');
+            if (t === 'cat_percent' && !payload.category) return 'Обери хоча б одну категорію для знижки';
+            if (t === 'gift_threshold') {
+                if (!(payload.min_items >= 1)) return bad('prMinItems', 'Вкажи, скільки товарів потрібно для подарунка');
+                if (!(payload.max_gift_price >= 1)) return bad('prMaxGift', 'Вкажи максимальну ціну подарунка');
+            }
+            if (payload.starts_at && payload.ends_at && new Date(payload.ends_at) <= new Date(payload.starts_at)) {
+                return 'Дата завершення має бути пізнішою за дату початку';
+            }
+            return '';
+        }
+
+        async function savePromotion() {
+            if (!promoDraft) return;
+            promoReadInputs();
+            const payload = promoPayload();
+            const err = promoValidate(payload);
+            if (err) { showToast(err, 'error'); return; }
+            const submitBtn = document.getElementById('promotionSubmitBtn');
+            const editing = !!currentPromotionId;
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '⏳ Збереження...';
+                const res = await fetch(editing ? API_BASE + `/admin/promotions/${encodeURIComponent(currentPromotionId)}` : API_BASE + '/admin/promotions', {
+                    method: editing ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                    body: JSON.stringify(payload),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти акцію');
+                showToast(editing ? 'Акцію оновлено ✅' : 'Акцію створено ✅', 'success');
+                closePromotionModal(true);
+                await loadPromotions();
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження акції', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Зберегти акцію';
+            }
+        }
+
+        document.getElementById('promotionForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            savePromotion();
+        });
 
         async function togglePromotionActive(promoId, active) {
             try {
@@ -8023,7 +8906,9 @@
         }
 
         async function deletePromotion(promoId) {
-            if (!confirm(`Видалити акцію ${promoId}? Цю дію не можна скасувати.`)) return;
+            const promo = allPromotions.find(p => p.id === promoId);
+            if (!promo) return;
+            if (!(await askConfirm(`Видалити акцію «${promo.title || promo.id}»? Цю дію не можна скасувати.`))) return;
             try {
                 const res = await fetch(API_BASE + `/admin/promotions/${encodeURIComponent(promoId)}`, {
                     method: 'DELETE',
@@ -8032,126 +8917,12 @@
                 const result = await res.json();
                 if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося видалити акцію');
                 showToast('Акцію видалено ✅', 'success');
+                if (currentPromotionId === promoId) closePromotionModal(true);
                 await loadPromotions();
             } catch (e) {
                 showToast(e.message || 'Помилка видалення акції', 'error');
             }
         }
-
-        document.getElementById('promotionForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const submitBtn = document.getElementById('promotionSubmitBtn');
-
-            const payload = {
-                id: form.promo_id.value.trim().toLowerCase(),
-                type: form.type.value,
-                title: form.promo_title.value.trim(),
-                subtitle: form.subtitle.value.trim(),
-                emoji: form.emoji.value.trim() || '🔥',
-                badge: form.badge.value.trim(),
-                value: parseInt(form.value.value || '0', 10),
-                min_order: parseInt(form.min_order.value || '0', 10),
-                category: form.category.value,
-                min_items: parseInt(form.min_items.value || '0', 10),
-                max_gift_price: parseInt(form.max_gift_price.value || '0', 10),
-                priority: parseInt(form.priority.value || '100', 10),
-                starts_at: form.starts_at.value || null,
-                ends_at: form.ends_at.value || null,
-                active: form.active.checked,
-            };
-
-            if (!payload.id) { showToast('Вкажіть ID акції', 'error'); return; }
-            if (!payload.title) { showToast('Вкажіть назву акції', 'error'); return; }
-
-            try {
-                submitBtn.disabled = true;
-                submitBtn.textContent = '⏳ Збереження...';
-                const method = currentPromotionId ? 'PUT' : 'POST';
-                const url = currentPromotionId
-                    ? API_BASE + `/admin/promotions/${encodeURIComponent(currentPromotionId)}`
-                    : API_BASE + '/admin/promotions';
-                const res = await fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
-                    body: JSON.stringify(payload),
-                });
-                const result = await res.json();
-                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти акцію');
-                showToast(method === 'POST' ? 'Акцію створено ✅' : 'Акцію оновлено ✅', 'success');
-                closePromotionModal();
-                await loadPromotions();
-            } catch (err) {
-                showToast(err.message || 'Помилка збереження акції', 'error');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '✅ Зберегти акцію';
-            }
-        });
-
-        document.getElementById('couponForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const submitBtn = document.getElementById('couponSubmitBtn');
-
-            const payload = {
-                code: form.code.value.trim(),
-                type: form.type.value,
-                value: parseInt(form.value.value, 10),
-                min_order: parseInt(form.min_order.value || '0', 10),
-                uses_max: parseInt(form.uses_max.value || '0', 10),
-                one_per_user: form.one_per_user.checked,
-                stackable: form.stackable.checked,
-                require_channel_sub: form.require_channel_sub.checked,
-                sub_channel_id: form.sub_channel_id.value.trim() || null,
-                expires_at: form.expires_at.value || null,
-                allowed_user_ids: parseAllowedUserIdsInput(form.allowed_user_ids.value),
-                active: form.active.checked,
-            };
-
-            if (!payload.code) {
-                showToast('Вкажіть код купона', 'error');
-                return;
-            }
-            if (!payload.value || payload.value <= 0) {
-                showToast('Вкажіть коректне значення знижки', 'error');
-                return;
-            }
-
-            try {
-                submitBtn.disabled = true;
-                submitBtn.textContent = '⏳ Збереження...';
-
-                const method = currentCouponCode ? 'PUT' : 'POST';
-                const url = currentCouponCode
-                    ? API_BASE + `/coupons/${encodeURIComponent(currentCouponCode)}`
-                    : API_BASE + '/coupons';
-                const res = await fetch(url, {
-                    method,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tgInitData
-                    },
-                    body: JSON.stringify(payload),
-                });
-                const result = await res.json();
-                if (!res.ok || !result.ok) {
-                    throw new Error(result.error || 'Не вдалося зберегти купон');
-                }
-
-                const toastMsg = method === 'POST'
-                    ? buildCouponCreatedToast(result)
-                    : 'Купон оновлено ✅';
-                showToast(toastMsg, 'success');
-                closeCouponModal();
-                await loadCoupons();
-            } catch (err) {
-                showToast(err.message || 'Помилка збереження купона', 'error');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '✅ Зберегти купон';
-            }
-        });
 
 
         // ═══════════════════════════════════════════════════════════
@@ -9495,6 +10266,12 @@
                 return;
             }
 
+            const addCouponUserModal = document.getElementById('addCouponUserModal');
+            if (addCouponUserModal.classList.contains('active')) {
+                closeAddCouponUserModal();
+                return;
+            }
+
             const couponModal = document.getElementById('couponModal');
             if (couponModal.classList.contains('active')) {
                 closeCouponModal();
@@ -9504,12 +10281,6 @@
             const promotionModal = document.getElementById('promotionModal');
             if (promotionModal.classList.contains('active')) {
                 closePromotionModal();
-                return;
-            }
-
-            const addCouponUserModal = document.getElementById('addCouponUserModal');
-            if (addCouponUserModal.classList.contains('active')) {
-                closeAddCouponUserModal();
             }
         });
 
@@ -9559,27 +10330,6 @@
         document.getElementById('addCouponUserModal').addEventListener('click', (e) => {
             if (e.target.id === 'addCouponUserModal') {
                 closeAddCouponUserModal();
-            }
-        });
-
-        document.getElementById('addCouponUserForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const submitBtn = document.getElementById('addCouponUserSubmitBtn');
-            const userId = parseInt(form.user_id.value, 10);
-            if (!userId || userId <= 0) {
-                showToast('Вкажіть коректний Telegram user ID', 'error');
-                return;
-            }
-            try {
-                submitBtn.disabled = true;
-                submitBtn.textContent = '⏳ Додавання...';
-                await addCouponUserSubmit(userId);
-            } catch (err) {
-                showToast(err.message || 'Помилка додавання користувача', 'error');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '✅ Додати';
             }
         });
 

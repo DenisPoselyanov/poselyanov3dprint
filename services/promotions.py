@@ -25,9 +25,16 @@ _DB_ERROR_MESSAGE = "Помилка бази даних. Спробуйте пі
 #   order_percent   — % знижки на всю суму від порогу min_order
 #   order_fixed     — фіксована знижка в ₴ на всю суму від порогу min_order
 #   gift_threshold  — безкоштовний подарунок за N позицій із категорії
+#   cat_percent     — % знижки лише на товари вибраних категорій (category — через кому)
+#   free_ship       — безкоштовна доставка від порогу min_order (0 = без умов).
+#                     Доставка в магазині не має ціни (тариф перевізника), тож це
+#                     лише відображуваний бонус: прапорець у кошику й на замовленні.
 #   info            — банер без автоматичного ефекту (промокод, умови доставки тощо)
-PROMO_TYPES = ("order_percent", "order_fixed", "gift_threshold", "info")
-DISCOUNT_TYPES = ("order_percent", "order_fixed")
+PROMO_TYPES = ("order_percent", "order_fixed", "gift_threshold", "cat_percent", "free_ship", "info")
+DISCOUNT_TYPES = ("order_percent", "order_fixed", "cat_percent")
+
+# Токени акценту — рівно ті, що знає вітрина (клас .ac-<токен> в index.html)
+ACCENT_TOKENS = ("blue", "orange", "violet", "green", "teal", "pink", "red", "amber")
 
 _ID_RE = re.compile(r"^[a-z0-9_]{2,40}$")
 
@@ -72,7 +79,7 @@ DEFAULT_PROMOTIONS: list[dict] = [
 _COLUMNS = (
     "id", "type", "title", "subtitle", "emoji", "badge", "active", "priority",
     "value", "min_order", "category", "min_items", "max_gift_price",
-    "starts_at", "ends_at",
+    "starts_at", "ends_at", "accent", "show_timer",
 )
 
 _CACHE_TTL_SEC = 20.0
@@ -101,6 +108,8 @@ def init_promotions_table(conn) -> None:
                 max_gift_price INTEGER NOT NULL DEFAULT 0,
                 starts_at      TIMESTAMPTZ,
                 ends_at        TIMESTAMPTZ,
+                accent         TEXT NOT NULL DEFAULT '',
+                show_timer     INTEGER NOT NULL DEFAULT 1,
                 created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
@@ -122,9 +131,12 @@ def init_promotions_table(conn) -> None:
                 max_gift_price INTEGER NOT NULL DEFAULT 0,
                 starts_at      TIMESTAMP,
                 ends_at        TIMESTAMP,
+                accent         TEXT NOT NULL DEFAULT '',
+                show_timer     INTEGER NOT NULL DEFAULT 1,
                 created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+    _migrate_promotion_columns(conn)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_promotions_active ON promotions(active)")
 
     row = conn.execute("SELECT COUNT(*) FROM promotions").fetchone()
@@ -135,6 +147,20 @@ def init_promotions_table(conn) -> None:
     else:
         _migrate_gift_category_toy_to_key(conn)
     _invalidate_cache()
+
+
+def _migrate_promotion_columns(conn) -> None:
+    """Ідемпотентно додати accent/show_timer до таблиці, створеної до слайсу 5.
+    Старі рядки: accent '' (як було), show_timer 1 (таймер показувався завжди)."""
+    if is_postgres():
+        conn.execute("ALTER TABLE promotions ADD COLUMN IF NOT EXISTS accent TEXT NOT NULL DEFAULT ''")
+        conn.execute("ALTER TABLE promotions ADD COLUMN IF NOT EXISTS show_timer INTEGER NOT NULL DEFAULT 1")
+        return
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(promotions)").fetchall()}
+    if "accent" not in cols:
+        conn.execute("ALTER TABLE promotions ADD COLUMN accent TEXT NOT NULL DEFAULT ''")
+    if "show_timer" not in cols:
+        conn.execute("ALTER TABLE promotions ADD COLUMN show_timer INTEGER NOT NULL DEFAULT 1")
 
 
 def _migrate_gift_category_toy_to_key(conn) -> None:
@@ -155,10 +181,14 @@ def _insert_promotion(conn, promo: dict) -> None:
         _sql("""
             INSERT INTO promotions
             (id, type, title, subtitle, emoji, badge, active, priority, value,
-             min_order, category, min_items, max_gift_price, starts_at, ends_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             min_order, category, min_items, max_gift_price, starts_at, ends_at,
+             accent, show_timer)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """),
-        tuple(promo.get(col) for col in _COLUMNS),
+        tuple(
+            promo.get(col, "" if col == "accent" else 1 if col == "show_timer" else None)
+            for col in _COLUMNS
+        ),
     )
 
 
@@ -197,6 +227,8 @@ def _normalize_row(row: dict) -> dict:
         "max_gift_price": int(row.get("max_gift_price") or 0),
         "starts_at": row.get("starts_at") or None,
         "ends_at": row.get("ends_at") or None,
+        "accent": row.get("accent") if row.get("accent") in ACCENT_TOKENS else "",
+        "show_timer": row.get("show_timer") is None or bool(row.get("show_timer")),
     }
 
 
@@ -275,35 +307,130 @@ def get_promotion(promo_id: str) -> dict | None:
 
 # ─── РОЗРАХУНОК ─────────────────────────────────────────────
 
-def _raw_discount(promo: dict, subtotal: int) -> int:
+def promo_categories(promo: dict) -> set[str]:
+    """Категорії акції: `category` може містити кілька slug через кому."""
+    return {c.strip() for c in str(promo.get("category") or "").split(",") if c.strip()}
+
+
+def _raw_discount(promo: dict, subtotal: int, cat_totals: dict | None = None) -> int:
     if subtotal < promo["min_order"]:
         return 0
     if promo["type"] == "order_percent":
         return int(subtotal * promo["value"] / 100)
     if promo["type"] == "order_fixed":
         return min(promo["value"], subtotal)
+    if promo["type"] == "cat_percent":
+        cats = promo_categories(promo)
+        base = sum(int(v) for c, v in (cat_totals or {}).items() if c in cats)
+        return int(base * promo["value"] / 100)
     return 0
 
 
-def compute_order_raw_discount(subtotal: int) -> int:
-    """Найвигідніша автоматична знижка до округлення підсумку."""
+def best_order_promotion(subtotal: int, cat_totals: dict | None = None) -> tuple[dict | None, int]:
+    """(акція, знижка до округлення) — найвигідніша автоматична знижка; (None, 0), якщо немає.
+
+    cat_totals — {slug категорії: сума позицій}, потрібен лише для cat_percent.
+    """
     subtotal = max(0, int(subtotal or 0))
+    best_promo, best = None, 0
     if subtotal <= 0:
-        return 0
-    best = 0
+        return None, 0
     for promo in get_active_promotions():
         if promo["type"] not in DISCOUNT_TYPES:
             continue
-        best = max(best, _raw_discount(promo, subtotal))
-    return best
+        raw = _raw_discount(promo, subtotal, cat_totals)
+        if raw > best:
+            best_promo, best = promo, raw
+    return best_promo, best
 
 
-def compute_order_discount(subtotal: int) -> int:
+def compute_order_raw_discount(subtotal: int, cat_totals: dict | None = None) -> int:
+    """Найвигідніша автоматична знижка до округлення підсумку."""
+    return best_order_promotion(subtotal, cat_totals)[1]
+
+
+def compute_order_discount(subtotal: int, cat_totals: dict | None = None) -> int:
     """Найвигідніша для клієнта автоматична знижка на суму замовлення."""
-    best = compute_order_raw_discount(subtotal)
+    best = compute_order_raw_discount(subtotal, cat_totals)
     if best <= 0:
         return 0
     return actual_discount_after_rounding(subtotal, best)
+
+
+def free_shipping_promotion(subtotal: int) -> dict | None:
+    """Перша активна акція free_ship, умова якої виконана (min_order 0 = без умов)."""
+    subtotal = max(0, int(subtotal or 0))
+    for promo in get_active_promotions():
+        if promo["type"] == "free_ship" and subtotal >= promo["min_order"]:
+            return promo
+    return None
+
+
+def promotion_status(promo: dict, now: datetime | None = None) -> str:
+    """off — вимкнена; scheduled — ще не почалась; ended — минула; active — діє."""
+    if not promo.get("active"):
+        return "off"
+    now = now or datetime.now(timezone.utc)
+    starts = _parse_dt(promo.get("starts_at"))
+    ends = _parse_dt(promo.get("ends_at"))
+    if starts and now < starts:
+        return "scheduled"
+    if ends and now > ends:
+        return "ended"
+    return "active"
+
+
+def promotion_stats() -> dict[str, dict]:
+    """Результат акцій з orders.promotion_id: {id: {orders, revenue, discount, gifts}}.
+
+    Рахуємо замовлення в статусах «підтверджено…доставлено» (SOLD_STATUSES) — те саме
+    правило, що й виторг на «Огляді». discount — сума promotion_discount, gifts —
+    замовлення з обраним подарунком.
+    """
+    from services.hits import SOLD_STATUSES
+
+    placeholders = ", ".join("?" * len(SOLD_STATUSES))
+    conn = db_connect(dict_rows=True)
+    try:
+        rows = conn.execute(
+            _sql(
+                "SELECT promotion_id, COUNT(*) AS n, COALESCE(SUM(total_price), 0) AS revenue, "
+                "COALESCE(SUM(promotion_discount), 0) AS discount, "
+                "COALESCE(SUM(CASE WHEN gift_product_id IS NOT NULL AND gift_product_id <> 0 "
+                "THEN 1 ELSE 0 END), 0) AS gifts "
+                f"FROM orders WHERE promotion_id IS NOT NULL AND promotion_id <> '' "
+                f"AND status IN ({placeholders}) GROUP BY promotion_id"
+            ),
+            tuple(SOLD_STATUSES),
+        ).fetchall()
+    finally:
+        conn.close()
+    out: dict[str, dict] = {}
+    for row in rows:
+        r = row_to_dict(row)
+        out[str(r["promotion_id"])] = {
+            "orders": int(r.get("n") or 0),
+            "revenue": int(r.get("revenue") or 0),
+            "discount": int(r.get("discount") or 0),
+            "gifts": int(r.get("gifts") or 0),
+        }
+    return out
+
+
+def list_promotions_admin() -> list[dict]:
+    """Список для адмінки: акції + status + stats (нулі, якщо замовлень ще не було)."""
+    promos = list_promotions()
+    try:
+        stats = promotion_stats()
+    except Exception:
+        logger.warning("promotion_stats failed", exc_info=True)
+        stats = {}
+    now = datetime.now(timezone.utc)
+    empty = {"orders": 0, "revenue": 0, "discount": 0, "gifts": 0}
+    for p in promos:
+        p["status"] = promotion_status(p, now)
+        p["stats"] = stats.get(p["id"], dict(empty))
+    return promos
 
 
 def get_gift_rule() -> dict | None:
@@ -365,6 +492,11 @@ def _normalize_payload(data: dict, *, id_override: str | None = None) -> tuple[d
     elif ptype == "order_fixed":
         if value <= 0:
             return None, "Сума знижки має бути більшою за 0"
+    elif ptype == "cat_percent":
+        if not 1 <= value <= 100:
+            return None, "Відсоток знижки має бути від 1 до 100"
+        if not str(data.get("category") or "").strip():
+            return None, "Обери хоча б одну категорію для знижки"
     elif ptype == "gift_threshold":
         if min_items <= 0:
             return None, "Вкажи, скільки товарів потрібно для подарунка"
@@ -379,6 +511,16 @@ def _normalize_payload(data: dict, *, id_override: str | None = None) -> tuple[d
     if starts_at and ends_at and _parse_dt(ends_at) <= _parse_dt(starts_at):
         return None, "Дата завершення має бути пізнішою за дату початку"
 
+    accent = str(data.get("accent") or "").strip().lower()
+    if accent and accent not in ACCENT_TOKENS:
+        return None, f"Колір банера має бути одним із: {', '.join(ACCENT_TOKENS)}"
+    show_timer = data.get("show_timer", 1)
+    show_timer = 0 if show_timer in (0, False, "0", "false", "off", "") and show_timer is not None else 1
+
+    category = str(data.get("category") or "").strip()
+    if ptype == "cat_percent":
+        category = ",".join(sorted(promo_categories({"category": category})))
+
     return {
         "id": promo_id,
         "type": ptype,
@@ -390,11 +532,13 @@ def _normalize_payload(data: dict, *, id_override: str | None = None) -> tuple[d
         "priority": priority,
         "value": value,
         "min_order": min_order,
-        "category": str(data.get("category") or "").strip(),
+        "category": category,
         "min_items": min_items,
         "max_gift_price": max_gift_price,
         "starts_at": starts_at,
         "ends_at": ends_at,
+        "accent": accent,
+        "show_timer": show_timer,
     }, None
 
 
@@ -425,7 +569,12 @@ def update_promotion(promo_id: str, data: dict) -> dict:
     if not existing:
         return {"ok": False, "error": "Акцію не знайдено"}
 
-    merged = {**existing, "active": 1 if existing["active"] else 0, **data}
+    merged = {
+        **existing,
+        "active": 1 if existing["active"] else 0,
+        "show_timer": 1 if existing.get("show_timer", True) else 0,
+        **data,
+    }
     payload, err = _normalize_payload(merged, id_override=promo_id)
     if err:
         return {"ok": False, "error": err}
@@ -437,7 +586,7 @@ def update_promotion(promo_id: str, data: dict) -> dict:
                 UPDATE promotions SET
                     type = ?, title = ?, subtitle = ?, emoji = ?, badge = ?, active = ?,
                     priority = ?, value = ?, min_order = ?, category = ?, min_items = ?,
-                    max_gift_price = ?, starts_at = ?, ends_at = ?
+                    max_gift_price = ?, starts_at = ?, ends_at = ?, accent = ?, show_timer = ?
                 WHERE id = ?
             """),
             (
@@ -445,6 +594,7 @@ def update_promotion(promo_id: str, data: dict) -> dict:
                 payload["badge"], payload["active"], payload["priority"], payload["value"],
                 payload["min_order"], payload["category"], payload["min_items"],
                 payload["max_gift_price"], payload["starts_at"], payload["ends_at"],
+                payload["accent"], payload["show_timer"],
                 promo_id,
             ),
         )

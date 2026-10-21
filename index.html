@@ -1997,14 +1997,38 @@ let GIFT_RULE = { category: 'key', min_items: 3, max_gift_price: 100 };
 let COUPON_STACKING_ENABLED = false;
 
 function getDiscountPromotions() {
-  return PROMOTIONS.filter(p => p.type === 'order_percent' || p.type === 'order_fixed');
+  return PROMOTIONS.filter(p => p.type === 'order_percent' || p.type === 'order_fixed' || p.type === 'cat_percent');
+}
+
+// Категорії акції cat_percent (slug через кому) і суми кошика по категоріях — дзеркало services/promotions.py
+function promoCats(p) {
+  return String(p.category || '').split(',').map(c => c.trim()).filter(Boolean);
+}
+function cartCatTotals() {
+  const totals = {};
+  cart.forEach(i => {
+    if (i.contractPrice) return;
+    const cat = i.cat || findAnyProduct(i.id)?.cat || '';
+    totals[cat] = (totals[cat] || 0) + i.price * i.quantity;
+  });
+  return totals;
 }
 
 function promotionRawDiscount(promo, rawTotal) {
   if (rawTotal < (promo.min_order || 0)) return 0;
   if (promo.type === 'order_percent') return Math.floor(rawTotal * (promo.value || 0) / 100);
   if (promo.type === 'order_fixed') return Math.min(promo.value || 0, rawTotal);
+  if (promo.type === 'cat_percent') {
+    const cats = promoCats(promo);
+    const base = Object.entries(cartCatTotals()).reduce((n, [c, v]) => n + (cats.includes(c) ? v : 0), 0);
+    return Math.floor(base * (promo.value || 0) / 100);
+  }
   return 0;
+}
+
+// Безкоштовна доставка (акція free_ship): доставка в магазині без ціни, тож це лише позначка в підсумку
+function getFreeShipPromo(rawTotal) {
+  return PROMOTIONS.find(p => p.type === 'free_ship' && rawTotal >= (p.min_order || 0)) || null;
 }
 
 // Найвигідніша для клієнта автоматична знижка (той самий алгоритм, що й на сервері)
@@ -2020,7 +2044,7 @@ function getBestPromotion(rawTotal) {
 
 // Найменший поріг серед знижкових акцій — щоб знати, коли перемальовувати кошик
 function getLowestPromotionThreshold() {
-  const thresholds = getDiscountPromotions().map(p => p.min_order || 0);
+  const thresholds = [...getDiscountPromotions(), ...PROMOTIONS.filter(p => p.type === 'free_ship')].map(p => p.min_order || 0);
   return thresholds.length ? Math.min(...thresholds) : Infinity;
 }
 
@@ -2223,7 +2247,7 @@ function giftRowHtml() {
 
 // Прогрес до знижки й подарунка — ті самі картки, що на вкладці «Акції», але без переходу
 function cartProgressHtml() {
-  const promos = PROMOTIONS.filter(p => p.type === 'gift_threshold' || p.type === 'order_percent' || p.type === 'order_fixed');
+  const promos = PROMOTIONS.filter(p => ['gift_threshold', 'order_percent', 'order_fixed', 'cat_percent', 'free_ship'].includes(p.type));
   return salesPromoCards(promos).map(c => c
     .replace(/<button type="button" class="progress-card/, '<div class="progress-card')
     .replace(/ data-act="promo" data-id="[^"]*"/, '')
@@ -2260,7 +2284,7 @@ function cartSummaryHtml() {
   if (pricing.promotionDiscount > 0) rows.push(`<div class="sum-row g"><span>Акція${promo?.title ? ` «${escapeHtml(promo.title)}»` : ''}</span><b>−${money(pricing.promotionDiscount)}</b></div>`);
   if (appliedCoupon && pricing.couponDiscount > 0) rows.push(`<div class="sum-row g"><span>Промокод ${escapeHtml(appliedCoupon.code)}</span><b>−${money(pricing.couponDiscount)}</b></div>`);
   if (shouldShowGift() && selectedGift) rows.push(`<div class="sum-row g"><span>Подарунок: ${escapeHtml(selectedGift.name)}</span><b>0 ₴</b></div>`);
-  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'безкоштовно' : 'за тарифами перевізника'}</b></div>`);
+  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'безкоштовно' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : 'за тарифами перевізника'}</b></div>`);
   rows.push(`<div class="sum-row total"><span>До сплати</span><b>${escapeHtml(formatCartTotalLabel(pricing.finalTotal))}</b></div>`);
   return `<div class="chk-sec">${rows.join('')}</div>`;
 }
@@ -4977,16 +5001,18 @@ function heroCards() {
         ${need ? `<div class="hero-foot"><div class="hero-prog"><i style="width:${need ? have / need * 100 : 0}%"></i></div>
           <small>${have >= need ? 'Подарунок твій — обери в кошику' : `<b>${have}</b> з ${need} у кошику`}</small></div>` : ''}
       </div>`);
-    } else if (p.type === 'order_percent' || p.type === 'order_fixed') {
+    } else if (p.type === 'order_percent' || p.type === 'order_fixed' || p.type === 'cat_percent') {
       const min = p.min_order || 0;
-      const timer = timerHtml(p.ends_at);
-      const val = p.type === 'order_percent'
-        ? `<b>−${p.value}</b><span>%</span>`
-        : `<b>−${p.value}</b><span>₴</span>`;
+      const endsAttr = p.show_timer === false ? '' : (p.ends_at || '');
+      const timer = timerHtml(endsAttr);
+      const val = p.type === 'order_fixed'
+        ? `<b>−${p.value}</b><span>₴</span>`
+        : `<b>−${p.value}</b><span>%</span>`;
+      const catNames = p.type === 'cat_percent' ? promoCats(p).map(catName).join(', ') : '';
       cards.push(`<div class="hero-card disc deal${promoAccent(p)}" ${open}>
-        <div class="hero-top"><span class="eyebrow">Знижка на все</span><span class="timer" data-ends="${escapeAttr(p.ends_at || '')}"${timer ? '' : ' hidden'} title="До кінця акції">${timer}</span></div>
+        <div class="hero-top"><span class="eyebrow">${p.type === 'cat_percent' ? 'Знижка на категорію' : 'Знижка на все'}</span><span class="timer" data-ends="${escapeAttr(endsAttr)}"${timer ? '' : ' hidden'} title="До кінця акції">${timer}</span></div>
         <div class="deal-main"><div class="deal-val tnum">${val}</div>
-          <div><h4>${min ? `Від ${money(min)} у кошику` : escapeHtml(p.title)}</h4><p>Рахується автоматично, без промокоду</p></div></div>
+          <div><h4>${p.type === 'cat_percent' ? escapeHtml(catNames || p.title) : min ? `Від ${money(min)} у кошику` : escapeHtml(p.title)}</h4><p>${p.type === 'cat_percent' && min ? `Від ${money(min)} у кошику` : 'Рахується автоматично, без промокоду'}</p></div></div>
         ${min ? `<div class="hero-foot"><div class="hero-prog"><i style="width:${Math.min(100, rawTotal / min * 100)}%"></i></div>
           <small>${rawTotal >= min ? 'Знижка діє' : `Ще <b>${money(min - rawTotal)}</b>`}</small></div>` : ''}
       </div>`);
@@ -5014,7 +5040,7 @@ function refreshHero() {
 }
 function onPromoClick(id) {
   const promo = PROMOTIONS.find(p => p.id === id);
-  if (promo?.type === 'gift_threshold' && promo.category) openList('cat', promo.category);
+  if ((promo?.type === 'gift_threshold' || promo?.type === 'cat_percent') && promo.category && !promo.category.includes(',')) openList('cat', promo.category);
   else switchPage(activePage === 'sales' ? 'products' : 'sales');
 }
 
@@ -5431,13 +5457,15 @@ function salesPromoCards(promos = PROMOTIONS) {
         ${need ? `<div class="bar"><i style="width:${have / need * 100}%"></i></div>` : ''}
       </button>`;
     }
-    if (p.type === 'order_percent' || p.type === 'order_fixed') {
+    if (p.type === 'order_percent' || p.type === 'order_fixed' || p.type === 'cat_percent') {
       const min = p.min_order || 0;
-      const val = p.type === 'order_percent' ? `−${p.value}%` : `−${money(p.value)}`;
-      const left = timeLeftText(p.ends_at);
-      const state = !min ? 'Діє на все замовлення' : rawTotal >= min ? 'Знижка вже діє' : `Ще ${money(min - rawTotal)} до знижки`;
+      const val = p.type === 'order_fixed' ? `−${money(p.value)}` : `−${p.value}%`;
+      const left = p.show_timer === false ? '' : timeLeftText(p.ends_at);
+      const isCat = p.type === 'cat_percent';
+      const scope = isCat ? ` на ${escapeHtml(promoCats(p).map(catName).join(', '))}` : ' на все';
+      const state = !min ? (isCat ? 'Діє на товари категорії' : 'Діє на все замовлення') : rawTotal >= min ? 'Знижка вже діє' : `Ще ${money(min - rawTotal)} до знижки`;
       return `<button type="button" class="progress-card${promoAccent(p)}" ${open} title="${escapeAttr(p.title || '')}">
-        <div class="row"><span class="ic">${ic('percent')}</span><div><b>${val}${min ? ` від ${money(min)}` : ' на все'}</b><br><small>${state}${left ? ` · до кінця ${left}` : ''}</small></div></div>
+        <div class="row"><span class="ic">${ic('percent')}</span><div><b>${val}${isCat ? scope + (min ? ` · від ${money(min)}` : '') : min ? ` від ${money(min)}` : scope}</b><br><small>${state}${left ? ` · до кінця ${left}` : ''}</small></div></div>
         ${min ? `<div class="bar"><i style="width:${Math.min(100, rawTotal / min * 100)}%"></i></div>` : ''}
       </button>`;
     }

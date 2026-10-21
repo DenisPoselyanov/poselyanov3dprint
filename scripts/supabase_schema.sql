@@ -192,4 +192,27 @@ UPDATE filament_colors SET name = 'Світний синій' WHERE id = 'lumino
 UPDATE filament_colors SET name = 'Світний бірюзовий' WHERE id = 'luminous-aqua';
 UPDATE filament_colors SET name = 'Світний рожевий' WHERE id = 'luminous-pink';
 
+-- Акції (таблицю створює і застартово мігрує сам бот — services/promotions.py; тут для довідки).
+-- Слайс 5: accent (токен кольору банера) і show_timer (показувати таймер до кінця).
+CREATE TABLE IF NOT EXISTS promotions (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    subtitle TEXT NOT NULL DEFAULT '',
+    emoji TEXT NOT NULL DEFAULT '🔥',
+    badge TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 100,
+    value INTEGER NOT NULL DEFAULT 0,
+    min_order INTEGER NOT NULL DEFAULT 0,
+    category TEXT NOT NULL DEFAULT '',
+    min_items INTEGER NOT NULL DEFAULT 0,
+    max_gift_price INTEGER NOT NULL DEFAULT 0,
+    starts_at TIMESTAMPTZ,
+    ends_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS accent TEXT NOT NULL DEFAULT '';
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS show_timer INTEGER NOT NULL DEFAULT 1;
+
 COMMIT;

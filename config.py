@@ -39,6 +39,9 @@ ADMIN_BYPASS_TOKEN: str = os.environ.get("ADMIN_BYPASS_TOKEN") or secrets.token_
 NOVAPOSHTA_API_KEY = os.environ.get("NOVAPOSHTA_API_KEY", "").strip()
 UKRPOSHTA_TOKEN = os.environ.get("UKRPOSHTA_TOKEN", "").strip()
 
+# Username бота (без @) — для deep-link `t.me/<bot>?startapp=…` (купони в адмінці)
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "poselyanov3dprint_bot").strip().lstrip("@") or "poselyanov3dprint_bot"
+
 PROMOTION_ENABLED = os.environ.get("PROMOTION_ENABLED", "true").lower() in ("1", "true", "yes")
 
 # Канал, підписка на який потрібна для промокодів з галочкою «Лише для підписників».

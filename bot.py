@@ -153,7 +153,8 @@ from services.promotions import (
     create_promotion,
     delete_promotion,
     get_active_promotions,
-    list_promotions,
+    get_gift_rule,
+    list_promotions_admin,
     public_promotions,
     set_promotion_active,
     update_promotion,
@@ -2108,6 +2109,19 @@ async def handle_order(request):
     if not ok:
         return web.json_response({"ok": False, "error": checkout}, status=400, headers=cors_headers(request))
 
+    # Акцію для статистики визначає сервер, а не клієнт: знижка > подарунок > безкоштовна доставка
+    gift_rule = get_gift_rule() if checkout.get("gift_product_id") else None
+    attributed_promo = (
+        result.get("promotion_id")
+        or (gift_rule["id"] if gift_rule else "")
+        or result.get("free_ship_promotion_id")
+        or ""
+    )
+    if attributed_promo:
+        checkout["promotion_id"] = attributed_promo
+    else:
+        checkout.pop("promotion_id", None)
+
     items = result["items"]
     total_price = result["total_price"]
     coupon_discount = result.get("coupon_discount", 0)
@@ -3739,7 +3753,7 @@ async def handle_get_promotions(request: web.Request):
     denied = require_admin(request, auth)
     if denied:
         return denied
-    return web.json_response(await run_db(list_promotions), headers=cors_headers(request))
+    return web.json_response(await run_db(list_promotions_admin), headers=cors_headers(request))
 
 
 async def handle_get_users(request: web.Request):

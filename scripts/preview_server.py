@@ -67,6 +67,50 @@ for _uid, _pid, _rate, _txt, _photos, _st, _reply in (
     _c.execute("INSERT INTO reviews (product_id, order_id, user_id, author_name, rating, text, photos, status, admin_reply) VALUES (?,?,?,?,?,?,?,?,?)",
                (_pid, _oid, _uid, "Клієнт %d" % _uid, _rate, _txt, _json.dumps(_photos), _st, _reply))
     _c.commit(); _c.close()
+# Акції, купони й замовлення з ними (слайс 5): усі статуси акцій, різні типи, кольори, статистика
+import datetime as _dt
+import services.promotions as _promos, services.coupons as _coupons
+_now = _dt.datetime.now(_dt.timezone.utc)
+_iso = lambda days: (_now + _dt.timedelta(days=days)).isoformat()
+for _pr in (
+    {"id": "cat_keys_15", "type": "cat_percent", "title": "−15% на брелки", "subtitle": "Лише на брелки до кінця тижня", "emoji": "🔑", "value": 15, "category": "key", "ends_at": _iso(5), "accent": "violet", "priority": 6},
+    {"id": "free_ship_700", "type": "free_ship", "title": "Безкоштовна доставка", "subtitle": "Від 700 ₴ — доставка за наш рахунок", "emoji": "🚚", "min_order": 700, "accent": "teal", "show_timer": 0, "priority": 30},
+    {"id": "spring_soon", "type": "order_percent", "title": "Весняна знижка −12%", "subtitle": "Стартує наступного тижня", "emoji": "🌷", "value": 12, "min_order": 300, "starts_at": _iso(7), "ends_at": _iso(20), "accent": "pink", "priority": 8},
+    {"id": "winter_over", "type": "order_fixed", "title": "−40 ₴ зимовий розпродаж", "subtitle": "Уже завершилась", "emoji": "❄️", "value": 40, "min_order": 250, "starts_at": _iso(-30), "ends_at": _iso(-2), "priority": 9},
+    {"id": "review_info", "type": "info", "title": "Відгук — і купон твій", "subtitle": "Надішли фото у відгуку й отримай купон", "emoji": "⭐", "active": 0, "priority": 35},
+):
+    _promos.create_promotion(_pr)
+for _cp in (
+    {"code": "LETO10", "type": "percent", "value": 10, "min_order": 300, "uses_max": 20, "expires_at": (_now + _dt.timedelta(days=14)).strftime("%Y-%m-%d"), "stackable": 1},
+    {"code": "SAVE50", "type": "fixed", "value": 50, "min_order": 400, "one_per_user": 1},
+    {"code": "VIP", "type": "percent", "value": 20, "allowed_user_ids": [101, 103]},
+    {"code": "SUBS15", "type": "percent", "value": 15, "require_channel_sub": 1, "sub_channel_id": "@poselyanov3d"},
+    {"code": "OLD5", "type": "fixed", "value": 5, "expires_at": "2024-01-31"},
+    {"code": "LITO", "type": "percent", "value": 7, "active": 0},
+    {"code": "ЛІТО", "type": "percent", "value": 8},
+):
+    _coupons.create_coupon(_cp)
+for _uid, _nm, _tot, _code, _cd, _promo, _pd in (
+    (201, "Анна", 270, "LETO10", 30, "cat_keys_15", 0),
+    (202, "Віктор", 350, "SAVE50", 50, "", 0),
+    (203, "Юлія", 720, "", 0, "free_ship_700", 0),
+    (204, "Петро", 450, "", 0, "order_10_percent", 50),
+):
+    _oid, _ = orders.save_order(_uid, "@u%d" % _uid, _nm, [it("Товар", _tot, 1)], _tot, "", coupon_code=_code or None,
+                                discount_amount=_cd + _pd, promotion_discount=_pd, extra={"promotion_id": _promo} if _promo else None)
+    orders.update_order_status(_oid, "confirmed")
+_c = db_connect()
+for _code, _n in (("LETO10", 1), ("SAVE50", 1)):
+    _c.execute("UPDATE coupons SET uses_count = ? WHERE code = ?", (_n, _code))
+_c.commit(); _c.close()
 app = web.Application(client_max_size=30 * 1024 * 1024)
+
+
+async def _local_api_config(request):
+    """Вітрина (/) у перегляді ходить на ЛОКАЛЬНИЙ API, а не на прод із api-config.js."""
+    return web.Response(text="window.__API_BASE__ = location.origin;", content_type="application/javascript")
+
+
+app.router.add_get("/api-config.js", _local_api_config)
 register_http_routes(app, bot)
 web.run_app(app, host="127.0.0.1", port=8081, print=None)
