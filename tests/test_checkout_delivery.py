@@ -66,6 +66,11 @@ def test_checkout_rejects_unknown_method():
     assert not ok
 
 
+@pytest.fixture(autouse=True)
+def _no_np_delays(monkeypatch):
+    monkeypatch.setattr(delivery, "WAREHOUSE_PAGE_DELAY_SEC", 0)
+
+
 def test_available_methods_np_always_lookup_needs_key(monkeypatch):
     monkeypatch.setattr(delivery.config, "NOVAPOSHTA_API_KEY", "")
     assert delivery.available_methods() == ["np", "self"]

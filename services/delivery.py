@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
@@ -21,6 +22,8 @@ WAREHOUSE_TTL_SEC = 3 * 3600
 WAREHOUSE_PAGE_SIZE = 500
 WAREHOUSE_MAX_PAGES = 10  # запобіжник: до 5000 відділень на місто
 WAREHOUSE_PARTIAL_TTL_SEC = 60  # неповний список кешуємо ненадовго
+WAREHOUSE_PAGE_DELAY_SEC = 1.0  # пауза між сторінками: НП відповідає «To many requests» на запити підряд
+WAREHOUSE_PAGE_RETRIES = 3  # спроб на одну сторінку (з наростаючою паузою)
 REQUEST_TIMEOUT_SEC = 8
 CACHE_MAX = 2000
 
@@ -155,15 +158,25 @@ async def np_warehouses(city_ref: str, kind: str = "all", limit: int = 500) -> l
     raw: list = []
     partial = False
     for page in range(1, WAREHOUSE_MAX_PAGES + 1):
-        try:
-            data = await _np_call(
-                "Address",
-                "getWarehouses",
-                {"CityRef": city_ref, "Limit": str(page_size), "Page": str(page), "Language": "UA"},
-            )
-        except DeliveryUnavailable:
+        if page > 1:
+            await asyncio.sleep(WAREHOUSE_PAGE_DELAY_SEC)
+        data = None
+        for attempt in range(1, WAREHOUSE_PAGE_RETRIES + 1):
+            try:
+                data = await _np_call(
+                    "Address",
+                    "getWarehouses",
+                    {"CityRef": city_ref, "Limit": str(page_size), "Page": str(page), "Language": "UA"},
+                )
+                break
+            except DeliveryUnavailable as exc:
+                if str(exc) == "no_api_key":
+                    raise
+                if attempt < WAREHOUSE_PAGE_RETRIES:
+                    await asyncio.sleep(WAREHOUSE_PAGE_DELAY_SEC * 2 * attempt)
+        if data is None:
             if page == 1:
-                raise
+                raise DeliveryUnavailable("api_error")
             logger.warning(
                 "НП getWarehouses: сторінка %s не завантажилась, повертаю %s відділень (неповний список)",
                 page, len(raw),
