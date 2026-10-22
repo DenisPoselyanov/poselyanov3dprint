@@ -228,6 +228,7 @@ from services.orders import (
 from services.stats import get_stats
 from services.status_messages import list_status_messages, mark_status_message_deleted, record_status_message
 import services.broadcasts as broadcasts_svc
+import services.channel_posts as channel_posts_svc
 import services.ai_suggestions as ai_suggestions_svc
 from services.users import (
     export_users,
@@ -3831,6 +3832,14 @@ async def handle_post_event(request: web.Request):
         recorded = await run_db(broadcasts_svc.record_click, user_id, bid)
         return web.json_response({"ok": True, "recorded": recorded}, headers=cors_headers(request))
 
+    if data["type"] == "channel_open":
+        try:
+            post_id = int(data.get("post_id") or 0)
+        except (TypeError, ValueError):
+            post_id = 0
+        recorded = await run_db(channel_posts_svc.record_click, user_id, post_id)
+        return web.json_response({"ok": True, "recorded": recorded}, headers=cors_headers(request))
+
     if data["type"] in FUNNEL_EVENT_TYPES:
         try:
             product_id = int(data.get("product_id") or 0) or None
@@ -4073,6 +4082,123 @@ async def handle_delete_broadcast(request: web.Request):
             status=409, headers=cors_headers(request),
         )
     return web.json_response({"ok": False, "error": "Не знайдено"}, status=404, headers=cors_headers(request))
+
+
+def _channel_product_id(request: web.Request) -> int:
+    try:
+        return int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def handle_get_channel_posts(request: web.Request):
+    """Канал з налаштувань, опис товару для шаблону й попередні публікації (з переходами)."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    product_id = _channel_product_id(request)
+    posts = await run_db(channel_posts_svc.list_product_posts, product_id)
+    channel = await run_db(channel_posts_svc.get_channel)
+    product = await run_db(get_product_by_id, product_id)
+    return web.json_response(
+        {"channel": channel, "posts": posts, "description": (product or {}).get("description") or ""},
+        headers=cors_headers(request),
+    )
+
+
+def _channel_error_text(e: Exception) -> str:
+    msg = str(e).lower()
+    if "chat not found" in msg:
+        return "Канал не знайдено. Перевірте @username або ID і що бот доданий у канал"
+    if "not enough rights" in msg or "not a member" in msg or "administrator" in msg or "forbidden" in msg:
+        return "Бот не може писати в канал: додайте його адміном з правом «Публікація повідомлень»"
+    return "Telegram не прийняв пост, спробуйте ще раз"
+
+
+async def handle_publish_channel_post(request: web.Request):
+    """Пост товару в канал: фото + текст + кнопки «Замовити» і «Усі товари»."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        data = None
+    if not isinstance(data, dict):
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+
+    product_id = _channel_product_id(request)
+    product = await run_db(get_product_by_id, product_id)
+    if not product:
+        return web.json_response(
+            {"ok": False, "error": "Публікувати можна лише товар, що є в магазині"}, status=404, headers=cors_headers(request)
+        )
+    channel = channel_posts_svc.normalize_channel(data.get("channel"))
+    if not channel:
+        return web.json_response(
+            {"ok": False, "error": "Вкажіть канал: @username або ID на кшталт -100…"}, status=400, headers=cors_headers(request)
+        )
+    photos = product.get("photos") or []
+    photo = _share_photo_url(photos[0]) if photos else ""
+    text, text_err = channel_posts_svc.validate_text(data.get("text"), bool(photo))
+    if text_err:
+        return web.json_response({"ok": False, "error": text_err}, status=400, headers=cors_headers(request))
+
+    tg_bot = getattr(bot_app, "bot", None)
+    if tg_bot is None:
+        return web.json_response({"ok": False, "error": "Бот не запущено"}, status=502, headers=cors_headers(request))
+
+    post_id = await run_db(channel_posts_svc.create_post, product_id, channel, text)
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🛒 Замовити", url=channel_posts_svc.product_link(post_id, product_id)),
+        InlineKeyboardButton("🛍 Усі товари", url=channel_posts_svc.shop_link(post_id)),
+    ]])
+    body = channel_posts_svc.caption_html(text)
+    silent = bool(data.get("silent"))
+    from rich_messages import _telegram_retry
+
+    try:
+        if photo:
+            message = await _telegram_retry(
+                lambda: tg_bot.send_photo(
+                    chat_id=channel, photo=photo, caption=body, parse_mode="HTML",
+                    reply_markup=markup, disable_notification=silent,
+                ),
+                label="channel post photo",
+            )
+        else:
+            message = await _telegram_retry(
+                lambda: tg_bot.send_message(
+                    chat_id=channel, text=body, parse_mode="HTML",
+                    reply_markup=markup, disable_notification=silent,
+                ),
+                label="channel post",
+            )
+    except Exception as e:
+        await run_db(channel_posts_svc.delete_post, post_id)
+        logger.warning("Пост товару %s у канал %s не вдався: %s", product_id, channel, e)
+        return web.json_response({"ok": False, "error": _channel_error_text(e)}, status=502, headers=cors_headers(request))
+
+    await run_db(channel_posts_svc.set_message_id, post_id, message.message_id)
+    if channel != await run_db(channel_posts_svc.get_channel):
+        await run_db(channel_posts_svc.set_channel, channel)
+    pinned = False
+    if data.get("pin"):
+        try:
+            await tg_bot.pin_chat_message(chat_id=channel, message_id=message.message_id, disable_notification=True)
+            pinned = True
+        except Exception as e:
+            logger.warning("Не вдалось закріпити пост %s у %s: %s", post_id, channel, e)
+    return web.json_response(
+        {
+            "ok": True,
+            "id": post_id,
+            "url": channel_posts_svc.post_url(channel, message.message_id),
+            "pinned": pinned,
+            "channel": channel,
+        },
+        headers=cors_headers(request),
+    )
 
 
 async def handle_get_ai_suggestions(request: web.Request):

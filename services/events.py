@@ -16,7 +16,7 @@ from db_core import db_connect, is_postgres, sql as _sql
 logger = logging.getLogger(__name__)
 
 FUNNEL_EVENT_TYPES = ("catalog_open", "product_view", "add_to_cart")
-EVENT_TYPES = ("search", *FUNNEL_EVENT_TYPES, "broadcast_open")
+EVENT_TYPES = ("search", *FUNNEL_EVENT_TYPES, "broadcast_open", "channel_open")
 
 QUERY_MIN_LEN = 2
 QUERY_MAX_LEN = 64

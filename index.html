@@ -6232,6 +6232,17 @@ document.addEventListener('keydown', e => {
 /// ─── КУПОНИ ───────────────────────────────────────────────
 let appliedCoupon = null; // { code, type, value, discount, stackable }
 
+  // Пост у каналі: ch_<id>[_product_N] - так само рахуємо перехід, залишок відкриває товар
+  const chLink = /^ch_(\d+)(?:_(.+))?$/.exec(startParam || '');
+  if (chLink) {
+    if (tg?.initData) {
+      fetch(API_BASE + '/api/events', {
+        method: 'POST', headers: apiHeaders(), keepalive: true,
+        body: JSON.stringify({ type: 'channel_open', post_id: Number(chLink[1]) }),
+      }).catch(() => {});
+    }
+    startParam = chLink[2] || '';
+  }
 // Повертає поле промокоду в початковий стан (після оформлення замовлення).
 function resetCouponField() {
   const input = document.getElementById('couponInput');

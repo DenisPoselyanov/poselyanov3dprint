@@ -6390,6 +6390,7 @@
             const raw = input.value.trim().replace(/\s+/g, '');
             if (raw === String(p.price)) return;
             if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+                    <button type="button" onclick="closeProductMenus(); openChannelPostDialog(${p.id})">📣 Опублікувати в канал</button>
                 showToast('Ціна — ціле число від 1', 'error');
                 input.value = p.price;
                 return;
@@ -6555,6 +6556,127 @@
         // ═══════════════════════════════════════════════════════════
 
         function toggleContractPriceFields() {
+        // ─── Публікація товару в канал ───────────────────────────
+        const CHANNEL_RUBRICS = [
+            { key: 'new', label: '🆕 Новинка' },
+            { key: 'custom', label: '💡 За запитом' },
+            { key: 'sale', label: '🔥 Акція' },
+            { key: 'none', label: 'Без рубрики' },
+        ];
+
+        function channelPostText(p, rubric) {
+            const lines = [];
+            const r = CHANNEL_RUBRICS.find(x => x.key === rubric);
+            if (r && r.key !== 'none') lines.push(r.label);
+            lines.push(p.name);
+            let desc = String(p.description || '').trim();
+            if (desc.length > 500) desc = desc.slice(0, 497).trimEnd() + '…';
+            if (desc) lines.push('', desc);
+            let price;
+            if (p.contractPrice) price = '💰 Ціна — договірна';
+            else if (p.oldPrice && p.oldPrice > p.price) price = `💰 ${p.price} ₴ замість ${p.oldPrice} ₴`;
+            else price = `💰 ${p.price} ₴`;
+            lines.push('', price, '📦 Доставка Новою поштою');
+            return lines.join('\n');
+        }
+
+        async function openChannelPostDialog(id) {
+            const p = adminProducts.find(x => x.id === id);
+            if (!p) return;
+            let info = { channel: '', posts: [] };
+            try {
+                info = await productApi(`/admin/products/${id}/channel-posts`, 'GET');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося завантажити дані каналу', 'error');
+            }
+            const photo = (p.photos || [])[0] || '';
+            const product = { ...p, description: info.description || p.description || '' };
+            const history = (info.posts || []).map(x => {
+                const d = x.created_at ? new Date(x.created_at).toLocaleDateString('uk-UA') : '';
+                const link = x.url ? `<a href="${escapeAttr(x.url)}" target="_blank" rel="noopener">пост</a>` : 'пост';
+                return `<div>${escapeHtml(d)} · ${link} · ${x.clicks} переход${x.clicks === 1 ? '' : (x.clicks >= 2 && x.clicks <= 4 ? 'и' : 'ів')}</div>`;
+            }).join('');
+            const field = 'width:100%;box-sizing:border-box;padding:10px 12px;font-size:15px;border:2px solid var(--border-input);border-radius:10px;background:var(--bg-input);color:var(--text-main);';
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+            overlay.innerHTML = `
+                <div style="background:var(--bg-card);color:var(--text-main);border-radius:16px;padding:20px;width:100%;max-width:460px;max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+                    <div style="font-size:17px;font-weight:700;margin-bottom:4px;">📣 Пост у канал</div>
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Під постом будуть кнопки «🛒 Замовити» (відкриває цей товар) і «🛍 Усі товари».</div>
+                    <label style="font-size:13px;font-weight:600;">Канал</label>
+                    <input id="chp-channel" type="text" autocomplete="off" placeholder="@username або -100…" value="${escapeAttr(info.channel || '')}" style="${field}margin:4px 0 4px;">
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Бот має бути адміном каналу з правом публікації.</div>
+                    <div id="chp-rubrics" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+                        ${CHANNEL_RUBRICS.map(r => `<button type="button" class="btn btn-secondary" data-r="${r.key}" style="padding:6px 10px;font-size:13px;">${escapeHtml(r.label)}</button>`).join('')}
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:flex-start;">
+                        ${photo ? `<img src="${escapeAttr(photo)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none;">` : ''}
+                        <textarea id="chp-text" rows="9" style="${field}resize:vertical;font-family:inherit;"></textarea>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:4px;">
+                        <span>Перший рядок буде жирним</span><span id="chp-count"></span>
+                    </div>
+                    <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px;"><input id="chp-silent" type="checkbox"> Без звуку для підписників</label>
+                    <label style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:14px;"><input id="chp-pin" type="checkbox"> Закріпити в каналі</label>
+                    ${history ? `<div style="margin-top:12px;font-size:13px;color:var(--text-muted);"><div style="font-weight:600;margin-bottom:2px;">Уже публікувався:</div>${history}</div>` : ''}
+                    <div id="chp-err" style="color:#e53935;font-size:13px;min-height:18px;margin-top:8px;"></div>
+                    <div style="display:flex;gap:8px;margin-top:6px;">
+                        <button type="button" id="chp-cancel" class="btn btn-secondary" style="flex:1;">Скасувати</button>
+                        <button type="button" id="chp-ok" class="btn btn-primary" style="flex:2;">Опублікувати</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            const $ = sel => overlay.querySelector(sel);
+            const textEl = $('#chp-text');
+            const limit = photo ? 1024 : 4096;
+            const updateCount = () => {
+                const n = textEl.value.trim().length;
+                $('#chp-count').textContent = `${n} / ${limit}`;
+                $('#chp-count').style.color = n > limit ? '#e53935' : '';
+            };
+            const setRubric = key => {
+                overlay.querySelectorAll('#chp-rubrics [data-r]').forEach(b => {
+                    b.className = 'btn ' + (b.dataset.r === key ? 'btn-primary' : 'btn-secondary');
+                });
+                textEl.value = channelPostText(product, key);
+                updateCount();
+            };
+            overlay.querySelectorAll('#chp-rubrics [data-r]').forEach(b => {
+                b.onclick = () => {
+                    if (textEl.dataset.edited && !confirm('Замінити ваш текст шаблоном рубрики?')) return;
+                    delete textEl.dataset.edited;
+                    setRubric(b.dataset.r);
+                };
+            });
+            textEl.addEventListener('input', () => { textEl.dataset.edited = '1'; updateCount(); $('#chp-err').textContent = ''; });
+            setRubric('new');
+            const close = () => overlay.remove();
+            $('#chp-cancel').onclick = close;
+            overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+            $('#chp-ok').onclick = async () => {
+                const channel = $('#chp-channel').value.trim();
+                const text = textEl.value.trim();
+                const err = $('#chp-err');
+                if (!channel) { err.textContent = 'Вкажіть канал'; $('#chp-channel').focus(); return; }
+                if (!text) { err.textContent = 'Текст поста порожній'; textEl.focus(); return; }
+                if (text.length > limit) { err.textContent = `Задовгий текст: ${text.length} із ${limit}`; return; }
+                const ok = $('#chp-ok');
+                ok.disabled = true;
+                ok.textContent = 'Публікую…';
+                try {
+                    const res = await productApi(`/admin/products/${id}/channel-posts`, 'POST', {
+                        channel, text, silent: $('#chp-silent').checked, pin: $('#chp-pin').checked,
+                    });
+                    close();
+                    showToast(res.pinned ? 'Опубліковано й закріплено в каналі ✅' : 'Опубліковано в каналі ✅', 'success');
+                } catch (e) {
+                    err.textContent = e.message || 'Не вдалося опублікувати';
+                    ok.disabled = false;
+                    ok.textContent = 'Опублікувати';
+                }
+            };
+        }
+
             const checked = document.getElementById('contractPriceToggle').checked;
             const group = document.getElementById('priceFieldsGroup');
             const hint = document.getElementById('contractPriceHint');
