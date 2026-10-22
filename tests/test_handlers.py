@@ -30,10 +30,12 @@ def test_telegram_error_handler_notifies_owner():
 
     asyncio.run(telegram_error_handler(update, context))
 
-    bot.send_message.assert_awaited_once()
-    kwargs = bot.send_message.await_args.kwargs
-    assert kwargs["chat_id"] == 12345
-    assert "test failure" in kwargs["text"]
+    bot.do_api_request.assert_awaited_once()
+    method, payload = bot.do_api_request.await_args.args
+    assert method == "sendRichMessage"
+    assert payload["chat_id"] == 12345
+    assert "test failure" in payload["rich_message"]["html"]
+    assert "99" in payload["rich_message"]["html"]
 
 
 def test_telegram_error_handler_skips_without_owner():

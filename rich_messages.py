@@ -597,7 +597,7 @@ def build_admin_order_with_status(
 def build_client_price_quote(order_id: int, total_price: int, items: list[dict]) -> str:
     """HTML-повідомлення клієнту з фінальною сумою після узгодження."""
     parts = [
-        f"<h2>💰 Замовлення #{order_id}</h2>",
+        f"<h2>💰 Замовлення №{order_id}</h2>",
         "<p>Фінальна сума узгоджена:</p>",
         "<ul>",
     ]
@@ -629,7 +629,7 @@ def build_order_status(order: dict) -> str:
     )
     date_fmt = format_date(order.get("ordered_at"))
     return (
-        f"<h2>📦 Останнє замовлення #{order['id']}</h2>"
+        f"<h2>📦 Останнє замовлення №{order['id']}</h2>"
         f"<p>📅 {date_fmt} · 💰 {order['total_price']} ₴</p>"
         "<hr/>"
         f"<p>{icon} <b>{escape(label)}</b></p>"
@@ -643,7 +643,7 @@ def build_order_history(orders: list[dict], items_by_order: dict[int, list], fir
     for o in orders:
         icon, label = STATUS_LABELS_SHORT.get(o.get("status", ""), ("❔", o.get("status", "")))
         date_fmt = format_date(o.get("ordered_at"))
-        parts.append(f"<p>{icon} <b>Замовлення #{o['id']}</b> · {date_fmt}</p>")
+        parts.append(f"<p>{icon} <b>Замовлення №{o['id']}</b> · {date_fmt}</p>")
         parts.append("<ul>")
 
         for item in items_by_order.get(o["id"], []):
@@ -934,4 +934,210 @@ def build_admin_panel_hint() -> str:
         "<li>📸 Завантажувати фото на Cloudinary</li>"
         "</ul>"
         "<footer>Натисни кнопку нижче, щоб відкрити панель</footer>"
+    )
+
+
+def build_notice(
+    icon: str,
+    title: str,
+    *lines: str,
+    items: list[str] | None = None,
+    footer: str | None = None,
+) -> str:
+    """Універсальний rich-каркас: <h2> + <hr/> + <p>… + <ul> + <footer>.
+
+    Рядки й пункти вставляються як є (HTML) — екрануй користувацькі дані через escape().
+    """
+    parts = [f"<h2>{icon} {title}</h2>", "<hr/>"]
+    parts.extend(f"<p>{line}</p>" for line in lines if line)
+    if items:
+        parts.append("<ul>")
+        parts.extend(f"<li>{item}</li>" for item in items)
+        parts.append("</ul>")
+    if footer:
+        parts.append(f"<footer>{footer}</footer>")
+    return "\n".join(parts)
+
+
+def build_error_notice(reason: str, *hints: str, title: str = "Не вдалось") -> str:
+    return build_notice("❌", title, escape(reason), items=[escape(h) for h in hints] or None)
+
+
+def build_review_request(order_id: int) -> str:
+    return build_notice(
+        "⭐",
+        f"Як тобі замовлення №{int(order_id)}?",
+        "Буду вдячний за відгук — він допомагає іншим обрати.",
+        footer=f'<a href="{DENIS_LINK}">Денис</a>',
+    )
+
+
+def build_manual_client_message(text: str) -> str:
+    """Довільний текст від Дениса клієнту — абзаци + підпис."""
+    paragraphs = "".join(f"<p>{escape(line)}</p>" for line in text.splitlines() if line.strip())
+    return paragraphs + f'\n<footer><a href="{DENIS_LINK}">Денис</a></footer>'
+
+
+def build_review_moderation(review: dict, product_name: str) -> str:
+    stars = "★" * int(review["rating"]) + "☆" * (5 - int(review["rating"]))
+    links = [
+        f'<a href="{escape(url)}">фото {n}</a>' for n, url in enumerate(review.get("photos") or [], 1)
+    ]
+    parts = [
+        f"<h2>⭐ Новий відгук #{review['id']}</h2>",
+        "<hr/>",
+        f"<p><b>{escape(product_name)}</b> · замовлення #{review['order_id']}</p>",
+        f"<p>{stars} · {escape(review.get('author_name') or 'Покупець')}</p>",
+        f"<blockquote><p>{escape(review.get('text') or '—')}</p></blockquote>",
+    ]
+    if links:
+        parts.append(f"<p>📷 {' · '.join(links)}</p>")
+    parts.append("<footer>Модерація — кнопки нижче</footer>")
+    return "\n".join(parts)
+
+
+def build_contact_card(uid: int, name: str) -> str:
+    return build_notice(
+        "👤",
+        "Контакт клієнта",
+        f'<a href="tg://user?id={int(uid)}">{escape(name)}</a>',
+        f"ID: <code>{int(uid)}</code>",
+        footer="Натисни ім'я, щоб відкрити чат у Telegram",
+    )
+
+
+def build_bot_error(err_text: str, update_id: int | None = None) -> str:
+    lines = [f"<code>{escape(err_text)}</code>"]
+    if update_id is not None:
+        lines.append(f"update_id: <code>{int(update_id)}</code>")
+    return build_notice("⚠️", "Помилка бота", *lines)
+
+
+def build_myid(user_id: int) -> str:
+    return build_notice("🆔", "Твій Telegram ID", f"<code>{int(user_id)}</code>")
+
+
+def build_cache_reloaded(products: int, custom: int, filaments: int) -> str:
+    return build_notice(
+        "✅",
+        "Кеш оновлено",
+        items=[f"Товари: <b>{products}</b>", f"Індивідуальні: <b>{custom}</b>", f"Філаменти: <b>{filaments}</b>"],
+    )
+
+
+def build_stats(
+    user_count, order_count, order_confirmed, order_draft, order_cancelled, earned,
+    recent, top_products, coupon_stats, total_discount,
+) -> str:
+    parts = [
+        "<h2>📊 Статистика</h2>",
+        "<hr/>",
+        "<ul>",
+        f"<li>👥 Користувачів: <b>{user_count}</b></li>",
+        f"<li>📦 Замовлень всього: <b>{order_count}</b></li>",
+        f"<li>✅ Підтверджених: <b>{order_confirmed}</b></li>",
+        f"<li>❓ Під питанням: <b>{order_draft}</b></li>",
+        f"<li>❌ Відмінених: <b>{order_cancelled}</b></li>",
+        f"<li>💰 Зароблено: <b>{earned} ₴</b></li>",
+        "</ul>",
+    ]
+    if recent:
+        parts.extend(["<hr/>", "<p><b>🕐 Останні користувачі</b></p>", "<ul>"])
+        for uid, name, username in recent:
+            raw = str(username or "").strip()
+            if raw.startswith("@") and raw[1:].strip() not in ("", "невідомо", "—"):
+                parts.append(f"<li>{escape(name)} {escape(raw)}</li>")
+            else:
+                parts.append(f"<li>{escape(name)} — ID <code>{escape(uid)}</code></li>")
+        parts.append("</ul>")
+    if top_products:
+        parts.extend(["<hr/>", "<p><b>🏆 Топ товари</b></p>", "<ul>"])
+        parts.extend(f"<li>{escape(name)} — {cnt} шт</li>" for name, cnt in top_products)
+        parts.append("</ul>")
+    if coupon_stats:
+        parts.extend(["<hr/>", "<p><b>🎟️ Купони (топ-3)</b></p>", "<ul>"])
+        parts.extend(
+            f"<li><code>{escape(code)}</code> — {uses} раз, −{disc} ₴</li>"
+            for code, uses, disc in coupon_stats
+        )
+        parts.append("</ul>")
+        parts.append(f"<footer>💸 Всього знижок: <b>{total_discount} ₴</b></footer>")
+    return "\n".join(parts)
+
+
+def _code(text: str) -> str:
+    return f"<code>{escape(text)}</code>"
+
+
+def build_coupon_help() -> str:
+    c = _code
+    return "\n".join([
+        "<h2>🎟️ Управління купонами</h2>",
+        "<hr/>",
+        "<p><b>Створити купон</b></p>",
+        "<ul>",
+        f"<li>{c('/coupon add КОД percent 20')} — знижка 20%</li>",
+        f"<li>{c('/coupon add КОД fixed 50')} — знижка 50 ₴</li>",
+        "</ul>",
+        "<p><b>Додаткові опції</b></p>",
+        "<ul>",
+        f"<li>{c('min=200')} — мінімальна сума замовлення</li>",
+        f"<li>{c('max=10')} — максимум використань</li>",
+        f"<li>{c('once')} — одноразовий (один юзер — один раз)</li>",
+        f"<li>{c('expires=2025-12-31')} — термін дії</li>",
+        f"<li>{c('user=123456789')} — один користувач (legacy)</li>",
+        f"<li>{c('users=111,222,333')} — доступ лише для цих Telegram ID</li>",
+        "</ul>",
+        "<p><b>Приклади</b></p>",
+        "<ul>",
+        f"<li>{c('/coupon add ЛІТО percent 15 min=300 expires=2026-08-31')}</li>",
+        f"<li>{c('/coupon add УЧНІ percent 10 expires=2027-05-31 users=111,222')}</li>",
+        f"<li>{c('/coupon add VIP fixed 100 once user=718746623')}</li>",
+        "</ul>",
+        "<p><b>Інші команди</b></p>",
+        "<ul>",
+        f"<li>{c('/coupon list')} — всі купони</li>",
+        f"<li>{c('/coupon adduser КОД 123456789')} — додати ID до купона</li>",
+        f"<li>{c('/coupon disable КОД')} — вимкнути</li>",
+        f"<li>{c('/coupon enable КОД')} — увімкнути</li>",
+        f"<li>{c('/coupon delete КОД')} — видалити</li>",
+        "</ul>",
+    ])
+
+
+def build_coupon_list(rows: list[dict]) -> str:
+    items = []
+    for c in rows:
+        label = f"{c['value']}%" if c["type"] == "percent" else f"{c['value']} ₴"
+        status = "✅" if c.get("active") else "🚫"
+        uses_count = int(c.get("uses_count") or 0)
+        uses_max = int(c.get("uses_max") or 0)
+        uses_str = f"{uses_count}/{uses_max}" if uses_max else f"{uses_count}/∞"
+        line = f"{status} {_code(c['code'])} — {label} · {uses_str}"
+        if c.get("expires_at"):
+            line += f" · до {format_date(c['expires_at'])}"
+        allowed = c.get("allowed_user_ids") or []
+        if len(allowed) == 1:
+            line += " · лише для 1 користувача"
+        elif allowed:
+            line += f" · лише для {len(allowed)} користувачів"
+        elif c.get("personal_user_id"):
+            line += f" · лише для ID {_code(c['personal_user_id'])}"
+        items.append(line)
+    return build_notice("🎟️", "Всі купони", items=items, footer=f"Всього: <b>{len(rows)}</b>")
+
+
+def build_broadcast_help() -> str:
+    c = _code
+    return build_notice(
+        "📨",
+        "Розсилка",
+        "Відповідай (reply) на повідомлення командою:",
+        items=[
+            f"{c('/broadcast')} — усім",
+            f"{c('/broadcast <product_id>')} — усім + кнопка товару",
+            f"{c('/broadcast u:<user_id>')} — конкретному юзеру",
+            f"{c('/broadcast u:<user_id> <product_id>')} — юзеру + кнопка товару",
+        ],
+        footer="💡 Rich-форматування (заголовки, списки, цитати) збережеться при розсилці",
     )

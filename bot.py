@@ -1002,33 +1002,12 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user or not message or user.id != OWNER_ID:
         return
 
+    async def reply(body: str):
+        await send_rich_message(context.bot, message.chat_id, body)
+
     args = context.args
     if not args:
-        await message.reply_text(
-            "🎟️ <b>Управління купонами</b>\n"
-            "──────────────────────\n\n"
-            "<b>Створити купон:</b>\n"
-            "<code>/coupon add КОД percent 20</code> — знижка 20%\n"
-            "<code>/coupon add КОД fixed 50</code> — знижка 50 ₴\n\n"
-            "<b>Додаткові опції:</b>\n"
-            "• <code>min=200</code> — мінімальна сума замовлення\n"
-            "• <code>max=10</code> — максимум використань\n"
-            "• <code>once</code> — одноразовий (один юзер — один раз)\n"
-            "• <code>expires=2025-12-31</code> — термін дії\n"
-            "• <code>user=123456789</code> — один користувач (legacy)\n"
-            "• <code>users=111,222,333</code> — доступ лише для цих Telegram ID\n\n"
-            "<b>Приклади:</b>\n"
-            "<code>/coupon add ЛІТО percent 15 min=300 expires=2026-08-31</code>\n"
-            "<code>/coupon add УЧНІ percent 10 expires=2027-05-31 users=111,222</code>\n"
-            "<code>/coupon add VIP fixed 100 once user=718746623</code>\n\n"
-            "<b>Інші команди:</b>\n"
-            "<code>/coupon list</code> — всі купони\n"
-            "<code>/coupon adduser КОД 123456789</code> — додати ID до купона\n"
-            "<code>/coupon disable КОД</code> — вимкнути\n"
-            "<code>/coupon enable КОД</code> — увімкнути\n"
-            "<code>/coupon delete КОД</code> — видалити",
-            parse_mode='HTML'
-        )
+        await reply(build_coupon_help())
         return
 
     sub = args[0].lower()
@@ -1039,7 +1018,7 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             value = int(args[3])
         except ValueError:
-            await message.reply_text("❌ Значення має бути числом")
+            await reply(build_error_notice("Значення має бути числом", title="Купон не створено"))
             return
 
         min_order = 0; uses_max = 0; one_per_user = 0; expires_at = None
@@ -1075,21 +1054,19 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         result = replace_coupon(payload)
         if not result.get("ok"):
-            await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
+            await reply(build_error_notice(result.get('error', 'Помилка'), title="Купон не створено"))
             return
 
         coupon = result.get("coupon") or {}
         label = f"{value}%" if ctype == 'percent' else f"{value} ₴"
         allowed_count = len(coupon.get("allowed_user_ids") or [])
+        items = [f"🏷️ <b><code>{escape(code)}</code></b> — знижка {label}"]
         if allowed_count == 1:
-            user_str = " · доступ лише для: 1 користувача"
+            items.append("Доступ лише для 1 користувача")
         elif allowed_count:
-            user_str = f" · доступ лише для: {allowed_count} користувачів"
+            items.append(f"Доступ лише для {allowed_count} користувачів")
         elif personal_user_id:
-            user_str = f" · доступ лише для ID `{personal_user_id}`"
-        else:
-            user_str = ""
-        reply_lines = [f"✅ Купон `{code}` створено! Знижка {label}{user_str}"]
+            items.append(f"Доступ лише для ID <code>{int(personal_user_id)}</code>")
 
         if result.get("created"):
             notifications = await notify_coupon_created(
@@ -1101,42 +1078,34 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             failed = notifications.get("users_failed") or []
             if notified:
                 if len(notified) == 1:
-                    reply_lines.append(f"📨 Повідомлення надіслано юзеру `{notified[0]}`")
+                    items.append(f"📨 Повідомлення надіслано юзеру <code>{notified[0]}</code>")
                 else:
-                    reply_lines.append(f"📨 Повідомлення надіслано {len(notified)} юзерам")
-            elif failed:
-                reply_lines.append(
-                    "⚠️ Купон створено, але повідомлення не доставлено "
-                    "(юзер не писав боту або заблокував)"
-                )
-            elif personal_user_id and notifications.get("user_sent") is False:
-                reply_lines.append(
-                    "⚠️ Купон створено, але повідомлення не доставлено "
-                    "(юзер не писав боту або заблокував)"
-                )
+                    items.append(f"📨 Повідомлення надіслано {len(notified)} юзерам")
+            elif failed or (personal_user_id and notifications.get("user_sent") is False):
+                items.append("⚠️ Повідомлення не доставлено (юзер не писав боту або заблокував)")
 
-        await message.reply_text("\n".join(reply_lines), parse_mode='Markdown')
+        await reply(build_notice("✅", "Купон створено", items=items))
 
     elif sub == 'adduser' and len(args) >= 3:
         code = args[1].upper()
         try:
             new_user_id = int(args[2])
         except ValueError:
-            await message.reply_text("❌ Telegram user ID має бути числом")
+            await reply(build_error_notice("Telegram user ID має бути числом", title="Помилка"))
             return
 
         result = add_coupon_users(code, [new_user_id])
         if not result.get("ok"):
-            await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
+            await reply(build_error_notice(result.get('error', 'Помилка'), title="Помилка"))
             return
 
         coupon = result.get("coupon") or {}
         added = result.get("added_user_ids") or []
         if not added:
-            await message.reply_text(
-                f"ℹ️ Юзер `{new_user_id}` вже має доступ до купона `{code}`",
-                parse_mode='Markdown',
-            )
+            await reply(build_notice(
+                "ℹ️", "Доступ вже є",
+                f"Юзер <code>{new_user_id}</code> вже має доступ до купона <code>{escape(code)}</code>",
+            ))
             return
 
         notifications = await notify_coupon_created(
@@ -1144,57 +1113,46 @@ async def coupon_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             source="coupon_cmd",
             notify_user_ids=added,
         )
-        reply_lines = [f"✅ Додано `{new_user_id}` до купона `{code}`"]
+        items = []
         if notifications.get("users_notified"):
-            reply_lines.append(f"📨 Повідомлення надіслано юзеру `{new_user_id}`")
+            items.append(f"📨 Повідомлення надіслано юзеру <code>{new_user_id}</code>")
         elif notifications.get("users_failed"):
-            reply_lines.append("⚠️ ID додано, але повідомлення не доставлено")
-        await message.reply_text("\n".join(reply_lines), parse_mode='Markdown')
+            items.append("⚠️ ID додано, але повідомлення не доставлено")
+        await reply(build_notice(
+            "✅", "Користувача додано",
+            f"<code>{new_user_id}</code> → купон <code>{escape(code)}</code>",
+            items=items or None,
+        ))
 
     elif sub == 'list':
         rows = await run_db(list_coupons)
         if not rows:
-            await message.reply_text("Купонів ще немає")
+            await reply(build_notice("🎟️", "Купонів ще немає", "Створи перший: <code>/coupon add КОД percent 10</code>"))
             return
-        lines = ["🎟️ *Всі купони:*\n"]
-        for c in rows:
-            label = f"{c['value']}%" if c['type'] == 'percent' else f"{c['value']} ₴"
-            status = "✅" if c.get('active') else "🚫"
-            uses_count = int(c.get('uses_count') or 0)
-            uses_max = int(c.get('uses_max') or 0)
-            uses_str = f"{uses_count}/{uses_max}" if uses_max else f"{uses_count}/∞"
-            exp = f" · до {c.get('expires_at')}" if c.get('expires_at') else ""
-            allowed = c.get("allowed_user_ids") or []
-            if len(allowed) == 1:
-                restrict = " · доступ лише для: 1 користувача"
-            elif allowed:
-                restrict = f" · доступ лише для: {len(allowed)} користувачів"
-            else:
-                restrict = (
-                    f" · доступ лише для ID {c.get('personal_user_id')}" if c.get("personal_user_id") else ""
-                )
-            lines.append(f"{status} `{c['code']}` — {label} · {uses_str}{exp}{restrict}")
-        await message.reply_text("\n".join(lines), parse_mode='Markdown')
+        await reply(build_coupon_list(rows))
 
     elif sub in ('disable', 'enable') and len(args) >= 2:
         code = args[1].upper()
         result = set_coupon_active(code, sub == 'enable')
         if not result.get("ok"):
-            await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
+            await reply(build_error_notice(result.get('error', 'Помилка'), title="Помилка"))
             return
-        icon = "✅" if sub == 'enable' else "🚫"
-        await message.reply_text(f"{icon} Купон `{code}` {'увімкнено' if sub == 'enable' else 'вимкнено'}", parse_mode='Markdown')
+        await reply(build_notice(
+            "✅" if sub == 'enable' else "🚫",
+            "Купон увімкнено" if sub == 'enable' else "Купон вимкнено",
+            f"<code>{escape(code)}</code>",
+        ))
 
     elif sub == 'delete' and len(args) >= 2:
         code = args[1].upper()
         result = delete_coupon(code)
         if not result.get("ok"):
-            await message.reply_text(f"❌ {result.get('error', 'Помилка')}")
+            await reply(build_error_notice(result.get('error', 'Помилка'), title="Помилка"))
             return
-        await message.reply_text(f"🗑️ Купон `{code}` видалено", parse_mode='Markdown')
+        await reply(build_notice("🗑️", "Купон видалено", f"<code>{escape(code)}</code>"))
 
     else:
-        await message.reply_text("❌ Невірний формат команди")
+        await reply(build_error_notice("Невірний формат команди", "Довідка: /coupon", title="Помилка"))
 
 def _admin_items_from_db(db_items: list[dict]) -> list[dict]:
     return [
@@ -2757,7 +2715,7 @@ async def handle_send_order_message(request: web.Request):
             status=409,
             headers=cors_headers(request),
         )
-    paragraphs = "".join(f"<p>{html.escape(line)}</p>" for line in text.splitlines() if line.strip())
+    paragraphs = build_manual_client_message(text)
     try:
         await send_rich_message(bot_app.bot, user_id, paragraphs)
     except Exception as e:
@@ -3003,18 +2961,7 @@ async def handle_upload_review_photo(request: web.Request):
 
 
 def _review_moderation_html(review: dict, product_name: str) -> str:
-    stars = "★" * int(review["rating"]) + "☆" * (5 - int(review["rating"]))
-    text = escape(review.get("text") or "—")
-    links = [
-        f'<a href="{escape(url)}">фото {n}</a>' for n, url in enumerate(review.get("photos") or [], 1)
-    ]
-    photos_line = f"<p>📷 {' · '.join(links)}</p>" if links else ""
-    return (
-        f"<h2>⭐ Новий відгук #{review['id']}</h2>"
-        f"<p><b>{escape(product_name)}</b> · замовлення #{review['order_id']}</p>"
-        f"<p>{stars} · {escape(review.get('author_name') or 'Покупець')}</p>"
-        f"<p>{text}</p>{photos_line}"
-    )
+    return build_review_moderation(review, product_name)
 
 
 def _review_moderation_markup(review_id: int, status: str) -> InlineKeyboardMarkup:
@@ -3207,7 +3154,7 @@ async def send_due_review_requests() -> int:
             await send_rich_message(
                 bot_app.bot,
                 item["user_id"],
-                f"<p>💙 Як тобі замовлення №{item['order_id']}? Буду вдячний за відгук — він допомагає іншим обрати.</p>",
+                build_review_request(item['order_id']),
                 reply_markup=markup,
             )
             sent += 1
@@ -3947,7 +3894,7 @@ async def handle_send_user_message(request: web.Request):
         )
     if not await run_db(get_user, user_id):
         return web.json_response({"ok": False, "error": "Клієнта не знайдено"}, status=404, headers=cors_headers(request))
-    paragraphs = "".join(f"<p>{html.escape(line)}</p>" for line in text.splitlines() if line.strip())
+    paragraphs = build_manual_client_message(text)
     try:
         if bot_app is None:
             raise RuntimeError("bot is not running")
@@ -4385,8 +4332,10 @@ async def reload_products_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     reload_products_cache(force=True)
     reload_filaments_cache(force=True)
-    await message.reply_text(
-        f"✅ Кеш оновлено: products={len(PRODUCTS_CACHE)}, custom={len(CUSTOM_PRODUCTS_CACHE)}, filaments={len(FILAMENTS_CACHE)}"
+    await send_rich_message(
+        context.bot,
+        message.chat_id,
+        build_cache_reloaded(len(PRODUCTS_CACHE), len(CUSTOM_PRODUCTS_CACHE), len(FILAMENTS_CACHE)),
     )
 
 async def contact_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -4401,12 +4350,7 @@ async def contact_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("❌ Невірний запит", show_alert=True)
         return
     name = await run_db(get_user_display_name, uid)
-    safe_name = html.escape(name)
-    contact_html = (
-        f'<p>👤 <a href="tg://user?id={uid}">{safe_name}</a></p>'
-        f"<p>ID: <code>{uid}</code></p>"
-        f"<blockquote><p>Натисніть ім'я, щоб відкрити чат у Telegram.</p></blockquote>"
-    )
+    contact_html = build_contact_card(uid, name)
     await query.answer()
     try:
         await send_rich_message(context.bot, query.from_user.id, contact_html)
@@ -4558,28 +4502,29 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Команда для відкриття адмін панелі
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != OWNER_ID:
-        await update.message.reply_text("❌ У вас немає доступу до адмін панелі")
+        await send_rich_message(context.bot, update.message.chat_id, build_error_notice(
+            "У тебе немає доступу до адмін-панелі", title="Немає доступу"))
         return
 
     admin_url = (os.environ.get("ADMIN_WEBAPP_URL") or "").strip()
     if not admin_url:
-        await update.message.reply_text(
-            "❌ Не задано ADMIN_WEBAPP_URL у `.env`.\n"
-            "Вкажи HTTPS-адресу адмінки, наприклад через ngrok."
-        )
+        await send_rich_message(context.bot, update.message.chat_id, build_error_notice(
+            "Не задано ADMIN_WEBAPP_URL у .env",
+            "Вкажи HTTPS-адресу адмінки, наприклад через ngrok",
+            title="Адмін-панель недоступна"))
         return
 
     # Telegram Web App у кнопці підтримує тільки HTTPS URL.
     if not admin_url.lower().startswith("https://"):
-        await update.message.reply_text(
-            "❌ `ADMIN_WEBAPP_URL` невалідний для Telegram Web App.\n"
-            "Telegram приймає тільки HTTPS-посилання.\n\n"
-            "Зараз у тебе: "
-            f"`{admin_url}`\n\n"
-            "Локально: підніми `ngrok http 8080` і встав HTTPS URL у `.env`,\n"
-            "наприклад: `ADMIN_WEBAPP_URL=https://<id>.ngrok-free.app/admin/panel`",
-            parse_mode='Markdown'
-        )
+        await send_rich_message(context.bot, update.message.chat_id, build_notice(
+            "❌", "Невалідний ADMIN_WEBAPP_URL",
+            "Telegram приймає для Web App тільки HTTPS-посилання.",
+            f"Зараз: <code>{escape(admin_url)}</code>",
+            items=[
+                "Локально: підніми <code>ngrok http 8080</code> і встав HTTPS URL у <code>.env</code>",
+                "Приклад: <code>ADMIN_WEBAPP_URL=https://&lt;id&gt;.ngrok-free.app/admin/panel</code>",
+            ],
+        ))
         return
 
     # Для dev-режиму на ngrok додаємо bypass з токеном.

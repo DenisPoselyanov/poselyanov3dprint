@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import html
+
 import logging
 
 from telegram.ext import ContextTypes
@@ -19,17 +19,10 @@ async def telegram_error_handler(update: object, context: ContextTypes.DEFAULT_T
         return
 
     try:
-        err_text = html.escape(str(context.error or "unknown"))[:500]
-        update_hint = ""
-        if update is not None:
-            update_id = getattr(update, "update_id", None)
-            if update_id is not None:
-                update_hint = f"\nupdate_id: <code>{update_id}</code>"
+        from rich_messages import build_bot_error, send_rich_message
 
-        await context.bot.send_message(
-            chat_id=owner_id,
-            text=f"⚠️ <b>Bot error</b>\n<code>{err_text}</code>{update_hint}",
-            parse_mode="HTML",
-        )
+        err_text = str(context.error or "unknown")[:500]
+        update_id = getattr(update, "update_id", None) if update is not None else None
+        await send_rich_message(context.bot, owner_id, build_bot_error(err_text, update_id))
     except Exception:
         logger.exception("Не вдалося сповістити власника про помилку")
