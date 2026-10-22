@@ -3026,7 +3026,7 @@ async def _award_review_bonus(review_id: int) -> dict | None:
     try:
         markup = None
         if bonus.get("link"):
-            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛍 До магазину", url=bonus["link"])]])
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🎟 Застосувати купон", url=bonus["link"])]])
         await send_rich_message(
             bot_app.bot, bonus["user_id"],
             build_review_bonus(bonus["percent"], bonus["code"], bonus["expires_at"]),

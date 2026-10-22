@@ -1007,6 +1007,7 @@ def build_review_bonus(percent: int, code: str, expires_at: str = "") -> str:
     ]
     if expires_at:
         lines.append(f"Діє до {escape(expires_at)}, одноразовий — лише для тебе.")
+    lines.append("Натисни «Застосувати купон» — магазин відкриється, а знижка підставиться сама, щойно додаси товар у кошик.")
     return build_notice("🎁", "Купон за відгук", *lines, footer=f'<a href="{DENIS_LINK}">Денис</a>')
 
 

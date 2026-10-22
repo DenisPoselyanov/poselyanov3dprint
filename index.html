@@ -6326,7 +6326,7 @@ async function pasteCoupon() {
   const code = (text || '').trim().toUpperCase().replace(/[^A-Z0-9А-ЯІЇЄҐ_-]/g, '').slice(0, 32);
   if (!code) {
     input.focus();
-    showToast({ msg: 'Буфер порожній — скопіюйте код і спробуйте ще раз', icon: 'alert', duration: 2600 });
+    showToast({ msg: 'Не вдалось прочитати буфер — вставте код у поле вручну (Ctrl+V або утримайте палець)', icon: 'alert', duration: 3200 });
     return;
   }
   input.value = code;
