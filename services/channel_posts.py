@@ -18,6 +18,8 @@ from services import settings as settings_svc
 logger = logging.getLogger(__name__)
 
 CHANNEL_KEY = "channel_id"
+DEFAULT_CHANNEL = "@poselyanov3dprint"
+MAX_ALBUM_PHOTOS = 10
 CAPTION_MAX = 1024
 TEXT_MAX = 4096
 _USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
@@ -68,7 +70,7 @@ def normalize_channel(raw) -> str | None:
 
 
 def get_channel() -> str:
-    return settings_svc.get_setting(CHANNEL_KEY, "")
+    return settings_svc.get_setting(CHANNEL_KEY, "") or DEFAULT_CHANNEL
 
 
 def set_channel(channel: str) -> None:

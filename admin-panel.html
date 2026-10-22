@@ -2370,7 +2370,23 @@
             width: 44px; height: 44px; border-radius: 10px; background: var(--bg-section); object-fit: cover; flex: 0 0 auto;
             display: grid; place-items: center; font-size: 22px; overflow: hidden;
         }
-        .pt-prod-text { min-width: 0; }
+        .pt-prod-text { min-width: 0; cursor: pointer; }
+        .pt-prod-text:hover .pt-name { color: var(--accent); text-decoration: underline; }
+        img.pt-thumb { cursor: zoom-in; transition: transform .12s, box-shadow .12s; }
+        img.pt-thumb:hover { transform: scale(1.06); box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+        .pt-thumb-wrap { position: relative; flex: 0 0 auto; display: block; cursor: zoom-in; }
+        .pt-thumb-count { position: absolute; right: -4px; bottom: -4px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 800; padding: 0 5px; border-radius: 8px; line-height: 15px; pointer-events: none; }
+        .pt-edit { border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 8px; width: 32px; height: 32px; cursor: pointer; margin-right: 4px; }
+        .pt-edit:hover { color: var(--accent); border-color: var(--accent); }
+        .c-menu-inner { display: flex; align-items: center; }
+        .pv-overlay { position: fixed; inset: 0; z-index: 10001; background: rgba(0,0,0,.82); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; }
+        .pv-overlay .pv-main { max-width: min(92vw, 900px); max-height: 72vh; border-radius: 12px; object-fit: contain; }
+        .pv-overlay .pv-bar { color: #fff; display: flex; gap: 12px; align-items: center; font-size: 14px; }
+        .pv-overlay .pv-strip { display: flex; gap: 6px; max-width: 92vw; overflow-x: auto; }
+        .pv-overlay .pv-strip img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; opacity: .55; cursor: pointer; border: 2px solid transparent; flex: none; }
+        .pv-overlay .pv-strip img.on { opacity: 1; border-color: var(--accent); }
+        .pv-overlay .pv-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.15); color: #fff; border: 0; width: 44px; height: 44px; border-radius: 50%; font-size: 22px; cursor: pointer; }
+        .pv-overlay .pv-prev { left: 16px; } .pv-overlay .pv-next { right: 16px; }
         .pt-name { font-weight: 700; color: var(--text-main); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .pt-sub { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
         .pt-price-wrap { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
@@ -2378,7 +2394,7 @@
         .pt-table th.c-flags, .pt-table td.c-flags { width: 245px; }
         .pt-table th.c-stats, .pt-table td.c-stats { width: 225px; }
         .pt-table th.c-status, .pt-table td.c-status { width: 90px; }
-        .pt-table th.c-menu, .pt-table td.c-menu { width: 48px; }
+        .pt-table th.c-menu, .pt-table td.c-menu { width: 90px; }
         .pt-table td { padding-top: 7px; padding-bottom: 7px; }
         .pt-st-ic { display: none; }
         .pt-price-line { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); }
@@ -6368,8 +6384,9 @@
             const discount = !p.contractPrice && p.oldPrice && p.oldPrice > p.price
                 ? Math.round((p.oldPrice - p.price) / p.oldPrice * 100) : 0;
             const photo = p.photos && p.photos.length ? p.photos[0] : '';
+            const photoTotal = (p.photos || []).filter(Boolean).length;
             const thumb = photo
-                ? `<img class="pt-thumb" src="${escapeAttr(photo)}" alt="" loading="lazy">`
+                ? `<span class="pt-thumb-wrap" title="Переглянути фото" onclick="openProductPhotos(${p.id})"><img class="pt-thumb" src="${escapeAttr(photo)}" alt="" loading="lazy">${photoTotal > 1 ? `<span class="pt-thumb-count">${photoTotal}</span>` : ''}</span>`
                 : `<span class="pt-thumb">${escapeHtml(p.emoji || '📦')}</span>`;
             const giftBlocked = p.contractPrice || p.cat === 'custom';
             const flagBtn = (flag, label, blocked) => `
@@ -6405,7 +6422,7 @@
                     <td class="c-prod">
                         <div class="pt-prod">
                             ${thumb}
-                            <div class="pt-prod-text">
+                            <div class="pt-prod-text" title="Редагувати товар" onclick="editProduct(${p.id})">
                                 <div class="pt-name" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</div>
                                 <div class="pt-sub">${escapeHtml(categoryMeta.emoji)} ${escapeHtml(categoryMeta.name)} · ID ${p.id}${formatProductAdded(p) ? ` · 📅 ${formatProductAdded(p)}` : ''}</div>
                             </div>
@@ -6422,10 +6439,13 @@
                     </div></td>
                     <td class="c-status"><span class="pt-st ${status}">${PRODUCT_STATUS_LABELS[status]}</span></td>
                     <td class="c-menu">
+                        <div class="c-menu-inner">
+                        <button type="button" class="pt-edit" title="Редагувати" aria-label="Редагувати" onclick="editProduct(${p.id})">✎</button>
                         <details class="pt-menu" ontoggle="positionProductMenu(this)">
                             <summary aria-label="Дії з товаром">⋯</summary>
                             <div class="pt-menu-list">${menu}</div>
                         </details>
+                        </div>
                     </td>
                 </tr>`;
         }
@@ -6580,16 +6600,57 @@
             return lines.join('\n');
         }
 
+        function openProductPhotos(id) {
+            const p = adminProducts.find(x => x.id === id);
+            const photos = ((p && p.photos) || []).filter(Boolean);
+            if (!photos.length) return;
+            let i = 0;
+            const ov = document.createElement('div');
+            ov.className = 'pv-overlay';
+            ov.innerHTML = `
+                <button type="button" class="pv-nav pv-prev" aria-label="Назад">‹</button>
+                <img class="pv-main" alt="">
+                <button type="button" class="pv-nav pv-next" aria-label="Далі">›</button>
+                <div class="pv-bar"><b>${escapeHtml(p.name)}</b><span class="pv-count"></span>
+                    <button type="button" class="btn btn-secondary pv-edit" style="padding:5px 10px;font-size:13px;">✎ Редагувати</button>
+                    <button type="button" class="btn btn-secondary pv-close" style="padding:5px 10px;font-size:13px;">✕</button></div>
+                <div class="pv-strip">${photos.map((u, n) => `<img data-n="${n}" src="${escapeAttr(u)}" alt="">`).join('')}</div>`;
+            document.body.appendChild(ov);
+            const q = s => ov.querySelector(s);
+            const show = n => {
+                i = (n + photos.length) % photos.length;
+                q('.pv-main').src = photos[i];
+                q('.pv-count').textContent = `${i + 1} / ${photos.length}`;
+                ov.querySelectorAll('.pv-strip img').forEach(el => el.classList.toggle('on', Number(el.dataset.n) === i));
+            };
+            const onKey = e => {
+                if (e.key === 'Escape') close();
+                else if (e.key === 'ArrowLeft') show(i - 1);
+                else if (e.key === 'ArrowRight') show(i + 1);
+            };
+            const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+            document.addEventListener('keydown', onKey);
+            q('.pv-prev').onclick = () => show(i - 1);
+            q('.pv-next').onclick = () => show(i + 1);
+            q('.pv-close').onclick = close;
+            q('.pv-edit').onclick = () => { close(); editProduct(id); };
+            ov.querySelectorAll('.pv-strip img').forEach(el => { el.onclick = () => show(Number(el.dataset.n)); });
+            ov.addEventListener('click', e => { if (e.target === ov) close(); });
+            if (photos.length < 2) { q('.pv-prev').style.display = 'none'; q('.pv-next').style.display = 'none'; }
+            show(0);
+        }
+
         async function openChannelPostDialog(id) {
             const p = adminProducts.find(x => x.id === id);
             if (!p) return;
-            let info = { channel: '', posts: [] };
+            let info = { channel: '@poselyanov3dprint', posts: [] };
             try {
                 info = await productApi(`/admin/products/${id}/channel-posts`, 'GET');
             } catch (e) {
                 showToast(e.message || 'Не вдалося завантажити дані каналу', 'error');
             }
             const photo = (p.photos || [])[0] || '';
+            const photoCount = Math.min((p.photos || []).filter(Boolean).length, 10);
             const product = { ...p, description: info.description || p.description || '' };
             const history = (info.posts || []).map(x => {
                 const d = x.created_at ? new Date(x.created_at).toLocaleDateString('uk-UA') : '';
@@ -6606,11 +6667,20 @@
                     <label style="font-size:13px;font-weight:600;">Канал</label>
                     <input id="chp-channel" type="text" autocomplete="off" placeholder="@username або -100…" value="${escapeAttr(info.channel || '')}" style="${field}margin:4px 0 4px;">
                     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Бот має бути адміном каналу з правом публікації.</div>
+                    ${photoCount > 1 ? `
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:13px;font-weight:600;">Фото в пості</label>
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-mode" value="all" checked style="margin-top:3px;"><span><b>Усі фото (${photoCount})</b> — альбомом<br><span style="font-size:12px;color:var(--text-muted);">Підпис стоїть на першому фото. Telegram не дозволяє кнопки під альбомом, тому «Замовити» / «Усі товари» підуть окремим коротким повідомленням під ним. Закріплення стосується альбому.</span></span></label>
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-mode" value="one" style="margin-top:3px;"><span><b>Лише одне фото</b> — одним постом<br><span style="font-size:12px;color:var(--text-muted);">Фото, підпис і кнопки в одному повідомленні. Оберіть, яке саме, натиснувши на мініатюру нижче.</span></span></label>
+                        <div id="chp-covers" style="display:none;gap:6px;margin-top:8px;overflow-x:auto;">
+                            ${(p.photos || []).filter(Boolean).slice(0, 10).map((u, n) => `<img data-n="${n}" src="${escapeAttr(u)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid ${n === 0 ? 'var(--accent)' : 'transparent'};flex:none;">`).join('')}
+                        </div>
+                    </div>` : ''}
                     <div id="chp-rubrics" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
                         ${CHANNEL_RUBRICS.map(r => `<button type="button" class="btn btn-secondary" data-r="${r.key}" style="padding:6px 10px;font-size:13px;">${escapeHtml(r.label)}</button>`).join('')}
                     </div>
                     <div style="display:flex;gap:10px;align-items:flex-start;">
-                        ${photo ? `<img src="${escapeAttr(photo)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none;">` : ''}
+                        ${photo ? `<div style="position:relative;flex:none;"><img class="chp-main-img" src="${escapeAttr(photo)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;display:block;">${photoCount > 1 ? `<span class="chp-badge" style="position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;padding:1px 6px;border-radius:8px;">${photoCount} фото</span>` : ''}</div>` : ''}
                         <textarea id="chp-text" rows="9" style="${field}resize:vertical;font-family:inherit;"></textarea>
                     </div>
                     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:4px;">
@@ -6650,6 +6720,24 @@
             });
             textEl.addEventListener('input', () => { textEl.dataset.edited = '1'; updateCount(); $('#chp-err').textContent = ''; });
             setRubric('new');
+            let coverIdx = 0;
+            const modeEl = () => (overlay.querySelector('input[name="chp-mode"]:checked') || {}).value || 'all';
+            overlay.querySelectorAll('input[name="chp-mode"]').forEach(r => {
+                r.onchange = () => {
+                    const one = modeEl() === 'one';
+                    $('#chp-covers').style.display = one ? 'flex' : 'none';
+                    const badge = overlay.querySelector('.chp-badge');
+                    if (badge) badge.style.display = one ? 'none' : '';
+                };
+            });
+            overlay.querySelectorAll('#chp-covers img').forEach(img => {
+                img.onclick = () => {
+                    coverIdx = Number(img.dataset.n);
+                    overlay.querySelectorAll('#chp-covers img').forEach(x => { x.style.borderColor = x === img ? 'var(--accent)' : 'transparent'; });
+                    const main = overlay.querySelector('.chp-main-img');
+                    if (main) main.src = img.src;
+                };
+            });
             const close = () => overlay.remove();
             $('#chp-cancel').onclick = close;
             overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
@@ -6666,6 +6754,7 @@
                 try {
                     const res = await productApi(`/admin/products/${id}/channel-posts`, 'POST', {
                         channel, text, silent: $('#chp-silent').checked, pin: $('#chp-pin').checked,
+                        photos_mode: modeEl(), photo_index: coverIdx,
                     });
                     close();
                     showToast(res.pinned ? 'Опубліковано й закріплено в каналі ✅' : 'Опубліковано в каналі ✅', 'success');

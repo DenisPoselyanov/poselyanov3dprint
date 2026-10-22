@@ -4145,7 +4145,15 @@ async def handle_publish_channel_post(request: web.Request):
             {"ok": False, "error": "Вкажіть канал: @username або ID на кшталт -100…"}, status=400, headers=cors_headers(request)
         )
     photos = product.get("photos") or []
-    photo = _share_photo_url(photos[0]) if photos else ""
+    photos = [u for u in photos if u]
+    if data.get("photos_mode") == "one" and photos:
+        try:
+            idx = int(data.get("photo_index") or 0)
+        except (TypeError, ValueError):
+            idx = 0
+        photos = [photos[idx] if 0 <= idx < len(photos) else photos[0]]
+    album = [_share_photo_url(u) for u in photos[: channel_posts_svc.MAX_ALBUM_PHOTOS]]
+    photo = album[0] if album else ""
     text, text_err = channel_posts_svc.validate_text(data.get("text"), bool(photo))
     if text_err:
         return web.json_response({"ok": False, "error": text_err}, status=400, headers=cors_headers(request))
@@ -4164,7 +4172,23 @@ async def handle_publish_channel_post(request: web.Request):
     from rich_messages import _telegram_retry
 
     try:
-        if photo:
+        if len(album) > 1:
+            # Альбом не може мати inline-кнопок: підпис на першому фото, кнопки — окремим повідомленням під ним
+            from telegram import InputMediaPhoto
+
+            media = [InputMediaPhoto(album[0], caption=body, parse_mode="HTML")] + [InputMediaPhoto(u) for u in album[1:]]
+            sent = await _telegram_retry(
+                lambda: tg_bot.send_media_group(chat_id=channel, media=media, disable_notification=silent),
+                label="channel post album",
+            )
+            message = sent[0]
+            await _telegram_retry(
+                lambda: tg_bot.send_message(
+                    chat_id=channel, text="👇 Оформити замовлення", reply_markup=markup, disable_notification=True,
+                ),
+                label="channel post buttons",
+            )
+        elif photo:
             message = await _telegram_retry(
                 lambda: tg_bot.send_photo(
                     chat_id=channel, photo=photo, caption=body, parse_mode="HTML",

@@ -87,6 +87,10 @@ class FakeBot:
         self.calls.append(("message", kw))
         return SimpleNamespace(message_id=56)
 
+    async def send_media_group(self, **kw):
+        self.calls.append(("album", kw))
+        return [SimpleNamespace(message_id=70), SimpleNamespace(message_id=71)]
+
     async def pin_chat_message(self, **kw):
         self.calls.append(("pin", kw))
 
@@ -145,6 +149,41 @@ def test_http_publish_post(env, monkeypatch):
     assert fake.calls[1][0] == "pin"
 
 
+def test_http_publish_album(env, monkeypatch):
+    fake = FakeBot()
+    import bot
+
+    async def steps(client, adm):
+        monkeypatch.setattr(bot, "get_product_by_id", lambda pid: {"id": 42, "name": "Д", "photos": ["https://x/a.jpg", "https://x/b.jpg"]})
+        r = await client.post("/api/admin/products/42/channel-posts", json={"channel": "@chan", "text": "Т\nх"}, headers=adm)
+        return await r.json()
+
+    data = _http(env, monkeypatch, steps, fake)
+    assert data["url"] == "https://t.me/chan/70"
+    assert [c[0] for c in fake.calls] == ["album", "message"]
+    assert len(fake.calls[0][1]["media"]) == 2 and fake.calls[0][1]["media"][0].caption.startswith("<b>Т</b>")
+    assert fake.calls[1][1]["reply_markup"].inline_keyboard[0][0].url.endswith(f"_product_42")
+
+
+def test_http_publish_one_photo_of_many(env, monkeypatch):
+    fake = FakeBot()
+    import bot
+
+    async def steps(client, adm):
+        monkeypatch.setattr(bot, "get_product_by_id", lambda pid: {"id": 42, "name": "Д", "photos": ["https://x/a.jpg", "https://x/b.jpg"]})
+        r = await client.post("/api/admin/products/42/channel-posts", json={"channel": "@chan", "text": "Т", "photos_mode": "one", "photo_index": 1}, headers=adm)
+        return await r.json()
+
+    assert _http(env, monkeypatch, steps, fake)["ok"]
+    assert [c[0] for c in fake.calls] == ["photo"] and fake.calls[0][1]["photo"] == "https://x/b.jpg"
+
+
+def test_default_channel(env):
+    assert cp.get_channel() == "@poselyanov3dprint"
+    cp.set_channel("@other")
+    assert cp.get_channel() == "@other"
+
+
 def test_http_publish_failure_leaves_no_post(env, monkeypatch):
     fake = FakeBot(fail="Bad Request: chat not found")
 
@@ -158,7 +197,7 @@ def test_http_publish_failure_leaves_no_post(env, monkeypatch):
     conn = db_connect()
     assert conn.execute("SELECT COUNT(*) FROM channel_posts").fetchone()[0] == 0
     conn.close()
-    assert cp.get_channel() == ""  # невдалий канал не запам'ятовується
+    assert cp.get_channel() == cp.DEFAULT_CHANNEL  # невдалий канал не запам'ятовується
 
 
 def test_http_publish_error_log_hides_token(env, monkeypatch, caplog):
