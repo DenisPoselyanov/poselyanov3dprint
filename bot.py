@@ -2820,6 +2820,23 @@ async def handle_update_order(request: web.Request):
     return web.json_response({"ok": True}, headers=cors_headers(request))
 
 
+async def _send_test_review_request(order: dict) -> None:
+    """Тестове замовлення: клієнт одразу отримує запит відгуку (без очікування доставки)."""
+    user_id = int(order.get("user_id") or 0)
+    if user_id <= 0:
+        return
+    try:
+        await run_db(mark_review_requested, int(order["id"]))
+        await send_rich_message(
+            bot_app.bot,
+            user_id,
+            build_review_request(int(order["id"]), bonus_config()),
+            reply_markup=_review_request_markup(int(order["id"])),
+        )
+    except Exception as e:
+        logger.warning("Запит відгуку для тестового #%s не доставлено: %s", order.get("id"), e)
+
+
 async def _notify_client_status(order: dict, status: str, ttn: str | None = None) -> bool:
     """Повідомлення клієнту про новий статус. Помилка доставки не блокує зміну статусу."""
     user_id = int(order.get("user_id") or 0)
@@ -2831,23 +2848,12 @@ async def _notify_client_status(order: dict, status: str, ttn: str | None = None
             return False
     except ValueError:
         pass
-    if user_id > 0 and order.get("is_test"):
-        # Тестове замовлення: статуси друку/доставки клієнту не шлемо, але після `delivered`
-        # він одразу отримує запит відгуку, щоб міг його залишити.
-        if status != "delivered":
-            return False
-        try:
-            await run_db(mark_review_requested, int(order["id"]))
-            await send_rich_message(
-                bot_app.bot,
-                user_id,
-                build_review_request(int(order["id"]), bonus_config()),
-                reply_markup=_review_request_markup(int(order["id"])),
-            )
+    if order.get("is_test"):
+        # Тестове замовлення: статуси друку/доставки клієнту не шлемо, лише запит відгуку при підтвердженні
+        if status == "confirmed":
+            await _send_test_review_request(order)
             return True
-        except Exception as e:
-            logger.warning("Запит відгуку для тестового #%s не доставлено: %s", order.get("id"), e)
-            return False
+        return False
     html_text = build_client_status_update(int(order["id"]), status, ttn)
     if user_id <= 0 or not html_text:
         return False
@@ -4638,6 +4644,9 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order, items = await run_db(get_order_with_items, order_id)
     if not order:
         return
+
+    if action == "confirm" and order.get("is_test"):
+        await _send_test_review_request(order)
 
     if action in ("confirm", "cancel"):
         affected_user_id = order.get("user_id")

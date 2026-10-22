@@ -252,7 +252,9 @@ def pending_reviews(user_id: int) -> list[dict]:
                 SELECT o.id, oi.product_id, oi.product_name
                 FROM orders o
                 JOIN order_items oi ON oi.order_id = o.id
-                WHERE o.user_id = ? AND o.status = 'delivered'
+                WHERE o.user_id = ?
+                  AND (o.status = 'delivered'
+                       OR (COALESCE(o.is_test, 0) = 1 AND o.status IN ('confirmed', 'shipped')))
                   AND oi.product_id IS NOT NULL AND oi.product_id > 0
                   AND NOT EXISTS (
                       SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.product_id = oi.product_id
@@ -302,11 +304,12 @@ def submit_review(
     conn = db_connect()
     try:
         order = conn.execute(
-            _sql("SELECT user_id, status FROM orders WHERE id = ?"), (order_id,)
+            _sql("SELECT user_id, status, COALESCE(is_test, 0) FROM orders WHERE id = ?"), (order_id,)
         ).fetchone()
         if not order or int(order[0] or 0) != uid:
             raise ReviewError("Замовлення не знайдено")
-        if order[1] != "delivered":
+        # Тестові замовлення можна оцінити вже після підтвердження
+        if order[1] != "delivered" and not (order[2] and order[1] in ("confirmed", "shipped")):
             raise ReviewError("Відгук можна залишити після отримання замовлення")
         has_item = conn.execute(
             _sql("SELECT 1 FROM order_items WHERE order_id = ? AND product_id = ?"),
