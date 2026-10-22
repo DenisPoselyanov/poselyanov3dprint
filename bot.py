@@ -2074,7 +2074,7 @@ async def handle_order(request):
         return web.Response(status=400, text="Bad JSON", headers=cors_headers(request))
 
     auth, err = resolve_request_user(request, data)
-    if err:
+    if err is not None:
         return err
 
     user_id = auth.get("user_id") or data.get("user_id") or 0
@@ -2327,10 +2327,10 @@ async def handle_get_categories(request: web.Request):
     include_inactive = request.query.get("includeInactive", "false").lower() in ("1", "true", "yes")
     if include_inactive:
         auth, err = resolve_request_user(request, {})
-        if err:
+        if err is not None:
             return err
         denied = require_admin(request, auth)
-        if denied:
+        if denied is not None:
             return denied
     categories = get_all_categories(active_only=not include_inactive)
     return web.json_response(categories, headers=cors_headers(request))
@@ -2391,10 +2391,10 @@ async def handle_get_product_related(request: web.Request):
 async def handle_update_filament(request: web.Request):
     """Оновити існуючий філамент."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     try:
         filament_id = request.match_info.get('id', '')
@@ -2409,10 +2409,10 @@ async def handle_update_filament(request: web.Request):
 async def handle_create_filament(request: web.Request):
     """Додати колір філаменту (ID — з назви, якщо не передано)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     try:
         data = await request.json()
@@ -2428,10 +2428,10 @@ async def handle_create_filament(request: web.Request):
 async def handle_delete_filament(request: web.Request):
     """Видалити колір. Якщо він пропонується в товарах — 409 з used_by; ?force=1 видаляє попри це."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     filament_id = request.match_info.get('id', '')
     force = request.query.get("force", "").lower() in ("1", "true", "yes")
@@ -2450,10 +2450,10 @@ async def handle_delete_filament(request: web.Request):
 async def handle_reorder_categories(request: web.Request):
     """Порядок категорій одним запитом: {"ids": ["toy", "key", …]}."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     try:
         data = await request.json()
@@ -2468,10 +2468,10 @@ async def handle_reorder_categories(request: web.Request):
 async def handle_create_category(request: web.Request):
     """Створити нову категорію"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2486,10 +2486,10 @@ async def handle_create_category(request: web.Request):
 async def handle_update_category(request: web.Request):
     """Оновити категорію"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2505,10 +2505,10 @@ async def handle_update_category(request: web.Request):
 async def handle_delete_category(request: web.Request):
     """Видалити категорію"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2523,11 +2523,11 @@ async def handle_delete_category(request: web.Request):
 async def handle_create_product(request: web.Request):
     """Створити новий товар"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2542,11 +2542,11 @@ async def handle_create_product(request: web.Request):
 async def handle_update_product(request: web.Request):
     """Редагувати товар"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2562,11 +2562,11 @@ async def handle_update_product(request: web.Request):
 async def handle_delete_product(request: web.Request):
     """Видалити товар"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2581,7 +2581,7 @@ async def handle_delete_product(request: web.Request):
 async def _admin_guard(request: web.Request):
     """None, якщо запит від адміна; інакше готова відповідь 401/403."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     return require_admin(request, auth)
 
@@ -2604,7 +2604,7 @@ def _result_response(request: web.Request, result: dict, ok_status: int = 200):
 async def handle_get_admin_products(request: web.Request):
     """Усі товари всіх статусів зі статистикою (перегляди, кошик, продажі) для таблиці в адмінці."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     products = await run_db(lambda: admin_products_with_stats(get_admin_products()))
     return web.json_response(products, headers=cors_headers(request))
@@ -2613,10 +2613,10 @@ async def handle_get_admin_products(request: web.Request):
 async def handle_set_product_status(request: web.Request):
     """Статус товару: active / hidden / archive."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     result = await run_db(set_product_status, _product_id_param(request), str(data.get("status") or ""))
     return _result_response(request, result)
@@ -2625,10 +2625,10 @@ async def handle_set_product_status(request: web.Request):
 async def handle_patch_product(request: web.Request):
     """Швидке оновлення: ціна, стара ціна, hot / pinned / gift."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     result = await run_db(patch_product, _product_id_param(request), data)
     return _result_response(request, result)
@@ -2637,10 +2637,10 @@ async def handle_patch_product(request: web.Request):
 async def handle_bulk_products(request: web.Request):
     """Масові дії: {ids, action: discount|clear_discount|category|status, value}."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     result = await run_db(bulk_update_products, data.get("ids"), str(data.get("action") or ""), data.get("value"))
     return _result_response(request, result)
@@ -2649,7 +2649,7 @@ async def handle_bulk_products(request: web.Request):
 async def handle_duplicate_product(request: web.Request):
     """Копія товару (прихована)."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     result = await run_db(duplicate_product, _product_id_param(request))
     return _result_response(request, result, 201)
@@ -2658,10 +2658,10 @@ async def handle_duplicate_product(request: web.Request):
 async def handle_get_orders(request: web.Request):
     """Список замовлень для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     pending_only = request.query.get("pending_price", "false").lower() in ("1", "true", "yes")
@@ -2679,10 +2679,10 @@ async def handle_get_orders(request: web.Request):
 async def handle_get_print_queue(request: web.Request):
     """Черга друку: позиції confirmed/printing, згруповані за кольором."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     return web.json_response(await run_db(get_print_queue), headers=cors_headers(request))
 
@@ -2690,10 +2690,10 @@ async def handle_get_print_queue(request: web.Request):
 async def handle_set_item_printed(request: web.Request):
     """Відмітка «надруковано»: перша -> printing, усі -> ready (клієнт отримує повідомлення)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2724,10 +2724,10 @@ async def handle_set_item_printed(request: web.Request):
 async def handle_create_manual_order(request: web.Request):
     """Замовлення вручну (Instagram, OLX, особисто): одразу підтверджене, без повідомлення клієнту."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2754,10 +2754,10 @@ async def handle_create_manual_order(request: web.Request):
 async def handle_send_order_message(request: web.Request):
     """Надіслати клієнту в бот текст (шаблон з адмінки, відредагований адміном)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2799,10 +2799,10 @@ async def handle_send_order_message(request: web.Request):
 async def handle_export_orders_csv(request: web.Request):
     """CSV усіх (або відфільтрованих за status) замовлень."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     statuses = expand_status_filter(request.query.get("status"))
     rows = await run_db(list_orders, limit=5000, statuses=statuses or None)
@@ -2817,10 +2817,10 @@ async def handle_export_orders_csv(request: web.Request):
 async def handle_get_overview(request: web.Request):
     """Огляд: KPI, виторг по днях, воронка, топ товарів, «потребує уваги»."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     try:
         days = int(request.query.get("days", "7") or 7)
@@ -2832,10 +2832,10 @@ async def handle_get_overview(request: web.Request):
 async def handle_get_order_counts(request: web.Request):
     """Лічильники замовлень для вкладок і бічного меню адмінки."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     counts = await run_db(count_orders_by_status)
     try:  # лічильник «Відгуки» в меню; збій не повинен ламати лічильники замовлень
@@ -2848,10 +2848,10 @@ async def handle_get_order_counts(request: web.Request):
 async def handle_update_order(request: web.Request):
     """ТТН і внутрішня нотатка (клієнт нотатку не бачить)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2892,7 +2892,7 @@ async def _notify_client_status(order: dict, status: str, ttn: str | None = None
 async def handle_get_my_orders(request: web.Request):
     """Замовлення поточного покупця (за initData) для «Моїх замовлень»."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     try:
         user_id = int(auth.get("user_id") or 0)
@@ -2907,7 +2907,7 @@ async def handle_get_my_orders(request: web.Request):
 async def handle_get_pending_reviews(request: web.Request):
     """Що покупець ще може оцінити (товари доставлених замовлень без відгуку)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     items = await run_db(pending_reviews, auth.get("user_id") or 0)
     return web.json_response({"items": items}, headers=cors_headers(request))
@@ -2916,7 +2916,7 @@ async def handle_get_pending_reviews(request: web.Request):
 async def handle_upload_review_photo(request: web.Request):
     """Фото до відгуку від покупця: лише зображення, з лімітами розміру й кількості."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     try:
         user_id = int(auth.get("user_id") or 0)
@@ -2986,7 +2986,7 @@ async def handle_post_review(request: web.Request):
     except Exception:
         return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
     auth, err = resolve_request_user(request, data if isinstance(data, dict) else {})
-    if err:
+    if err is not None:
         return err
     if not isinstance(data, dict):
         return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
@@ -3050,7 +3050,7 @@ async def handle_get_admin_reviews(request: web.Request):
     """Відгуки для сторінки «Відгуки»: ?status=pending|approved|hidden|all&q=&rating=&limit=.
     Разом із лічильниками (вкладки, середній рейтинг, кількість на модерації)."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     status = request.query.get("status", "all")
     if status not in ("pending", "approved", "hidden", "all"):
@@ -3078,10 +3078,10 @@ async def handle_get_admin_reviews(request: web.Request):
 async def handle_set_admin_review_status(request: web.Request):
     """PUT /api/admin/reviews/{id}/status {status: approved|hidden|pending}."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     status = data.get("status")
     if status not in ("pending", "approved", "hidden"):
@@ -3098,10 +3098,10 @@ async def handle_set_admin_review_status(request: web.Request):
 async def handle_set_admin_review_reply(request: web.Request):
     """PUT /api/admin/reviews/{id}/reply {reply}: ≤1000 символів, порожня відповідь прибирає її."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     try:
         found = await run_db(set_admin_reply, _review_review_id(request), data.get("reply"))
@@ -3114,7 +3114,7 @@ async def handle_set_admin_review_reply(request: web.Request):
 
 async def handle_delete_admin_review(request: web.Request):
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     if not await run_db(delete_review, _review_review_id(request)):
         return _review_not_found(request)
@@ -3179,10 +3179,10 @@ async def _review_request_loop() -> None:
 async def handle_get_order(request: web.Request):
     """Деталі замовлення з позиціями."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     order_id = int(request.match_info.get("id", 0))
@@ -3195,10 +3195,10 @@ async def handle_get_order(request: web.Request):
 async def handle_update_order_pricing(request: web.Request):
     """Оновити ціни позицій замовлення."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -3316,10 +3316,10 @@ async def handle_update_order_pricing(request: web.Request):
 async def handle_update_order_status(request: web.Request):
     """Змінити статус замовлення та синхронізувати з Telegram-каналом."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -3382,10 +3382,10 @@ async def handle_update_order_status(request: web.Request):
 async def handle_delete_order(request: web.Request):
     """Видалити замовлення."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -3400,10 +3400,10 @@ async def handle_delete_order(request: web.Request):
 async def handle_get_coupons(request: web.Request):
     """Список купонів для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     return web.json_response(await run_db(list_coupons), headers=cors_headers(request))
 
@@ -3411,10 +3411,10 @@ async def handle_get_coupons(request: web.Request):
 async def handle_create_coupon(request: web.Request):
     """Створити купон."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -3437,10 +3437,10 @@ async def handle_create_coupon(request: web.Request):
 async def handle_update_coupon(request: web.Request):
     """Оновити купон."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -3469,10 +3469,10 @@ async def handle_update_coupon(request: web.Request):
 async def handle_add_coupon_users(request: web.Request):
     """Додати Telegram ID до whitelist купона."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -3506,10 +3506,10 @@ async def handle_add_coupon_users(request: web.Request):
 async def handle_remove_coupon_user(request: web.Request):
     """Прибрати Telegram ID з whitelist купона."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -3525,10 +3525,10 @@ async def handle_remove_coupon_user(request: web.Request):
 async def handle_delete_coupon(request: web.Request):
     """Видалити купон."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -3566,7 +3566,7 @@ async def handle_get_config(request: web.Request):
 async def _delivery_lookup(request: web.Request, fetch):
     """Спільна обгортка довідників: авторизація, ліміт, відмова API -> текстове поле у фронті."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     try:
         user_id = int(auth.get("user_id") or 0)
@@ -3620,34 +3620,34 @@ def _collection_response(request: web.Request, result: dict, ok_status: int = 20
 async def handle_get_admin_collections(request: web.Request):
     """Усі добірки (і вимкнені) для адмінки: склад, режим, кількість товарів, що бачить покупець."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     return web.json_response({"collections": await run_db(list_admin_collections)}, headers=cors_headers(request))
 
 
 async def handle_create_collection(request: web.Request):
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     return _collection_response(request, await run_db(create_collection, data), 201)
 
 
 async def handle_update_collection(request: web.Request):
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     return _collection_response(request, await run_db(update_collection, request.match_info.get("id", ""), data))
 
 
 async def handle_delete_collection(request: web.Request):
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     return _collection_response(request, await run_db(delete_collection, request.match_info.get("id", "")))
 
@@ -3655,10 +3655,10 @@ async def handle_delete_collection(request: web.Request):
 async def handle_reorder_collections(request: web.Request):
     """Порядок добірок: {"ids": ["new", "glow", …]}."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     return _collection_response(request, await run_db(reorder_collections, data.get("ids")))
 
@@ -3666,10 +3666,10 @@ async def handle_reorder_collections(request: web.Request):
 async def handle_preview_collection(request: web.Request):
     """«Зараз підходить: N товарів» для форми добірки: {mode, rule | product_ids}."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     return _collection_response(request, await run_db(preview_collection, data))
 
@@ -3677,10 +3677,10 @@ async def handle_preview_collection(request: web.Request):
 async def handle_set_collection_products(request: web.Request):
     """Упорядкований склад ручної добірки: {"product_ids": [3, 1, 2]}."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     return _collection_response(
         request, await run_db(set_collection_products, request.match_info.get("id", ""), data.get("product_ids"))
@@ -3690,7 +3690,7 @@ async def handle_set_collection_products(request: web.Request):
 async def handle_get_product_collections(request: web.Request):
     """ID ручних добірок товару (секція «Добірки» в редакторі)."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     ids = await run_db(product_collection_ids, _product_id_param(request))
     return web.json_response({"ok": True, "collections": ids}, headers=cors_headers(request))
@@ -3699,10 +3699,10 @@ async def handle_get_product_collections(request: web.Request):
 async def handle_set_product_collections(request: web.Request):
     """Ручні добірки товару: {"collections": ["gift-ideas", …]}."""
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     data, bad = await _json_body(request)
-    if bad:
+    if bad is not None:
         return bad
     return _collection_response(
         request, await run_db(set_product_collections, _product_id_param(request), data.get("collections"))
@@ -3727,7 +3727,7 @@ async def handle_post_event(request: web.Request):
         return web.json_response({"ok": False, "error": "unknown_event"}, status=400, headers=cors_headers(request))
 
     auth, err = resolve_request_user(request, data)
-    if err:
+    if err is not None:
         return err
     try:
         user_id = int(auth.get("user_id") or 0)
@@ -3765,10 +3765,10 @@ async def handle_post_event(request: web.Request):
 async def handle_get_promotions(request: web.Request):
     """Повний список акцій для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     return web.json_response(await run_db(list_promotions_admin), headers=cors_headers(request))
 
@@ -3776,10 +3776,10 @@ async def handle_get_promotions(request: web.Request):
 async def handle_get_users(request: web.Request):
     """Список користувачів бота з лічильниками запусків для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     q = request.query
@@ -3811,10 +3811,10 @@ async def handle_get_users(request: web.Request):
 async def handle_export_users_csv(request: web.Request):
     """CSV клієнтів (з урахуванням segment/search/blocked)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     q = request.query
     rows = await run_db(
@@ -3828,10 +3828,10 @@ async def handle_export_users_csv(request: web.Request):
 async def handle_create_personal_coupon(request: web.Request):
     """Персональний купон -10% для клієнта (одноразовий, лише йому, 30 днів)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     try:
         user_id = int(request.match_info.get("id", 0))
@@ -3846,10 +3846,10 @@ async def handle_create_personal_coupon(request: web.Request):
 async def handle_send_user_message(request: web.Request):
     """Надіслати клієнту в бот текст (наприклад, код купона)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     try:
         user_id = int(request.match_info.get("id", 0))
@@ -3930,14 +3930,14 @@ async def _broadcast_scheduler_loop() -> None:
 
 async def _admin_guard(request: web.Request):
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     return require_admin(request, auth)
 
 
 async def handle_get_broadcasts(request: web.Request):
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     items = await run_db(broadcasts_svc.list_broadcasts)
     return web.json_response({"broadcasts": items}, headers=cors_headers(request))
@@ -3945,7 +3945,7 @@ async def handle_get_broadcasts(request: web.Request):
 
 async def handle_preview_broadcast(request: web.Request):
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     try:
         data = await request.json()
@@ -3957,7 +3957,7 @@ async def handle_preview_broadcast(request: web.Request):
 
 async def handle_create_broadcast(request: web.Request):
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     try:
         data = await request.json()
@@ -3973,7 +3973,7 @@ async def handle_create_broadcast(request: web.Request):
 
 async def handle_delete_broadcast(request: web.Request):
     denied = await _admin_guard(request)
-    if denied:
+    if denied is not None:
         return denied
     try:
         bid = int(request.match_info.get("id", 0))
@@ -3993,10 +3993,10 @@ async def handle_delete_broadcast(request: web.Request):
 async def handle_get_settings(request: web.Request):
     """Глобальні налаштування магазину для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     return web.json_response(await run_db(admin_settings), headers=cors_headers(request))
 
@@ -4011,10 +4011,10 @@ async def handle_update_settings(request: web.Request):
         )
 
     auth, err = resolve_request_user(request, data)
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     result = await run_db(update_admin_settings, data)
@@ -4025,10 +4025,10 @@ async def handle_update_settings(request: web.Request):
 async def handle_create_promotion(request: web.Request):
     """Створити акцію."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -4043,10 +4043,10 @@ async def handle_create_promotion(request: web.Request):
 async def handle_update_promotion(request: web.Request):
     """Оновити акцію або лише перемкнути її активність."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -4065,10 +4065,10 @@ async def handle_update_promotion(request: web.Request):
 async def handle_delete_promotion(request: web.Request):
     """Видалити акцію."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -4083,10 +4083,10 @@ async def handle_delete_promotion(request: web.Request):
 async def handle_upload_photo(request: web.Request):
     """Завантажити фото на Cloudinary з повною обробкою помилок"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -4142,10 +4142,10 @@ async def handle_upload_photo(request: web.Request):
 async def handle_upload_video(request: web.Request):
     """Завантажити відео товару (mp4/mov/webm) на Cloudinary."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     try:
         form = await request.post()
@@ -4172,10 +4172,10 @@ async def handle_upload_video(request: web.Request):
 async def handle_upload_photo_url(request: web.Request):
     """Завантажити фото на Cloudinary за URL (зручно для анімованих GIF/WebP з інтернету)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -4214,7 +4214,7 @@ async def handle_check_coupon(request):
         return web.Response(status=400, text="Bad JSON", headers=cors_headers(request))
 
     auth, err = resolve_request_user(request, data)
-    if err:
+    if err is not None:
         return err
 
     code = (data.get("code") or "").strip()
