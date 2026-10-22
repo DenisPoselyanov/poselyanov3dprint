@@ -695,6 +695,21 @@
             .order-card-meta + .order-card-meta { margin-top: 0; }
             .order-card-total { min-width: 110px; }
         }
+        @media (min-width: 900px) {
+            .order-details-panel { margin-top: 10px; padding-top: 10px; }
+            .od-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 8px 24px; align-items: start; }
+            .od-side .order-field:first-child { margin-top: 0; }
+            .order-details-panel .order-stepper { max-width: 560px; margin: 0 0 10px; }
+            .order-details-panel .order-step { flex-direction: row; justify-content: center; gap: 6px; }
+            .order-details-panel .order-step-dot { width: 20px; height: 20px; font-size: 11px; flex: 0 0 auto; }
+            .order-details-panel .order-customer-info { padding: 8px 12px; margin-bottom: 6px; line-height: 1.5; }
+            .order-details-panel .order-item-row { padding: 6px 0; }
+            .order-details-panel .order-item-meta { margin-top: 1px; }
+            .order-details-panel .order-summary-row { padding: 3px 0; }
+            .order-details-panel .order-summary-row.total { margin-top: 3px; padding-top: 6px; }
+            .order-details-panel .order-field { margin-top: 10px; gap: 4px; }
+            .order-details-panel textarea.order-field-input { min-height: 0; }
+        }
         .order-next-btn { white-space: nowrap; }
         .order-more { position: relative; }
         .order-more > summary { list-style: none; cursor: pointer; }
@@ -10159,6 +10174,7 @@
                 const ttnNeeded = status === 'ready' || status === 'shipped' || !!order.ttn;
                 container.innerHTML = `
                     ${renderOrderStepper(status)}
+                    <div class="od-grid"><div class="od-main">
                     <div class="order-customer-info">
                         <div><strong>Клієнт:</strong> ${escapeHtml(order.first_name || '—')} · ${userLine}</div>
                         ${order.comment ? `<div><strong>Коментар:</strong> ${escapeHtml(order.comment)}</div>` : ''}
@@ -10175,6 +10191,7 @@
                         </label>
                         <button class="btn btn-primary" type="button" onclick="saveOrderPricing(${orderId})">💾 Зберегти ціну</button>
                     ` : ''}
+                    </div><div class="od-side">
                     ${ttnNeeded ? `
                     <div class="order-field">
                         <label for="order-ttn-${orderId}">ТТН (потрібна для «Відправлено»)</label>
@@ -10192,6 +10209,7 @@
                             placeholder="Наприклад: оплата на карту, друкувати PETG">${escapeHtml(order.internal_note || '')}</textarea>
                         <button class="btn btn-secondary" type="button" onclick="saveOrderNote(${orderId})">Зберегти нотатку</button>
                     </div>
+                    </div></div>
                 `;
             } catch (e) {
                 container.innerHTML = `<div style="color:#e53935;">${escapeHtml(e.message)}</div>`;
