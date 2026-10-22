@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import urllib.request
 import sys
 from pathlib import Path
 
@@ -22,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
+from PIL import Image, ImageOps
 
 load_dotenv(ROOT / ".env")
 
@@ -39,13 +42,43 @@ def is_external(url: str) -> bool:
     return bool(url) and url.startswith("http") and CLOUDINARY_HOST not in url
 
 
+CLOUDINARY_REMOTE_LIMIT = 10 * 1024 * 1024  # Cloudinary не забирає за URL файли більше 10 МБ
+DOWNLOAD_LIMIT = 40 * 1024 * 1024
+
+
+def _download(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "poselyanov3dprint-rehost/1.0"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = resp.read(DOWNLOAD_LIMIT + 1)
+    if len(data) > DOWNLOAD_LIMIT:
+        raise ValueError(f"файл завеликий: {url}")
+    return data
+
+
+def _shrink_static(data: bytes) -> bytes:
+    """Статичне фото завелике — зменшуємо до 1600px і стискаємо в WebP (анімацію не чіпаємо)."""
+    with Image.open(io.BytesIO(data)) as img:
+        if getattr(img, "is_animated", False):
+            raise ValueError("анімація завелика — потрібне ручне стиснення")
+        img = ImageOps.exif_transpose(img)
+        img.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        img.convert("RGB").save(out, format="WEBP", quality=88, method=4)
+    return out.getvalue()
+
+
 def rehost(url: str, product_id: int) -> str:
     # Ім'я з хешу URL: повторний запуск перезаписує той самий файл, а не плодить дублікати
     digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:12]
     animated = url.lower().split("?")[0].endswith((".gif", ".webp"))
     opts = {"flags": "lossy", "quality": "auto:good"} if animated else {"quality": "auto:good", "fetch_format": "auto"}
+    source = url
+    data = _download(url)
+    if len(data) > CLOUDINARY_REMOTE_LIMIT:
+        # Завантажуємо самі байти: Cloudinary приймає їх до 100 МБ, а за URL — лише до 10 МБ
+        source = _shrink_static(data) if not animated else data
     result = cloudinary.uploader.upload(
-        url,
+        source,
         folder="poselyanov3dprint",
         public_id=f"rehosted_{product_id}_{digest}",
         overwrite=True,

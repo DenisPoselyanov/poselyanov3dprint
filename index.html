@@ -1778,7 +1778,7 @@ function photo(url, opts = {}) {
   if (isAnimatedPhoto(url)) {
     return opts.still || w <= 200
       ? `${prefix}pg_1,f_auto,q_auto,w_${w}/${suffix}`
-      : `${prefix}c_limit,w_${w},q_75/${suffix}`;
+      : `${prefix}c_limit,w_${Math.min(w, 600)},q_70,fl_lossy/${suffix}`;
   }
 
   return `${prefix}f_auto,q_auto,w_${w}/${suffix}`;
