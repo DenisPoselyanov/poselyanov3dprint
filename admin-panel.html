@@ -680,6 +680,21 @@
             display: inline-block; margin: 6px 0 0 6px; font-size: 11px; font-weight: 700; padding: 3px 10px;
             border-radius: 999px; background: var(--bg-section); color: var(--text-secondary);
         }
+        .order-card-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .order-card-top .order-status-badge, .order-card-top .order-ttn-chip { margin: 0; }
+        /* Десктоп: картка — один компактний рядок (інфо · сума · дії), деталі розгортаються на всю ширину. */
+        @media (min-width: 900px) {
+            .order-card { display: flex; flex-wrap: wrap; align-items: center; column-gap: 20px; padding: 12px 16px; margin-bottom: 8px; }
+            .order-card-header { flex: 1 1 0; min-width: 0; flex-wrap: nowrap; align-items: center; }
+            .order-card-header > div:first-child { flex: 1 1 auto; }
+            .order-card-header > div:last-child { flex: 0 0 auto; }
+            .order-card .order-actions { margin-top: 0; flex: 0 0 auto; flex-wrap: nowrap; }
+            .order-card .order-actions .btn { white-space: nowrap; padding: 8px 12px; }
+            .order-card .order-details-panel { flex: 0 0 100%; }
+            .order-card-meta { margin-top: 2px; }
+            .order-card-meta + .order-card-meta { margin-top: 0; }
+            .order-card-total { min-width: 110px; }
+        }
         .order-next-btn { white-space: nowrap; }
         .order-more { position: relative; }
         .order-more > summary { list-style: none; cursor: pointer; }
@@ -9305,7 +9320,7 @@
                         <div style="font-size:17px;font-weight:700;margin-bottom:4px;">📦 Відправка №${orderId}</div>
                         <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Вставте ТТН Нової пошти — клієнт отримає її в повідомленні в боті.</div>
                         <div style="display:flex;gap:8px;">
-                            <input id="ttn-modal-input" type="text" inputmode="numeric" maxlength="17" autocomplete="off" placeholder="20450000000000"
+                            <input id="ttn-modal-input" type="text" inputmode="numeric" maxlength="14" autocomplete="off" placeholder="20450000000000"
                                 style="flex:1;min-width:0;padding:12px;font-size:17px;letter-spacing:1px;border:2px solid var(--border-input);border-radius:10px;background:var(--bg-input);color:var(--text-main);">
                             <button type="button" id="ttn-modal-paste" class="btn btn-secondary" style="white-space:nowrap;">Вставити</button>
                         </div>
@@ -9322,7 +9337,7 @@
                 const done = (val) => { overlay.remove(); resolve(val); };
                 input.value = initial || '';
                 input.addEventListener('input', () => {
-                    input.value = input.value.replace(/[^\d\s]/g, '');
+                    input.value = input.value.replace(/\D/g, '').slice(0, 14);
                     err.textContent = '';
                 });
                 const submit = () => {
@@ -9737,11 +9752,13 @@
                 <div class="order-card ${o.price_pending ? 'pending-price' : ''}" id="order-card-${o.id}">
                     <div class="order-card-header">
                         <div style="min-width:0;">
-                            <div class="order-card-id">#${o.id}</div>
+                            <div class="order-card-top">
+                                <span class="order-card-id">#${o.id}</span>
+                                ${renderOrderStatusBadge(status)}
+                                ${o.ttn ? `<span class="order-ttn-chip">ТТН ${escapeHtml(o.ttn)}</span>` : ''}
+                            </div>
                             <div class="order-card-meta">${userLine} · ${formatOrderDate(o.ordered_at)}</div>
                             ${summary ? `<div class="order-card-meta">${summary}</div>` : ''}
-                            ${renderOrderStatusBadge(status)}
-                            ${o.ttn ? `<span class="order-ttn-chip">ТТН ${escapeHtml(o.ttn)}</span>` : ''}
                         </div>
                         <div>
                             ${totalHtml}
@@ -10162,8 +10179,8 @@
                     <div class="order-field">
                         <label for="order-ttn-${orderId}">ТТН (потрібна для «Відправлено»)</label>
                         <div class="order-field-row">
-                            <input id="order-ttn-${orderId}" class="order-field-input" type="text" inputmode="numeric" maxlength="17" pattern="\d{14}"
-                                oninput="this.value = this.value.replace(/[^\d\s]/g, '')"
+                            <input id="order-ttn-${orderId}" class="order-field-input" type="text" inputmode="numeric" maxlength="14" pattern="\d{14}"
+                                oninput="this.value = this.value.replace(/\D/g, '').slice(0, 14)"
                                 placeholder="20450000000000" value="${escapeAttr(order.ttn || '')}">
                             <button class="btn btn-secondary" type="button" onclick="saveOrderTtn(${orderId})">Зберегти ТТН</button>
                         </div>
