@@ -309,12 +309,22 @@
   .rev-coupon { display: grid; gap: 4px; justify-items: center; padding: 12px 16px; border: 1.5px dashed var(--line-2); border-radius: var(--r-sm); }
   .rev-coupon code { font-size: 22px; font-weight: 800; letter-spacing: 2px; }
   .rev-coupon small { color: var(--ink-3); }
-  .rev-nudge { position: relative; margin: 0 0 12px; padding: 14px 40px 12px 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); display: grid; gap: 6px; }
-  .rev-nudge-x { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 0; background: none; color: var(--ink-3); font-size: 14px; cursor: pointer; }
-  .rev-nudge-stars { display: flex; gap: 4px; }
-  .rev-nudge-stars button { border: 0; background: none; padding: 2px; color: var(--amber); cursor: pointer; }
-  .rev-nudge-stars svg.i { width: 30px; height: 30px; fill: currentColor; stroke: currentColor; }
-  .rev-nudge small { color: var(--ink-3); }
+  .rev-nudge { position: relative; margin: 0 var(--gx) 14px; padding: 14px 14px 12px; border: 1px solid var(--line); border-radius: var(--r); background: linear-gradient(135deg, var(--amber-soft), var(--surface) 60%); display: grid; gap: 12px; overflow: hidden; }
+  .rev-nudge-x { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: 0; background: none; color: var(--ink-3); font-size: 13px; cursor: pointer; z-index: 1; }
+  .rev-nudge-head { display: flex; gap: 12px; align-items: center; padding-right: 26px; min-width: 0; }
+  .rev-nudge-th { display: flex; flex: 0 0 auto; }
+  .rev-nudge-th span { width: 46px; height: 46px; border-radius: 12px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; font-size: 22px; border: 2px solid var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+  .rev-nudge-th span + span { margin-left: -16px; }
+  .rev-nudge-th img { width: 100%; height: 100%; object-fit: cover; }
+  .rev-nudge-txt { min-width: 0; display: grid; gap: 2px; }
+  .rev-nudge-txt small { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--amber-ink, var(--amber)); }
+  .rev-nudge-txt b { font-size: 15px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .rev-nudge-stars { display: flex; justify-content: space-between; gap: 4px; padding: 6px 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+  .rev-nudge-stars button { flex: 1; border: 0; background: none; padding: 2px 0; color: var(--amber); cursor: pointer; display: grid; place-items: center; transition: transform .12s; }
+  .rev-nudge-stars button:active { transform: scale(1.25); }
+  .rev-nudge-stars svg.i { width: 30px; height: 30px; fill: none; stroke: currentColor; }
+  .rev-nudge-gift { justify-self: start; display: inline-flex; gap: 6px; align-items: center; padding: 5px 10px; border-radius: 999px; background: var(--amber-soft); color: var(--amber-ink, var(--amber)); font-size: 12px; font-weight: 600; }
+  .rev-nudge-gift svg.i { width: 14px; height: 14px; }
   .rev-done { text-align: center; padding: 18px 0 6px; display: grid; gap: 10px; justify-items: center; }
   .rev-done .success-check { margin-bottom: 0; }
 
@@ -4461,7 +4471,7 @@ function renderReviewForm() {
   const items = reviewItems();
   const rated = items.filter(x => revDraft(x.product_id).rating > 0);
   const busy = items.some(x => revDraft(x.product_id).photos.some(p => p.busy));
-  body.innerHTML = `<div class="gift-modal-title">Відгук про замовлення №${REV.orderId}
+  body.innerHTML = `<div class="gift-modal-title">Твій відгук
       <button class="gift-modal-close" data-act="review-close" aria-label="Закрити">✕</button></div>
     <div class="rev-body">
       ${revBonusLine()}
@@ -4572,20 +4582,22 @@ function reviewNudgeOrder() {
   const dismissed = readJsonStorage(REV_NUDGE_KEY, []);
   const first = (PENDING_REVIEWS || []).find(x => !dismissed.includes(x.order_id));
   if (!first) return null;
-  const items = PENDING_REVIEWS.filter(x => x.order_id === first.order_id);
-  return { orderId: first.order_id, name: items[0].product_name, more: items.length - 1 };
+  return { orderId: first.order_id, items: PENDING_REVIEWS.filter(x => x.order_id === first.order_id) };
 }
 function reviewNudgeHtml() {
   const n = reviewNudgeOrder();
   if (!n) return '';
-  const title = n.more > 0 ? `Як тобі замовлення №${n.orderId}?` : `Як тобі «${escapeHtml(n.name)}»?`;
+  const thumbs = n.items.slice(0, 3).map(x => `<span>${orderItemThumb({ product_id: x.product_id })}</span>`).join('');
+  const rest = n.items.length - 1;
+  const name = escapeHtml(n.items[0].product_name) + (rest > 0 ? ` <span style="font-weight:600;color:var(--ink-3)">+ ще ${rest}</span>` : '');
   const stars = [1, 2, 3, 4, 5].map(i =>
     `<button type="button" data-act="review-quick" data-order="${n.orderId}" data-n="${i}" aria-label="${i} з 5">${ic('star')}</button>`).join('');
   const b = REVIEW_BONUS;
   return `<div class="rev-nudge"><button type="button" class="rev-nudge-x" data-act="review-nudge-close" data-order="${n.orderId}" aria-label="Не зараз">✕</button>
-    <b>${title}</b>
-    <div class="rev-nudge-stars">${stars}</div>
-    ${b ? `<small>🎁 Купон −${b.photo_percent}% за відгук із фото</small>` : '<small>Відгук допомагає іншим обрати</small>'}
+    <div class="rev-nudge-head"><div class="rev-nudge-th">${thumbs}</div>
+      <div class="rev-nudge-txt"><small>Оціни покупку</small><b>${name}</b></div></div>
+    <div class="rev-nudge-stars" role="group" aria-label="Оцінка">${stars}</div>
+    ${b ? `<div class="rev-nudge-gift">${ic('gift')}Купон −${b.photo_percent}% за відгук із фото</div>` : ''}
   </div>`;
 }
 function dismissReviewNudge(orderId) {
