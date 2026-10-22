@@ -1762,16 +1762,78 @@ function photo(url, opts = {}) {
     return url;
   }
 
-  const lower = url.toLowerCase();
   const w = opts.w || 800;
 
-  // GIF/WebP: w_ і f_auto часто дають 400 — лише легке стиснення якості
-  if (lower.includes('.gif') || lower.includes('.webp')) {
-    return `${prefix}q_auto/${suffix}`;
+  // Анімація (GIF/WebP) важить 1–3 МБ: f_auto перетворює її на ще важчий GIF.
+  // still — статичний перший кадр (~20 КБ; завжди для дрібних мініатюр); інакше анімація, зменшена до потрібної ширини.
+  if (isAnimatedPhoto(url)) {
+    return opts.still || w <= 200
+      ? `${prefix}pg_1,f_auto,q_auto,w_${w}/${suffix}`
+      : `${prefix}c_limit,w_${w},q_75/${suffix}`;
   }
 
   return `${prefix}f_auto,q_auto,w_${w}/${suffix}`;
 }
+
+function isAnimatedPhoto(url) {
+  return /\.(gif|webp)(\?|$)/i.test(String(url || '').trim());
+}
+
+// <img> для фото товару: мініатюри анімацій спершу статичні, анімація вмикається, коли картка на екрані.
+// data-fallback — оригінал, якщо Cloudinary не зміг трансформувати файл.
+function photoImg(url, w, { alt = '', eager = false, still = false } = {}) {
+  const animated = isAnimatedPhoto(url) && url.includes('res.cloudinary.com/');
+  const tiny = w <= 200;
+  const src = photo(url, { w, still: animated });
+  const anim = animated && !tiny && !still ? ` data-anim="${escapeAttr(photo(url, { w: Math.min(w, 360) }))}"` : '';
+  return `<img src="${escapeAttr(src)}"${anim} data-fallback="${escapeAttr(url)}" alt="${escapeAttr(alt)}" loading="${eager ? 'eager' : 'lazy'}" decoding="async" crossorigin="anonymous">`;
+}
+
+let animObserver = null;
+function activateAnimatedThumbs(root = document) {
+  const imgs = root.querySelectorAll('img[data-anim]');
+  if (!imgs.length) return;
+  if (!('IntersectionObserver' in window)) {
+    imgs.forEach(swapToAnimation);
+    return;
+  }
+  animObserver ||= new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      animObserver.unobserve(e.target);
+      swapToAnimation(e.target);
+    });
+  }, { rootMargin: '100px' });
+  imgs.forEach((img) => animObserver.observe(img));
+}
+function swapToAnimation(img) {
+  const anim = img.dataset.anim;
+  if (!anim) return;
+  delete img.dataset.anim;
+  // Підміняємо лише після повного завантаження — без мигання порожнім місцем
+  const pre = new Image();
+  pre.crossOrigin = 'anonymous';
+  pre.onload = () => { if (img.isConnected) img.src = anim; };
+  pre.src = anim;
+}
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (img?.tagName !== 'IMG' || !img.dataset.fallback) return;
+  const fallback = img.dataset.fallback;
+  delete img.dataset.fallback;
+  delete img.dataset.anim;
+  if (img.src !== fallback) img.src = fallback;
+}, true);
+// Будь-який рендер (головна, список, пошук, акції) — нові мініатюри стають у чергу на анімацію
+new MutationObserver((records) => {
+  for (const r of records) {
+    for (const n of r.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.matches?.('img[data-anim]')) activateAnimatedThumbs(n.parentNode);
+      else if (n.querySelector?.('img[data-anim]')) activateAnimatedThumbs(n);
+    }
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 
 // Категорійні ярлики (для табів та заголовку)
@@ -3008,7 +3070,7 @@ function buildCarousel(photos, startIndex = 0) {
   const track = document.getElementById('carousel-track');
   modalPhotos = photos || [];
   const slides = modalPhotos.map((url, i) => `<div class="gal-slide" data-photo="${i}">
-      <img src="${escapeAttr(photo(url, { w: 1000 }))}" alt="${escapeAttr(`${p.name} — фото ${i + 1}`)}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async" crossorigin="anonymous">
+      <img src="${escapeAttr(photo(url, { w: 1000 }))}" data-fallback="${escapeAttr(url)}" alt="${escapeAttr(`${p.name} — фото ${i + 1}`)}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async" crossorigin="anonymous">
     </div>`);
   const video = !modalGiftPreview && p.video ? videoSources(p.video) : null;
   if (!slides.length && !video) {
@@ -3214,7 +3276,7 @@ function openLightbox(startIndex, photos = modalPhotos) {
   const dots  = document.getElementById('lb-dots');
 
   track.innerHTML = photos.map((url, i) =>
-    `<div class="lightbox-slide"><img src="${escapeAttr(photo(url, { w: 1400 }))}" alt="фото ${i+1}" loading="lazy" decoding="async" crossorigin="anonymous"></div>`
+    `<div class="lightbox-slide"><img src="${escapeAttr(photo(url, { w: 1400 }))}" data-fallback="${escapeAttr(url)}" alt="фото ${i+1}" loading="lazy" decoding="async" crossorigin="anonymous"></div>`
   ).join('');
 
   dots.innerHTML = photos.map((_, i) =>
@@ -5158,7 +5220,7 @@ function catLabel(id) {
 function thumbHtml(p, w = 400) {
   const src = p.photos?.[0];
   return src
-    ? `<img src="${escapeAttr(photo(src, { w }))}" alt="" loading="lazy" decoding="async" crossorigin="anonymous">`
+    ? photoImg(src, w)
     : `<span class="emo">${escapeHtml(p.emoji || '📦')}</span>`;
 }
 function priceHtml(p) {
