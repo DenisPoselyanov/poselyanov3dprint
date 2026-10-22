@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,6 +23,23 @@ _products_mtime = 0.0
 _custom_mtime = 0.0
 _categories_mtime = 0.0
 _filaments_mtime = 0.0
+
+# Каталог у БД: кеш у пам'яті замість SELECT на кожен запит вітрини. Усі зміни з адмінки
+# йдуть через цей модуль і перезавантажують кеш (force=True); TTL — лише для змін поза процесом.
+CATALOG_CACHE_TTL_SEC = float(os.environ.get("CATALOG_CACHE_TTL_SEC", "60"))
+_db_loaded_at: dict[str, float] = {}
+
+
+def _db_cache_fresh(name: str, force: bool) -> bool:
+    if force:
+        return False
+    loaded = _db_loaded_at.get(name)
+    return loaded is not None and time.monotonic() - loaded < CATALOG_CACHE_TTL_SEC
+
+
+def invalidate_catalog_cache() -> None:
+    """Наступне читання каталогу піде в БД (зміни поза цим процесом, тести)."""
+    _db_loaded_at.clear()
 
 PRODUCTS_CACHE: list[dict] = []
 CUSTOM_PRODUCTS_CACHE: list[dict] = []
@@ -376,12 +394,15 @@ def sync_filament_colors_table(conn, filament: dict) -> None:
 def reload_filaments_cache(force: bool = False):
     global FILAMENTS_CACHE, _filaments_mtime
     if use_catalog_db():
+        if _db_cache_fresh("filaments", force):
+            return False
         conn = db_connect(dict_rows=True)
         rows = conn.execute(
             "SELECT id, name, hex, available, glow FROM filaments ORDER BY sort_order, id"
         ).fetchall()
         conn.close()
         _replace_cache_list(FILAMENTS_CACHE, [_row_to_filament(dict(r)) for r in rows])
+        _db_loaded_at["filaments"] = time.monotonic()
         return True
 
     fp = Path(config.FILAMENTS_FILE)
@@ -398,12 +419,17 @@ def reload_filaments_cache(force: bool = False):
 def reload_categories_cache(force: bool = False):
     global CATEGORIES_CACHE, _categories_mtime
     if use_catalog_db():
+        if _db_cache_fresh("categories", force):
+            return False
         conn = db_connect(dict_rows=True)
         rows = conn.execute(
             "SELECT id, name, emoji, badge_class, sort_order, active, quick_slot FROM categories ORDER BY sort_order"
         ).fetchall()
         conn.close()
         _replace_cache_list(CATEGORIES_CACHE, [_row_to_category(dict(r)) for r in rows])
+        _db_loaded_at["categories"] = time.monotonic()
+        if force:
+            _db_loaded_at.pop("products", None)  # зміна категорії могла переписати category_id товарів
         return True
 
     fp = Path(config.CATEGORIES_FILE)
@@ -420,6 +446,8 @@ def reload_categories_cache(force: bool = False):
 def reload_products_cache(force: bool = False):
     global PRODUCTS_CACHE, CUSTOM_PRODUCTS_CACHE, _products_mtime, _custom_mtime
     if use_catalog_db():
+        if _db_cache_fresh("products", force):
+            return False
         conn = db_connect(dict_rows=True)
         rows = conn.execute(
             "SELECT * FROM products WHERE status = 'active' AND active = true ORDER BY id"
@@ -434,6 +462,7 @@ def reload_products_cache(force: bool = False):
                 standard.append(p)
         _replace_cache_list(PRODUCTS_CACHE, standard)
         _replace_cache_list(CUSTOM_PRODUCTS_CACHE, custom)
+        _db_loaded_at["products"] = time.monotonic()
         return True
 
     changed = False
@@ -472,15 +501,11 @@ def bootstrap_json_catalog(force: bool = False):
 def get_product_by_id(product_id: int):
     if not product_id:
         return None
-    if use_catalog_db():
-        conn = db_connect(dict_rows=True)
-        row = conn.execute(sql("SELECT * FROM products WHERE id = ? AND status = 'active' AND active = true"), (product_id,)).fetchone()
-        conn.close()
-        return _row_to_product(dict(row)) if row else None
     reload_products_cache()
     for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE:
         if p.get("id") == product_id:
-            return p
+            # з БД раніше щоразу був новий словник — копія, щоб виклики не змінювали кеш
+            return copy.deepcopy(p) if use_catalog_db() else p
     return None
 
 
