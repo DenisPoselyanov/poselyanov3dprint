@@ -2835,16 +2835,33 @@
         .ai-job:empty { display: none; }
         .ai-job.err { color: var(--sale); }
         .ai-job.run { color: var(--accent); font-weight: 600; }
+        .ai-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); align-items: start; }
+        .ai-card { align-content: start; }
         .ai-card.is-done { opacity: .72; }
-        .ai-price { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .ai-desc { font-size: 13px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-        .ai-row { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+        .ai-card .rv-th { width: 56px; height: 56px; border-radius: 12px; font-size: 28px; }
+        .ai-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+        .ai-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 99px; background: var(--bg-section); border: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+        .ai-chip.src { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+        .ai-price { font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .ai-desc { font-size: 13px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .ai-row { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; color: var(--text-secondary); }
         .ai-row b { color: var(--text-main); }
         .ai-row a { color: var(--accent); }
-        .ai-lic { padding: 8px 12px; border-left: 3px solid var(--amber); background: var(--bg-section); border-radius: 0 10px 10px 0; }
+        .ai-lic { border: 1px solid var(--border); border-radius: 10px; background: var(--bg-section); font-size: 12.5px; line-height: 1.45; }
+        .ai-lic summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-weight: 600; color: var(--text-main); }
+        .ai-lic summary::-webkit-details-marker { display: none; }
+        .ai-lic summary::after { content: '▾'; margin-left: auto; color: var(--text-muted); }
+        .ai-lic[open] summary::after { content: '▴'; }
+        .ai-lic .lic-badge { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 99px; background: color-mix(in srgb, var(--amber) 22%, transparent); color: var(--amber); }
+        .ai-lic .lic-badge.ok { background: color-mix(in srgb, #2ea66b 22%, transparent); color: #2ea66b; }
+        .ai-lic .lic-text { padding: 0 12px 9px; color: var(--text-secondary); overflow-wrap: anywhere; }
+        .ai-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .ai-actions .btn { padding: 8px 14px; font-size: 13px; min-height: 36px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+        .ai-actions .ai-main { margin-left: auto; }
         .ai-src { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border: 1px dashed var(--border-alt); border-radius: 12px; background: var(--bg-section); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
         .ai-src[hidden] { display: none; }
         .ai-src a { color: var(--accent); }
+        .ai-src-open { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--border-alt); background: var(--bg-card); color: var(--text-main) !important; font-weight: 600; text-decoration: none; }
         .ai-src-imgs { display: flex; gap: 8px; flex-wrap: wrap; }
         .ai-src-img { display: grid; gap: 4px; width: 84px; }
         .ai-src-img img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); }
@@ -3198,7 +3215,7 @@
                     <div id="aiJob" class="ai-job"></div>
                 </div>
                 <div id="aiTabs" class="orders-tabs"></div>
-                <div id="aiList" class="rv-list"></div>
+                <div id="aiList" class="rv-list ai-list"></div>
             </section>
 
             <section id="reviewsPage" class="page-section">
@@ -10394,30 +10411,65 @@
             renderAiPage();
         }
 
+        // Посилання «STL»: прямий STL/сторінка завантаження або, якщо ШІ дав лише пошук, сторінка пошуку моделі
+        function aiStlUrl(it) {
+            return (it.product && it.product.stlLink) || it.sourceUrl || '';
+        }
+
+        function aiIsSearchUrl(url) {
+            return /\/search\/|[?&](q|keyword)=/i.test(url || '');
+        }
+
+        function aiSourceName(url) {
+            try {
+                const host = new URL(url).hostname.replace(/^www\./, '');
+                if (host.includes('makerworld')) return 'MakerWorld';
+                if (host.includes('printables')) return 'Printables';
+                if (host.includes('thingiverse')) return 'Thingiverse';
+                if (host.includes('cults3d')) return 'Cults3D';
+                return host;
+            } catch (_) { return ''; }
+        }
+
+        function aiLicenseBadge(text) {
+            const risky = !text || /не перевір|не дозвол|комерційн|не вказан|не зрозум/i.test(text);
+            return risky ? '<span class="lic-badge">Перевір</span>' : '<span class="lic-badge ok">Дозволено</span>';
+        }
+
         function aiCardHtml(it) {
             const p = it.product || {};
             const cat = p.cat ? getCategoryMeta(p.cat) : null;
             const cover = (it.images || [])[0];
-            const meta = [cat ? `${cat.emoji || ''} ${cat.name}` : '', p.mat || ''].filter(Boolean).join(' · ');
+            const stl = aiStlUrl(it);
+            const isSearch = aiIsSearchUrl(stl);
+            const srcName = aiSourceName(stl);
             let actions = '';
+            const stlBtn = stl
+                ? `<a class="btn btn-secondary" href="${escapeAttr(stl)}" target="_blank" rel="noopener noreferrer" title="${escapeAttr(stl)}">${isSearch ? '🔎 Знайти модель' : '📐 Відкрити STL'}</a>
+                   <button class="btn btn-secondary" type="button" onclick="copyAiLink(${it.id})" title="Скопіювати посилання">📋</button>`
+                : '';
             if (it.status === 'new') {
-                actions = `<button class="btn btn-primary" type="button" onclick="openAiSuggestion(${it.id})">✏️ Відкрити й додати</button>
-                    <button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">Відхилити</button>`;
+                actions = `${stlBtn}
+                    <button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">Відхилити</button>
+                    <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">✏️ Відкрити й додати</button>`;
             } else if (it.status === 'published') {
-                actions = it.productId
-                    ? `<button class="btn btn-secondary" type="button" onclick="editProduct(${it.productId})">Товар #${it.productId}</button>`
-                    : '';
+                actions = `${stlBtn}${it.productId ? `<button class="btn btn-secondary ai-main" type="button" onclick="editProduct(${it.productId})">Товар #${it.productId}</button>` : ''}`;
             } else {
-                actions = `<button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'new')">Повернути в нові</button>
-                    <button class="btn btn-secondary" type="button" onclick="deleteAiSuggestion(${it.id})">Видалити</button>`;
+                actions = `${stlBtn}
+                    <button class="btn btn-secondary" type="button" onclick="deleteAiSuggestion(${it.id})">Видалити</button>
+                    <button class="btn btn-secondary ai-main" type="button" onclick="setAiSuggestionStatus(${it.id}, 'new')">Повернути в нові</button>`;
             }
             return `<article class="rv-card ai-card${it.status === 'new' ? '' : ' is-done'}">
                 <div class="rv-top">
                     <div class="rv-prod">
                         <div class="rv-th">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : escapeHtml(p.emoji || '📦')}</div>
                         <div style="min-width:0">
-                            <div class="rv-pname">${escapeHtml(p.emoji || '')} ${escapeHtml(p.name || it.name)}</div>
-                            <div class="rv-meta">${escapeHtml(meta)}</div>
+                            <div class="rv-pname">${escapeHtml(p.name || it.name)}</div>
+                            <div class="ai-chips">
+                                ${cat ? `<span class="ai-chip">${escapeHtml(cat.emoji || '')} ${escapeHtml(cat.name)}</span>` : ''}
+                                ${p.mat ? `<span class="ai-chip">${escapeHtml(p.mat)}</span>` : ''}
+                                ${srcName ? `<span class="ai-chip src">${escapeHtml(srcName)}</span>` : ''}
+                            </div>
                         </div>
                     </div>
                     <span class="ai-price">${Number(p.price) || 0} ₴</span>
@@ -10425,10 +10477,21 @@
                 ${p.description ? `<div class="ai-desc">${escapeHtml(p.description)}</div>` : ''}
                 ${p.note ? `<div class="ai-row">ⓘ ${escapeHtml(p.note)}</div>` : ''}
                 ${it.reason ? `<div class="ai-row"><b>Чому:</b> ${escapeHtml(it.reason)}</div>` : ''}
-                ${it.sourceUrl ? `<div class="ai-row"><b>Модель:</b> <a href="${escapeAttr(it.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.sourceTitle || it.sourceUrl)}</a></div>` : ''}
-                ${it.license ? `<div class="ai-row ai-lic"><b>Ліцензія:</b> ${escapeHtml(it.license)}</div>` : ''}
-                <div class="rv-actions">${actions}</div>
+                ${it.license ? `<details class="ai-lic"><summary>⚖️ Ліцензія ${aiLicenseBadge(it.license)}</summary><div class="lic-text">${escapeHtml(it.license)}</div></details>` : ''}
+                <div class="ai-actions">${actions}</div>
             </article>`;
+        }
+
+        async function copyAiLink(id) {
+            const it = aiItems.find(x => x.id === id);
+            const url = it ? aiStlUrl(it) : '';
+            if (!url) return;
+            try {
+                await navigator.clipboard.writeText(url);
+                showToast('Посилання скопійовано', 'success');
+            } catch (_) {
+                showToast(url, 'info');
+            }
         }
 
         function openAiSuggestion(id) {
@@ -10448,6 +10511,7 @@
             form.mat.value = p.mat || '';
             form.description.value = p.description || '';
             form.note.value = p.note || '';
+            form.stlLink.value = aiStlUrl(it);
             if (p.cat !== 'custom') {
                 form.filamentChoice.checked = p.filamentChoice !== false;
                 form.gift.checked = !!p.gift;
@@ -10469,8 +10533,9 @@
                     <button type="button" onclick="addAiSourcePhoto(${it.id}, ${i})">+ Додати</button>
                 </div>`).join('');
             box.innerHTML = `
-                <div><b>✨ Пропозиція ШІ.</b> ${it.sourceUrl ? `Модель: <a href="${escapeAttr(it.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.sourceTitle || it.sourceUrl)}</a>` : ''}</div>
-                ${it.license ? `<div class="ai-lic"><b>Ліцензія:</b> ${escapeHtml(it.license)}</div>` : ''}
+                <div><b>✨ Пропозиція ШІ.</b> ${it.sourceTitle ? escapeHtml(it.sourceTitle) : ''}</div>
+                ${aiStlUrl(it) ? `<a class="ai-src-open" href="${escapeAttr(aiStlUrl(it))}" target="_blank" rel="noopener noreferrer">${aiIsSearchUrl(aiStlUrl(it)) ? '🔎 Знайти модель' : '📐 Відкрити STL'} · ${escapeHtml(aiSourceName(aiStlUrl(it)))}</a>` : ''}
+                ${it.license ? `<div class="ai-row"><b>Ліцензія:</b> ${escapeHtml(it.license)}</div>` : ''}
                 ${imgs ? `<div>Фото з джерела — краще заміни їх своїми після друку:</div><div class="ai-src-imgs">${imgs}</div>` : '<div>Фото з джерела немає — додай свої.</div>'}`;
             box.hidden = false;
         }

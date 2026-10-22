@@ -81,6 +81,14 @@ def test_normalize_item_cleans_fields():
     assert ai.normalize_item(_item(price=0), ["toy"]) is None
 
 
+def test_stl_link_falls_back_to_source_url():
+    own = ai.normalize_item(_item(stl_link="https://makerworld.com/en/models/1#download"), ["toy"])
+    assert own["product"]["stlLink"] == "https://makerworld.com/en/models/1#download"
+    fallback = ai.normalize_item(_item(stl_link="javascript:x"), ["toy"])
+    assert fallback["product"]["stlLink"] == "https://makerworld.com/en/models/1"
+    assert "stlLink" not in ai.normalize_item(_item(source_url="", stl_link=""), ["toy"])["product"]
+
+
 def test_generate_saves_and_skips_duplicates(env):
     client = FakeClient([_resp([_submit([
         _item(),

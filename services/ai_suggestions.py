@@ -209,6 +209,11 @@ def normalize_item(raw: dict, category_ids: list[str]) -> dict | None:
         "filamentChoice": bool(raw.get("filament_choice", True)),
         "gift": bool(raw.get("gift", False)),
     }
+    source_url = _https(raw.get("source_url"))
+    # Посилання на STL: пряма сторінка завантаження; якщо ШІ її не дав, то сторінка моделі
+    stl_link = _https(raw.get("stl_link")) or source_url
+    if stl_link:
+        product["stlLink"] = stl_link
     images = []
     for url in raw.get("image_urls") or []:
         url = _https(url)
@@ -217,7 +222,7 @@ def normalize_item(raw: dict, category_ids: list[str]) -> dict | None:
     return {
         "name": name,
         "product": product,
-        "source_url": _https(raw.get("source_url")),
+        "source_url": source_url,
         "source_title": _text(raw.get("source_title"), 200),
         "license": _text(raw.get("license"), TEXT_MAX),
         "reason": _text(raw.get("reason"), TEXT_MAX),
@@ -271,7 +276,7 @@ SUBMIT_TOOL = {
                     "required": [
                         "name", "cat", "emoji", "mat", "price", "description", "note",
                         "filament_choice", "gift", "source_url", "source_title", "license",
-                        "reason", "image_urls",
+                        "reason", "image_urls", "stl_link",
                     ],
                     "properties": {
                         "name": {"type": "string", "description": "Назва товару для вітрини, коротко, як у каталозі"},
@@ -284,6 +289,7 @@ SUBMIT_TOOL = {
                         "filament_choice": {"type": "boolean", "description": "Чи може покупець вибрати колір"},
                         "gift": {"type": "boolean", "description": "Чи годиться як дрібний подарунок до замовлення"},
                         "source_url": {"type": "string", "description": "Посилання на сторінку моделі"},
+                        "stl_link": {"type": "string", "description": "Пряме посилання на сторінку, звідки качається STL/3MF цієї моделі; порожній рядок, якщо не бачив"},
                         "source_title": {"type": "string", "description": "Назва моделі на сайті й автор"},
                         "license": {"type": "string", "description": "Ліцензія моделі і чи дозволено продавати друк"},
                         "reason": {"type": "string", "description": "Чому цей товар підійде магазину"},
@@ -317,7 +323,11 @@ SYSTEM_PROMPT = """Ти допомагаєш власнику маленьког
 - пиши українською, у тому ж стилі, тоні й довжині, що й наявні товари магазину (приклади нижче);
 - назва коротка й зрозуміла покупцю, без артикулів і англійських хвостів, якщо їх немає у прикладах;
 - ціну орієнтуй на ціни схожих товарів у каталозі;
+- stl_link — сторінка завантаження файлів цієї самої моделі (лише якщо реально бачив її); не вигадуй посилань;
 - image_urls — прямі посилання на фото зі сторінки моделі (og:image або галерея), лише якщо ти їх бачив; інакше порожній список.
+
+Мова: ЗАВЖДИ українська. Усі текстові поля (name, mat, description, note, reason, license, source_title-пояснення) пиши українською,
+навіть якщо сторінка моделі англійською: описи, ліцензії й причини перекладай. Назви-бренди й імена авторів можна лишати латиницею.
 
 Коли закінчиш пошук, виклич інструмент submit_products один раз з усіма товарами. Не пиши окремого звіту текстом."""
 
