@@ -40,6 +40,7 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_get("/my/orders", handlers.handle_get_my_orders)
     http_app.router.add_get("/my/reviews/pending", handlers.handle_get_pending_reviews)
     http_app.router.add_post("/my/review-photo", handlers.handle_upload_review_photo)
+    http_app.router.add_post("/my/share-product", handlers.handle_prepare_share)
     http_app.router.add_post("/reviews", handlers.handle_post_review)
     http_app.router.add_route("OPTIONS", "/my/{tail:.*}", handlers.handle_options)
     http_app.router.add_route("OPTIONS", "/reviews", handlers.handle_options)

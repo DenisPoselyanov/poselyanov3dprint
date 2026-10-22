@@ -4600,6 +4600,18 @@ async function shareProduct() {
     }
   };
 
+  // Картка з фото товару (Bot API 8.0+); якщо клієнт старий або збій — звичайне посилання
+  const tg = window.Telegram?.WebApp;
+  if (tg?.shareMessage && tg.isVersionAtLeast?.('8.0')) {
+    try {
+      const r = await apiPost('/my/share-product', { product_id: currentProduct.id, photo_index: getGlobalPhotoIndex() });
+      if (r?.ok && r.id) {
+        tg.shareMessage(r.id);
+        return;
+      }
+    } catch (_) { /* падаємо на посилання */ }
+  }
+
   if (await tryNativeShare({ title, text, url: link })) return;
   if (await tryNativeShare({ text: `${text}\n${link}` })) return;
   if (await tryNativeShare({ url: link })) return;

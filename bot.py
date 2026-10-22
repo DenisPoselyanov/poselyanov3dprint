@@ -3,6 +3,7 @@ Denis 3D Print — Telegram Bot
 """
 
 from datetime import datetime, timedelta, timezone
+import aiohttp
 from aiohttp import web
 import asyncio
 import concurrent.futures
@@ -2931,6 +2932,65 @@ async def handle_get_pending_reviews(request: web.Request):
         return err
     items = await run_db(pending_reviews, auth.get("user_id") or 0)
     return web.json_response({"items": items}, headers=cors_headers(request))
+
+
+def _share_photo_url(url: str) -> str:
+    """JPEG-версія фото для картки в чаті; у GIF Cloudinary бере перший кадр."""
+    if "res.cloudinary.com" in url and "/upload/" in url:
+        return url.replace("/upload/", "/upload/f_jpg,w_800,c_limit/", 1)
+    return url
+
+
+async def handle_prepare_share(request: web.Request):
+    """Готує повідомлення-картку товару (фото + кнопка) для Telegram.WebApp.shareMessage."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+        data = await request.json()
+        product_id = int(data.get("product_id"))
+        photo_index = max(0, int(data.get("photo_index") or 0))
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "bad_request"}, status=400, headers=cors_headers(request))
+    product = get_product_by_id(product_id) if user_id > 0 else None
+    photos = (product or {}).get("photos") or []
+    if not product or not photos:
+        return web.json_response({"ok": False, "error": "no_photo"}, status=404, headers=cors_headers(request))
+    photo = _share_photo_url(photos[photo_index if photo_index < len(photos) else 0])
+    link = f"https://t.me/{config.BOT_USERNAME}?startapp=product_{product_id}"
+    if photo_index > 0:
+        link += f"_p{photo_index}"
+    result = {
+        "type": "photo",
+        "id": f"p{product_id}",
+        "photo_url": photo,
+        "thumbnail_url": photo,
+        "caption": f"{product.get('name', '')} — Denis 3D Print",
+        "reply_markup": {"inline_keyboard": [[{"text": "🛍️ Відкрити в магазині", "url": link}]]},
+    }
+    payload = {
+        "user_id": user_id,
+        "result": result,
+        "allow_user_chats": True,
+        "allow_bot_chats": True,
+        "allow_group_chats": True,
+        "allow_channel_chats": True,
+    }
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/savePreparedInlineMessage", json=payload
+            ) as resp:
+                body = await resp.json()
+        if not body.get("ok"):
+            raise RuntimeError(body.get("description"))
+        return web.json_response(
+            {"ok": True, "id": body["result"]["id"]}, headers=cors_headers(request)
+        )
+    except Exception as e:
+        logger.warning("savePreparedInlineMessage для товару %s не вдалось: %s", product_id, e)
+        return web.json_response({"ok": False, "error": "prepare_failed"}, status=502, headers=cors_headers(request))
 
 
 async def handle_upload_review_photo(request: web.Request):
