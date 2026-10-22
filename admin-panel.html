@@ -782,9 +782,15 @@
         @media (max-width: 700px) {
             .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .ov-cols { grid-template-columns: 1fr; }
-            .ov-funnel-row { grid-template-columns: 100px 1fr 36px; }
-            .ov-funnel-conv { margin-left: 110px; }
+            .ov-funnel-row { grid-template-columns: 124px 1fr 30px; gap: 8px; font-size: 12.5px; }
+            .ov-funnel-conv { margin-left: 132px; }
+            #overviewPage .orders-toolbar-right { flex-wrap: nowrap; gap: 8px; }
+            .hide-mobile { display: none; }
+            #overviewPeriods { flex: 1; min-width: 0; }
+            #overviewPeriods button { flex: 1; padding: 8px 4px; white-space: nowrap; }
+            #overviewPage .orders-toolbar-right > .btn { flex: 0 0 auto; padding: 8px 12px; }
         }
+        .queue-kpi-card .ov-delta { line-height: 1.3; }
 
         .order-actions {
             margin-top: 14px;
@@ -3020,14 +3026,15 @@
                             <button type="button" data-days="1" onclick="setOverviewPeriod(1)">Сьогодні</button>
                             <button type="button" data-days="7" class="active" onclick="setOverviewPeriod(7)">7 днів</button>
                             <button type="button" data-days="30" onclick="setOverviewPeriod(30)">30 днів</button>
+                            <button type="button" data-days="0" onclick="setOverviewPeriod(0)">Весь час</button>
                         </div>
-                        <button class="btn btn-secondary" type="button" onclick="loadOverview()">🔄 Оновити</button>
+                        <button class="btn btn-secondary" type="button" onclick="loadOverview()" aria-label="Оновити">🔄<span class="hide-mobile"> Оновити</span></button>
                     </div>
                 </div>
                 <div id="overviewLoading" class="loading" style="display:none;"><div class="spinner"></div></div>
                 <div id="overviewKpis" class="ov-kpis"></div>
                 <div class="ov-cols">
-                    <div class="ov-panel"><h3>Виторг по днях</h3><div id="overviewChart"></div></div>
+                    <div class="ov-panel"><h3 id="overviewChartTitle">Виторг по днях</h3><div id="overviewChart"></div></div>
                     <div class="ov-panel"><h3>Воронка</h3><div id="overviewFunnel"></div></div>
                 </div>
                 <div class="ov-cols">
@@ -5082,30 +5089,51 @@
         }
 
         function renderDelta(delta, unit = '%') {
-            if (delta === null || delta === undefined) return '<span class="ov-delta">немає даних для порівняння</span>';
+            if (overviewData?.days === 0) return '<span class="ov-delta">за весь час</span>';
+            if (delta === null || delta === undefined) return '<span class="ov-delta">без порівняння</span>';
             const up = delta >= 0;
             const text = `${up ? '↑' : '↓'} ${Math.abs(delta).toLocaleString('uk-UA')}${unit === '%' ? '%' : ' п.п.'}`;
-            return `<span class="ov-delta ${up ? 'up' : 'down'}">${text} до попер. періоду</span>`;
+            return `<span class="ov-delta ${up ? 'up' : 'down'}">${text} до поперед.</span>`;
         }
 
-        function renderOverviewChart(chart) {
-            const W = 640, H = 210, pl = 44, pb = 24;
+        function compactNumber(n) {
+            n = Math.round(n);
+            return n >= 1000 ? `${(n / 1000).toLocaleString('uk-UA', { maximumFractionDigits: 1 })}к` : String(n);
+        }
+
+        let overviewResizeTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(overviewResizeTimer);
+            overviewResizeTimer = setTimeout(() => {
+                if (overviewData && document.getElementById('overviewPage').classList.contains('active')) renderOverview();
+            }, 150);
+        });
+
+        const UA_MONTHS = ['січ', 'лют', 'бер', 'кві', 'тра', 'чер', 'лип', 'сер', 'вер', 'жов', 'лис', 'гру'];
+
+        function renderOverviewChart(chart, unit = 'day') {
+            const monthly = unit === 'month';
+            // ширина = реальна ширина блоку, щоб підписи не зменшувалися разом із SVG
+            const W = Math.max(document.getElementById('overviewChart').clientWidth || 640, 240), H = 210, pl = 40, pb = 24;
             const max = Math.max(...chart.map(c => c.revenue), 1);
             const bw = (W - pl - 10) / chart.length;
             const grid = [0, .5, 1].map(t => {
                 const y = H - pb - t * (H - pb - 16);
                 return `<line x1="${pl}" x2="${W - 6}" y1="${y}" y2="${y}" stroke="var(--border)"/>`
-                    + `<text x="${pl - 6}" y="${y + 3}" text-anchor="end">${Math.round(max * t)}</text>`;
+                    + `<text x="${pl - 6}" y="${y + 3}" text-anchor="end">${compactNumber(max * t)}</text>`;
             }).join('');
             const bars = chart.map((c, i) => {
                 const h = (c.revenue / max) * (H - pb - 16);
-                const d = c.date.slice(8, 10) + '.' + c.date.slice(5, 7);
-                return `<rect x="${pl + i * bw + 4}" y="${H - pb - h}" width="${Math.max(bw - 8, 2)}" height="${Math.max(h, 1.5)}" rx="4" fill="${i === chart.length - 1 ? 'var(--accent)' : 'var(--accent)'}" opacity="${i === chart.length - 1 ? 1 : .55}"><title>${d}: ${formatMoney(c.revenue)}</title></rect>`;
+                const d = monthly
+                    ? `${UA_MONTHS[Number(c.date.slice(5, 7)) - 1]} ${c.date.slice(0, 4)}`
+                    : c.date.slice(8, 10) + '.' + c.date.slice(5, 7);
+                const gap = chart.length > 40 ? 1 : 4;
+                return `<rect x="${pl + i * bw + gap}" y="${H - pb - h}" width="${Math.max(bw - gap * 2, 1.5)}" height="${Math.max(h, 1.5)}" rx="${gap > 1 ? 4 : 1}" fill="var(--accent)" opacity="${i === chart.length - 1 ? 1 : .55}"><title>${d}: ${formatMoney(c.revenue)}</title></rect>`;
             }).join('');
-            const step = chart.length > 14 ? 3 : 1;
+            const step = monthly ? Math.ceil(chart.length / 10) : chart.length > 14 ? 3 : 1;
             const labels = chart.map((c, i) => (i % step === 0 || i === chart.length - 1)
-                ? `<text x="${pl + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${c.date.slice(8, 10)}</text>` : '').join('');
-            return `<svg class="ov-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Виторг по днях">${grid}${bars}${labels}</svg>`;
+                ? `<text x="${pl + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${monthly ? UA_MONTHS[Number(c.date.slice(5, 7)) - 1] : c.date.slice(8, 10)}</text>` : '').join('');
+            return `<svg class="ov-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${monthly ? 'Виторг по місяцях' : 'Виторг по днях'}">${grid}${bars}${labels}</svg>`;
         }
 
         function renderOverview() {
@@ -5120,9 +5148,10 @@
                 <div class="queue-kpi-card"><span>Виторг</span><b>${formatMoney(k.revenue.value)}</b>${renderDelta(k.revenue.delta)}</div>
                 <div class="queue-kpi-card"><span>Замовлень</span><b>${k.orders.value}</b>${renderDelta(k.orders.delta)}</div>
                 <div class="queue-kpi-card"><span>Середній чек</span><b>${formatMoney(k.avg_check.value)}</b>${renderDelta(k.avg_check.delta)}</div>
-                <div class="queue-kpi-card"><span>Конверсія в замовлення</span><b>${conv === null ? '—' : conv.toLocaleString('uk-UA') + '%'}</b>${renderDelta(k.conversion.delta, 'pp')}</div>`;
+                <div class="queue-kpi-card"><span>Конверсія</span><b>${conv === null ? '—' : conv.toLocaleString('uk-UA') + '%'}</b>${renderDelta(k.conversion.delta, 'pp')}</div>`;
 
-            document.getElementById('overviewChart').innerHTML = renderOverviewChart(d.chart);
+            document.getElementById('overviewChartTitle').textContent = d.chart_unit === 'month' ? 'Виторг по місяцях' : 'Виторг по днях';
+            document.getElementById('overviewChart').innerHTML = renderOverviewChart(d.chart, d.chart_unit);
 
             const maxFunnel = Math.max(...d.funnel.map(f => f.count), 1);
             const funnelEmpty = d.funnel.every(f => !f.count);
@@ -5156,7 +5185,7 @@
                 ? d.top_products.map(t => `
                     <div class="ov-top-row"><div><div style="font-weight:600">${escapeHtml(t.name)}</div>
                         <div class="ov-funnel-bar"><i style="width:${t.qty / topMax * 100}%"></i></div></div><b>${t.qty}</b></div>`).join('')
-                : '<div class="order-card-meta">За цей період продажів ще не було.</div>';
+                : `<div class="order-card-meta">${d.days === 0 ? 'Продажів ще не було.' : 'За цей період продажів ще не було.'}</div>`;
         }
 
         function overviewOpenOrders(tab) {

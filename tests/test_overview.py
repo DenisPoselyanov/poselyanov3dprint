@@ -107,3 +107,41 @@ def test_overview_previous_period_delta(env):
 def test_overview_unknown_period_falls_back(env):
     _, _, overview = env
     assert overview.get_overview(99)["days"] == 7
+
+
+def test_overview_all_time_covers_old_orders_without_comparison(env):
+    orders, _, overview = env
+    old = _order(orders, 1, 100)
+    from db_core import db_connect
+
+    long_ago = (datetime.now(timezone.utc) - timedelta(days=200)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db_connect()
+    conn.execute("UPDATE orders SET ordered_at = ? WHERE id = ?", (long_ago, old))
+    conn.commit()
+    conn.close()
+    _order(orders, 2, 150)
+
+    data = overview.get_overview(0)
+    assert data["days"] == 0
+    assert data["kpi"]["revenue"]["value"] == 250
+    assert data["kpi"]["orders"]["value"] == 2
+    assert data["kpi"]["revenue"]["delta"] is None
+    assert data["chart_unit"] == "month"
+    assert sum(c["revenue"] for c in data["chart"]) == 250
+    assert data["chart"][0]["date"].endswith("-01")
+
+
+def test_overview_all_time_short_history_stays_daily(env):
+    orders, _, overview = env
+    _order(orders, 1, 100)
+    data = overview.get_overview(0)
+    assert data["chart_unit"] == "day"
+    assert len(data["chart"]) == 7
+    assert data["chart"][-1]["revenue"] == 100
+
+
+def test_overview_all_time_without_orders(env):
+    _, _, overview = env
+    data = overview.get_overview(0)
+    assert data["kpi"]["orders"]["value"] == 0
+    assert len(data["chart"]) == 7
