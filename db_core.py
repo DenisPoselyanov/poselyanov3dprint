@@ -97,11 +97,19 @@ class PooledConnection:
                 # Як і з psycopg.connect: незакомічені зміни відкочуються. Явний rollback не дає
                 # пулу писати попередження «rolling back returned connection» на кожному читанні.
                 info = getattr(conn, "info", None)
-                if info is not None and info.transaction_status != psycopg.pq.TransactionStatus.IDLE:
+                if info is not None and info.transaction_status not in (
+                    psycopg.pq.TransactionStatus.IDLE,
+                    psycopg.pq.TransactionStatus.UNKNOWN,
+                ):
                     conn.rollback()
-                self._pool.putconn(conn)
             except Exception:
-                logger.warning("Не вдалось повернути з'єднання в пул", exc_info=True)
+                # Зламане з'єднання: пул сам його відкине при поверненні
+                logger.warning("Не вдалось відкотити з'єднання перед поверненням у пул", exc_info=True)
+            finally:
+                try:
+                    self._pool.putconn(conn)
+                except Exception:
+                    logger.warning("Не вдалось повернути з'єднання в пул", exc_info=True)
 
     def __getattr__(self, name):
         conn = self._conn

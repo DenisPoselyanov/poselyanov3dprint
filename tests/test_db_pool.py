@@ -94,3 +94,17 @@ def test_db_catalog_is_cached_until_forced(monkeypatch):
         assert len(calls) == 4
     finally:
         catalog_store.invalidate_catalog_cache()
+
+
+class BrokenRollbackConn(FakeConn):
+    class info:  # noqa: N801 — імітація psycopg.ConnectionInfo
+        transaction_status = 2  # INTRANS
+
+    def rollback(self):
+        raise RuntimeError("connection lost")
+
+
+def test_connection_returns_to_pool_even_if_rollback_fails():
+    pool, conn = FakePool(), BrokenRollbackConn()
+    db_core.PooledConnection(conn, pool).close()
+    assert pool.returned == [conn]
