@@ -2998,7 +2998,7 @@ async def handle_upload_review_photo(request: web.Request):
 
 
 def _review_moderation_html(review: dict, product_name: str) -> str:
-    return build_review_moderation(review, product_name)
+    return build_review_moderation(review, product_name, review.get("product_id"))
 
 
 def _review_moderation_markup(review_id: int, status: str) -> InlineKeyboardMarkup:

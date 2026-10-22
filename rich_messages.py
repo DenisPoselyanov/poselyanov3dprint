@@ -1017,21 +1017,27 @@ def build_manual_client_message(text: str) -> str:
     return paragraphs + f'\n<footer><a href="{DENIS_LINK}">Денис</a></footer>'
 
 
-def build_review_moderation(review: dict, product_name: str) -> str:
-    stars = "★" * int(review["rating"]) + "☆" * (5 - int(review["rating"]))
+def build_review_moderation(review: dict, product_name: str, product_id: int | None = None) -> str:
+    rating = int(review["rating"])
+    stars = "★" * rating + "☆" * (5 - rating)
+    name = escape(product_name)
+    if product_id:
+        name = f'<a href="{BOT_LINK_BASE}{int(product_id)}">{name}</a>'
     links = [
         f'<a href="{escape(url)}">фото {n}</a>' for n, url in enumerate(review.get("photos") or [], 1)
     ]
+    author = escape(review.get("author_name") or "Покупець")
     parts = [
-        f"<h2>⭐ Новий відгук #{review['id']}</h2>",
+        f"<h2>Відгук #{review['id']}</h2>",
         "<hr/>",
-        f"<p><b>{escape(product_name)}</b> · замовлення #{review['order_id']}</p>",
-        f"<p>{stars} · {escape(review.get('author_name') or 'Покупець')}</p>",
-        f"<blockquote><p>{escape(review.get('text') or '—')}</p></blockquote>",
+        f"<p><b>{name}</b></p>",
+        f"<p>{stars} · {author} · №{review['order_id']}</p>",
     ]
+    text = (review.get("text") or "").strip()
+    if text:
+        parts.append(f"<blockquote><p>{escape(text)}</p></blockquote>")
     if links:
         parts.append(f"<p>📷 {' · '.join(links)}</p>")
-    parts.append("<footer>Модерація — кнопки нижче</footer>")
     return "\n".join(parts)
 
 
