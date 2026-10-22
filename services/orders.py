@@ -639,12 +639,15 @@ def expand_status_filter(raw: str | None) -> list[str]:
     return out
 
 
-def count_orders_by_status() -> dict[str, int]:
-    """Лічильники для вкладок: по кожній групі, «all» і «pending_price»."""
+def count_orders_by_status(include_test: bool = True) -> dict[str, int]:
+    """Лічильники для вкладок: по кожній групі, «all» і «pending_price». Тестові — за бажанням."""
     conn = db_connect(dict_rows=True)
-    rows = conn.execute(_sql("SELECT status, COUNT(*) AS n FROM orders GROUP BY status")).fetchall()
+    no_test = "" if include_test else " AND COALESCE(is_test, 0) = 0"
+    rows = conn.execute(
+        _sql(f"SELECT status, COUNT(*) AS n FROM orders WHERE 1 = 1{no_test} GROUP BY status")
+    ).fetchall()
     pending = conn.execute(
-        _sql("SELECT COUNT(*) AS n FROM orders WHERE price_pending = ?"), (1,)
+        _sql(f"SELECT COUNT(*) AS n FROM orders WHERE price_pending = ?{no_test}"), (1,)
     ).fetchone()
     conn.close()
     by_status = {str(row_to_dict(r)["status"] or "new"): int(row_to_dict(r)["n"]) for r in rows}
@@ -662,11 +665,14 @@ def list_orders(
     pending_price_only: bool = False,
     limit: int = 50,
     statuses: list[str] | None = None,
+    include_test: bool = True,
 ):
     conn = db_connect(dict_rows=True)
     sql = f"SELECT {_LIST_COLUMNS} FROM orders"
     where: list[str] = []
     params: list = []
+    if not include_test:
+        where.append("COALESCE(is_test, 0) = 0")
     if pending_price_only:
         where.append("price_pending = ?")
         params.append(1)

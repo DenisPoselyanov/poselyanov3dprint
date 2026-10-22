@@ -3149,6 +3149,10 @@
                             <input type="checkbox" id="ordersPendingFilter" onchange="loadOrders()">
                             Лише потребують ціни
                         </label>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:14px;" title="Тестові замовлення за замовчуванням не враховуються">
+                            <input type="checkbox" id="ordersShowTest" onchange="loadOrders()">
+                            🧪 Тестові
+                        </label>
                         <div class="orders-view-toggle">
                             <button type="button" id="ordersViewList" class="active" onclick="setOrdersView('list')">Список</button>
                             <button type="button" id="ordersViewKanban" onclick="setOrdersView('kanban')">Канбан</button>
@@ -5509,7 +5513,7 @@
             renderCmdk('');
             setTimeout(() => input.focus(), 30);
             if (!cmdkOrders) {
-                fetch(API_BASE + '/orders?limit=200').then(r => (r.ok ? r.json() : [])).then(rows => {
+                fetch(API_BASE + '/orders?limit=200&include_test=1').then(r => (r.ok ? r.json() : [])).then(rows => {
                     cmdkOrders = rows;
                     if (box.classList.contains('open')) renderCmdk(input.value);
                 }).catch(() => { cmdkOrders = []; });
@@ -10043,9 +10047,13 @@
             renderOrdersList();
         }
 
+        function showTestOrders() {
+            return !!document.getElementById('ordersShowTest')?.checked;
+        }
+
         async function loadOrderCounts() {
             try {
-                const res = await fetch(API_BASE + '/orders/counts');
+                const res = await fetch(API_BASE + '/orders/counts' + (showTestOrders() ? '?include_test=1' : ''));
                 if (res.ok) ordersCounts = await res.json();
             } catch (_) { /* лічильники не критичні */ }
             renderOrderTabs();
@@ -10064,6 +10072,7 @@
                 if (ordersView === 'kanban') params.set('status', 'new,draft,work,shipped');
                 else if (ordersTab !== 'all') params.set('status', ordersTab);
                 if (pendingOnly) params.set('pending_price', 'true');
+                if (showTestOrders()) params.set('include_test', '1');
                 const [res] = await Promise.all([
                     fetch(API_BASE + '/orders?' + params.toString()),
                     loadOrderCounts(),

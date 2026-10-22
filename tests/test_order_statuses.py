@@ -265,3 +265,12 @@ def test_status_messages_log(orders):
     assert [r["order_id"] for r in sm.list_status_messages(63)] == [63]
     sm.mark_status_message_deleted(sm.list_status_messages(62)[0]["id"])
     assert sm.list_status_messages(62) == []
+
+
+def test_test_orders_can_be_excluded(orders):
+    a, b = (_make_order(orders, user_id=i) for i in (1, 2))
+    orders.update_order_fields(b, {"is_test": 1})
+    assert orders.count_orders_by_status()["all"] == 2
+    assert orders.count_orders_by_status(include_test=False)["all"] == 1
+    assert {r["id"] for r in orders.list_orders(include_test=False)} == {a}
+    assert {r["id"] for r in orders.list_orders()} == {a, b}
