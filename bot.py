@@ -2820,13 +2820,13 @@ async def handle_update_order(request: web.Request):
     return web.json_response({"ok": True}, headers=cors_headers(request))
 
 
-async def _review_item_names(order_id: int) -> list[str]:
+async def _review_item_names(order_id: int) -> list[tuple[str, int]]:
     """Назви товарів замовлення — щоб у запиті відгуку було зрозуміло, про що мова (без номера)."""
     try:
         _, items = await run_db(get_order_with_items, int(order_id))
     except Exception:
         return []
-    return [str(i.get("product_name") or "") for i in items if not i.get("is_gift") and int(i.get("product_id") or 0) > 0]
+    return [(str(i.get("product_name") or ""), int(i["product_id"])) for i in items if not i.get("is_gift") and int(i.get("product_id") or 0) > 0]
 
 
 async def _send_test_review_request(order: dict) -> None:

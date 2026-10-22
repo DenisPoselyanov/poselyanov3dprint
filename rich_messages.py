@@ -980,17 +980,22 @@ def _bonus_line(bonus: dict | None) -> str:
     )
 
 
-def _review_items_line(names: list[str] | None) -> str:
-    names = [n for n in (names or []) if n]
-    if not names:
-        return ""
-    shown = ", ".join(f"<b>{escape(n)}</b>" for n in names[:3])
-    if len(names) > 3:
-        shown += f" і ще {len(names) - 3}"
+def _review_items_line(names: list | None) -> str:
+    """names: назви або пари (назва, product_id) — з id назва стає посиланням на товар у магазині."""
+    parts = []
+    for item in names or []:
+        name, pid = (item if isinstance(item, (tuple, list)) else (item, None))
+        if not name:
+            continue
+        label = escape(str(name))
+        parts.append(f'<a href="{BOT_LINK_BASE}{int(pid)}"><b>{label}</b></a>' if pid else f"<b>{label}</b>")
+    shown = ", ".join(parts[:3])
+    if len(parts) > 3:
+        shown += f" і ще {len(parts) - 3}"
     return shown
 
 
-def build_review_request(order_id: int, bonus: dict | None = None, names: list[str] | None = None) -> str:
+def build_review_request(order_id: int, bonus: dict | None = None, names: list | None = None) -> str:
     return build_notice(
         "⭐",
         "Як тобі покупка?",
@@ -1001,7 +1006,7 @@ def build_review_request(order_id: int, bonus: dict | None = None, names: list[s
     )
 
 
-def build_review_reminder(order_id: int, bonus: dict | None = None, names: list[str] | None = None) -> str:
+def build_review_reminder(order_id: int, bonus: dict | None = None, names: list | None = None) -> str:
     return build_notice(
         "⭐",
         "Поділишся враженням?",
