@@ -149,3 +149,74 @@ def test_review_request_skipped_when_everything_reviewed(env):
     conn.commit()
     conn.close()
     assert reviews.orders_due_review_request() == []
+
+
+def _age(order_id, **cols):
+    from db_core import db_connect
+
+    conn = db_connect()
+    for col, days in cols.items():
+        conn.execute(f"UPDATE orders SET {col} = datetime('now', '-{days} days') WHERE id = ?", (order_id,))
+    conn.commit()
+    conn.close()
+
+
+def test_review_request_due_after_one_day(env):
+    orders, reviews, _ = env
+    oid = _delivered_order(orders)
+    _age(oid, delivered_at=0)
+    assert reviews.orders_due_review_request(1) == []  # ще не добу
+    _age(oid, delivered_at=2)
+    assert reviews.orders_due_review_request() == [{"order_id": oid, "user_id": 7}]
+
+
+def test_review_reminder_once_and_only_without_review(env):
+    orders, reviews, _ = env
+    oid = _delivered_order(orders)
+    _age(oid, delivered_at=8, review_requested_at=6)
+    assert reviews.orders_due_review_reminder() == [{"order_id": oid, "user_id": 7}]
+    reviews.mark_review_reminded(oid)
+    assert reviews.orders_due_review_reminder() == []
+
+    other = _delivered_order(orders, product_id=12)
+    _age(other, delivered_at=8, review_requested_at=6)
+    reviews.submit_review(7, "І", other, 12, 5)
+    assert reviews.orders_due_review_reminder() == []  # відгук уже є
+
+    stale = _delivered_order(orders, product_id=13)
+    _age(stale, delivered_at=60, review_requested_at=50)
+    assert reviews.orders_due_review_reminder() == []  # надто давнє замовлення
+
+    fresh = _delivered_order(orders, product_id=14)
+    _age(fresh, delivered_at=3, review_requested_at=2)
+    assert reviews.orders_due_review_reminder() == []  # запит був нещодавно
+
+
+def test_review_bonus_percent_rules(env):
+    _, reviews, _ = env
+    assert reviews.review_bonus_percent({"text": "Супер", "photos": []}) == 0
+    assert reviews.review_bonus_percent({"text": "Дуже гарна якість друку, дякую", "photos": []}) == 5
+    assert reviews.review_bonus_percent({"text": "", "photos": ["u"]}) == 10
+
+
+def test_grant_bonus_only_when_approved_once_per_order(env):
+    orders, reviews, settings = env
+    oid = _delivered_order(orders)
+    result = reviews.submit_review(7, "Іван", oid, 11, 5, "Дуже гарна якість друку, дякую", [GOOD_PHOTO])
+    assert reviews.grant_review_bonus(result["id"]) is None  # ще на модерації
+    reviews.set_review_status(result["id"], "approved")
+    bonus = reviews.grant_review_bonus(result["id"])
+    assert bonus["percent"] == 10 and bonus["user_id"] == 7 and bonus["code"].startswith("P")
+    from services.coupons import get_coupon
+
+    coupon = get_coupon(bonus["code"])
+    assert coupon["value"] == 10 and coupon.get("allowed_user_ids") == [7]
+    assert reviews.grant_review_bonus(result["id"]) is None  # вдруге не видаємо
+
+
+def test_no_bonus_for_rating_only_review(env):
+    orders, reviews, settings = env
+    settings.set_setting(settings.REVIEWS_AUTO_PUBLISH_KEY, "1")
+    oid = _delivered_order(orders)
+    result = reviews.submit_review(7, "Іван", oid, 11, 5, "ок")
+    assert reviews.grant_review_bonus(result["id"]) is None

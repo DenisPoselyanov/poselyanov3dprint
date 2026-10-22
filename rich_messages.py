@@ -112,7 +112,10 @@ CLIENT_STATUS_TEXT = {
         "Замовлення №{id} відправлено",
         "ТТН: <code>{ttn}</code>\n<a href=\"" + NP_TRACKING_URL + "{ttn}\">Відстежити на novaposhta.ua</a>",
     ),
-    "delivered": ("Замовлення №{id} отримано", "Дякую, що обрав нас 💙"),
+    "delivered": (
+        "Замовлення №{id} отримано",
+        "Дякую, що обрав нас 💙\nЯк тобі? Оціни одним дотиком — за відгук із фото дарую купон на знижку.",
+    ),
     "cancelled": ("Замовлення №{id} скасовано", "Якщо є питання — напиши Денису."),
 }
 
@@ -963,13 +966,43 @@ def build_error_notice(reason: str, *hints: str, title: str = "Не вдалос
     return build_notice("❌", title, escape(reason), items=[escape(h) for h in hints] or None)
 
 
-def build_review_request(order_id: int) -> str:
+def _bonus_line(bonus: dict | None) -> str:
+    if not bonus:
+        return ""
+    return (
+        f"🎁 Подяка: купон −{int(bonus['photo_percent'])}% за відгук із фото "
+        f"або −{int(bonus['text_percent'])}% за змістовний текст."
+    )
+
+
+def build_review_request(order_id: int, bonus: dict | None = None) -> str:
     return build_notice(
         "⭐",
         f"Як тобі замовлення №{int(order_id)}?",
-        "Буду вдячний за відгук — він допомагає іншим обрати.",
+        "Постав оцінку одним дотиком — відгук допомагає іншим обрати.",
+        _bonus_line(bonus),
         footer=f'<a href="{DENIS_LINK}">Денис</a>',
     )
+
+
+def build_review_reminder(order_id: int, bonus: dict | None = None) -> str:
+    return build_notice(
+        "⭐",
+        f"Замовлення №{int(order_id)}: поділишся враженням?",
+        "Це займе хвилину, а мені — справжній орієнтир, що покращувати.",
+        _bonus_line(bonus),
+        footer=f'<a href="{DENIS_LINK}">Денис</a>',
+    )
+
+
+def build_review_bonus(percent: int, code: str, expires_at: str = "") -> str:
+    lines = [
+        f"Дякую за відгук! Тримай персональний купон <b>−{int(percent)}%</b> на наступне замовлення.",
+        f"Код: <code>{escape(code)}</code>",
+    ]
+    if expires_at:
+        lines.append(f"Діє до {escape(expires_at)}, одноразовий — лише для тебе.")
+    return build_notice("🎁", "Купон за відгук", *lines, footer=f'<a href="{DENIS_LINK}">Денис</a>')
 
 
 def build_manual_client_message(text: str) -> str:

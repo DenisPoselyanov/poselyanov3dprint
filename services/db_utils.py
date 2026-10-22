@@ -61,6 +61,8 @@ ORDER_EXTRA_COLUMNS = {
     "gift_product_id": "BIGINT",
     "delivered_at": "TIMESTAMPTZ",
     "review_requested_at": "TIMESTAMPTZ",
+    "review_reminded_at": "TIMESTAMPTZ",
+    "review_bonus_code": "TEXT DEFAULT ''",
 }
 
 ORDER_ITEM_EXTRA_COLUMNS = {

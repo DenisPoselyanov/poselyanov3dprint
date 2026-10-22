@@ -201,7 +201,15 @@ PHOTOS_MAX = 3
 # Приймаємо лише URL з нашого акаунта Cloudinary і лише власні фото користувача.
 PHOTO_HOST = "res.cloudinary.com"
 PHOTO_FOLDER = "poselyanov3dprint"
-REVIEW_REQUEST_DELAY_DAYS = 3
+REVIEW_REQUEST_DELAY_DAYS = 1
+REVIEW_REMINDER_DELAY_DAYS = 5   # через стільки днів після запиту — одне нагадування
+REVIEW_REMINDER_MAX_AGE_DAYS = 30  # старі доставлені замовлення не турбуємо
+# Бонус за відгук: персональний одноразовий купон, один на замовлення.
+# Не залежить від оцінки — платимо за зміст, а не за позитив.
+BONUS_TEXT_MIN_CHARS = 20
+BONUS_TEXT_PERCENT = 5
+BONUS_PHOTO_PERCENT = 10
+BONUS_VALID_DAYS = 30
 
 
 class ReviewError(Exception):
@@ -500,27 +508,32 @@ def delete_review(review_id: int) -> bool:
 
 # ─── ЗАПИТ ВІДГУКУ ПІСЛЯ ДОСТАВКИ ──────────────────────────────
 
-def orders_due_review_request(days: int = REVIEW_REQUEST_DELAY_DAYS) -> list[dict]:
-    """Доставлені `days` днів тому замовлення, яким ще не слали запит і де є що оцінити."""
-    cutoff = (
-        f"NOW() - INTERVAL '{int(days)} days'" if is_postgres() else f"datetime('now', '-{int(days)} days')"
+def _days_ago(days: int) -> str:
+    return f"NOW() - INTERVAL '{int(days)} days'" if is_postgres() else f"datetime('now', '-{int(days)} days')"
+
+
+_UNREVIEWED_ITEM_EXISTS = """
+    EXISTS (
+        SELECT 1 FROM order_items oi
+        WHERE oi.order_id = o.id AND oi.product_id > 0
+          AND NOT EXISTS (
+              SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.product_id = oi.product_id
+          )
     )
+"""
+
+
+def _due_orders(where: str) -> list[dict]:
     conn = db_connect()
     try:
         rows = conn.execute(
             _sql(f"""
                 SELECT o.id, o.user_id
                 FROM orders o
-                WHERE o.status = 'delivered' AND o.review_requested_at IS NULL
-                  AND o.delivered_at IS NOT NULL AND o.delivered_at <= {cutoff}
+                WHERE o.status = 'delivered' AND o.delivered_at IS NOT NULL
                   AND o.user_id IS NOT NULL AND o.user_id > 0
-                  AND EXISTS (
-                      SELECT 1 FROM order_items oi
-                      WHERE oi.order_id = o.id AND oi.product_id > 0
-                        AND NOT EXISTS (
-                            SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.product_id = oi.product_id
-                        )
-                  )
+                  AND {where}
+                  AND {_UNREVIEWED_ITEM_EXISTS}
                 ORDER BY o.id
                 LIMIT 50
             """)
@@ -530,11 +543,95 @@ def orders_due_review_request(days: int = REVIEW_REQUEST_DELAY_DAYS) -> list[dic
     return [{"order_id": int(r[0]), "user_id": int(r[1])} for r in rows]
 
 
-def mark_review_requested(order_id: int) -> None:
+def orders_due_review_request(days: int = REVIEW_REQUEST_DELAY_DAYS) -> list[dict]:
+    """Доставлені `days` днів тому замовлення, яким ще не слали запит і де є що оцінити."""
+    return _due_orders(f"o.review_requested_at IS NULL AND o.delivered_at <= {_days_ago(days)}")
+
+
+def orders_due_review_reminder(days: int = REVIEW_REMINDER_DELAY_DAYS) -> list[dict]:
+    """Одне нагадування: запит був `days` днів тому, відгуку досі немає."""
+    return _due_orders(
+        f"o.review_requested_at IS NOT NULL AND o.review_requested_at <= {_days_ago(days)} "
+        f"AND o.review_reminded_at IS NULL AND o.delivered_at >= {_days_ago(REVIEW_REMINDER_MAX_AGE_DAYS)}"
+    )
+
+
+def _mark_order_time(column: str, order_id: int) -> None:
     now_expr = "NOW()" if is_postgres() else "CURRENT_TIMESTAMP"
     conn = db_connect()
     try:
-        conn.execute(_sql(f"UPDATE orders SET review_requested_at = {now_expr} WHERE id = ?"), (int(order_id),))
+        conn.execute(_sql(f"UPDATE orders SET {column} = {now_expr} WHERE id = ?"), (int(order_id),))
         conn.commit()
     finally:
         conn.close()
+
+
+def mark_review_requested(order_id: int) -> None:
+    _mark_order_time("review_requested_at", order_id)
+
+
+def mark_review_reminded(order_id: int) -> None:
+    _mark_order_time("review_reminded_at", order_id)
+
+
+# ─── БОНУС ЗА ВІДГУК ─────────────────────────────────────────────
+
+def bonus_config() -> dict:
+    """Умови бонусу для форми відгуку й повідомлень."""
+    return {
+        "text_percent": BONUS_TEXT_PERCENT,
+        "photo_percent": BONUS_PHOTO_PERCENT,
+        "text_min": BONUS_TEXT_MIN_CHARS,
+        "valid_days": BONUS_VALID_DAYS,
+    }
+
+
+def review_bonus_percent(review: dict) -> int:
+    """Знижка за відгук: з фото — більша, зі змістовним текстом — менша, лише зірки — без бонусу."""
+    if review.get("photos"):
+        return BONUS_PHOTO_PERCENT
+    if len(str(review.get("text") or "").strip()) >= BONUS_TEXT_MIN_CHARS:
+        return BONUS_TEXT_PERCENT
+    return 0
+
+
+def grant_review_bonus(review_id: int) -> dict | None:
+    """Видає персональний купон за опублікований відгук. Один бонус на замовлення, ідемпотентно:
+    замовлення «захоплюється» одним UPDATE, тож повторна публікація чи гонка двох запитів купона не задвоять.
+    Повертає {"code","percent","expires_at","link","user_id","order_id"} або None."""
+    from services.coupons import create_personal_coupon
+
+    review = get_review(review_id)
+    if not review or review["status"] != "approved":
+        return None
+    user_id, order_id = int(review.get("user_id") or 0), int(review.get("order_id") or 0)
+    percent = review_bonus_percent(review)
+    if user_id <= 0 or order_id <= 0 or percent <= 0:
+        return None
+
+    conn = db_connect()
+    try:
+        cur = conn.execute(
+            _sql("UPDATE orders SET review_bonus_code = 'pending' WHERE id = ? AND COALESCE(review_bonus_code, '') = ''"),
+            (order_id,),
+        )
+        conn.commit()
+        if cur.rowcount != 1:
+            return None
+    finally:
+        conn.close()
+
+    coupon = create_personal_coupon(user_id, percent=percent, days=BONUS_VALID_DAYS)
+    conn = db_connect()
+    try:
+        conn.execute(
+            _sql("UPDATE orders SET review_bonus_code = ? WHERE id = ?"),
+            (coupon.get("code", "") if coupon.get("ok") else "", order_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    if not coupon.get("ok"):
+        logger.warning("Бонус за відгук #%s: не вдалось створити купон: %s", review_id, coupon.get("error"))
+        return None
+    return {**coupon, "order_id": order_id}

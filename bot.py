@@ -69,6 +69,8 @@ from rich_messages import (
     build_notice,
     build_review_moderation,
     build_review_request,
+    build_review_reminder,
+    build_review_bonus,
     build_stats,
     edit_rich_message,
     escape,
@@ -182,7 +184,11 @@ from services.reviews import (
     set_admin_reply,
     get_review,
     mark_review_requested,
+    mark_review_reminded,
     orders_due_review_request,
+    orders_due_review_reminder,
+    grant_review_bonus,
+    bonus_config,
     pending_reviews,
     product_reviews,
     set_review_status,
@@ -2828,7 +2834,14 @@ async def _notify_client_status(order: dict, status: str, ttn: str | None = None
     if user_id <= 0 or not html_text:
         return False
     try:
-        message_id = await send_rich_message(bot_app.bot, user_id, html_text)
+        markup = None
+        if status == "delivered":
+            try:
+                if any(p["order_id"] == int(order["id"]) for p in await run_db(pending_reviews, user_id)):
+                    markup = _review_request_markup(int(order["id"]))
+            except Exception:
+                logger.warning("Не вдалось перевірити відгуки для кнопки в #%s", order.get("id"), exc_info=True)
+        message_id = await send_rich_message(bot_app.bot, user_id, html_text, reply_markup=markup)
         try:
             await run_db(record_status_message, int(order["id"]), user_id, message_id, status)
         except Exception as e:
@@ -2860,7 +2873,7 @@ async def handle_get_pending_reviews(request: web.Request):
     if err is not None:
         return err
     items = await run_db(pending_reviews, auth.get("user_id") or 0)
-    return web.json_response({"items": items}, headers=cors_headers(request))
+    return web.json_response({"items": items, "bonus": bonus_config()}, headers=cors_headers(request))
 
 
 def _share_photo_url(url: str) -> str:
@@ -2977,6 +2990,29 @@ def _review_moderation_markup(review_id: int, status: str) -> InlineKeyboardMark
     return InlineKeyboardMarkup([row])
 
 
+async def _award_review_bonus(review_id: int) -> dict | None:
+    """Купон за опублікований відгук: видаємо (раз на замовлення) і дублюємо клієнту в бот."""
+    try:
+        bonus = await run_db(grant_review_bonus, review_id)
+    except Exception:
+        logger.exception("Бонус за відгук #%s: помилка видачі", review_id)
+        return None
+    if not bonus:
+        return None
+    try:
+        markup = None
+        if bonus.get("link"):
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛍 До магазину", url=bonus["link"])]])
+        await send_rich_message(
+            bot_app.bot, bonus["user_id"],
+            build_review_bonus(bonus["percent"], bonus["code"], bonus["expires_at"]),
+            reply_markup=markup,
+        )
+    except Exception as e:
+        logger.warning("Купон за відгук #%s не доставлено клієнту: %s", review_id, e)
+    return bonus
+
+
 async def handle_post_review(request: web.Request):
     """Відгук покупця: лише на товар із доставленого замовлення, один на пару (замовлення, товар)."""
     try:
@@ -3017,6 +3053,10 @@ async def handle_post_review(request: web.Request):
             )
         except Exception as e:
             logger.warning("Не вдалось надіслати відгук #%s на модерацію: %s", result["id"], e)
+    if result["status"] == "approved":
+        bonus = await _award_review_bonus(result["id"])
+        if bonus:
+            result["bonus"] = {k: bonus[k] for k in ("code", "percent", "expires_at")}
     return web.json_response({"ok": True, **result}, headers=cors_headers(request))
 
 
@@ -3088,6 +3128,8 @@ async def handle_set_admin_review_status(request: web.Request):
     if not await run_db(get_review, review_id):
         return _review_not_found(request)
     await run_db(set_review_status, review_id, status)
+    if status == "approved":
+        await _award_review_bonus(review_id)
     return web.json_response(
         {"ok": True, "counts": await run_db(admin_review_counts)}, headers=cors_headers(request)
     )
@@ -3132,34 +3174,46 @@ async def review_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status = "approved" if action == "pub" else "hidden"
     if not await run_db(set_review_status, review_id, status):
         return
+    if status == "approved":
+        await _award_review_bonus(review_id)
     try:
         await query.edit_message_reply_markup(reply_markup=_review_moderation_markup(review_id, status))
     except Exception as e:
         logger.warning("review_action: не вдалось оновити кнопки #%s: %s", review_id, e)
 
 
-async def send_due_review_requests() -> int:
-    """Запит відгуку через 3 дні після `delivered`. Позначаємо навіть при помилці, щоб не спамити."""
-    due = await run_db(orders_due_review_request)
+def _review_request_markup(order_id: int) -> InlineKeyboardMarkup:
+    """Оцінка одним дотиком: кнопка зірок відкриває форму відгуку з уже обраною оцінкою."""
+    base = f"https://t.me/{config.BOT_USERNAME}?startapp=review_{int(order_id)}"
+    stars = [InlineKeyboardButton(f"{n}⭐", url=f"{base}_{n}") for n in range(1, 6)]
+    return InlineKeyboardMarkup([stars, [InlineKeyboardButton("✍️ Написати відгук", url=base)]])
+
+
+async def _send_review_nudges(due: list[dict], mark, build) -> int:
     sent = 0
     for item in due:
-        await run_db(mark_review_requested, item["order_id"])
-        markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton(
-                "⭐ Оцінити",
-                url=f"https://t.me/poselyanov3dprint_bot?startapp=review_{item['order_id']}",
-            )
-        ]])
+        await run_db(mark, item["order_id"])  # позначаємо навіть при помилці, щоб не спамити
         try:
             await send_rich_message(
                 bot_app.bot,
                 item["user_id"],
-                build_review_request(item['order_id']),
-                reply_markup=markup,
+                build(item["order_id"], bonus_config()),
+                reply_markup=_review_request_markup(item["order_id"]),
             )
             sent += 1
         except Exception as e:
             logger.warning("Запит відгуку для #%s не доставлено: %s", item["order_id"], e)
+    return sent
+
+
+async def send_due_review_requests() -> int:
+    """Запит відгуку через добу після `delivered`, далі — одне нагадування, якщо відгуку немає."""
+    sent = await _send_review_nudges(
+        await run_db(orders_due_review_request), mark_review_requested, build_review_request
+    )
+    sent += await _send_review_nudges(
+        await run_db(orders_due_review_reminder), mark_review_reminded, build_review_reminder
+    )
     return sent
 
 
