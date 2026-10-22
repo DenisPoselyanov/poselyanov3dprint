@@ -30,21 +30,20 @@ def validate_telegram_init_data(init_data: str) -> dict | None:
         if not received_hash:
             return None
 
-        auth_date_raw = parsed.get("auth_date")
-        if auth_date_raw:
-            try:
-                auth_ts = int(auth_date_raw)
-                age = datetime.now(timezone.utc).timestamp() - auth_ts
-                if age > config.INIT_DATA_MAX_AGE_SEC:
-                    logger.warning("initData expired (age=%ss)", int(age))
-                    return None
-            except (TypeError, ValueError):
-                return None
+        # Telegram завжди підписує auth_date; без нього не можна перевірити строк дії
+        try:
+            auth_ts = int(parsed.get("auth_date") or "")
+        except (TypeError, ValueError):
+            return None
+        age = datetime.now(timezone.utc).timestamp() - auth_ts
+        if age > config.INIT_DATA_MAX_AGE_SEC:
+            logger.warning("initData expired (age=%ss)", int(age))
+            return None
 
         check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
         secret = hmac.new(b"WebAppData", config.BOT_TOKEN.encode(), hashlib.sha256).digest()
         calc = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
-        if calc != received_hash:
+        if not hmac.compare_digest(calc, received_hash):
             return None
 
         user = json.loads(parsed.get("user", "{}")) if parsed.get("user") else {}

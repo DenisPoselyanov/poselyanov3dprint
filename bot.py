@@ -252,7 +252,7 @@ from handlers.register import (
     configure_bot_commands,
     register_telegram_handlers,
 )
-from handlers.rate_limit import allow_delivery_lookup, allow_event, allow_review_upload, command_cooldown
+from handlers.rate_limit import allow_coupon_check, allow_delivery_lookup, allow_event, allow_review_upload, command_cooldown
 from routes.setup import register_http_routes
 import services.delivery as delivery
 from services.manual_orders import orders_to_csv, parse_manual_order
@@ -2006,6 +2006,14 @@ async def _deliver_order_notifications(
 
 
 #Новий HTTP хендлер для прийому замовлень з веб-додатку
+def _safe_int(value, default: int = 0) -> int:
+    """int() від даних клієнта без 500 на сміттєвому значенні."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 async def handle_order(request):
     try:
         data = await request.json()
@@ -2031,7 +2039,7 @@ async def handle_order(request):
     username = data.get("user") or (f"@{tg_username}" if tg_username else "невідомо")
 
     items = data.get("items", [])
-    client_total = int(data.get("total_price", 0))
+    client_total = _safe_int(data.get("total_price"))
     comment = (data.get("comment") or "").strip()
     gift = data.get("gift")
     coupon_code = (data.get("coupon_code") or "").strip() or None
@@ -2220,8 +2228,9 @@ async def handle_static(request: web.Request):
         
         content = file.read_bytes()
         return web.Response(body=content, content_type=content_type, headers=cors_headers(request))
-    except Exception as e:
-        return web.Response(status=500, text=str(e), headers=cors_headers(request))
+    except Exception:
+        logger.exception("static file %s failed", file_path)
+        return web.Response(status=500, text="Internal error", headers=cors_headers(request))
 
 async def handle_admin_panel(request: web.Request):
     """Отримати HTML адмін панелі.
@@ -2288,7 +2297,7 @@ async def handle_get_filaments(request: web.Request):
 
 async def handle_get_product(request: web.Request):
     """Отримати товар за ID"""
-    product_id = int(request.match_info.get('id', 0))
+    product_id = _product_id_param(request)
     is_admin = _is_admin_viewer(request)
     # Адмін бачить і приховані та архівні товари (редактор); покупцям — лише активні.
     product = get_admin_product(product_id) if is_admin else get_product_by_id(product_id)
@@ -3008,9 +3017,10 @@ async def handle_upload_review_photo(request: web.Request):
                 headers=cors_headers(request),
             )
         content_type = file_field.content_type or ""
-        if not content_type.startswith("image/") or is_animated_image(file_data, content_type):
+        # Pillow розбирає файл покупця — у потоці, щоб не блокувати сервер
+        if not content_type.startswith("image/") or await asyncio.to_thread(is_animated_image, file_data, content_type):
             return web.json_response({"ok": False, "error": "Потрібне звичайне фото"}, status=400, headers=cors_headers(request))
-        content_type = normalize_image_content_type(file_data, content_type)
+        content_type = await asyncio.to_thread(normalize_image_content_type, file_data, content_type)
         result = await upload_photo_to_cloudinary(file_data, f"review_{user_id}", content_type)
         if not result.get("ok"):
             return web.json_response({"ok": False, "error": "Не вдалось завантажити фото"}, status=400, headers=cors_headers(request))
@@ -4616,7 +4626,13 @@ async def handle_check_coupon(request):
 
     code = (data.get("code") or "").strip()
     user_id = auth.get("user_id") or data.get("user_id", 0)
-    cart_total = int(data.get("cart_total", 0))
+    cart_total = _safe_int(data.get("cart_total"))
+    if code and not allow_coupon_check(_safe_int(user_id)):
+        return web.json_response(
+            {"valid": False, "message": "Забагато спроб. Спробуй за хвилину"},
+            status=429,
+            headers=cors_headers(request),
+        )
 
     channel_block = False
     coupon_channel = None

@@ -98,9 +98,29 @@ def allow_review_upload(user_id: int) -> bool:
     return True
 
 
+_COUPON_MAX_PER_WINDOW = 20
+_coupon_calls: dict[int, list[float]] = {}
+
+
+def allow_coupon_check(user_id: int) -> bool:
+    """Перевірка купону: не більше 20 спроб на користувача за хвилину — щоб коди не підбирали перебором."""
+    now = time.monotonic()
+    recent = [t for t in _coupon_calls.get(user_id, ()) if now - t < _EVENT_WINDOW_SEC]
+    if len(recent) >= _COUPON_MAX_PER_WINDOW:
+        _coupon_calls[user_id] = recent
+        return False
+    recent.append(now)
+    _coupon_calls[user_id] = recent
+    if len(_coupon_calls) > 10_000:
+        for uid in [u for u, ts in _coupon_calls.items() if not ts or now - ts[-1] >= _EVENT_WINDOW_SEC]:
+            _coupon_calls.pop(uid, None)
+    return True
+
+
 def reset_rate_limits() -> None:
     """Скидає in-memory cooldown (корисно для тестів)."""
     _last_call.clear()
     _event_calls.clear()
     _upload_calls.clear()
     _lookup_calls.clear()
+    _coupon_calls.clear()

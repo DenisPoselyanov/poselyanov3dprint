@@ -69,3 +69,36 @@ def test_format_date_escapes_invalid_input():
 
 def test_format_date_parses_valid_iso_date():
     assert format_date("2026-06-26") == "26 чер 2026"
+
+
+def _signed_init_data(token: str, fields: dict) -> str:
+    import hashlib
+    import hmac
+    from urllib.parse import urlencode
+
+    check = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()))
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    return urlencode({**fields, "hash": hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()})
+
+
+def test_init_data_without_auth_date_is_rejected(monkeypatch):
+    import time
+
+    import auth
+    import config
+
+    monkeypatch.setattr(config, "BOT_TOKEN", "123:test")
+    user = '{"id":42,"first_name":"A"}'
+    assert auth.validate_telegram_init_data(_signed_init_data("123:test", {"user": user})) is None
+    ok = auth.validate_telegram_init_data(
+        _signed_init_data("123:test", {"user": user, "auth_date": str(int(time.time()))})
+    )
+    assert ok and ok["user_id"] == 42
+
+
+def test_coupon_check_is_rate_limited():
+    from handlers.rate_limit import allow_coupon_check
+
+    assert all(allow_coupon_check(7) for _ in range(20))
+    assert not allow_coupon_check(7)
+    assert allow_coupon_check(8)
