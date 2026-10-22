@@ -309,13 +309,13 @@
   .rev-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 18px 12px; }
   .rev-head h3 { font-size: 19px; font-weight: 800; line-height: 1.2; }
   .rev-head p { font-size: 13px; color: var(--ink-3); margin-top: 3px; }
-  .rev-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 16px 14px; display: grid; gap: 10px; align-content: start; }
+  .rev-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 1px 16px 14px; display: grid; gap: 10px; align-content: start; }
   .rev-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--card-bg); display: grid; gap: 8px; }
   .rev-foot .btn { width: 100%; min-height: 50px; font-size: 15px; }
-  .rev-bonus { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--amber-soft); color: var(--amber-ink, var(--amber)); font-size: 13px; line-height: 1.35; }
+  .rev-bonus { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--blue-soft); color: var(--blue-ink); font-size: 13px; line-height: 1.35; }
   .rev-bonus svg.i { width: 20px; height: 20px; flex: 0 0 auto; }
   .rev-item { padding: 12px; border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); transition: box-shadow .2s ease; }
-  .rev-item.rated { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--amber) 55%, transparent); }
+  .rev-item.rated { box-shadow: 0 0 0 1px color-mix(in srgb, var(--blue) 28%, var(--line)); }
   .rev-row { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; }
   .rev-th { position: relative; width: 64px; height: 64px; border-radius: 12px; overflow: hidden; border: 0; padding: 0; background: var(--surface-2); display: grid; place-items: center; font-size: 26px; cursor: pointer; transition: transform .15s ease; }
   .rev-th:active { transform: scale(.94); }
@@ -329,11 +329,11 @@
   .rev-stars-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
   .rev-stars { display: flex; gap: 0; margin-left: -4px; }
   .rev-stars button { border: 0; background: none; padding: 4px; color: var(--surface-3); cursor: pointer; transition: color .15s ease; -webkit-tap-highlight-color: transparent; }
-  .rev-stars button.on { color: var(--amber); }
+  .rev-stars button.on { color: var(--blue); }
   .rev-stars button.pop { animation: starPop .32s cubic-bezier(.34,1.56,.64,1); }
   @keyframes starPop { 50% { transform: scale(1.35); } }
   .rev-stars svg.i { width: 28px; height: 28px; fill: currentColor; stroke: currentColor; }
-  .rev-rlabel { font-size: 12px; font-weight: 700; color: var(--amber-ink, var(--amber)); white-space: nowrap; }
+  .rev-rlabel { font-size: 12px; font-weight: 700; color: var(--blue-ink); white-space: nowrap; }
   .rev-extra { display: grid; gap: 10px; margin-top: 12px; animation: revIn .25s ease; }
   @keyframes revIn { from { opacity: 0; transform: translateY(-6px); } }
   .rev-text { width: 100%; min-height: 76px; padding: 10px 12px; border: 1.5px solid var(--line-2); border-radius: 12px; background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; resize: vertical; transition: border-color .15s; }
@@ -347,7 +347,7 @@
   .rev-photos .ph button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; line-height: 1; cursor: pointer; z-index: 2; }
   .rev-photos .add { border: 1.5px dashed var(--line-2); display: grid; place-items: center; align-content: center; gap: 2px; color: var(--ink-3); cursor: pointer; background: none; font-size: 11px; font-weight: 600; }
   .rev-photos .add svg.i { width: 20px; height: 20px; }
-  .rev-badge { position: absolute; top: -7px; right: -7px; padding: 2px 6px; border-radius: 999px; background: var(--amber); color: #1a1200; font: 800 10px/1.2 inherit; font-style: normal; }
+  .rev-badge { position: absolute; top: -7px; right: -7px; padding: 2px 6px; border-radius: 999px; background: var(--blue); color: #fff; font: 800 10px/1.2 inherit; font-style: normal; }
   .rev-photos .add { overflow: visible; }
   .rev-photos .add.wide { flex: 1; width: auto; height: 46px; display: flex; flex-direction: row; justify-content: center; gap: 8px; font-size: 13px; }
   .rev-photos .add.wide .rev-badge { position: static; margin-left: 2px; }
@@ -356,17 +356,17 @@
   .rev-count { font-size: 12px; color: var(--ink-3); margin-top: -4px; display: flex; align-items: center; gap: 4px; transition: color .2s; }
   .rev-count.ok { color: #5fdc93; font-weight: 600; }
   .rev-count svg.i { width: 14px; height: 14px; }
-  .rev-ph-hint { font-size: 12px; color: var(--amber-ink, var(--amber)); font-weight: 600; max-width: 170px; line-height: 1.3; }
-  .rev-coupon { display: grid; gap: 4px; justify-items: center; padding: 14px 16px; border: 1.5px dashed var(--amber); border-radius: 14px; background: var(--amber-soft); width: 100%; }
+  .rev-ph-hint { font-size: 12px; color: var(--blue-ink); font-weight: 600; max-width: 170px; line-height: 1.3; }
+  .rev-coupon { display: grid; gap: 4px; justify-items: center; padding: 14px 16px; border: 1.5px dashed var(--blue); border-radius: 14px; background: var(--blue-soft); width: 100%; }
   .rev-coupon code { font-size: 24px; font-weight: 800; letter-spacing: 2px; color: var(--ink); }
   .rev-coupon small { color: var(--ink-3); }
   .rev-done { text-align: center; padding: 18px 0 6px; display: grid; gap: 10px; justify-items: center; }
   .rev-done .success-check { margin-bottom: 0; }
   .psheet.over-rev { z-index: 210; }
   .ord-card.flash { animation: ordFlash 1.6s ease; }
-  @keyframes ordFlash { 0%, 40% { box-shadow: 0 0 0 2px var(--amber); } }
+  @keyframes ordFlash { 0%, 40% { box-shadow: 0 0 0 2px var(--blue); } }
   /* Плашка «Оціни покупку» на головній */
-  .rev-nudge { position: relative; margin: 0 var(--gx) 14px; padding: 14px 14px 12px; border: 1px solid var(--line); border-radius: var(--r); background: linear-gradient(135deg, var(--amber-soft), var(--surface) 60%); display: grid; gap: 12px; overflow: hidden; animation: revIn .3s ease; }
+  .rev-nudge { position: relative; margin: 0 var(--gx) 14px; padding: 14px 14px 12px; border: 1px solid var(--line); border-radius: var(--r); background: linear-gradient(135deg, var(--blue-soft), var(--surface) 60%); display: grid; gap: 12px; overflow: hidden; animation: revIn .3s ease; }
   .rev-nudge-x { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: 0; background: none; color: var(--ink-3); font-size: 13px; cursor: pointer; z-index: 1; }
   .rev-nudge-head { display: flex; gap: 12px; align-items: center; padding: 0 26px 0 0; min-width: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
   .rev-nudge-head:active { opacity: .75; }
@@ -375,15 +375,15 @@
   .rev-nudge-th span + span { margin-left: -16px; }
   .rev-nudge-th img { width: 100%; height: 100%; object-fit: cover; }
   .rev-nudge-txt { min-width: 0; display: grid; gap: 1px; }
-  .rev-nudge-txt small { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--amber-ink, var(--amber)); }
+  .rev-nudge-txt small { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--blue-ink); }
   .rev-nudge-txt b { font-size: 15px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rev-nudge-txt span { font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 2px; white-space: nowrap; }
   .rev-nudge-txt span svg.i { width: 12px; height: 12px; transform: rotate(180deg); }
   .rev-nudge-stars { display: flex; justify-content: space-between; gap: 4px; padding: 6px 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
-  .rev-nudge-stars button { flex: 1; border: 0; background: none; padding: 2px 0; color: var(--amber); cursor: pointer; display: grid; place-items: center; transition: transform .12s; -webkit-tap-highlight-color: transparent; }
+  .rev-nudge-stars button { flex: 1; border: 0; background: none; padding: 2px 0; color: var(--blue); cursor: pointer; display: grid; place-items: center; transition: transform .12s; -webkit-tap-highlight-color: transparent; }
   .rev-nudge-stars button:active { transform: scale(1.25); }
   .rev-nudge-stars svg.i { width: 30px; height: 30px; fill: none; stroke: currentColor; }
-  .rev-nudge-gift { justify-self: start; display: inline-flex; gap: 6px; align-items: center; padding: 5px 10px; border-radius: 999px; background: var(--amber-soft); color: var(--amber-ink, var(--amber)); font-size: 12px; font-weight: 600; }
+  .rev-nudge-gift { justify-self: start; display: inline-flex; gap: 6px; align-items: center; padding: 5px 10px; border-radius: 999px; background: var(--blue-soft); color: var(--blue-ink); font-size: 12px; font-weight: 600; }
   .rev-nudge-gift svg.i { width: 14px; height: 14px; }
   @media (prefers-reduced-motion: reduce) {
     .rev-extra, .rev-nudge, .rev-photos .ph img, #review-backdrop.open, .rev-stars button.pop, .ord-card.flash { animation: none; }
