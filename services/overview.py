@@ -9,8 +9,10 @@ from db_core import db_connect, is_postgres, sql as _sql
 from services.hits import SOLD_STATUSES
 from services.orders import row_to_dict
 
-PERIODS = (1, 7, 30)
+ALL_TIME = 0
+PERIODS = (1, 7, 30, ALL_TIME)
 CHART_MIN_DAYS = 7
+MONTHLY_AFTER_DAYS = 90  # «весь час» довший за це групується по місяцях
 TOP_LIMIT = 5
 ATTENTION_LIMIT = 5
 
@@ -100,20 +102,53 @@ def _period_stats(conn, start: datetime, end: datetime) -> dict:
     }
 
 
+def _first_sale_day(conn, fallback: date) -> date:
+    """Локальний день першого продажу (для періоду «весь час»)."""
+    placeholders = ", ".join("?" * len(SOLD_STATUSES))
+    row = row_to_dict(
+        conn.execute(
+            _sql(f"SELECT MIN(ordered_at) AS first FROM orders WHERE status IN ({placeholders})"),
+            SOLD_STATUSES,
+        ).fetchone()
+    )
+    ts = _parse_ts(row.get("first")) if row.get("first") else None
+    return ts.astimezone(_TZ).date() if ts else fallback
+
+
+def _month_series(chart_start: date, today: date) -> dict:
+    series, d = {}, chart_start.replace(day=1)
+    while d <= today:
+        series[d] = 0
+        d = (d.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return series
+
+
 def get_overview(days: int = 7, now: datetime | None = None) -> dict:
+    """days: 1/7/30 — останні N днів із порівнянням до попереднього; 0 — весь час (без порівняння)."""
     days = days if days in PERIODS else 7
     now = (now or datetime.now(timezone.utc)).astimezone(_TZ)
     today = now.date()
-    start = _local_midnight(today - timedelta(days=days - 1))
-    prev_start = _local_midnight(today - timedelta(days=2 * days - 1))
-    chart_days = max(days, CHART_MIN_DAYS)
-    chart_start = _local_midnight(today - timedelta(days=chart_days - 1))
     end = now + timedelta(seconds=1)
+    all_time = days == ALL_TIME
 
     conn = db_connect(dict_rows=True)
     try:
-        cur = _period_stats(conn, start, end)
-        prev = _period_stats(conn, prev_start, start)
+        if all_time:
+            first_day = _first_sale_day(conn, today)
+            start = _local_midnight(date(2000, 1, 1))
+            chart_start_day = min(first_day, today - timedelta(days=CHART_MIN_DAYS - 1))
+            span_days = (today - chart_start_day).days + 1
+            by_month = span_days > MONTHLY_AFTER_DAYS
+            cur = _period_stats(conn, start, end)
+            prev = {key: None for key in cur}
+        else:
+            start = _local_midnight(today - timedelta(days=days - 1))
+            prev_start = _local_midnight(today - timedelta(days=2 * days - 1))
+            chart_start_day = today - timedelta(days=max(days, CHART_MIN_DAYS) - 1)
+            by_month = False
+            cur = _period_stats(conn, start, end)
+            prev = _period_stats(conn, prev_start, start)
+        chart_start = _local_midnight(chart_start_day)
 
         placeholders = ", ".join("?" * len(SOLD_STATUSES))
         rows = [
@@ -126,13 +161,18 @@ def get_overview(days: int = 7, now: datetime | None = None) -> dict:
                 (*SOLD_STATUSES, _db_ts(chart_start), _db_ts(end)),
             ).fetchall()
         ]
-        series = {chart_start.date() + timedelta(days=i): 0 for i in range(chart_days)}
+        if by_month:
+            series = _month_series(chart_start_day, today)
+        else:
+            series = {chart_start_day + timedelta(days=i): 0 for i in range((today - chart_start_day).days + 1)}
         for row in rows:
             ts = _parse_ts(row.get("ordered_at"))
             if ts:
-                local_day = ts.astimezone(_TZ).date()
-                if local_day in series:
-                    series[local_day] += int(row.get("total_price") or 0)
+                key = ts.astimezone(_TZ).date()
+                if by_month:
+                    key = key.replace(day=1)
+                if key in series:
+                    series[key] += int(row.get("total_price") or 0)
 
         top = [
             row_to_dict(r)
@@ -199,6 +239,7 @@ def get_overview(days: int = 7, now: datetime | None = None) -> dict:
                 ),
             }
         },
+        "chart_unit": "month" if by_month else "day",
         "chart": [{"date": d.isoformat(), "revenue": v} for d, v in series.items()],
         "funnel": funnel,
         "top_products": [
