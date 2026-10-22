@@ -2831,6 +2831,23 @@ async def _notify_client_status(order: dict, status: str, ttn: str | None = None
             return False
     except ValueError:
         pass
+    if user_id > 0 and order.get("is_test"):
+        # Тестове замовлення: статуси друку/доставки клієнту не шлемо, але після `delivered`
+        # він одразу отримує запит відгуку, щоб міг його залишити.
+        if status != "delivered":
+            return False
+        try:
+            await run_db(mark_review_requested, int(order["id"]))
+            await send_rich_message(
+                bot_app.bot,
+                user_id,
+                build_review_request(int(order["id"]), bonus_config()),
+                reply_markup=_review_request_markup(int(order["id"])),
+            )
+            return True
+        except Exception as e:
+            logger.warning("Запит відгуку для тестового #%s не доставлено: %s", order.get("id"), e)
+            return False
     html_text = build_client_status_update(int(order["id"]), status, ttn)
     if user_id <= 0 or not html_text:
         return False
