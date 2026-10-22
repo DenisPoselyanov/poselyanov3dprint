@@ -4,9 +4,38 @@ from __future__ import annotations
 
 from aiohttp import web
 
+# Стискаємо текстові відповіді: каталог /api/products — ~80 КБ JSON, у gzip ~12 КБ
+_COMPRESSIBLE_TYPES = ("application/json", "text/html", "text/csv", "text/plain", "application/javascript", "text/css")
+_MIN_COMPRESS_BYTES = 1024
+
+
+@web.middleware
+async def compression_middleware(request: web.Request, handler):
+    response = await handler(request)
+    if (
+        type(response) is web.Response
+        and "gzip" in request.headers.get("Accept-Encoding", "").lower()
+        and response.content_type in _COMPRESSIBLE_TYPES
+        and isinstance(response.body, (bytes, bytearray))
+        and len(response.body) >= _MIN_COMPRESS_BYTES
+        and not response.headers.get("Content-Encoding")
+    ):
+        response.enable_compression(web.ContentCoding.gzip)
+    return response
+
+
+@web.middleware
+async def security_headers_middleware(request: web.Request, handler):
+    response = await handler(request)
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+    return response
+
 
 def register_http_routes(http_app: web.Application, handlers) -> None:
     """Attach all HTTP handlers to the aiohttp application."""
+    http_app.middlewares.append(security_headers_middleware)
+    http_app.middlewares.append(compression_middleware)
     http_app.router.add_post("/order", handlers.handle_order)
     http_app.router.add_route("OPTIONS", "/order", handlers.handle_options)
     http_app.router.add_post("/check_coupon", handlers.handle_check_coupon)
