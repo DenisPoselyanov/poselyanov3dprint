@@ -3159,6 +3159,47 @@ async def handle_set_admin_review_status(request: web.Request):
     )
 
 
+async def handle_bulk_admin_reviews(request: web.Request):
+    """POST /api/admin/reviews/bulk {action: approve|hide|delete, ids: [..]} — масова модерація (до 500 за раз)."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    action = data.get("action")
+    raw_ids = data.get("ids")
+    if action not in ("approve", "hide", "delete") or not isinstance(raw_ids, list) or not raw_ids or len(raw_ids) > 500:
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    ids: list[int] = []
+    for raw in raw_ids:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value > 0 and value not in ids:
+            ids.append(value)
+    done = 0
+    for review_id in ids:
+        review = await run_db(get_review, review_id)
+        if not review:
+            continue
+        if action == "delete":
+            changed = await run_db(delete_review, review_id)
+        else:
+            status = "approved" if action == "approve" else "hidden"
+            if review["status"] == status:
+                continue
+            changed = await run_db(set_review_status, review_id, status)
+            if changed and status == "approved":
+                await _award_review_bonus(review_id)
+        if changed:
+            done += 1
+    return web.json_response(
+        {"ok": True, "done": done, "counts": await run_db(admin_review_counts)}, headers=cors_headers(request)
+    )
+
+
 async def handle_set_admin_review_reply(request: web.Request):
     """PUT /api/admin/reviews/{id}/reply {reply}: ≤1000 символів, порожня відповідь прибирає її."""
     denied = await _admin_guard(request)

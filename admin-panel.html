@@ -2861,6 +2861,12 @@
         .rv-summary .rv-sub { color: var(--text-muted); font-size: 13px; }
         .rv-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
         .rv-filters .orders-search { flex: 1 1 200px; width: auto; max-width: 320px; }
+        .rv-bulk { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; }
+        .rv-bulk label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .rv-bulk .rv-bulk-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+        .rv-bulk .rv-bulk-n { font-size: 13px; color: var(--text-muted); }
+        .rv-pick { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--primary, #2aabee); cursor: pointer; }
+        .rv-card.is-picked { border-color: color-mix(in srgb, var(--primary, #2aabee) 60%, var(--border)); }
         .rv-filters select.orders-search { flex: 0 0 auto; max-width: none; }
         .orders-tab.hot .orders-tab-n { background: var(--sale); color: #fff; opacity: 1; border-radius: 99px; padding: 0 7px; }
         .rv-list { display: grid; gap: 12px; }
@@ -3349,6 +3355,7 @@
                         <option value="2">2 ★</option><option value="1">1 ★</option>
                     </select>
                 </div>
+                <div id="reviewsBulk" class="rv-bulk" style="display:none;"></div>
                 <div id="reviewsList" class="rv-list"></div>
             </section>
 
@@ -10738,6 +10745,7 @@
         ];
         const REVIEW_REPLY_MAX = 1000;
         let reviewsTab = 'pending';
+        const reviewsSelected = new Set();
         let reviewsSearch = '';
         let reviewsRating = '';
         let reviewsItems = [];
@@ -11069,6 +11077,8 @@
                 const data = await res.json();
                 if (seq !== reviewsSeq) return; // прийшла новіша відповідь
                 reviewsItems = Array.isArray(data.reviews) ? data.reviews : [];
+                const visibleIds = new Set(reviewsItems.map(x => x.id));
+                for (const id of [...reviewsSelected]) if (!visibleIds.has(id)) reviewsSelected.delete(id);
                 reviewsCounts = data.counts || reviewsCounts;
                 reviewsLoaded = true;
                 renderReviewsHeader();
@@ -11137,9 +11147,10 @@
             const hide = r.status !== 'hidden'
                 ? `<button type="button" class="btn btn-secondary" onclick="setReviewStatus(${r.id}, 'hidden')">Сховати</button>` : '';
             const reply = editing ? '' : `<button type="button" class="btn btn-secondary" onclick="openReviewReply(${r.id})">${r.reply ? 'Змінити відповідь' : 'Відповісти'}</button>`;
-            return `<article class="rv-card${r.status === 'pending' ? ' is-pending' : ''}" data-rv="${r.id}">
+            return `<article class="rv-card${r.status === 'pending' ? ' is-pending' : ''}${reviewsSelected.has(r.id) ? ' is-picked' : ''}" data-rv="${r.id}">
                 <div class="rv-top">
                     <div class="rv-prod">
+                        <input type="checkbox" class="rv-pick" aria-label="Вибрати відгук" ${reviewsSelected.has(r.id) ? 'checked' : ''} onchange="toggleReviewPick(${r.id}, this.checked)">
                         <span class="rv-th">${photo}</span>
                         <div style="min-width:0;">
                             <div class="rv-pname">${escapeHtml(r.product_name)}</div>
@@ -11171,6 +11182,55 @@
             list.innerHTML = reviewsItems.length
                 ? reviewsItems.map(reviewCardHtml).join('')
                 : `<div class="rv-empty">${escapeHtml(reviewEmptyText())}</div>`;
+            renderReviewsBulk();
+        }
+
+        function renderReviewsBulk() {
+            const bar = document.getElementById('reviewsBulk');
+            if (!bar) return;
+            const total = reviewsItems.length;
+            if (!reviewsLoaded || !total) { bar.style.display = 'none'; return; }
+            const n = reviewsSelected.size;
+            const allOn = n === total;
+            bar.style.display = '';
+            bar.innerHTML = `<label><input type="checkbox" class="rv-pick" ${allOn ? 'checked' : ''} onchange="toggleReviewPickAll(this.checked)"> Вибрати всі (${total})</label>
+                ${n ? `<div class="rv-bulk-actions">
+                    <span class="rv-bulk-n">Вибрано: ${n}</span>
+                    ${reviewsTab !== 'approved' ? '<button type="button" class="btn btn-primary" onclick="bulkReviews(\'approve\')">Опублікувати</button>' : ''}
+                    ${reviewsTab !== 'hidden' ? '<button type="button" class="btn btn-secondary" onclick="bulkReviews(\'hide\')">Сховати</button>' : ''}
+                    <button type="button" class="btn btn-secondary" onclick="bulkReviews(\'delete\')" style="color:var(--danger, #e5484d);">Видалити</button>
+                </div>` : ''}`;
+        }
+
+        function toggleReviewPick(id, on) {
+            if (on) reviewsSelected.add(id); else reviewsSelected.delete(id);
+            const card = document.querySelector(`.rv-card[data-rv="${id}"]`);
+            if (card) card.classList.toggle('is-picked', on);
+            renderReviewsBulk();
+        }
+
+        function toggleReviewPickAll(on) {
+            reviewsSelected.clear();
+            if (on) reviewsItems.forEach(r => reviewsSelected.add(r.id));
+            renderReviewsList();
+        }
+
+        async function bulkReviews(action) {
+            const ids = [...reviewsSelected];
+            if (!ids.length) return;
+            const word = { approve: 'опублікувати', hide: 'сховати', delete: 'видалити назавжди' }[action];
+            const extra = action === 'delete' ? ' Рейтинг товарів перерахується.' : '';
+            if (!await askConfirm(`Ви впевнені, що хочете ${word} відгуків: ${ids.length}?${extra}`)) return;
+            try {
+                const data = await reviewApi('/admin/reviews/bulk', 'POST', { action, ids });
+                const done = data.done ?? ids.length;
+                showToast({ approve: `Опубліковано: ${done}`, hide: `Приховано: ${done}`, delete: `Видалено: ${done}` }[action], 'success');
+                reviewsSelected.clear();
+                if (action === 'delete') ids.forEach(id => reviewReplyDrafts.delete(id));
+            } catch (e) {
+                showToast(e.message || 'Не вдалося виконати дію', 'error');
+            }
+            await loadReviews();
         }
 
         async function reviewApi(path, method, body) {

@@ -259,3 +259,26 @@ def test_http_flow(env, api):
         assert r.status == 404
 
     run(scenario)
+
+
+def test_bulk_actions(env, api):
+    orders, reviews = env
+    a, _ = _make(orders, reviews, product=11, rating=5)
+    b, _ = _make(orders, reviews, user=8, product=99, rating=3, name="Олена")
+    run, admin = api
+
+    async def scenario(client):
+        r = await client.post("/api/admin/reviews/bulk", json={"action": "x", "ids": [a]}, headers=admin)
+        assert r.status == 400
+        r = await client.post("/api/admin/reviews/bulk", json={"action": "approve", "ids": []}, headers=admin)
+        assert r.status == 400
+        r = await client.post("/api/admin/reviews/bulk", json={"action": "approve", "ids": [a, b, 9999]}, headers=admin)
+        data = await r.json()
+        assert r.status == 200 and data["done"] == 2 and data["counts"]["approved"] == 2
+        r = await client.post("/api/admin/reviews/bulk", json={"action": "hide", "ids": [a, b]}, headers=admin)
+        assert (await r.json())["done"] == 2
+        r = await client.post("/api/admin/reviews/bulk", json={"action": "delete", "ids": [a, b]}, headers=admin)
+        data = await r.json()
+        assert data["done"] == 2 and data["counts"]["all"] == 0
+
+    run(scenario)

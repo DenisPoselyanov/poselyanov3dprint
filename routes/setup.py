@@ -87,6 +87,7 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_get("/api/admin/products/{id}/channel-posts", handlers.handle_get_channel_posts)
     http_app.router.add_post("/api/admin/products/{id}/channel-posts", handlers.handle_publish_channel_post)
     http_app.router.add_get("/api/admin/reviews", handlers.handle_get_admin_reviews)
+    http_app.router.add_post("/api/admin/reviews/bulk", handlers.handle_bulk_admin_reviews)
     http_app.router.add_put("/api/admin/reviews/{id}/status", handlers.handle_set_admin_review_status)
     http_app.router.add_put("/api/admin/reviews/{id}/reply", handlers.handle_set_admin_review_reply)
     http_app.router.add_delete("/api/admin/reviews/{id}", handlers.handle_delete_admin_review)
