@@ -159,3 +159,18 @@ def test_http_publish_failure_leaves_no_post(env, monkeypatch):
     assert conn.execute("SELECT COUNT(*) FROM channel_posts").fetchone()[0] == 0
     conn.close()
     assert cp.get_channel() == ""  # невдалий канал не запам'ятовується
+
+
+def test_http_publish_error_log_hides_token(env, monkeypatch, caplog):
+    import bot
+
+    monkeypatch.setattr(bot, "BOT_TOKEN", "123:SECRET")
+    fake = FakeBot(fail="Network error: https://api.telegram.org/bot123:SECRET/sendPhoto")
+
+    async def steps(client, adm):
+        r = await client.post("/api/admin/products/42/channel-posts", json={"channel": "@chan", "text": "x"}, headers=adm)
+        return r.status
+
+    with caplog.at_level("WARNING"):
+        assert _http(env, monkeypatch, steps, fake) == 502
+    assert "SECRET" not in caplog.text and "bot***" in caplog.text

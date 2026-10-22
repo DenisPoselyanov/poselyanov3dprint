@@ -4106,6 +4106,12 @@ async def handle_get_channel_posts(request: web.Request):
     )
 
 
+def _redact_token(e: Exception) -> str:
+    """Текст помилки для логу без токена бота (мережеві помилки можуть містити URL з ним)."""
+    text = str(e)
+    return text.replace(BOT_TOKEN, "***") if BOT_TOKEN else text
+
+
 def _channel_error_text(e: Exception) -> str:
     msg = str(e).lower()
     if "chat not found" in msg:
@@ -4176,7 +4182,7 @@ async def handle_publish_channel_post(request: web.Request):
             )
     except Exception as e:
         await run_db(channel_posts_svc.delete_post, post_id)
-        logger.warning("Пост товару %s у канал %s не вдався: %s", product_id, channel, e)
+        logger.warning("Пост товару %s у канал %s не вдався: %s", product_id, channel, _redact_token(e))
         return web.json_response({"ok": False, "error": _channel_error_text(e)}, status=502, headers=cors_headers(request))
 
     await run_db(channel_posts_svc.set_message_id, post_id, message.message_id)
@@ -4188,7 +4194,7 @@ async def handle_publish_channel_post(request: web.Request):
             await tg_bot.pin_chat_message(chat_id=channel, message_id=message.message_id, disable_notification=True)
             pinned = True
         except Exception as e:
-            logger.warning("Не вдалось закріпити пост %s у %s: %s", post_id, channel, e)
+            logger.warning("Не вдалось закріпити пост %s у %s: %s", post_id, channel, _redact_token(e))
     return web.json_response(
         {
             "ok": True,
