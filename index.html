@@ -1152,6 +1152,63 @@
   .cat-chip[aria-pressed="true"] svg.i { color: inherit; opacity: .8; }
   .chip-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
 
+  /* Категорії на головній: сітка фото-плиток — усі видно одразу, впізнаються з першого погляду */
+  .cat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 2px var(--gx) 0; }
+  @media (min-width: 600px) { .cat-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; } }
+  .cat-tile {
+    position: relative; aspect-ratio: 1; border: 0; padding: 0; border-radius: 16px; overflow: hidden; isolation: isolate;
+    background: var(--surface-2); color: #fff; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent); transition: transform .18s ease;
+  }
+  .cat-tile:active { transform: scale(.97); }
+  .cat-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; transition: transform .6s cubic-bezier(.2,.7,.2,1); }
+  .cat-tile::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(6,10,16,0) 34%, rgba(6,10,16,.18) 55%, rgba(6,10,16,.82) 100%); }
+  @media (hover: hover) and (pointer: fine) { .cat-tile:hover img { transform: scale(1.06); } }
+  .cat-tile .ci {
+    position: absolute; top: 7px; left: 7px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(10,14,20,.38); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: 13px; line-height: 1;
+  }
+  .cat-tile .ci svg.i { width: 14px; height: 14px; color: #fff; }
+  .cat-tile .tx { position: absolute; left: 8px; right: 6px; bottom: 8px; display: grid; gap: 1px; }
+  .cat-tile b {
+    font-size: 12.5px; font-weight: 800; line-height: 1.15; letter-spacing: -.015em; text-shadow: 0 1px 10px rgba(0,0,0,.35);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; hyphens: auto; overflow-wrap: break-word;
+  }
+  .cat-tile small { font-size: 11px; font-weight: 600; opacity: .78; font-variant-numeric: tabular-nums; }
+  /* Без фото — спокійна плитка з великою іконкою */
+  .cat-tile.noimg { color: var(--ink); background: linear-gradient(160deg, var(--surface-2), var(--surface-3, var(--surface-2))); }
+  .cat-tile.noimg::after { display: none; }
+  .cat-tile.noimg .ci { inset: 0 0 34% 0; width: auto; height: auto; border-radius: 0; background: none; backdrop-filter: none; -webkit-backdrop-filter: none; font-size: 30px; }
+  .cat-tile.noimg .ci svg.i { width: 30px; height: 30px; color: var(--ink-3); }
+  .cat-tile.noimg b { text-shadow: none; }
+  .cat-tile.noimg small { color: var(--ink-3); opacity: 1; }
+  /* В1: «Ще N» — решта категорій розгортається на місці */
+  .cat-grid .cat-extra { display: none; }
+  .cat-grid.open .cat-extra { display: block; animation: catIn .32s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes catIn { from { opacity: 0; transform: translateY(8px) scale(.97); } }
+  .cat-more { background: var(--surface-2); color: var(--ink); }
+  .cat-more::after { display: none; }
+  .cat-more .mc { position: absolute; top: 12px; left: 10px; display: flex; }
+  .cat-more .mc img { position: static; width: 34px; height: 34px; border-radius: 50%; object-fit: cover; z-index: auto; margin-right: -9px; box-shadow: 0 0 0 2px var(--surface-2); }
+  .cat-more b { text-shadow: none; font-size: 14px; }
+  .cat-more small { color: var(--ink-3); opacity: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
+  .cat-more .m-close, .cat-grid.open .cat-more .m-open { display: none; }
+  .cat-grid.open .cat-more { grid-column: 1 / -1; aspect-ratio: auto; height: 40px; border-radius: 12px; }
+  .cat-grid.open .cat-more .tx { position: static; height: 100%; place-items: center; }
+  .cat-grid.open .cat-more .m-close { display: block; font-size: 13px; color: var(--ink-2); }
+  .cat-grid.open .cat-more .mc { display: none; }
+  /* Всередині категорії: тиха стрічка інших категорій (міні-фото + назва), поточна — ледь тонована */
+  .cat-strip { padding-top: 10px; gap: 6px; }
+  .cat-pill {
+    border: 1px solid transparent; background: transparent; color: var(--ink-2); border-radius: 99px; padding: 3px 11px 3px 3px;
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s;
+  }
+  .cat-pill .av { width: 22px; height: 22px; border-radius: 50%; overflow: hidden; flex: none; background: var(--surface-2); display: grid; place-items: center; opacity: .85; }
+  .cat-pill .av img { width: 100%; height: 100%; object-fit: cover; }
+  .cat-pill .av svg.i { width: 12px; height: 12px; color: var(--ink-3); }
+  .cat-pill[aria-current="true"] { background: color-mix(in srgb, var(--blue) 14%, var(--surface)); color: var(--blue-ink); border-color: color-mix(in srgb, var(--blue) 30%, transparent); font-weight: 700; }
+  .cat-pill[aria-current="true"] .av { opacity: 1; }
+
   /* Банер акцій: спокійна картка з легким тоном кольору акції */
   .hero { margin: 2px var(--gx) 0; position: relative; }
   .hero-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; scrollbar-width: none; border-radius: 18px; }
@@ -5744,17 +5801,50 @@ function shopCategories() {
   if (!cats.length) cats = [...new Set(PRODUCTS.map(p => p.cat))].map(id => ({ id, name: catName(id), emoji: CAT_ICONS[id] || '📦' }));
   return cats.map(c => ({ ...c, count: PRODUCTS.filter(p => p.cat === c.id).length })).filter(c => c.count);
 }
-function categoriesHtml() {
-  const cats = shopCategories();
+// Обкладинка плитки категорії: найпопулярніший товар з фото (хіти → «Хіт» → закріплені → перший)
+function catCover(items) {
+  const withPhoto = items.filter(p => p.photos?.length);
+  return sortItems(withPhoto, 'pop')[0]?.photos[0] || '';
+}
+// Категорії для вітрини разом з «Індивідуальне» (якщо є такі товари)
+function shopCategoryList() {
   const custom = CATEGORIES.find(c => c.id === 'custom') || { emoji: '✏️', name: 'Індивідуальне' };
-  const chip = (id, label, count, pressed = false) =>
-    `<button type="button" class="cat-chip" data-act="list" data-type="${id === 'all' ? 'all' : 'cat'}" data-id="${escapeAttr(id)}"${pressed ? ' aria-pressed="true"' : ''}>${label} <small>${count}</small></button>`;
-  return `<div class="s-sec"><div class="s-h"><h3>Категорії</h3><span class="cnt">${cats.length}</span></div></div>
-    <div class="hscroll">
-      ${chip('all', 'Усі', PRODUCTS.length, true)}
-      ${cats.map(c => chip(c.id, `${catIconHtml(c.id, c.emoji)}${escapeHtml(c.name)}`, c.count)).join('')}
-      ${CUSTOM_PRODUCTS.length ? chip('custom', `${catIconHtml('custom', custom.emoji || '✏️')}${escapeHtml(custom.name)}`, CUSTOM_PRODUCTS.length) : ''}
+  const list = shopCategories().map(c => ({ id: c.id, name: c.name, emoji: c.emoji, items: PRODUCTS.filter(p => p.cat === c.id) }));
+  if (CUSTOM_PRODUCTS.length) list.push({ id: 'custom', name: custom.name, emoji: custom.emoji || '✏️', items: CUSTOM_PRODUCTS });
+  return list;
+}
+// Головна: 5 плиток + «Ще N», що розгортає решту на місці
+function categoriesHtml() {
+  const list = shopCategoryList();
+  const tile = ({ id, name, emoji, items }, extra = '') => {
+    const src = catCover(items);
+    return `<button type="button" class="cat-tile${src ? '' : ' noimg'}${extra}" data-act="list" data-type="cat" data-id="${escapeAttr(id)}" aria-label="${escapeAttr(`${name}: ${tovar(items.length)}`)}">
+      ${src ? photoImg(src, 240, { still: true }) : ''}
+      <span class="ci">${catIconHtml(id, emoji)}</span>
+      <span class="tx"><b>${escapeHtml(name)}</b><small>${tovar(items.length)}</small></span>
+    </button>`;
+  };
+  const head = `<div class="s-sec"><div class="s-h"><h3>Категорії</h3>
+      <button type="button" class="link-btn" data-act="list" data-type="all" data-id="all">Усі товари</button></div></div>`;
+  const LIMIT = 6;
+  if (list.length <= LIMIT) return `${head}<div class="cat-grid">${list.map(c => tile(c)).join('')}</div>`;
+  const shown = list.slice(0, LIMIT - 1), rest = list.slice(LIMIT - 1);
+  const pics = rest.map(c => catCover(c.items)).filter(Boolean).slice(0, 3);
+  return `${head}<div class="cat-grid" id="cat-grid">
+      ${shown.map(c => tile(c)).join('')}
+      ${rest.map(c => tile(c, ' cat-extra')).join('')}
+      <button type="button" class="cat-tile cat-more" data-act="cat-more" aria-expanded="false">
+        <span class="mc">${pics.map(s => photoImg(s, 120, { still: true })).join('')}</span>
+        <span class="tx"><b class="m-open">Ще ${rest.length}</b><b class="m-close">Згорнути</b><small class="m-open">${escapeHtml(rest.map(c => c.name).join(', '))}</small></span>
+      </button>
     </div>`;
+}
+function toggleCatMore(btn) {
+  const grid = document.getElementById('cat-grid');
+  const open = !grid.classList.contains('open');
+  grid.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', open);
+  haptic('select');
 }
 function collectionsHtml() {
   const list = COLLECTIONS.map(c => ({ c, items: collectionProducts(c) })).filter(x => x.items.length);
@@ -5854,7 +5944,7 @@ function renderHomeSkeleton() {
   document.getElementById('home-view').innerHTML = `${homeSearchHtml()}
     <div class="hero"><div class="sk" style="height:142px;border-radius:18px"></div></div>
     <div class="s-sec"><div class="sk" style="height:20px;width:40%"></div></div>
-    <div class="hscroll">${'<div class="sk" style="width:96px;height:36px;border-radius:99px"></div>'.repeat(4)}</div>
+    <div class="cat-grid">${'<div class="sk" style="aspect-ratio:1;border-radius:16px"></div>'.repeat(6)}</div>
     <div class="s-sec"><div class="sk" style="height:20px;width:50%"></div></div>
     <div class="grid2">${card.repeat(4)}</div>`;
 }
@@ -5888,11 +5978,33 @@ function renderList() {
   const el = document.getElementById('list-view');
   const { title, items, natural } = listData(SHOP.list);
   const sorted = sortItems(items, SHOP.sort, natural);
-  el.innerHTML = `<div class="s-sec" style="padding-top:20px"><div class="s-h"><h3 style="font-size:21px">${escapeHtml(title)}</h3><span class="cnt">${tovar(sorted.length)}</span></div></div>
+  const strip = SHOP.list?.type === 'cat' ? catStripHtml(SHOP.list.id) : '';
+  el.innerHTML = `${strip}<div class="s-sec" style="padding-top:${strip ? 16 : 20}px"><div class="s-h"><h3 style="font-size:21px">${escapeHtml(title)}</h3><span class="cnt">${tovar(sorted.length)}</span></div></div>
     <div class="hscroll" style="margin-bottom:16px">${SORTS.map(([id, label]) =>
       `<button type="button" class="cat-chip" data-act="sort" data-id="${id}" aria-pressed="${SHOP.sort === id}">${label}</button>`).join('')}</div>
     ${sorted.length ? gridHtml(sorted) : emptyHtml({ title: 'Тут поки порожньо', text: SHOP.sort === 'sale' ? 'Зі знижкою тут нічого немає — спробуй інше сортування.' : 'Загляни в інші категорії.' })}`;
   enhanceScrollers(el);
+  // Поточна категорія — по центру стрічки
+  const cur = el.querySelector('.cat-pill[aria-current="true"]');
+  if (cur) requestAnimationFrame(() => { const s = cur.parentElement; s.scrollLeft = cur.offsetLeft - (s.clientWidth - cur.offsetWidth) / 2; });
+}
+function catStripHtml(activeId) {
+  const list = shopCategoryList();
+  if (list.length < 2) return '';
+  return `<div class="hscroll cat-strip">${list.map(c => {
+    const src = catCover(c.items);
+    return `<button type="button" class="cat-pill" data-act="cat-switch" data-id="${escapeAttr(c.id)}" aria-current="${c.id === activeId}">
+      <span class="av">${src ? photoImg(src, 80, { still: true }) : catIconHtml(c.id, c.emoji)}</span>${escapeHtml(c.name)}</button>`;
+  }).join('')}</div>`;
+}
+// Перемикання між категоріями зі стрічки: без нового кроку в історії «Назад»
+function switchCategory(id) {
+  if (SHOP.list?.type === 'cat' && SHOP.list.id === id) return;
+  SHOP.list = { type: 'cat', id };
+  SHOP.sort = 'pop';
+  renderList();
+  document.getElementById('main-scroll')?.scrollTo({ top: 0 });
+  haptic('select');
 }
 
 // ─── ПОШУК: синоніми, транслітерація, нещодавні й популярні запити ───
@@ -6297,6 +6409,8 @@ function bindShopEvents() {
       case 'dec': changeQtyFromShop(id, -1, el); break;
       case 'fav': toggleFav(id); break;
       case 'list': openList(el.dataset.type, el.dataset.id); break;
+      case 'cat-more': toggleCatMore(el); break;
+      case 'cat-switch': switchCategory(el.dataset.id); break;
       case 'promo': onPromoClick(el.dataset.id); break;
       case 'sort': SHOP.sort = el.dataset.id; renderList(); haptic('select'); break;
       case 'search-open': openSearch(); break;
