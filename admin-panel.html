@@ -2226,6 +2226,8 @@
         .topbar h1 { font-size: 18px; font-weight: 800; margin-right: auto; }
         .tb-btn { position: relative; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--bg-section); color: var(--text-secondary); border-radius: 11px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
         .tb-btn:hover { background: var(--bg-tab-active); }
+        .tb-btn[hidden] { display: none; }
+        .tb-btn.active { color: var(--text-primary, inherit); background: var(--bg-tab-active); }
         .tb-btn kbd { font: inherit; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--bg-container); border: 1px solid var(--border); }
         .tb-burger { display: none; }
         .tb-badge { position: absolute; top: -5px; right: -5px; min-width: 18px; padding: 0 5px; border-radius: 99px; background: var(--sale); color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; }
@@ -2921,6 +2923,7 @@
             <h1 id="pageTitle">Адмінка</h1>
             <button class="tb-btn" type="button" onclick="openCmdk()" aria-label="Пошук" data-icon="search"><span class="tb-search-label">Пошук</span><kbd>Ctrl K</kbd></button>
             <button class="tb-btn" type="button" onclick="overviewOpenOrders('new')" aria-label="Нові замовлення" data-icon="bell"><span id="tbBellBadge" class="tb-badge"></span></button>
+            <button id="tbFullscreen" class="tb-btn" type="button" hidden onclick="toggleFullscreen()" aria-label="На весь екран" title="На весь екран" data-icon="fullscreen"></button>
             <button id="headerPrimaryAction" class="btn btn-primary" onclick="openAddModal()">➕ Додати товар</button>
         </div>
 
@@ -4298,6 +4301,42 @@
             }
         } catch (_) {}
 
+        // === ПОВНИЙ ЕКРАН (Bot API 8.0+; на старших клієнтах кнопка прихована) ===
+        function adminFsPref() {
+            try { return localStorage.getItem('adminFullscreen'); } catch (_) { return null; }
+        }
+        function setAdminFsPref(v) {
+            try { localStorage.setItem('adminFullscreen', v); } catch (_) {}
+        }
+        function toggleFullscreen() {
+            const tg = window.Telegram?.WebApp;
+            if (!tg || typeof tg.requestFullscreen !== 'function') return;
+            try {
+                if (tg.isFullscreen) { tg.exitFullscreen(); setAdminFsPref('0'); }
+                else { tg.requestFullscreen(); setAdminFsPref('1'); }
+            } catch (_) { showToast('Цей клієнт Telegram не підтримує повний екран', 'error'); }
+        }
+        function initAdminFullscreen(tg) {
+            const btn = document.getElementById('tbFullscreen');
+            const supported = typeof tg.requestFullscreen === 'function'
+                && (!tg.isVersionAtLeast || tg.isVersionAtLeast('8.0'));
+            if (!btn || !supported) return;
+            btn.hidden = false;
+            const sync = () => {
+                btn.title = tg.isFullscreen ? 'Вийти з повного екрана' : 'На весь екран';
+                btn.setAttribute('aria-label', btn.title);
+                btn.classList.toggle('active', !!tg.isFullscreen);
+            };
+            try { tg.onEvent('fullscreenChanged', sync); } catch (_) {}
+            sync();
+            // На десктопі за замовчуванням розгортаємо, доки власник сам не вийшов із повного екрана
+            const desktop = ['tdesktop', 'macos', 'weba', 'webk'].includes(tg.platform);
+            const pref = adminFsPref();
+            if (!tg.isFullscreen && (pref === '1' || (pref === null && desktop))) {
+                try { tg.requestFullscreen(); } catch (_) {}
+            }
+        }
+
         // === ІНІЦІАЛІЗАЦІЯ TELEGRAM WEBAPP ===
         function initTelegramWebApp() {
             const tg = window.Telegram?.WebApp;
@@ -4306,6 +4345,7 @@
                 tg.ready();
                 tg.expand();
                 tgInitData = tg.initData;
+                initAdminFullscreen(tg);
 
                 // Передаємо initData у всі подальші запити
                 if (tgInitData) {
@@ -5147,6 +5187,7 @@
             reviews: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/>',
             users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 3.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-4-6.3"/>',
             broadcasts: '<path d="m3 11 18-8v18l-18-8Z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+            fullscreen: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
             search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
             bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/>',
             menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
