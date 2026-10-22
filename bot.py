@@ -29,7 +29,7 @@ import io
 from PIL import Image
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    WebAppInfo,
+    WebAppInfo, LinkPreviewOptions,
 )
 from telegram.ext import (
     Application, ContextTypes,
@@ -4154,7 +4154,10 @@ async def handle_publish_channel_post(request: web.Request):
         photos = [photos[idx] if 0 <= idx < len(photos) else photos[0]]
     album = [_share_photo_url(u) for u in photos[: channel_posts_svc.MAX_ALBUM_PHOTOS]]
     photo = album[0] if album else ""
-    text, text_err = channel_posts_svc.validate_text(data.get("text"), bool(photo))
+    links_mode = data.get("buttons_mode") == "links"
+    text, text_err = channel_posts_svc.validate_text(
+        data.get("text"), bool(photo), channel_posts_svc.LINKS_TEXT_LEN if links_mode else 0
+    )
     if text_err:
         return web.json_response({"ok": False, "error": text_err}, status=400, headers=cors_headers(request))
 
@@ -4163,11 +4166,16 @@ async def handle_publish_channel_post(request: web.Request):
         return web.json_response({"ok": False, "error": "Бот не запущено"}, status=502, headers=cors_headers(request))
 
     post_id = await run_db(channel_posts_svc.create_post, product_id, channel, text)
-    markup = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🛒 Замовити", url=channel_posts_svc.product_link(post_id, product_id)),
-        InlineKeyboardButton("🛍 Усі товари", url=channel_posts_svc.shop_link(post_id)),
-    ]])
     body = channel_posts_svc.caption_html(text)
+    if links_mode:
+        # Посилання в самому тексті: усе в одному повідомленні, навіть для альбому
+        markup = None
+        body += channel_posts_svc.links_html(post_id, product_id)
+    else:
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🛒 Замовити", url=channel_posts_svc.product_link(post_id, product_id)),
+            InlineKeyboardButton("🛍 Усі товари", url=channel_posts_svc.shop_link(post_id)),
+        ]])
     silent = bool(data.get("silent"))
     from rich_messages import _telegram_retry
 
@@ -4182,12 +4190,13 @@ async def handle_publish_channel_post(request: web.Request):
                 label="channel post album",
             )
             message = sent[0]
-            await _telegram_retry(
-                lambda: tg_bot.send_message(
-                    chat_id=channel, text="👇 Оформити замовлення", reply_markup=markup, disable_notification=True,
-                ),
-                label="channel post buttons",
-            )
+            if markup is not None:
+                await _telegram_retry(
+                    lambda: tg_bot.send_message(
+                        chat_id=channel, text="👇 Оформити замовлення", reply_markup=markup, disable_notification=True,
+                    ),
+                    label="channel post buttons",
+                )
         elif photo:
             message = await _telegram_retry(
                 lambda: tg_bot.send_photo(
@@ -4201,6 +4210,7 @@ async def handle_publish_channel_post(request: web.Request):
                 lambda: tg_bot.send_message(
                     chat_id=channel, text=body, parse_mode="HTML",
                     reply_markup=markup, disable_notification=silent,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 ),
                 label="channel post",
             )

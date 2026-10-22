@@ -79,12 +79,13 @@ def set_channel(channel: str) -> None:
 
 # ── Текст і кнопки ──────────────────────────────────────────────────
 
-def validate_text(raw, has_photo: bool) -> tuple[str, str]:
-    """(текст, помилка). Ліміт — підпис до фото 1024 символи, звичайне повідомлення 4096."""
+def validate_text(raw, has_photo: bool, reserve: int = 0) -> tuple[str, str]:
+    """(текст, помилка). Ліміт — підпис до фото 1024 символи, звичайне повідомлення 4096;
+    `reserve` — скільки символів з ліміту займає дописаний рядок посилань."""
     text = str(raw or "").replace("\r\n", "\n").strip()
     if not text:
         return "", "Текст поста порожній"
-    limit = CAPTION_MAX if has_photo else TEXT_MAX
+    limit = (CAPTION_MAX if has_photo else TEXT_MAX) - reserve
     # Запас на <b></b> першого рядка: Telegram рахує ліміт уже після розбору HTML, тож теги не важать
     if len(text) > limit:
         return "", f"Задовгий текст: {len(text)} із {limit} символів"
@@ -98,6 +99,20 @@ def caption_html(text: str) -> str:
     if rest:
         out += "\n" + html.escape(rest)
     return out
+
+
+LINKS_LABEL_ORDER = "🛒 Замовити"
+LINKS_LABEL_SHOP = "🛍 Усі товари"
+# Видимі символи рядка з посиланнями (разом з порожнім рядком перед ним) — вони рахуються в ліміт підпису
+LINKS_TEXT_LEN = len(f"\n\n{LINKS_LABEL_ORDER} · {LINKS_LABEL_SHOP}")
+
+
+def links_html(post_id: int, product_id: int) -> str:
+    """Рядок посилань під текстом поста — варіант без inline-кнопок."""
+    return (
+        f'\n\n<a href="{html.escape(product_link(post_id, product_id))}">{LINKS_LABEL_ORDER}</a>'
+        f' · <a href="{html.escape(shop_link(post_id))}">{LINKS_LABEL_SHOP}</a>'
+    )
 
 
 def product_link(post_id: int, product_id: int) -> str:

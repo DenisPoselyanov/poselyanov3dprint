@@ -213,3 +213,24 @@ def test_http_publish_error_log_hides_token(env, monkeypatch, caplog):
     with caplog.at_level("WARNING"):
         assert _http(env, monkeypatch, steps, fake) == 502
     assert "SECRET" not in caplog.text and "bot***" in caplog.text
+
+
+def test_http_publish_links_mode_album(env, monkeypatch):
+    fake = FakeBot()
+    import bot
+
+    async def steps(client, adm):
+        monkeypatch.setattr(bot, "get_product_by_id", lambda pid: {"id": 42, "name": "Д", "photos": ["https://x/a.jpg", "https://x/b.jpg"]})
+        r = await client.post("/api/admin/products/42/channel-posts", json={"channel": "@chan", "text": "Т\nх", "buttons_mode": "links"}, headers=adm)
+        return await r.json()
+
+    data = _http(env, monkeypatch, steps, fake)
+    assert data["ok"]
+    assert [c[0] for c in fake.calls] == ["album"]  # без окремого повідомлення з кнопками
+    caption = fake.calls[0][1]["media"][0].caption
+    assert f"startapp=ch_{data['id']}_product_42" in caption and f"startapp=ch_{data['id']}\"" in caption
+
+
+def test_links_reserve_in_limit():
+    assert cp.validate_text("а" * 1024, True)[1] == ""
+    assert cp.validate_text("а" * 1024, True, cp.LINKS_TEXT_LEN)[1] != ""

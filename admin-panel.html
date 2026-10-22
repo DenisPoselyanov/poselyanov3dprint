@@ -6663,15 +6663,19 @@
             overlay.innerHTML = `
                 <div style="background:var(--bg-card);color:var(--text-main);border-radius:16px;padding:20px;width:100%;max-width:460px;max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35);">
                     <div style="font-size:17px;font-weight:700;margin-bottom:4px;">📣 Пост у канал</div>
-                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Під постом будуть кнопки «🛒 Замовити» (відкриває цей товар) і «🛍 Усі товари».</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:13px;font-weight:600;">Як показати «Замовити» і «Усі товари»</label>
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-btn" value="links" checked style="margin-top:3px;"><span><b>Посилання в тексті</b> — рядок унизу поста<br><span style="font-size:12px;color:var(--text-muted);">Усе в одному повідомленні, навіть якщо це альбом. Займає ~30 символів ліміту.</span></span></label>
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-btn" value="buttons" style="margin-top:3px;"><span><b>Кнопки під постом</b><br><span style="font-size:12px;color:var(--text-muted);">Для альбому Telegram не дає кнопок під ним — вони підуть окремим коротким повідомленням.</span></span></label>
+                    </div>
                     <label style="font-size:13px;font-weight:600;">Канал</label>
                     <input id="chp-channel" type="text" autocomplete="off" placeholder="@username або -100…" value="${escapeAttr(info.channel || '')}" style="${field}margin:4px 0 4px;">
                     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Бот має бути адміном каналу з правом публікації.</div>
                     ${photoCount > 1 ? `
                     <div style="margin-bottom:10px;">
                         <label style="font-size:13px;font-weight:600;">Фото в пості</label>
-                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-mode" value="all" checked style="margin-top:3px;"><span><b>Усі фото (${photoCount})</b> — альбомом<br><span style="font-size:12px;color:var(--text-muted);">Підпис стоїть на першому фото. Telegram не дозволяє кнопки під альбомом, тому «Замовити» / «Усі товари» підуть окремим коротким повідомленням під ним. Закріплення стосується альбому.</span></span></label>
-                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-mode" value="one" style="margin-top:3px;"><span><b>Лише одне фото</b> — одним постом<br><span style="font-size:12px;color:var(--text-muted);">Фото, підпис і кнопки в одному повідомленні. Оберіть, яке саме, натиснувши на мініатюру нижче.</span></span></label>
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-mode" value="all" checked style="margin-top:3px;"><span><b>Усі фото (${photoCount})</b> — альбомом<br><span style="font-size:12px;color:var(--text-muted);">Підпис стоїть на першому фото. Закріплення стосується альбому.</span></span></label>
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-mode" value="one" style="margin-top:3px;"><span><b>Лише одне фото</b> — одним постом<br><span style="font-size:12px;color:var(--text-muted);">Фото і підпис в одному повідомленні. Оберіть, яке саме, натиснувши на мініатюру нижче.</span></span></label>
                         <div id="chp-covers" style="display:none;gap:6px;margin-top:8px;overflow-x:auto;">
                             ${(p.photos || []).filter(Boolean).slice(0, 10).map((u, n) => `<img data-n="${n}" src="${escapeAttr(u)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid ${n === 0 ? 'var(--accent)' : 'transparent'};flex:none;">`).join('')}
                         </div>
@@ -6698,8 +6702,11 @@
             document.body.appendChild(overlay);
             const $ = sel => overlay.querySelector(sel);
             const textEl = $('#chp-text');
-            const limit = photo ? 1024 : 4096;
+            const baseLimit = photo ? 1024 : 4096;
+            const btnMode = () => (overlay.querySelector('input[name="chp-btn"]:checked') || {}).value || 'links';
+            const curLimit = () => baseLimit - (btnMode() === 'links' ? 30 : 0);
             const updateCount = () => {
+                const limit = curLimit();
                 const n = textEl.value.trim().length;
                 $('#chp-count').textContent = `${n} / ${limit}`;
                 $('#chp-count').style.color = n > limit ? '#e53935' : '';
@@ -6720,6 +6727,7 @@
             });
             textEl.addEventListener('input', () => { textEl.dataset.edited = '1'; updateCount(); $('#chp-err').textContent = ''; });
             setRubric('new');
+            overlay.querySelectorAll('input[name="chp-btn"]').forEach(r => { r.onchange = updateCount; });
             let coverIdx = 0;
             const modeEl = () => (overlay.querySelector('input[name="chp-mode"]:checked') || {}).value || 'all';
             overlay.querySelectorAll('input[name="chp-mode"]').forEach(r => {
@@ -6747,6 +6755,7 @@
                 const err = $('#chp-err');
                 if (!channel) { err.textContent = 'Вкажіть канал'; $('#chp-channel').focus(); return; }
                 if (!text) { err.textContent = 'Текст поста порожній'; textEl.focus(); return; }
+                const limit = curLimit();
                 if (text.length > limit) { err.textContent = `Задовгий текст: ${text.length} із ${limit}`; return; }
                 const ok = $('#chp-ok');
                 ok.disabled = true;
@@ -6754,7 +6763,7 @@
                 try {
                     const res = await productApi(`/admin/products/${id}/channel-posts`, 'POST', {
                         channel, text, silent: $('#chp-silent').checked, pin: $('#chp-pin').checked,
-                        photos_mode: modeEl(), photo_index: coverIdx,
+                        photos_mode: modeEl(), photo_index: coverIdx, buttons_mode: btnMode(),
                     });
                     close();
                     showToast(res.pinned ? 'Опубліковано й закріплено в каналі ✅' : 'Опубліковано в каналі ✅', 'success');
