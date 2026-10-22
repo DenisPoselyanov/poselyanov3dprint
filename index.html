@@ -3641,7 +3641,7 @@ let SHOP_CONFIG = { delivery_methods: ['np', 'self'], np_lookup: false };
 const CHK = {
   method: 'np', city: '', cityRef: '', branch: '', branchRef: '', kind: 'all',
   name: '', phone: '', pay: 'card',
-  cities: [], warehouses: [], whQuery: '', whTruncated: false, whError: false, whLoading: false, cityLoading: false, lookupDown: false, errors: {},
+  cities: [], warehouses: [], whQuery: '', whTruncated: false, whError: false, whLoading: false, cityLoading: false, lookupDown: false, lookupErr: '', errors: {},
 };
 let whTimer = null;
 let whReq = 0;
@@ -3663,13 +3663,15 @@ function saveCheckout() {
     localStorage.setItem(CHK_KEY, JSON.stringify({ method, city, cityRef, branch, branchRef, name, phone, pay }));
   } catch (_) {}
 }
+let SHOP_CONFIG_OK = false;
 async function loadShopConfig() {
   try {
     const c = await apiGet('/api/config');
     if (Array.isArray(c?.delivery_methods) && c.delivery_methods.length) {
       SHOP_CONFIG = { delivery_methods: c.delivery_methods, np_lookup: !!c.np_lookup };
+      SHOP_CONFIG_OK = true;
     }
-  } catch (_) {}
+  } catch (e) { CHK.lookupErr = 'конфіг: ' + (e?.message || e); }
   if (!SHOP_CONFIG.delivery_methods.includes(CHK.method)) CHK.method = SHOP_CONFIG.delivery_methods[0];
 }
 function npLookupOn() { return SHOP_CONFIG.np_lookup && !CHK.lookupDown; }
@@ -3736,7 +3738,8 @@ function chkNpHtml() {
     }
   } else {
     html += chkFieldHtml('chk-branch', 'Відділення або поштомат', CHK.branch, { ph: '№ відділення або адреса', max: 200 });
-    html += '<div class="chk-hint">Вкажи номер відділення чи поштомата Нової Пошти.</div>';
+    html += '<div class="chk-hint">Вкажи номер відділення чи поштомата Нової Пошти.'
+      + (CHK.lookupErr ? ` <small>(довідник недоступний — ${escapeHtml(CHK.lookupErr)})</small>` : '') + '</div>';
   }
   return html;
 }
@@ -3794,6 +3797,9 @@ function chkInput(id, value) {
   else if (id === 'chk-branch') CHK.branch = value;
   else if (id === 'chk-city') {
     CHK.city = value; CHK.cityRef = ''; CHK.branch = ''; CHK.branchRef = ''; CHK.warehouses = [];
+    // Разовий збій не вимикає довідник до перезавантаження: пробуємо знову при кожному вводі
+    if (SHOP_CONFIG.np_lookup && CHK.lookupDown) { CHK.lookupDown = false; renderCheckout(); }
+    if (!SHOP_CONFIG_OK) loadShopConfig().then(() => { if (npLookupOn()) { renderCheckout(); searchCities(CHK.city); } });
     if (npLookupOn()) {
       clearTimeout(cityTimer);
       cityTimer = setTimeout(() => searchCities(value), 300);
@@ -3810,10 +3816,10 @@ async function searchCities(q) {
     const data = await apiGet(`/delivery/np/cities?q=${encodeURIComponent(q)}`);
     if (req !== cityReq) return;
     CHK.cities = Array.isArray(data?.items) ? data.items : [];
-  } catch (_) {
+  } catch (e) {
     if (req !== cityReq) return;
     // Довідник недоступний — переходимо на ручне введення, замовлення не блокуємо
-    CHK.lookupDown = true; CHK.cities = [];
+    CHK.lookupDown = true; CHK.cities = []; CHK.lookupErr = 'міста: ' + (e?.message || e);
     CHK.cityLoading = false;
     renderCheckout();
     return;
