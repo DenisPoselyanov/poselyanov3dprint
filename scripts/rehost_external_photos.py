@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -39,15 +40,19 @@ def is_external(url: str) -> bool:
 
 
 def rehost(url: str, product_id: int) -> str:
+    # Ім'я з хешу URL: повторний запуск перезаписує той самий файл, а не плодить дублікати
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:12]
+    animated = url.lower().split("?")[0].endswith((".gif", ".webp"))
+    opts = {"flags": "lossy", "quality": "auto:good"} if animated else {"quality": "auto:good", "fetch_format": "auto"}
     result = cloudinary.uploader.upload(
         url,
         folder="poselyanov3dprint",
-        public_id=f"rehosted_{product_id}_{abs(hash(url)) % 10**8}",
+        public_id=f"rehosted_{product_id}_{digest}",
+        overwrite=True,
         resource_type="image",
         width=1000,
         crop="limit",
-        quality="auto:good",
-        fetch_format="auto",
+        **opts,
     )
     return result["secure_url"]
 
