@@ -641,8 +641,7 @@
   /* Підвал кошика */
   .cart-footer {
     flex-shrink: 0;
-    padding: 12px;
-    padding-bottom: 40px;
+    padding: 4px 12px 12px;
     border-top: 1px solid var(--border);
     background: var(--card-bg);
     /* фіксуємо над навігацією */
@@ -672,13 +671,26 @@
   }
   .cart-comment:focus { outline: none; border-color: var(--tg-blue); }
 
-  /* Ряд з загальною сумою та кнопкою оформлення замовлення в кошику */
-  .cart-total-row {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 14px; margin-top: 14px; transition: margin .5s cubic-bezier(.4,0,.2,1);
+  /* Підсумок у підвалі: згорнутий рядок «Разом», тап розгортає розбивку (товари, акція, промокод, доставка) */
+  .cart-sum-toggle {
+    display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 0 10px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
-  /* Текст "Загальна сума" в кошику */
-  .cart-total-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .cart-sum-lbl { display: grid; gap: 1px; }
+  .cart-sum-lbl .t { font-size: 15px; font-weight: 800; color: var(--ink); }
+  .cart-sum-lbl .d { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 700; color: var(--blue-ink); }
+  .cart-sum-lbl .d svg.i { width: 14px; height: 14px; transition: transform .25s ease; }
+  .cart-sum.open .cart-sum-lbl .d svg.i { transform: rotate(180deg); }
+  .cart-sum-price { display: flex; flex-direction: column; align-items: flex-end; }
+  .cart-sum-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s ease; }
+  .cart-sum.open .cart-sum-body { grid-template-rows: 1fr; }
+  .cart-sum-body .sum-list { overflow: hidden; min-height: 0; visibility: hidden; transition: visibility 0s .25s; }
+  .cart-sum.open .cart-sum-body .sum-list { visibility: visible; transition-delay: 0s; }
+  .sum-inner { display: grid; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+  @media (prefers-reduced-motion: reduce) {
+    .cart-sum-body, .cart-sum-lbl .d svg.i { transition: none; }
+  }
   .cart-total-sum { font-size: 20px; font-weight: 800; color: var(--text); transition: color .4s ease; }
   .cart-submit-btn {
     width: 100%; padding: 14px;
@@ -1372,6 +1384,31 @@
   .hero-card.ac-red, .progress-card.ac-red { --h: var(--sale); --h-ink: var(--red-ink); }
   .hero-card.ac-amber, .progress-card.ac-amber { --h: var(--amber); --h-ink: var(--amber-ink); }
 
+  /* Кошик: усі акції в одній картці, рядок на акцію */
+  .cart-promos { background: var(--surface); border-radius: var(--r); box-shadow: 0 0 0 1px var(--line); overflow: hidden; }
+  .cp-row { --h: var(--blue); --h-ink: var(--blue-ink); display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+  .cp-row + .cp-row { border-top: 1px solid var(--line); }
+  .cp-row.orange { --h: var(--orange); --h-ink: var(--orange-ink); }
+  .cp-row.green { --h: var(--green); --h-ink: var(--green); }
+  .cp-row.ac-blue { --h: var(--blue); --h-ink: var(--blue-ink); }
+  .cp-row.ac-orange { --h: var(--orange); --h-ink: var(--orange-ink); }
+  .cp-row.ac-violet { --h: var(--violet); --h-ink: var(--violet-ink); }
+  .cp-row.ac-green { --h: var(--green); --h-ink: var(--green); }
+  .cp-row.ac-teal { --h: var(--teal); --h-ink: var(--teal-ink); }
+  .cp-row.ac-pink { --h: var(--pink); --h-ink: var(--pink-ink); }
+  .cp-row.ac-red { --h: var(--sale); --h-ink: var(--red-ink); }
+  .cp-row.ac-amber { --h: var(--amber); --h-ink: var(--amber-ink); }
+  .cp-ic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--h) 13%, var(--surface)); color: var(--h-ink); }
+  .cp-ic svg.i { width: 18px; height: 18px; }
+  .cp-tx { flex: 1; min-width: 0; display: grid; gap: 1px; }
+  .cp-tx b { font-size: 13.5px; font-weight: 700; color: var(--ink); line-height: 1.25; }
+  .cp-tx small { font-size: 12px; color: var(--ink-2); line-height: 1.3; }
+  .cp-bar { height: 4px; border-radius: 9px; overflow: hidden; margin-top: 5px; background: color-mix(in srgb, var(--h) 14%, var(--surface-2)); }
+  .cp-bar i { display: block; height: 100%; border-radius: 9px; background: var(--h); transition: width .4s ease; }
+  .cp-ok { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--green) 16%, var(--surface)); color: var(--green); }
+  .cp-ok svg.i { width: 14px; height: 14px; stroke-width: 2.6; }
+  .cp-more { display: block; width: 100%; padding: 9px 12px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--blue-ink); font-size: 12.5px; font-weight: 700; }
+
   @media (prefers-reduced-motion: reduce) {
     .s-nav .badge.bump, .toast, .hero-prog i, .fly, .sk, .psheet, .gal-track, .progress-card .bar i { animation: none !important; transition: none !important; }
   }
@@ -1443,15 +1480,20 @@
       </div>
     </div>
     <div class="cart-footer" id="cart-footer" style="display:none">
-      <div class="cart-total-row" style="margin-top:0">
-        <span class="cart-total-label">Разом:</span>
-        <div style="display:flex; flex-direction:column; align-items:flex-end;">
-          <span class="cart-old-price" id="cartOldPrice"><span></span></span>
-          <span class="cart-total-sum" id="cart-total">0 ₴</span>
-          <div class="cart-total-hint" id="cart-total-hint" style="display:none">Суму узгодимо після замовлення</div>
-        </div>
+      <div class="cart-sum open" id="cart-sum">
+        <div class="cart-sum-body" id="cart-summary"></div>
+        <button type="button" class="cart-sum-toggle" id="cart-sum-toggle" aria-expanded="true" aria-controls="cart-summary" onclick="toggleCartSummary()">
+          <span class="cart-sum-lbl">
+            <span class="t">Разом</span>
+            <span class="d">Деталі <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></span>
+          </span>
+          <span class="cart-sum-price">
+            <span class="cart-old-price" id="cartOldPrice"><span></span></span>
+            <span class="cart-total-sum" id="cart-total">0 ₴</span>
+            <span class="cart-total-hint" id="cart-total-hint" style="display:none">Суму узгодимо після замовлення</span>
+          </span>
+        </button>
       </div>
-
       <button class="cart-submit-btn" id="cart-submit-btn" onclick="submitOrder()">✓ Оформити замовлення</button>
     </div>
   </div>
@@ -2255,15 +2297,81 @@ function giftRowHtml() {
     <button type="button" class="btn soft" onclick="openGiftModal()">Змінити</button></div>`;
 }
 
-// Прогрес до знижки й подарунка — ті самі картки, що на вкладці «Акції», але без переходу
+// Прогрес до знижки й подарунка: усі акції в одній компактній картці, найближчі до виконання — зверху.
+// Тексти повторюють salesPromoCards (вкладка «Акції»), але тут рядок = одна акція, а не окрема картка.
+const CART_PROMOS_VISIBLE = 3;   // більше акцій — показуємо дві найближчі, решта під «Ще N»
+let cartPromosOpen = false;
+
+function cartPromoModels() {
+  const raw = getCartFixedTotal();
+  const out = [];
+  PROMOTIONS.forEach(p => {
+    const accent = promoAccent(p);
+    if (p.type === 'gift_threshold') {
+      const need = p.min_items || 0;
+      const have = Math.min(promoGiftCount(p), need);
+      const left = need - have;
+      const cat = p.category ? ` з «${catName(p.category)}»` : '';
+      out.push({
+        icon: ic('gift'), hue: 'orange', accent, title: p.title,
+        sub: !need ? (p.subtitle || '') : left <= 0 ? 'Подарунок твій! Обери його нижче'
+          : `Ще ${left} ${plural(left, 'різний товар', 'різні товари', 'різних товарів')}${cat} до подарунка`,
+        ratio: need ? have / need : null, done: !!need && left <= 0,
+      });
+    } else if (['order_percent', 'order_fixed', 'cat_percent'].includes(p.type)) {
+      const min = p.min_order || 0;
+      const val = p.type === 'order_fixed' ? `−${money(p.value)}` : `−${p.value}%`;
+      const isCat = p.type === 'cat_percent';
+      const scope = isCat ? ` на ${promoCats(p).map(catName).join(', ')}` : ' на все';
+      const timer = p.show_timer === false ? '' : timeLeftText(p.ends_at);
+      const done = !min || raw >= min;
+      const state = !min ? 'Діє автоматично' : done ? 'Знижка вже діє' : `Ще ${money(min - raw)} до знижки`;
+      out.push({
+        icon: ic('percent'), hue: '', accent,
+        title: `${val}${isCat ? scope + (min ? ` · від ${money(min)}` : '') : min ? ` від ${money(min)}` : scope}`,
+        sub: `${state}${timer ? ` · до кінця ${timer}` : ''}`,
+        ratio: min ? Math.min(1, raw / min) : null, done,
+      });
+    } else if (p.type === 'free_ship') {
+      const min = p.min_order || 0;
+      const done = !min || raw >= min;
+      out.push({
+        icon: ic('truck'), hue: 'green', accent, title: p.title,
+        sub: done ? 'Доставка за наш рахунок' : `Ще ${money(min - raw)} до безкоштовної доставки`,
+        ratio: min ? Math.min(1, raw / min) : null, done,
+      });
+    }
+  });
+  // Спершу те, що ще можна дотягнути (найближче — перше), потім уже діючі
+  const rank = m => (m.done ? 1 : m.ratio != null ? 0 : 2);
+  return out.map((m, i) => ({ m, i })).sort((a, b) => rank(a.m) - rank(b.m)
+    || (rank(a.m) === 0 ? b.m.ratio - a.m.ratio : 0) || a.i - b.i).map(x => x.m);
+}
+
+function cartPromoRowHtml(m) {
+  return `<div class="cp-row${m.hue ? ' ' + m.hue : ''}${m.accent}"><span class="cp-ic">${m.icon}</span>
+    <div class="cp-tx"><b>${escapeHtml(m.title)}</b><small>${escapeHtml(m.sub)}</small>
+      ${m.ratio != null && !m.done ? `<div class="cp-bar"><i style="width:${Math.round(m.ratio * 100)}%"></i></div>` : ''}</div>
+    ${m.done ? `<span class="cp-ok" aria-label="Діє">${ic('check')}</span>` : ''}</div>`;
+}
+
 function cartProgressHtml() {
-  const promos = PROMOTIONS.filter(p => ['gift_threshold', 'order_percent', 'order_fixed', 'cat_percent', 'free_ship'].includes(p.type));
-  return salesPromoCards(promos).map(c => c
-    .replace(/<button type="button" class="progress-card/, '<div class="progress-card')
-    .replace(/ data-act="promo" data-id="[^"]*"/, '')
-    .replace(/<\/button>\s*$/, '</div>')
-    .replace('Виконано — обери подарунок у кошику', 'Подарунок твій! Обери його нижче')
-  ).join('');
+  const models = cartPromoModels();
+  if (!models.length) return '';
+  const collapsible = models.length > CART_PROMOS_VISIBLE;
+  const shown = collapsible && !cartPromosOpen ? models.slice(0, 2) : models;
+  const rest = models.length - 2;
+  const toggle = collapsible
+    ? `<button type="button" class="cp-more" data-act="cart-promos-toggle" aria-expanded="${cartPromosOpen}">${
+      cartPromosOpen ? 'Сховати' : `Ще ${rest} ${plural(rest, 'акція', 'акції', 'акцій')}`}</button>` : '';
+  return `<div class="cart-promos">${shown.map(cartPromoRowHtml).join('')}${toggle}</div>`;
+}
+
+function toggleCartPromos() {
+  cartPromosOpen = !cartPromosOpen;
+  haptic('select');
+  const top = document.getElementById('cart-top');
+  if (top) top.innerHTML = cartTopHtml();
 }
 
 function cartTopHtml() {
@@ -2298,18 +2406,37 @@ function cartSummaryHtml() {
   if (pricing.promotionDiscount > 0) rows.push(`<div class="sum-row g"><span>Акція${promo?.title ? ` «${escapeHtml(promo.title)}»` : ''}</span><b>−${money(pricing.promotionDiscount)}</b></div>`);
   if (appliedCoupon && pricing.couponDiscount > 0) rows.push(`<div class="sum-row g"><span>Промокод ${escapeHtml(appliedCoupon.code)}</span><b>−${money(pricing.couponDiscount)}</b></div>`);
   if (shouldShowGift() && selectedGift) rows.push(`<div class="sum-row g"><span>Подарунок: ${escapeHtml(selectedGift.name)}</span><b>0 ₴</b></div>`);
-  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'безкоштовно' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : CHK.method === 'np' ? `≈ ${money(NP_DELIVERY_ESTIMATE)} · Новій пошті окремо` : 'за тарифами перевізника'}</b></div>`);
-  rows.push(`<div class="sum-row total"><span>До сплати</span><b>${escapeHtml(formatCartTotalLabel(pricing.finalTotal))}</b></div>`);
-  return `<div class="chk-sec">${rows.join('')}</div>`;
+  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'самовивіз' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : CHK.method === 'np' ? `≈ ${money(NP_DELIVERY_ESTIMATE)} · за тарифами перевізника` : 'за тарифами перевізника'}</b></div>`);
+  // Рядок «Разом» живе в підвалі, тож тут лише розбивка
+  return `<div class="sum-list"><div class="sum-inner">${rows.join('')}</div></div>`;
+}
+
+// Розбивка в підвалі відкрита одразу, клієнт може згорнути; стан переживає перемальовування кошика
+let cartSumOpen = true;
+function applyCartSumState() {
+  document.getElementById('cart-sum')?.classList.toggle('open', cartSumOpen);
+  document.getElementById('cart-sum-toggle')?.setAttribute('aria-expanded', String(cartSumOpen));
+  const body = document.getElementById('cart-summary');
+  if (body) body.inert = !cartSumOpen;
+}
+function toggleCartSummary() {
+  cartSumOpen = !cartSumOpen;
+  haptic('select');
+  applyCartSumState();
+}
+function refreshCartSummary() {
+  const el = document.getElementById('cart-summary');
+  if (el) el.innerHTML = cartSummaryHtml();
+  applyCartSumState();
 }
 
 // Оновлює все, що залежить від складу й суми кошика, не перемальовуючи рядки товарів
 function refreshCartExtras() {
+  refreshCartSummary();
   const top = document.getElementById('cart-top');
   if (!top) return;
   top.innerHTML = cartTopHtml();
   document.getElementById('cart-gift-slot').innerHTML = giftRowHtml();
-  document.getElementById('cart-summary').innerHTML = cartSummaryHtml();
 }
 
 function clearCart() {
@@ -2474,7 +2601,7 @@ function renderCart() {
   `).join('');
 
   list.innerHTML = `<div id="cart-top"></div><div id="cart-items">${itemsHtml}</div><div id="cart-gift-slot"></div>
-    <div id="cart-upsell">${cartUpsellHtml()}</div><div id="cart-summary"></div>`;
+    <div id="cart-upsell">${cartUpsellHtml()}</div>`;
   refreshCartExtras();
   enhanceScrollers(document.getElementById('cart-upsell'));
 
@@ -3799,7 +3926,7 @@ function renderCheckout() {
 function chkSetMethod(m) {
   if (CHK.method === m) return;
   CHK.method = m; CHK.errors = {};
-  haptic('select'); saveCheckout(); renderCheckout();
+  haptic('select'); saveCheckout(); renderCheckout(); refreshCartSummary();
 }
 function chkSetPay(p) { CHK.pay = p; haptic('select'); saveCheckout(); renderCheckout(); }
 function chkSetKind(k) {
@@ -5691,6 +5818,7 @@ function bindShopEvents() {
       case 'page': switchPage(el.dataset.page); break;
       case 'fav-all': addFavsToCart(); break;
       case 'cart-clear': clearCart(); break;
+      case 'cart-promos-toggle': toggleCartPromos(); break;
       case 'order-copy': copyTtn(el.dataset.ttn); break;
       case 'review-open': openReviewForm(Number(el.dataset.id)); break;
       case 'review-close': closeReviewForm(); break;
