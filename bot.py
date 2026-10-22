@@ -2830,7 +2830,7 @@ async def _send_test_review_request(order: dict) -> None:
         await send_rich_message(
             bot_app.bot,
             user_id,
-            build_review_request(int(order["id"]), bonus_config()),
+            build_review_request(int(order["id"])),
             reply_markup=_review_request_markup(int(order["id"])),
         )
     except Exception as e:
@@ -3221,7 +3221,7 @@ async def _send_review_nudges(due: list[dict], mark, build) -> int:
             await send_rich_message(
                 bot_app.bot,
                 item["user_id"],
-                build(item["order_id"], bonus_config()),
+                build(item["order_id"], None if item.get("is_test") else bonus_config()),
                 reply_markup=_review_request_markup(item["order_id"]),
             )
             sent += 1

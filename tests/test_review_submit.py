@@ -60,7 +60,7 @@ def test_pending_lists_only_delivered_unreviewed(env):
     done = _delivered_order(orders)
     items = [{"product_id": 12, "product_name": "Інше", "price": 50, "quantity": 1}]
     orders.save_order(7, "@u", "Тест", items, 50, "")  # ще new
-    assert reviews.pending_reviews(7) == [{"order_id": done, "product_id": 11, "product_name": "Брелок"}]
+    assert reviews.pending_reviews(7) == [{"order_id": done, "product_id": 11, "product_name": "Брелок", "is_test": False}]
     assert reviews.pending_reviews(8) == []
     assert reviews.pending_reviews(0) == []
 
@@ -133,7 +133,7 @@ def test_review_request_due_after_three_days(env):
     conn.execute("UPDATE orders SET delivered_at = datetime('now', '-4 days') WHERE id = ?", (oid,))
     conn.commit()
     conn.close()
-    assert reviews.orders_due_review_request() == [{"order_id": oid, "user_id": 7}]
+    assert reviews.orders_due_review_request() == [{"order_id": oid, "user_id": 7, "is_test": False}]
     reviews.mark_review_requested(oid)
     assert reviews.orders_due_review_request() == []
 
@@ -167,14 +167,14 @@ def test_review_request_due_after_one_day(env):
     _age(oid, delivered_at=0)
     assert reviews.orders_due_review_request(1) == []  # ще не добу
     _age(oid, delivered_at=2)
-    assert reviews.orders_due_review_request() == [{"order_id": oid, "user_id": 7}]
+    assert reviews.orders_due_review_request() == [{"order_id": oid, "user_id": 7, "is_test": False}]
 
 
 def test_review_reminder_once_and_only_without_review(env):
     orders, reviews, _ = env
     oid = _delivered_order(orders)
     _age(oid, delivered_at=8, review_requested_at=6)
-    assert reviews.orders_due_review_reminder() == [{"order_id": oid, "user_id": 7}]
+    assert reviews.orders_due_review_reminder() == [{"order_id": oid, "user_id": 7, "is_test": False}]
     reviews.mark_review_reminded(oid)
     assert reviews.orders_due_review_reminder() == []
 

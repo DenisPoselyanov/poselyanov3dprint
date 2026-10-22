@@ -273,6 +273,9 @@
   .ord-pill.red { background: var(--sale-soft); color: var(--sale); }
   .ord-items { display: grid; gap: 8px; }
   .ord-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  button.ord-item { width: 100%; padding: 0; background: none; border: 0; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+  button.ord-item > .go { margin-left: auto; color: var(--ink-3); display: grid; }
+  button.ord-item > .go .i { width: 14px; height: 14px; transform: rotate(180deg); }
   .ord-item .th { width: 38px; height: 38px; border-radius: 10px; background: var(--surface-2); overflow: hidden; flex: none; display: grid; place-items: center; font-size: 18px; }
   .ord-item .th img { width: 100%; height: 100%; object-fit: cover; }
   .ord-item small { display: block; color: var(--ink-3); font-size: 11.5px; }
@@ -285,6 +288,15 @@
   .ord-ttn { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-2); font-size: 13px; }
   .ord-ttn code { font-weight: 800; letter-spacing: .02em; }
   .ord-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ord-toggle { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none; border: 0; color: var(--blue-ink); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .ord-toggle .i { width: 14px; height: 14px; transform: rotate(-90deg); transition: transform .2s ease; }
+  .ord-card.open .ord-toggle .i { transform: rotate(90deg); }
+  .ord-more { display: none; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
+  .ord-card.open .ord-more { display: grid; }
+  .ord-more .row { display: flex; justify-content: space-between; gap: 12px; }
+  .ord-more .row > span:first-child { color: var(--ink-3); }
+  .ord-more .row > span:last-child { text-align: right; font-weight: 600; }
+  .ord-more .row.total { font-weight: 800; font-size: 14px; padding-top: 6px; border-top: 1px dashed var(--line); }
 
   /* ФОРМА ВІДГУКУ: шапка й кнопка закріплені, гортається лише список товарів */
   #review-backdrop.open { animation: revFade .2s ease; }
@@ -4365,6 +4377,22 @@ function orderItemSub(it) {
   if (it.is_gift) bits.push('Подарунок');
   return bits.join(' · ');
 }
+const ORDER_DELIVERY = { np: 'Нова Пошта', up: 'Укрпошта', self: 'Самовивіз' };
+const ORDER_PAY = { card: 'Оплата карткою', cod: 'Накладений платіж' };
+function orderMoreHtml(o) {
+  const row = (k, v) => v ? `<div class="row"><span>${escapeHtml(k)}</span><span>${escapeHtml(v)}</span></div>` : '';
+  const lines = o.items.map(it => row(
+    `${(it.product_name || '').replace(/^🎁\s*/, '')}${it.quantity > 1 ? ` × ${it.quantity}` : ''}`,
+    it.is_gift ? 'Подарунок' : (it.is_contract_price ? 'Договірна' : money((it.price || 0) * (it.quantity || 1))))).join('');
+  const where = [o.city, o.branch].filter(Boolean).join(', ');
+  const discount = Number(o.discount_amount || 0);
+  return `<div class="ord-more">${lines}
+    ${discount > 0 ? row(o.coupon_code ? `Знижка (${o.coupon_code})` : 'Знижка', `−${money(discount)}`) : ''}
+    ${row('Доставка', ORDER_DELIVERY[o.delivery_method] || '')}${row('Куди', where)}${row('Оплата', ORDER_PAY[o.pay_method] || '')}
+    ${row('Коментар', o.comment)}
+    <div class="row total"><span>Разом</span><span>${escapeHtml(o.price_pending && !o.total_price ? 'Ціна після узгодження' : money(o.total_price))}</span></div>
+  </div>`;
+}
 function orderCardHtml(o) {
   const st = ORDER_STATUS[o.status] || { label: o.status, tone: '', hint: '' };
   const d = parseServerDate(o.ordered_at);
@@ -4373,9 +4401,12 @@ function orderCardHtml(o) {
   const idx = TRACK_STEPS.findIndex(([k]) => k === o.step);
   const track = o.status === 'cancelled' || idx < 0 ? '' :
     `<div class="ord-track" role="img" aria-label="Статус: ${escapeAttr(st.label)}">${TRACK_STEPS.map(([, l], i) => `<div class="${i <= idx ? 'on' : ''}">${l}</div>`).join('')}</div>`;
-  const items = o.items.map(it => `<div class="ord-item"><div class="th">${orderItemThumb(it)}</div>
+  const items = o.items.map(it => {
+    const link = it.product_id > 0 && !it.is_gift;
+    return `<${link ? `button type="button" data-act="order-product" data-pid="${it.product_id}"` : 'div'} class="ord-item"><div class="th">${orderItemThumb(it)}</div>
       <div><span>${escapeHtml((it.product_name || '').replace(/^🎁\s*/, ''))}${it.quantity > 1 ? ` × ${it.quantity}` : ''}</span>
-      ${orderItemSub(it) ? `<small>${escapeHtml(orderItemSub(it))}</small>` : ''}</div></div>`).join('');
+      ${orderItemSub(it) ? `<small>${escapeHtml(orderItemSub(it))}</small>` : ''}</div>${link ? `<span class="go">${ic('back')}</span>` : ''}</${link ? 'button' : 'div'}>`;
+  }).join('');
   const ttn = o.ttn ? `<div class="ord-ttn"><span>ТТН <code>${escapeHtml(o.ttn)}</code></span>
       <button type="button" class="link-btn" data-act="order-copy" data-ttn="${escapeAttr(o.ttn)}">${ic('copy')}Копіювати</button></div>` : '';
   const canRepeat = o.items.some(it => !it.is_gift && it.product_id > 0);
@@ -4386,6 +4417,8 @@ function orderCardHtml(o) {
       <span class="ord-pill ${st.tone}">${escapeHtml(st.label)}</span></div>
     <div class="ord-items">${items}</div>
     ${track}${st.hint ? `<div class="ord-hint">${escapeHtml(st.hint)}</div>` : ''}${ttn}${actions}
+    <button type="button" class="ord-toggle" data-act="order-toggle" aria-expanded="false">Деталі замовлення${ic('back')}</button>
+    ${orderMoreHtml(o)}
   </article>`;
 }
 function orderReviewButton(o) {
@@ -4448,12 +4481,17 @@ async function loadPendingReviews() {
     PENDING_REVIEWS = [];
   }
 }
+// Умови бонусу для замовлення: тестові замовлення купона не дають, тож і згадувати його не треба
+function revBonus(orderId = REV.orderId) {
+  if (!REVIEW_BONUS) return null;
+  return (PENDING_REVIEWS || []).some(x => x.order_id === orderId && x.is_test) ? null : REVIEW_BONUS;
+}
 function reviewItems() { return (PENDING_REVIEWS || []).filter(x => x.order_id === REV.orderId); }
 function revDraft(pid) { return REV.drafts[pid] || (REV.drafts[pid] = { rating: 0, text: '', photos: [] }); }
 function revItemEl(pid) { return document.getElementById(`rev-item-${pid}`); }
 // Чи відгук дає право на купон — для підказки «купон прийде після публікації»
 function revQualifies(d) {
-  const b = REVIEW_BONUS;
+  const b = revBonus();
   if (!b || !d) return false;
   return d.photos.some(p => p.url) || d.text.trim().length >= b.text_min;
 }
@@ -4507,21 +4545,21 @@ function revPhotosInner(pid) {
   const photos = d.photos.map(p =>
     `<div class="ph${p.busy ? ' busy' : ''}">${p.preview ? `<img src="${escapeAttr(p.preview)}" alt="">` : ''}${p.busy ? '' : `<button type="button" data-act="review-photo-del" data-pid="${pid}" data-id="${p.id}" aria-label="Прибрати фото">×</button>`}</div>`).join('');
   const add = d.photos.length < REV_PHOTOS_MAX
-    ? `<button type="button" class="add${d.photos.length ? '' : ' wide'}" data-act="review-photo-add" data-pid="${pid}" aria-label="Додати фото">${ic('plus')}${d.photos.length ? 'Ще' : 'Додати фото'}${!d.photos.length && REVIEW_BONUS ? `<i class="rev-badge">−${REVIEW_BONUS.photo_percent}%</i>` : ''}</button>` : '';
+    ? `<button type="button" class="add${d.photos.length ? '' : ' wide'}" data-act="review-photo-add" data-pid="${pid}" aria-label="Додати фото">${ic('plus')}${d.photos.length ? 'Ще' : 'Додати фото'}${!d.photos.length && revBonus() ? `<i class="rev-badge">−${revBonus().photo_percent}%</i>` : ''}</button>` : '';
   return photos + add;
 }
 function revTextLen(pid) { return (revDraft(pid).text || '').trim().length; }
 function revCountHtml(pid) {
-  const n = revTextLen(pid), min = REVIEW_BONUS.text_min;
+  const n = revTextLen(pid), min = revBonus().text_min;
   if (n >= min) return `${ic('check')}Достатньо для купона · ${n} ${plural(n, 'символ', 'символи', 'символів')}`;
-  return `${n} / ${min} символів для купона −${REVIEW_BONUS.text_percent}%`;
+  return `${n} / ${min} символів для купона −${revBonus().text_percent}%`;
 }
 function revTextInput(pid, el) {
   revDraft(pid).text = el.value;
   const c = document.getElementById(`rev-count-${pid}`);
   if (c) {
     const was = c.classList.contains('ok');
-    c.classList.toggle('ok', revTextLen(pid) >= REVIEW_BONUS.text_min);
+    c.classList.toggle('ok', revTextLen(pid) >= revBonus().text_min);
     c.innerHTML = revCountHtml(pid);
     if (!was && c.classList.contains('ok')) haptic('select');
   }
@@ -4531,7 +4569,7 @@ function revExtraHtml(pid) {
   const d = revDraft(pid);
   return `<div class="rev-extra">
     <textarea class="rev-text" maxlength="1000" placeholder="Що сподобалось? Як вийшов друк? (необовʼязково)" oninput="revTextInput(${pid}, this)">${escapeHtml(d.text)}</textarea>
-    ${REVIEW_BONUS ? `<div class="rev-count${revTextLen(pid) >= REVIEW_BONUS.text_min ? ' ok' : ''}" id="rev-count-${pid}">${revCountHtml(pid)}</div>` : ''}
+    ${revBonus() ? `<div class="rev-count${revTextLen(pid) >= revBonus().text_min ? ' ok' : ''}" id="rev-count-${pid}">${revCountHtml(pid)}</div>` : ''}
     <div class="rev-photos">${revPhotosInner(pid)}</div>
     <input type="file" id="rev-file-${pid}" accept="image/*" multiple hidden onchange="revAddFiles(${pid}, this.files); this.value = ''">
   </div>`;
@@ -4564,7 +4602,7 @@ function revFootHtml() {
 }
 // Один купон на все замовлення: банер показує, що вже заробено, а не повторює умови біля кожного товару
 function revBonusHtml() {
-  const b = REVIEW_BONUS;
+  const b = revBonus();
   if (!b) return '';
   const drafts = reviewItems().map(x => revDraft(x.product_id));
   const hasPhoto = drafts.some(d => d.photos.length);
@@ -4579,7 +4617,7 @@ function revSyncFoot() {
   const bn = document.getElementById('rev-bonus');
   if (bn) {
     bn.querySelector('span').innerHTML = revBonusHtml();
-    bn.classList.toggle('won', reviewItems().some(x => revDraft(x.product_id).photos.length || revTextLen(x.product_id) >= REVIEW_BONUS.text_min));
+    bn.classList.toggle('won', reviewItems().some(x => revDraft(x.product_id).photos.length || revTextLen(x.product_id) >= revBonus().text_min));
   }
   document.getElementById('review-body')?.classList.toggle('has-photo', reviewItems().some(x => revDraft(x.product_id).photos.length));
 }
@@ -4626,7 +4664,7 @@ function renderReviewForm() {
     return;
   }
   const items = reviewItems();
-  const b = REVIEW_BONUS;
+  const b = revBonus();
   const sub = items.length > 1 ? `${tovar(items.length)} · оціни ті, що хочеш` : 'Кілька слів допоможуть іншим обрати';
   body.innerHTML = `${head('Твій відгук', sub)}
     <div class="rev-scroll">
@@ -4750,7 +4788,7 @@ function reviewNudgeHtml() {
   const rest = n.items.length - 1;
   const stars = [1, 2, 3, 4, 5].map(i =>
     `<button type="button" data-act="review-quick" data-order="${n.orderId}" data-n="${i}" aria-label="${i} з 5">${ic('star')}</button>`).join('');
-  const b = REVIEW_BONUS;
+  const b = revBonus(n.orderId);
   return `<div class="rev-nudge"><button type="button" class="rev-nudge-x" data-act="review-nudge-close" data-order="${n.orderId}" aria-label="Не зараз">✕</button>
     <button type="button" class="rev-nudge-head" data-act="review-to-orders" data-order="${n.orderId}"><div class="rev-nudge-th">${thumbs}</div>
       <div class="rev-nudge-txt"><small>Оціни покупку</small><b>${escapeHtml(n.items[0].product_name)}</b>
@@ -6126,7 +6164,14 @@ function bindShopEvents() {
       case 'fav-all': addFavsToCart(); break;
       case 'cart-clear': clearCart(); break;
       case 'cart-promos-toggle': toggleCartPromos(); break;
+      case 'order-product': {
+        const pid = Number(el.dataset.pid);
+        if (!findAnyProduct(pid)) { showToast({ msg: 'Цього товару вже немає в каталозі', icon: 'info' }); break; }
+        openModal(pid);
+        break;
+      }
       case 'order-copy': copyTtn(el.dataset.ttn); break;
+      case 'order-toggle': { const c = el.closest('.ord-card'); el.setAttribute('aria-expanded', String(c.classList.toggle('open'))); break; }
       case 'review-open': openReviewForm(Number(el.dataset.id)); break;
       case 'review-close': closeReviewForm(); break;
       case 'review-star': revSetRating(Number(el.dataset.pid), Number(el.dataset.n)); break;

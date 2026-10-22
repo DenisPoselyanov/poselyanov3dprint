@@ -249,7 +249,7 @@ def pending_reviews(user_id: int) -> list[dict]:
     try:
         rows = conn.execute(
             _sql("""
-                SELECT o.id, oi.product_id, oi.product_name
+                SELECT o.id, oi.product_id, oi.product_name, COALESCE(o.is_test, 0)
                 FROM orders o
                 JOIN order_items oi ON oi.order_id = o.id
                 WHERE o.user_id = ?
@@ -267,12 +267,12 @@ def pending_reviews(user_id: int) -> list[dict]:
         conn.close()
     seen: set[tuple[int, int]] = set()
     out = []
-    for order_id, product_id, name in rows:
+    for order_id, product_id, name, is_test in rows:
         key = (int(order_id), int(product_id))
         if key in seen:
             continue
         seen.add(key)
-        out.append({"order_id": key[0], "product_id": key[1], "product_name": name or ""})
+        out.append({"order_id": key[0], "product_id": key[1], "product_name": name or "", "is_test": bool(is_test)})
     return out
 
 
@@ -531,7 +531,7 @@ def _due_orders(where: str) -> list[dict]:
     try:
         rows = conn.execute(
             _sql(f"""
-                SELECT o.id, o.user_id
+                SELECT o.id, o.user_id, COALESCE(o.is_test, 0)
                 FROM orders o
                 WHERE o.status = 'delivered' AND o.delivered_at IS NOT NULL
                   AND o.user_id IS NOT NULL AND o.user_id > 0
@@ -543,7 +543,7 @@ def _due_orders(where: str) -> list[dict]:
         ).fetchall()
     finally:
         conn.close()
-    return [{"order_id": int(r[0]), "user_id": int(r[1])} for r in rows]
+    return [{"order_id": int(r[0]), "user_id": int(r[1]), "is_test": bool(r[2])} for r in rows]
 
 
 def orders_due_review_request(days: int = REVIEW_REQUEST_DELAY_DAYS) -> list[dict]:
@@ -618,6 +618,10 @@ def grant_review_bonus(review_id: int) -> dict | None:
 
     conn = db_connect()
     try:
+        # Тестові замовлення купонів не дають, навіть якщо акцію увімкнено
+        test = conn.execute(_sql("SELECT COALESCE(is_test, 0) FROM orders WHERE id = ?"), (order_id,)).fetchone()
+        if test and test[0]:
+            return None
         cur = conn.execute(
             _sql("UPDATE orders SET review_bonus_code = 'pending' WHERE id = ? AND COALESCE(review_bonus_code, '') = ''"),
             (order_id,),
