@@ -1,5 +1,5 @@
 """
-Denis 3D Print — Telegram Bot
+Poselyanov 3D Print — Telegram Bot
 """
 
 from datetime import datetime, timedelta, timezone
@@ -2895,7 +2895,7 @@ async def handle_prepare_share(request: web.Request):
         "id": f"p{product_id}",
         "photo_url": photo,
         "thumbnail_url": photo,
-        "caption": f"{product.get('name', '')} — Denis 3D Print",
+        "caption": f"{product.get('name', '')} — Poselyanov 3D Print",
         "reply_markup": {"inline_keyboard": [[{"text": "🛍️ Відкрити в магазині", "url": link}]]},
     }
     payload = {

@@ -9294,6 +9294,64 @@
             return Promise.resolve(window.confirm(message));
         }
 
+        // Модальне вікно з полем ТТН: показується прямо при «Далі: Відправлено».
+        // Повертає 14 цифр або null, якщо скасовано. Саме воно і є підтвердженням.
+        function askTtn(orderId, initial) {
+            return new Promise(resolve => {
+                const overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+                overlay.innerHTML = `
+                    <div style="background:var(--bg-card);color:var(--text-main);border-radius:16px;padding:20px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+                        <div style="font-size:17px;font-weight:700;margin-bottom:4px;">📦 Відправка №${orderId}</div>
+                        <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Вставте ТТН Нової пошти — клієнт отримає її в повідомленні в боті.</div>
+                        <div style="display:flex;gap:8px;">
+                            <input id="ttn-modal-input" type="text" inputmode="numeric" maxlength="17" autocomplete="off" placeholder="20450000000000"
+                                style="flex:1;min-width:0;padding:12px;font-size:17px;letter-spacing:1px;border:2px solid var(--border-input);border-radius:10px;background:var(--bg-input);color:var(--text-main);">
+                            <button type="button" id="ttn-modal-paste" class="btn btn-secondary" style="white-space:nowrap;">Вставити</button>
+                        </div>
+                        <div id="ttn-modal-err" style="color:#e53935;font-size:13px;min-height:18px;margin-top:6px;"></div>
+                        <div style="display:flex;gap:8px;margin-top:10px;">
+                            <button type="button" id="ttn-modal-cancel" class="btn btn-secondary" style="flex:1;">Скасувати</button>
+                            <button type="button" id="ttn-modal-ok" class="btn btn-primary" style="flex:2;">Відправлено ✅</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(overlay);
+                const input = overlay.querySelector('#ttn-modal-input');
+                const err = overlay.querySelector('#ttn-modal-err');
+                const clean = () => input.value.replace(/\s+/g, '');
+                const done = (val) => { overlay.remove(); resolve(val); };
+                input.value = initial || '';
+                input.addEventListener('input', () => {
+                    input.value = input.value.replace(/[^\d\s]/g, '');
+                    err.textContent = '';
+                });
+                const submit = () => {
+                    const v = clean();
+                    if (!/^\d{14}$/.test(v)) {
+                        err.textContent = v ? `ТТН — рівно 14 цифр (зараз ${v.length})` : 'Введіть ТТН';
+                        input.focus();
+                        return;
+                    }
+                    done(v);
+                };
+                input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+                overlay.querySelector('#ttn-modal-ok').onclick = submit;
+                overlay.querySelector('#ttn-modal-cancel').onclick = () => done(null);
+                overlay.addEventListener('click', e => { if (e.target === overlay) done(null); });
+                overlay.querySelector('#ttn-modal-paste').onclick = async () => {
+                    try {
+                        const text = (await navigator.clipboard.readText()).replace(/\D/g, '');
+                        if (text) { input.value = text.slice(0, 14); err.textContent = ''; }
+                        else err.textContent = 'У буфері немає цифр';
+                    } catch (_) {
+                        err.textContent = 'Дозвольте доступ до буфера або вставте вручну';
+                    }
+                    input.focus();
+                };
+                setTimeout(() => input.focus(), 50);
+            });
+        }
+
         let ordersTab = 'all';
         let ordersCounts = {};
         let ordersSearch = '';
@@ -10166,14 +10224,9 @@
 
             let ttn = '';
             if (status === 'shipped') {
-                ttn = (document.getElementById(`order-ttn-${orderId}`)?.value || order?.ttn || '').replace(/\s+/g, '');
-                if (!/^\d{14}$/.test(ttn)) {
-                    expandedOrderId = orderId;
-                    renderOrdersList();
-                    setTimeout(() => document.getElementById(`order-ttn-${orderId}`)?.focus(), 400);
-                    showToast(ttn ? 'ТТН Нової пошти — рівно 14 цифр' : 'Введіть ТТН — вона піде клієнту в повідомленні', 'error');
-                    return;
-                }
+                const prefill = (document.getElementById(`order-ttn-${orderId}`)?.value || order?.ttn || '').replace(/\s+/g, '');
+                ttn = await askTtn(orderId, prefill);
+                if (!ttn) return;
             }
 
             const actionLabel = {
@@ -10185,7 +10238,8 @@
                 shipped: `позначити «Відправлено» (ТТН ${ttn})`,
                 delivered: 'позначити «Отримано»',
             }[status] || status;
-            if (!(await askConfirm(`#${orderId}: ${actionLabel}?\n\nКлієнт отримає повідомлення в боті.`))) return;
+            // Для «Відправлено» підтвердженням є саме вікно з ТТН.
+            if (status !== 'shipped' && !(await askConfirm(`#${orderId}: ${actionLabel}?\n\nКлієнт отримає повідомлення в боті.`))) return;
 
             try {
                 const res = await fetch(API_BASE + `/orders/${orderId}/status`, {

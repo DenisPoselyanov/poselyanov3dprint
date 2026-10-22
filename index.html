@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>Denis 3D Print</title>
+<title>Poselyanov 3D Print</title>
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <script src="api-config.js"></script>
 <script src="shared.js"></script>
@@ -4587,7 +4587,7 @@ async function shareProduct() {
   if (!currentProduct) return;
   const link = buildProductShareLink(currentProduct.id, getGlobalPhotoIndex());
   const title = currentProduct.name;
-  const text = `${title} — Denis 3D Print`;
+  const text = `${title} — Poselyanov 3D Print`;
 
   const tryNativeShare = async (data) => {
     if (!navigator.share) return false;

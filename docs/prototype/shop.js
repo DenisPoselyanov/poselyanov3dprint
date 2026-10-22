@@ -724,7 +724,7 @@ function tgHead() {
   const left = sub
     ? `<button class="tg-left" data-act="back">${ic('back')}Назад ${S.screen === 'product' ? nw(1) : ''}</button>`
     : `<button class="tg-left">${ic('close')}Закрити</button>`;
-  return `<div class="tg-head">${left}<div class="tg-title"><b>Denis 3D Print</b><small>міні-застосунок</small></div><button class="tg-right" aria-label="Меню">${ic('more')}</button></div>`;
+  return `<div class="tg-head">${left}<div class="tg-title"><b>Poselyanov 3D Print</b><small>міні-застосунок</small></div><button class="tg-right" aria-label="Меню">${ic('more')}</button></div>`;
 }
 const SCREENS = { home: scrHome, list: scrList, search: scrSearch, promos: scrPromos, fav: scrFav, orders: scrOrders, cart: scrCart, success: scrSuccess, product: scrProduct };
 let lastScreen = null;
