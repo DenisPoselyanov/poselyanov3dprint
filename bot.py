@@ -2045,6 +2045,13 @@ async def handle_order(request):
     coupon_code = (data.get("coupon_code") or "").strip() or None
 
     if coupon_code:
+        # Той самий ліміт, що й у /check_coupon: замовлення з купоном теж відповідає, чи код існує
+        if not allow_coupon_check(_safe_int(user_id)):
+            return web.json_response(
+                {"ok": False, "error": "Забагато спроб з купоном. Спробуй за хвилину"},
+                status=429,
+                headers=cors_headers(request),
+            )
         needs_sub, coupon_channel = await run_db(coupon_channel_gate, coupon_code)
         chat_id = resolve_coupon_channel(coupon_channel)
         if needs_sub and chat_id and not await is_channel_subscriber(user_id, chat_id):
