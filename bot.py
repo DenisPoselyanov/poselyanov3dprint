@@ -58,6 +58,18 @@ from rich_messages import (
     build_mycoupons_list,
     build_contact,
     build_admin_panel_hint,
+    build_broadcast_help,
+    build_cache_reloaded,
+    build_contact_card,
+    build_coupon_help,
+    build_coupon_list,
+    build_error_notice,
+    build_manual_client_message,
+    build_myid,
+    build_notice,
+    build_review_moderation,
+    build_review_request,
+    build_stats,
     edit_rich_message,
     escape,
     is_telegram_rate_limited,
@@ -658,27 +670,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         coupon_stats,
         total_discount,
     ) = await run_db(get_stats)
-    lines = [
-        f"📊 *Статистика*\n",
-        f"👥 Користувачів: *{user_count}*",
-        f"📦 Замовлень всього: *{order_count}*",
-        f"✅ Підтверджених: *{order_confirmed}*",
-        f"❓ Під питанням: *{order_draft}*",
-        f"❌ Відмінених: *{order_cancelled}*\n",
-        f"💰 Зароблено: *{earned} ₴*\n",
-        f"🕐 Останні користувачі:",
-    ]
-    for uid, name, username in recent:
-        safe_name = escape_markdown(str(name or ""), version=1)
-        raw_username = str(username or "").strip()
-        has_handle = raw_username.startswith("@") and raw_username[1:].strip() not in ("", "невідомо", "—")
-        if has_handle:
-            safe_username = escape_markdown(raw_username, version=1)
-            lines.append(f"• {safe_name} {safe_username}")
-        else:
-            safe_id = escape_markdown(str(uid), version=1)
-            lines.append(f"• {safe_name} — ID: `{safe_id}`")
-
     contact_buttons = []
     for uid, name, username in recent:
         raw_username = str(username or "").strip()
@@ -700,21 +691,11 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rows = [contact_buttons[i:i + 2] for i in range(0, len(contact_buttons), 2)]
         reply_markup = InlineKeyboardMarkup(rows)
 
-    # Виводимо топ-5 найпопулярніших товарів серед підтверджених замовлень
-    if top_products:
-        lines.append(f"\n🏆 *Топ товари:*")
-        for name, cnt in top_products:
-            safe_name = escape_markdown(str(name or ""), version=1)
-            lines.append(f"• {safe_name} — {cnt} шт")
-
-    if coupon_stats:
-        lines.append(f"\n🎟️ *Купони (топ-3):*")
-        for code, uses, disc in coupon_stats:
-            safe_code = escape_markdown(str(code or ""), version=1)
-            lines.append(f"• `{safe_code}` — {uses} раз, -{disc} ₴")
-        lines.append(f"💸 Всього знижок: *{total_discount} ₴*")
-
-    await update.message.reply_text("\n".join(lines), parse_mode='Markdown', reply_markup=reply_markup)
+    stats_html = build_stats(
+        user_count, order_count, order_confirmed, order_draft, order_cancelled, earned,
+        recent, top_products, coupon_stats, total_discount,
+    )
+    await send_rich_message(context.bot, update.message.chat_id, stats_html, reply_markup=reply_markup)
 
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -725,16 +706,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = update.message.reply_to_message
 
     if not reply:
-        await update.message.reply_text(
-            "Відповідай (reply) на повідомлення командою:\n"
-            "`/broadcast` — усім\n"
-            "`/broadcast <product_id>` — усім + кнопка товару\n"
-            "`/broadcast u:<user_id>` — конкретному юзеру\n"
-            "`/broadcast u:<user_id> <product_id>` — конкретному юзеру + кнопка товару\n\n"
-            "💡 Оформлюй повідомлення в Telegram з новим rich-форматуванням "
-            "(заголовки, списки, цитати) — воно збережеться при розсилці.",
-            parse_mode='Markdown'
-        )
+        await send_rich_message(context.bot, update.message.chat_id, build_broadcast_help())
         return
 
     target_user_id = None
@@ -746,18 +718,21 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 target_user_id = int(a[2:])
             except ValueError:
-                await update.message.reply_text("❌ Невірний формат user_id. Приклад: `/broadcast u:123456789`", parse_mode='Markdown')
+                await send_rich_message(context.bot, update.message.chat_id, build_error_notice(
+                    "Невірний формат user_id", "Приклад: /broadcast u:123456789", title="Розсилка не запущена"))
                 return
         else:
             try:
                 product_id = int(arg)
             except ValueError:
-                await update.message.reply_text("❌ Невірний аргумент. Дозволено тільки `u:<user_id>` та `product_id`.", parse_mode='Markdown')
+                await send_rich_message(context.bot, update.message.chat_id, build_error_notice(
+                    "Невірний аргумент", "Дозволено тільки u:<user_id> та product_id", title="Розсилка не запущена"))
                 return
 
     product = get_product_by_id(product_id) if product_id else None
     if product_id and not product:
-        await update.message.reply_text(f"❌ Товар з ID `{product_id}` не знайдено.", parse_mode='Markdown')
+        await send_rich_message(context.bot, update.message.chat_id, build_error_notice(
+            f"Товар з ID {product_id} не знайдено", title="Розсилка не запущена"))
         return
 
     if product:
@@ -773,10 +748,9 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if target_user_id:
         known_users = {uid for (uid,) in await run_db(get_all_users)}
         if target_user_id not in known_users:
-            await update.message.reply_text(
-                f"❌ Користувач `{target_user_id}` не знайдений у базі бота (або заблокований).",
-                parse_mode='Markdown'
-            )
+            await send_rich_message(context.bot, update.message.chat_id, build_error_notice(
+                f"Користувач {target_user_id} не знайдений у базі бота (або заблокований)",
+                title="Розсилка не запущена"))
             return
         users = [(target_user_id,)]
     else:
@@ -824,10 +798,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Команда для отримання Telegram ID користувача, яка може бути корисною для адміністраторів при налаштуванні замовлень або вирішенні проблем з користувачами. Вона відповідає повідомленням з ID користувача у форматі Markdown.
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"Твій Telegram ID: `{update.message.from_user.id}`",
-        parse_mode='Markdown'
-    )
+    await send_rich_message(context.bot, update.message.chat_id, build_myid(update.message.from_user.id))
 
 # --- Промокоди «лише для підписників каналу» -------------------------------------
 
@@ -2982,14 +2953,14 @@ async def handle_prepare_share(request: web.Request):
             async with session.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/savePreparedInlineMessage", json=payload
             ) as resp:
-                body = await resp.json()
-        if not body.get("ok"):
-            raise RuntimeError(body.get("description"))
+                body = await resp.json(content_type=None)
+        if not isinstance(body, dict) or not body.get("ok"):
+            raise RuntimeError((body or {}).get("description") if isinstance(body, dict) else "bad_response")
         return web.json_response(
             {"ok": True, "id": body["result"]["id"]}, headers=cors_headers(request)
         )
     except Exception as e:
-        logger.warning("savePreparedInlineMessage для товару %s не вдалось: %s", product_id, e)
+        logger.warning("savePreparedInlineMessage для товару %s не вдалось: %s", product_id, str(e).replace(BOT_TOKEN, "***"))
         return web.json_response({"ok": False, "error": "prepare_failed"}, status=502, headers=cors_headers(request))
 
 
