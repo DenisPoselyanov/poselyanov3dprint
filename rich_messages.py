@@ -980,20 +980,32 @@ def _bonus_line(bonus: dict | None) -> str:
     )
 
 
-def build_review_request(order_id: int, bonus: dict | None = None) -> str:
+def _review_items_line(names: list[str] | None) -> str:
+    names = [n for n in (names or []) if n]
+    if not names:
+        return ""
+    shown = ", ".join(f"<b>{escape(n)}</b>" for n in names[:3])
+    if len(names) > 3:
+        shown += f" і ще {len(names) - 3}"
+    return shown
+
+
+def build_review_request(order_id: int, bonus: dict | None = None, names: list[str] | None = None) -> str:
     return build_notice(
         "⭐",
-        f"Як тобі замовлення №{int(order_id)}?",
+        "Як тобі покупка?",
+        _review_items_line(names),
         "Постав оцінку одним дотиком — відгук допомагає іншим обрати.",
         _bonus_line(bonus),
         footer=f'<a href="{DENIS_LINK}">Денис</a>',
     )
 
 
-def build_review_reminder(order_id: int, bonus: dict | None = None) -> str:
+def build_review_reminder(order_id: int, bonus: dict | None = None, names: list[str] | None = None) -> str:
     return build_notice(
         "⭐",
-        f"Замовлення №{int(order_id)}: поділишся враженням?",
+        "Поділишся враженням?",
+        _review_items_line(names),
         "Це займе хвилину, а мені — справжній орієнтир, що покращувати.",
         _bonus_line(bonus),
         footer=f'<a href="{DENIS_LINK}">Денис</a>',

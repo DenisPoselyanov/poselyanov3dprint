@@ -2820,6 +2820,15 @@ async def handle_update_order(request: web.Request):
     return web.json_response({"ok": True}, headers=cors_headers(request))
 
 
+async def _review_item_names(order_id: int) -> list[str]:
+    """Назви товарів замовлення — щоб у запиті відгуку було зрозуміло, про що мова (без номера)."""
+    try:
+        _, items = await run_db(get_order_with_items, int(order_id))
+    except Exception:
+        return []
+    return [str(i.get("product_name") or "") for i in items if not i.get("is_gift") and int(i.get("product_id") or 0) > 0]
+
+
 async def _send_test_review_request(order: dict) -> None:
     """Тестове замовлення: клієнт одразу отримує запит відгуку (без очікування доставки)."""
     user_id = int(order.get("user_id") or 0)
@@ -2830,7 +2839,7 @@ async def _send_test_review_request(order: dict) -> None:
         await send_rich_message(
             bot_app.bot,
             user_id,
-            build_review_request(int(order["id"])),
+            build_review_request(int(order["id"]), None, await _review_item_names(order["id"])),
             reply_markup=_review_request_markup(int(order["id"])),
         )
     except Exception as e:
@@ -3262,7 +3271,11 @@ async def _send_review_nudges(due: list[dict], mark, build) -> int:
             await send_rich_message(
                 bot_app.bot,
                 item["user_id"],
-                build(item["order_id"], None if item.get("is_test") else bonus_config()),
+                build(
+                    item["order_id"],
+                    None if item.get("is_test") else bonus_config(),
+                    await _review_item_names(item["order_id"]),
+                ),
                 reply_markup=_review_request_markup(item["order_id"]),
             )
             sent += 1

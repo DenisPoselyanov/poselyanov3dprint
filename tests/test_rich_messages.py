@@ -51,7 +51,7 @@ def test_new_rich_builders_share_skeleton():
     import rich_messages as rm
 
     outputs = [
-        rm.build_review_request(12),
+        rm.build_review_request(12, None, ["Підставка"]),
         rm.build_contact_card(5, "Іван <b>"),
         rm.build_bot_error("boom", 7),
         rm.build_myid(5),
@@ -66,7 +66,7 @@ def test_new_rich_builders_share_skeleton():
     for html_text in outputs:
         assert html_text.startswith("<h2>") and "<hr/>" in html_text
     assert "Іван &lt;b&gt;" in outputs[1]
-    assert "№12" in outputs[0]
+    assert "<b>Підставка</b>" in outputs[0] and "№" not in outputs[0]
 
 
 def test_manual_client_message_has_signature():
