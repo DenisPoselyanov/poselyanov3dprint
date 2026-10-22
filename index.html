@@ -693,7 +693,7 @@
   }
   .cart-total-sum { font-size: 20px; font-weight: 800; color: var(--text); transition: color .4s ease; }
   .cart-submit-btn {
-    width: 100%; padding: 14px;
+    width: 100%; padding: 14px; min-height: 54px;
     background: var(--tg-blue); color: #fff;
     border: none; border-radius: var(--radius-sm);
     font-family: 'Inter', sans-serif;
@@ -892,6 +892,24 @@
     to   { opacity: 1; transform: translateY(0); }
   }
   .coupon-row { display: flex; gap: 8px; align-items: stretch; }
+  .coupon-row { flex-direction: column; }
+  .coupon-row .coupon-btn { width: 100%; height: 48px; font-size: 15px; }
+  .coupon-field { position: relative; flex: 1; min-width: 0; display: flex; }
+  .coupon-field .coupon-input { padding-right: 92px; }
+  .coupon-field.no-paste .coupon-input { padding-right: 14px; }
+  /* Другорядна дія: тихий «чіп» усередині поля — акцент лишається на «Застосувати» */
+  .coupon-paste {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    height: 32px; padding: 0 10px 0 8px; display: inline-flex; align-items: center; gap: 5px;
+    background: var(--surface); color: var(--ink-2); border: 1px solid var(--line-2, var(--line));
+    border-radius: 9px; font: 600 13px/1 inherit; font-family: inherit; cursor: pointer;
+    transition: color .15s, border-color .15s, transform .1s, opacity .15s;
+  }
+  .coupon-paste .i { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .coupon-paste:hover { color: var(--ink); border-color: var(--ink-2); }
+  .coupon-paste:active { transform: translateY(-50%) scale(.96); }
+  .coupon-field.no-paste .coupon-paste { display: none; }
+  .coupon-btn.idle { opacity: .55; }
   .coupon-input {
     flex: 1; min-width: 0; height: 46px; padding: 0 14px; border: 1.5px solid var(--line);
     border-radius: 12px; font-size: 15px; background: var(--surface-2, var(--bg));
@@ -1467,10 +1485,16 @@
           </button>
           <div class="coupon-input-wrap" id="couponInputWrap" style="display:none">
             <div class="coupon-row">
-              <input type="text" id="couponInput" class="coupon-input" placeholder="Введіть код" maxlength="32"
-                    autocomplete="off" autocapitalize="characters" spellcheck="false"
-                    oninput="this.value = this.value.toUpperCase()"
-                    onkeydown="if(event.key==='Enter') applyCoupon()">
+              <div class="coupon-field" id="couponField">
+                <input type="text" id="couponInput" class="coupon-input" placeholder="Введіть код" maxlength="32"
+                      autocomplete="off" autocapitalize="characters" spellcheck="false"
+                      oninput="this.value = this.value.toUpperCase(); syncCouponUi()"
+                      onkeydown="if(event.key==='Enter') applyCoupon()">
+                <button type="button" class="coupon-paste" id="couponPaste" onclick="pasteCoupon()" aria-label="Вставити з буфера обміну">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1.5"/><path d="M16 5h1.5A1.5 1.5 0 0 1 19 6.5v13a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5v-13A1.5 1.5 0 0 1 6.5 5H8"/></svg>
+                  Вставити
+                </button>
+              </div>
               <button class="coupon-btn" id="couponBtn" onclick="applyCoupon()">Застосувати</button>
             </div>
             <div class="coupon-status" id="couponStatus"></div>
@@ -2393,9 +2417,6 @@ function cartUpsellHtml() {
       <div style="display:flex;align-items:center;justify-content:space-between"><span class="price">${money(p.price)}</span>${controlHtml(p)}</div></div>`).join('')}</div></div>`;
 }
 
-// Орієнтовна ціна доставки НП (₴): посилка до 2 кг по Україні, тариф з 13.04.2026.
-// У суму замовлення не входить — клієнт платить перевізнику окремо. Оновлювати при зміні тарифів НП.
-const NP_DELIVERY_ESTIMATE = 90;
 
 // Підсумок з розбивкою: товари, акція, промокод, подарунок, доставка, до сплати
 function cartSummaryHtml() {
@@ -2406,7 +2427,7 @@ function cartSummaryHtml() {
   if (pricing.promotionDiscount > 0) rows.push(`<div class="sum-row g"><span>Акція${promo?.title ? ` «${escapeHtml(promo.title)}»` : ''}</span><b>−${money(pricing.promotionDiscount)}</b></div>`);
   if (appliedCoupon && pricing.couponDiscount > 0) rows.push(`<div class="sum-row g"><span>Промокод ${escapeHtml(appliedCoupon.code)}</span><b>−${money(pricing.couponDiscount)}</b></div>`);
   if (shouldShowGift() && selectedGift) rows.push(`<div class="sum-row g"><span>Подарунок: ${escapeHtml(selectedGift.name)}</span><b>0 ₴</b></div>`);
-  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'самовивіз' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : CHK.method === 'np' ? `≈ ${money(NP_DELIVERY_ESTIMATE)} · за тарифами перевізника` : 'за тарифами перевізника'}</b></div>`);
+  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'Самовивіз' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : 'За тарифами перевізника'}</b></div>`);
   // Рядок «Разом» живе в підвалі, тож тут лише розбивка
   return `<div class="sum-list"><div class="sum-inner">${rows.join('')}</div></div>`;
 }
@@ -5967,6 +5988,44 @@ function resetCouponField() {
   if (btn) { btn.textContent = 'Застосувати'; btn.disabled = false; }
   if (statusEl) { statusEl.textContent = ''; statusEl.className = 'coupon-status'; }
   updateCouponHint();
+  syncCouponUi();
+}
+
+// «Вставити» видно лише в порожньому активному полі; «Застосувати» приглушена, доки немає коду.
+function syncCouponUi() {
+  const input = document.getElementById('couponInput');
+  if (!input) return;
+  const empty = !input.value.trim();
+  document.getElementById('couponField')?.classList.toggle('no-paste', !empty || input.disabled);
+  document.getElementById('couponBtn')?.classList.toggle('idle', empty && !input.disabled);
+}
+
+async function pasteCoupon() {
+  const input = document.getElementById('couponInput');
+  if (!input || input.disabled || isSubmitting) return;
+  let text = '';
+  try {
+    const tg = window.Telegram?.WebApp;
+    if (tg?.readTextFromClipboard) {
+      text = await new Promise(res => {
+        let done = false;
+        const t = setTimeout(() => { if (!done) { done = true; res(''); } }, 1500);
+        try { tg.readTextFromClipboard(v => { if (!done) { done = true; clearTimeout(t); res(v || ''); } }); }
+        catch (_) { done = true; clearTimeout(t); res(''); }
+      });
+    }
+    if (!text && navigator.clipboard?.readText) text = await navigator.clipboard.readText();
+  } catch (_) {}
+  const code = (text || '').trim().toUpperCase().replace(/[^A-Z0-9А-ЯІЇЄҐ_-]/g, '').slice(0, 32);
+  if (!code) {
+    input.focus();
+    showToast({ msg: 'Буфер порожній — скопіюйте код і спробуйте ще раз', icon: 'alert', duration: 2600 });
+    return;
+  }
+  input.value = code;
+  syncCouponUi();
+  try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch (_) {}
+  input.focus();
 }
 
 // Пояснення під полем промокоду: сумується він з акцією чи замінює її.
@@ -5999,6 +6058,7 @@ function toggleCoupon() {
   const isHidden = wrap.style.display === 'none' || wrap.style.display === '';
   wrap.style.display = isHidden ? 'flex' : 'none';
   btn.classList.toggle('active', isHidden);
+  syncCouponUi();
   if (isHidden) document.getElementById('couponInput').focus();
 }
 
@@ -6021,6 +6081,7 @@ async function applyCoupon() {
     statusEl.textContent = '';
     statusEl.className = 'coupon-status';
     updateCouponHint();
+    syncCouponUi();
     renderCart(); // оновити суму
     return;
   }
@@ -6050,6 +6111,7 @@ async function applyCoupon() {
       btn.textContent = 'Скасувати';
       btn.disabled = false;
       updateCouponHint();
+      syncCouponUi();
       renderCart(); // оновити суму із знижкою
     } else {
       statusEl.textContent = data.message;
