@@ -253,3 +253,15 @@ def test_stale_channel_button_cannot_move_order_back(orders):
 
     asyncio.run(bot.order_action(update, MagicMock()))
     assert _row(oid)[0]["status"] == "printing"
+
+
+def test_status_messages_log(orders):
+    import services.status_messages as sm
+
+    sm.record_status_message(62, 111, 5001, "printing")
+    sm.record_status_message(63, 222, 5002, "ready")
+    sm.record_status_message(63, 222, None, "ready")  # без message_id не пишемо
+    assert [r["message_id"] for r in sm.list_status_messages()] == [5001, 5002]
+    assert [r["order_id"] for r in sm.list_status_messages(63)] == [63]
+    sm.mark_status_message_deleted(sm.list_status_messages(62)[0]["id"])
+    assert sm.list_status_messages(62) == []

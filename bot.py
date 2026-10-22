@@ -207,6 +207,7 @@ from services.orders import (
     user_order_lock as _user_order_lock,
 )
 from services.stats import get_stats
+from services.status_messages import list_status_messages, mark_status_message_deleted, record_status_message
 import services.broadcasts as broadcasts_svc
 import services.ai_suggestions as ai_suggestions_svc
 from services.users import (
@@ -2869,6 +2870,12 @@ async def handle_update_order(request: web.Request):
         )
     if "ttn" in fields:
         fields["ttn"] = re.sub(r"\s+", "", str(fields["ttn"] or ""))
+        if fields["ttn"] and not re.fullmatch(r"\d{14}", fields["ttn"]):
+            return web.json_response(
+                {"ok": False, "error": "ТТН Нової пошти — рівно 14 цифр"},
+                status=400,
+                headers=cors_headers(request),
+            )
     if not await run_db(update_order_fields, order_id, fields):
         return web.json_response(
             {"ok": False, "error": "Замовлення не знайдено"}, status=404, headers=cors_headers(request)
@@ -2879,11 +2886,23 @@ async def handle_update_order(request: web.Request):
 async def _notify_client_status(order: dict, status: str, ttn: str | None = None) -> bool:
     """Повідомлення клієнту про новий статус. Помилка доставки не блокує зміну статусу."""
     user_id = int(order.get("user_id") or 0)
+    # Старі замовлення (адмін закриває хвіст, відмічає друк заднім числом) — клієнта не турбуємо
+    ordered_at = str(order.get("ordered_at") or "")[:10]
+    try:
+        if ordered_at and (datetime.now() - datetime.strptime(ordered_at, "%Y-%m-%d")).days > 7:
+            logger.info("Замовлення #%s старше 7 днів — клієнта про статус %s не сповіщаємо", order.get("id"), status)
+            return False
+    except ValueError:
+        pass
     html_text = build_client_status_update(int(order["id"]), status, ttn)
     if user_id <= 0 or not html_text:
         return False
     try:
-        await send_rich_message(bot_app.bot, user_id, html_text)
+        message_id = await send_rich_message(bot_app.bot, user_id, html_text)
+        try:
+            await run_db(record_status_message, int(order["id"]), user_id, message_id, status)
+        except Exception as e:
+            logger.warning("Не вдалось записати ID повідомлення про статус #%s: %s", order.get("id"), e)
         return True
     except Exception as e:
         logger.warning("Не вдалось сповістити клієнта %s про статус #%s: %s", user_id, order.get("id"), e)
@@ -3359,11 +3378,17 @@ async def handle_update_order_status(request: web.Request):
                 headers=cors_headers(request),
             )
 
-        ttn = str(data.get("ttn") or order.get("ttn") or "").strip()
+        ttn = re.sub(r"\s+", "", str(data.get("ttn") or order.get("ttn") or ""))
         if status == "shipped":
             if not ttn:
                 return web.json_response(
                     {"ok": False, "error": "Для статусу shipped потрібна ТТН"},
+                    status=400,
+                    headers=cors_headers(request),
+                )
+            if not re.fullmatch(r"\d{14}", ttn):
+                return web.json_response(
+                    {"ok": False, "error": "ТТН Нової пошти — рівно 14 цифр"},
                     status=400,
                     headers=cors_headers(request),
                 )
@@ -3378,6 +3403,33 @@ async def handle_update_order_status(request: web.Request):
         )
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_delete_status_messages(request: web.Request):
+    """DELETE /api/orders/{id}/status-messages — видалити в клієнта надіслані повідомлення про статус
+    (?order_id=all не підтримується свідомо: {id} = 0 означає «усі ще не видалені»)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    try:
+        order_id = int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    rows = await run_db(list_status_messages, order_id or None)
+    deleted, failed = 0, 0
+    for row in rows:
+        try:
+            await bot_app.bot.delete_message(chat_id=row["user_id"], message_id=row["message_id"])
+            deleted += 1
+        except Exception as e:
+            # Повідомлення могло бути видалене раніше або старше 48 год — тоді просто знімаємо з обліку
+            logger.info("delete_message %s/%s: %s", row["user_id"], row["message_id"], e)
+            failed += 1
+        await run_db(mark_status_message_deleted, row["id"])
+    return web.json_response({"ok": True, "deleted": deleted, "failed": failed}, headers=cors_headers(request))
 
 
 async def handle_delete_order(request: web.Request):

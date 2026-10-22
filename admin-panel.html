@@ -9811,9 +9811,9 @@
 
         // ── Шаблони повідомлень клієнту ──────────────────────────────
         const ORDER_MESSAGE_TEMPLATES = [
-            { key: 'requisites', label: 'Реквізити для оплати', text: (o) => `Замовлення №${o.id} підтверджено! Сума до сплати: ${o.total_price} ₴.\nРеквізити для оплати: [вставте реквізити]` },
+            { key: 'requisites', label: 'Реквізити для оплати', text: (o) => `Замовлення №${o.id} підтверджено!\nСума до сплати: ${o.total_price} ₴\nРеквізити для оплати: [вставте реквізити]` },
             { key: 'ready', label: 'Готово до відправки', text: (o) => `Замовлення №${o.id} надруковано й запаковано — відправлю найближчим часом.` },
-            { key: 'ttn', label: 'ТТН', text: (o) => `Відправив замовлення №${o.id}! ТТН: ${o.ttn || '[вставте ТТН]'}. Відстежити: novaposhta.ua` },
+            { key: 'ttn', label: 'ТТН', text: (o) => `Замовлення №${o.id} відправлено!\nТТН: ${o.ttn || '[вставте ТТН]'}\nВідстежити: novaposhta.ua` },
             { key: 'review', label: 'Попросити відгук', text: (o) => `Як тобі замовлення №${o.id}? Буду вдячний за відгук у Mini App 💙` },
         ];
         const orderMessageCache = {};
@@ -10101,7 +10101,8 @@
                     <div class="order-field">
                         <label for="order-ttn-${orderId}">ТТН (потрібна для «Відправлено»)</label>
                         <div class="order-field-row">
-                            <input id="order-ttn-${orderId}" class="order-field-input" type="text" inputmode="numeric" maxlength="40"
+                            <input id="order-ttn-${orderId}" class="order-field-input" type="text" inputmode="numeric" maxlength="17" pattern="\d{14}"
+                                oninput="this.value = this.value.replace(/[^\d\s]/g, '')"
                                 placeholder="20450000000000" value="${escapeAttr(order.ttn || '')}">
                             <button class="btn btn-secondary" type="button" onclick="saveOrderTtn(${orderId})">Зберегти ТТН</button>
                         </div>
@@ -10140,6 +10141,7 @@
 
         async function saveOrderTtn(orderId) {
             const value = (document.getElementById(`order-ttn-${orderId}`)?.value || '').replace(/\s+/g, '');
+            if (value && !/^\d{14}$/.test(value)) { showToast('ТТН Нової пошти — рівно 14 цифр', 'error'); return; }
             if (await putOrderFields(orderId, { ttn: value }, 'ТТН збережено ✅')) renderOrdersList();
         }
 
@@ -10162,11 +10164,11 @@
             let ttn = '';
             if (status === 'shipped') {
                 ttn = (document.getElementById(`order-ttn-${orderId}`)?.value || order?.ttn || '').replace(/\s+/g, '');
-                if (!ttn) {
+                if (!/^\d{14}$/.test(ttn)) {
                     expandedOrderId = orderId;
                     renderOrdersList();
                     setTimeout(() => document.getElementById(`order-ttn-${orderId}`)?.focus(), 400);
-                    showToast('Введіть ТТН — вона піде клієнту в повідомленні', 'error');
+                    showToast(ttn ? 'ТТН Нової пошти — рівно 14 цифр' : 'Введіть ТТН — вона піде клієнту в повідомленні', 'error');
                     return;
                 }
             }

@@ -81,7 +81,7 @@ STATUS_LABELS_FULL = {
     "confirmed": ("✅", "Підтверджено", "Замовлення прийнято у роботу!"),
     "cancelled": ("❌", "Скасовано", "Якщо є питання — напиши Денису"),
     "draft": ("📝", "Під питанням", "Денис уточнює деталі замовлення"),
-    "printing": ("🖨️", "Друкується", "Орієнтовно буде готове за 1–2 дні"),
+    "printing": ("🖨️", "Друкується", "Вже беруся за твоє замовлення"),
     "ready": ("📦", "Готове до відправки", "Скоро відправлю"),
     "shipped": ("🚚", "Відправлено", "ТТН — у «Моїх замовленнях»"),
     "delivered": ("🎉", "Отримано", "Дякую, що обрав мене 💙"),
@@ -99,25 +99,38 @@ STATUS_LABELS_SHORT = {
 }
 
 # Повідомлення клієнту на кожному кроці (чернетки з REDESIGN.md, розд. 5.2).
+NP_TRACKING_URL = "https://novaposhta.ua/tracking/?cargo_number="
+
+# (заголовок, текст) — той самий каркас, що й у підтвердженні замовлення:
+# <h2> + <hr/> + <p> + <footer>.
 CLIENT_STATUS_TEXT = {
-    "draft": "По замовленню №{id} є питання — Денис уточнює деталі.",
-    "confirmed": "Замовлення №{id} підтверджено! Реквізити для оплати — у повідомленні вище.",
-    "printing": "Почав друкувати замовлення №{id}. Орієнтовно буде готове за 1–2 дні.",
-    "ready": "Замовлення №{id} надруковано й запаковано — скоро відправлю.",
-    "shipped": "Відправив замовлення №{id}! ТТН: <code>{ttn}</code>. Відстежити: novaposhta.ua",
-    "delivered": "Замовлення №{id} отримано! Дякую 💙",
-    "cancelled": "Замовлення №{id} скасовано. Якщо є питання — напиши Денису.",
+    "draft": ("Є питання по замовленню №{id}", "Денис уточнює деталі й скоро напише тобі."),
+    "confirmed": ("Замовлення №{id} підтверджено", "Денис надішле реквізити для оплати окремим повідомленням."),
+    "printing": ("Замовлення №{id} друкується", "Почав друкувати твоє замовлення."),
+    "ready": ("Замовлення №{id} готове", "Надруковано й запаковано — скоро відправлю."),
+    "shipped": (
+        "Замовлення №{id} відправлено",
+        "ТТН: <code>{ttn}</code>\n<a href=\"" + NP_TRACKING_URL + "{ttn}\">Відстежити на novaposhta.ua</a>",
+    ),
+    "delivered": ("Замовлення №{id} отримано", "Дякую, що обрав мене 💙"),
+    "cancelled": ("Замовлення №{id} скасовано", "Якщо є питання — напиши Денису."),
 }
 
 
 def build_client_status_update(order_id: int, status: str, ttn: str | None = None) -> str | None:
     """HTML-повідомлення клієнту про зміну статусу; None — для цього статусу нічого не шлемо."""
-    template = CLIENT_STATUS_TEXT.get(status)
-    if not template:
+    entry = CLIENT_STATUS_TEXT.get(status)
+    if not entry:
         return None
+    title, text = entry
     icon = STATUS_LABELS_SHORT.get(status, ("📦", ""))[0]
-    body = template.format(id=int(order_id), ttn=escape(ttn or "—"))
-    return f"<p>{icon} {body}</p>"
+    fmt = {"id": int(order_id), "ttn": escape(ttn or "—")}
+    blocks = [f"<h2>{icon} {title.format(**fmt)}</h2>", "<hr/>"]
+    for line in text.format(**fmt).split("\n"):
+        blocks.append(f"<p>{line}</p>")
+    if status in ("confirmed", "draft", "cancelled"):
+        blocks.append(f'<footer><a href="{DENIS_LINK}">Денис</a></footer>')
+    return "\n".join(blocks)
 
 
 def escape(text: str | None) -> str:

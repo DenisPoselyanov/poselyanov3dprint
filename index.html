@@ -2285,6 +2285,10 @@ function cartUpsellHtml() {
       <div style="display:flex;align-items:center;justify-content:space-between"><span class="price">${money(p.price)}</span>${controlHtml(p)}</div></div>`).join('')}</div></div>`;
 }
 
+// Орієнтовна ціна доставки НП (₴): посилка до 2 кг по Україні, тариф з 13.04.2026.
+// У суму замовлення не входить — клієнт платить перевізнику окремо. Оновлювати при зміні тарифів НП.
+const NP_DELIVERY_ESTIMATE = 90;
+
 // Підсумок з розбивкою: товари, акція, промокод, подарунок, доставка, до сплати
 function cartSummaryHtml() {
   const pricing = getCartPricing();
@@ -2294,7 +2298,7 @@ function cartSummaryHtml() {
   if (pricing.promotionDiscount > 0) rows.push(`<div class="sum-row g"><span>Акція${promo?.title ? ` «${escapeHtml(promo.title)}»` : ''}</span><b>−${money(pricing.promotionDiscount)}</b></div>`);
   if (appliedCoupon && pricing.couponDiscount > 0) rows.push(`<div class="sum-row g"><span>Промокод ${escapeHtml(appliedCoupon.code)}</span><b>−${money(pricing.couponDiscount)}</b></div>`);
   if (shouldShowGift() && selectedGift) rows.push(`<div class="sum-row g"><span>Подарунок: ${escapeHtml(selectedGift.name)}</span><b>0 ₴</b></div>`);
-  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'безкоштовно' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : 'за тарифами перевізника'}</b></div>`);
+  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'безкоштовно' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : CHK.method === 'np' ? `≈ ${money(NP_DELIVERY_ESTIMATE)} · Новій пошті окремо` : 'за тарифами перевізника'}</b></div>`);
   rows.push(`<div class="sum-row total"><span>До сплати</span><b>${escapeHtml(formatCartTotalLabel(pricing.finalTotal))}</b></div>`);
   return `<div class="chk-sec">${rows.join('')}</div>`;
 }
@@ -3706,8 +3710,8 @@ function chkContactHtml() {
     ? `<button type="button" class="chk-share" onclick="chkSharePhone()">${ic('phone')}З Telegram</button>` : '';
   return chkFieldHtml('chk-name', 'Імʼя та прізвище отримувача', CHK.name, { ph: 'Іван Петренко' })
     + `<div class="chk-field"><label for="chk-phone">Телефон</label>
-      <div class="chk-row"><input class="chk-input${err ? ' err' : ''}" id="chk-phone" type="tel" inputmode="tel" value="${escapeAttr(CHK.phone)}"
-        maxlength="20" placeholder="+380 50 123 45 67" autocomplete="tel" oninput="chkInput('chk-phone', this.value)">${share}</div>
+      <div class="chk-row"><input class="chk-input${err ? ' err' : ''}" id="chk-phone" type="tel" inputmode="tel" value="${escapeAttr(formatPhone(CHK.phone))}"
+        maxlength="40" placeholder="+380 50 123 45 67" autocomplete="tel" oninput="chkPhoneInput(this, event)">${share}</div>
       ${err ? `<div class="chk-err">${escapeHtml(err)}</div>` : ''}</div>`;
 }
 function chkWarehousesHtml() {
@@ -3802,6 +3806,27 @@ function chkSetKind(k) {
   CHK.kind = k;
   if (CHK.cityRef) loadWarehouses();
   renderCheckout();
+}
+// Телефон у вигляді «+380 50 123 45 67»: працює для ручного вводу, вставки з буфера й номера з Telegram
+function formatPhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('80')) d = '3' + d;
+  else if (d.startsWith('0')) d = '38' + d;
+  else if (!'380'.startsWith(d) && !d.startsWith('380')) d = '380' + d;
+  d = d.slice(0, 12);
+  const groups = [d.slice(0, 3), d.slice(3, 5), d.slice(5, 8), d.slice(8, 10), d.slice(10, 12)].filter(Boolean);
+  return '+' + groups.join(' ');
+}
+function chkPhoneInput(el, ev) {
+  const prev = CHK.phone;
+  let next = formatPhone(el.value);
+  const isDelete = ev && String(ev.inputType || '').startsWith('delete');
+  // Видалили пробіл/«+» — цифр не поменшало: прибираємо останню цифру, щоб Backspace не «застрягав»
+  if (isDelete && next === prev && prev) next = formatPhone(prev.replace(/\D/g, '').slice(0, -1));
+  if (isDelete && next.replace(/\D/g, '').length <= 3) next = '';
+  el.value = next;
+  chkInput('chk-phone', next);
 }
 function chkInput(id, value) {
   if (CHK.errors[id]) {
@@ -3909,7 +3934,7 @@ function onContactRequested(ev) {
     const contact = JSON.parse(params.get('contact') || '{}');
     const digits = String(contact.phone_number || '').replace(/\D/g, '');
     if (digits.length >= 10) {
-      CHK.phone = `+${digits}`;
+      CHK.phone = formatPhone(digits);
       delete CHK.errors['chk-phone'];
       saveCheckout(); renderCheckout();
     }

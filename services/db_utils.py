@@ -260,6 +260,17 @@ def init_db() -> None:
                 UNIQUE (user_id, idempotency_key)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_status_messages (
+                id BIGSERIAL PRIMARY KEY,
+                order_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL,
+                status TEXT,
+                sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                deleted INTEGER NOT NULL DEFAULT 0
+            )
+        """)
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS personal_user_id BIGINT")
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS stackable INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS require_channel_sub INTEGER DEFAULT 0")
@@ -393,6 +404,17 @@ def init_db() -> None:
                 is_new           INTEGER NOT NULL DEFAULT 1,
                 created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE (user_id, idempotency_key)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_status_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                status TEXT,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                deleted INTEGER NOT NULL DEFAULT 0
             )
         """)
         oi_cols = [row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()]

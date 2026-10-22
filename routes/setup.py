@@ -57,6 +57,7 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_put("/api/orders/{id}/pricing", handlers.handle_update_order_pricing)
     http_app.router.add_put("/api/orders/{id}/status", handlers.handle_update_order_status)
     http_app.router.add_delete("/api/orders/{id}", handlers.handle_delete_order)
+    http_app.router.add_delete("/api/orders/{id}/status-messages", handlers.handle_delete_status_messages)
     http_app.router.add_get("/api/coupons", handlers.handle_get_coupons)
     http_app.router.add_post("/api/coupons", handlers.handle_create_coupon)
     http_app.router.add_put("/api/coupons/{code}", handlers.handle_update_coupon)
