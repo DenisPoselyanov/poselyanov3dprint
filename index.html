@@ -1149,6 +1149,7 @@
   .cat-chip svg.i { width: 15px; height: 15px; color: var(--ink-3); }
   .cat-chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
   .cat-chip[aria-pressed="true"] small { color: inherit; opacity: .7; }
+  .cat-chip[aria-pressed="true"] svg.i { color: inherit; opacity: .8; }
   .chip-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
 
   /* Банер акцій: спокійна картка з легким тоном кольору акції */
@@ -1228,6 +1229,10 @@
   /* Фото товару */
   .thumb { position: relative; border-radius: 12px; overflow: hidden; background: var(--surface-2); aspect-ratio: 1; }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* Фото проявляються плавно, коли завантажились, а не «вистрілюють» шматками */
+  .thumb img { transition: opacity .28s ease; }
+  .thumb img:not(.ld) { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .thumb img { transition: none; } }
   .thumb .emo { width: 100%; height: 100%; display: grid; place-items: center; font-size: 40px; }
 
   /* «Рекомендуємо» — «Дві смуги»: два рядки, що гортаються разом */
@@ -1257,6 +1262,10 @@
   @media (min-width: 1200px) { .grid2 { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
   @media (min-width: 600px) { .hero-card { flex-basis: min(100%, 560px); } }
   .card { background: var(--surface); border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); display: flex; flex-direction: column; cursor: pointer; position: relative; min-width: 0; }
+  /* Тактильний відгук на дотик до картки, як у нативних застосунках */
+  .card, .mini { transition: transform .16s ease; -webkit-tap-highlight-color: transparent; }
+  .card:active, .mini:active { transform: scale(.975); }
+  @media (prefers-reduced-motion: reduce) { .card, .mini { transition: none; } .card:active, .mini:active { transform: none; } }
   .card .thumb { border-radius: 0; }
   .card-badges { position: absolute; top: 7px; left: 7px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; pointer-events: none; }
   .b-pill { font-size: 10px; font-weight: 800; padding: 3px 6px; border-radius: 6px; line-height: 1.1; display: inline-flex; align-items: center; gap: 3px; }
@@ -1816,9 +1825,13 @@ function swapToAnimation(img) {
   pre.onload = () => { if (img.isConnected) img.src = anim; };
   pre.src = anim;
 }
+document.addEventListener('load', (e) => {
+  if (e.target?.tagName === 'IMG') e.target.classList.add('ld');
+}, true);
 document.addEventListener('error', (e) => {
   const img = e.target;
-  if (img?.tagName !== 'IMG' || !img.dataset.fallback) return;
+  if (img?.tagName !== 'IMG') return;
+  if (!img.dataset.fallback) { img.classList.add('ld'); return; }
   const fallback = img.dataset.fallback;
   delete img.dataset.fallback;
   delete img.dataset.anim;
@@ -2958,10 +2971,37 @@ function isCartPageActive() {
 }
 
 // ─── ЗАВАНТАЖЕННЯ ТОВАРІВ ────────────────────────────────────
+// Знімок каталогу в localStorage: з другого відкриття вітрина малюється одразу зі знімка,
+// а свіжі дані підтягуються у фоні (stale-while-revalidate). Особисті дані сюди не потрапляють.
+const CATALOG_SNAP_KEY = 'catalog_snap_v1';
+const CATALOG_SNAP_MAX_AGE = 7 * 24 * 3600 * 1000;
+const CATALOG_PATHS = ['/api/products', '/api/filaments', '/api/categories', '/api/promotions', '/api/hits?limit=24', '/api/collections', '/api/config'];
+let catalogSnapshot = null;   // {path: data} — коли не null, apiGet відповідає зі знімка
+const catalogFresh = {};      // відповіді мережі для нового знімка
+
+function readCatalogSnapshot() {
+  try {
+    const snap = JSON.parse(localStorage.getItem(CATALOG_SNAP_KEY) || 'null');
+    if (!snap || Date.now() - snap.ts > CATALOG_SNAP_MAX_AGE || snap.api !== API_BASE) return null;
+    return CATALOG_PATHS.every(path => path in snap.data) ? snap.data : null;
+  } catch (_) {
+    return null;
+  }
+}
+function saveCatalogSnapshot() {
+  if (!CATALOG_PATHS.every(path => path in catalogFresh)) return;
+  try {
+    localStorage.setItem(CATALOG_SNAP_KEY, JSON.stringify({ ts: Date.now(), api: API_BASE, data: catalogFresh }));
+  } catch (_) {}
+}
+
 async function apiGet(path) {
+  if (catalogSnapshot && path in catalogSnapshot) return structuredClone(catalogSnapshot[path]);
   const res = await fetch(API_BASE + path, { headers: apiHeaders() });
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.json();
+  const data = await res.json();
+  if (CATALOG_PATHS.includes(path)) catalogFresh[path] = data;
+  return data;
 }
 
 async function loadProducts() {
@@ -3534,7 +3574,7 @@ function sheetMainHtml(p) {
       ? `<span class="price-old">${money(p.oldPrice)}</span><span class="pct">−${d}%</span><span class="save-note">Економія ${money(p.oldPrice - p.price)}</span>`
       : ''}</div>`;
   }
-  return `<div class="p-cat">${modalGiftPreview ? `${ic('gift')}Подарунок` : escapeHtml(catLabel(p.cat))}</div>
+  return `<div class="p-cat">${modalGiftPreview ? `${ic('gift')}Подарунок` : `${catIconHtml(p.cat, CATEGORIES.find(c => c.id === p.cat)?.emoji)}${escapeHtml(catName(p.cat))}`}</div>
     <h2>${escapeHtml(p.name)}</h2>
     ${p.mat ? `<div class="p-mat">${escapeHtml(p.mat)}</div>` : ''}
     ${rating}${price}`;
@@ -5093,6 +5133,12 @@ const ICON_PATHS = {
   card: '<rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20M6 15h4"/>',
   phone: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2Z"/>',
   copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
+  key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="m16 7 3 3"/><path d="m19 4 2 2"/>',
+  wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"/>',
+  smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8"/><path d="M9 9.5h.01M15 9.5h.01"/>',
+  spiral: '<path d="M12 12.5a1 1 0 1 1 1-1 2 2 0 0 1-2 3 3 3 0 0 1-3-3 4 4 0 0 1 4-4 5 5 0 0 1 5 5 6 6 0 0 1-6 6 7 7 0 0 1-7-7 8 8 0 0 1 8-8"/>',
+  fish: '<path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/><path d="M18 12v.5"/><path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/>',
+  sprout: '<path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8Z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2Z"/>',
   box: '<path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
 };
@@ -5212,6 +5258,11 @@ function isNewProduct(p, days = NEW_DAYS) {
 function catName(id) {
   if (id === 'all') return 'Усі товари';
   return CATEGORIES.find(c => c.id === id)?.name || String(CAT_LABELS[id] || id).replace(/^\S+\s/, '');
+}
+// Категорії в чипах і на картці — лінійні SVG-іконки в стилі вітрини; для нових категорій з адмінки — їхнє емодзі
+const CAT_SVG = { toy: 'smile', anti: 'spiral', home: 'home', gadget: 'phone', fishing: 'fish', key: 'key', decoration: 'sprout', gifts: 'gift', tool: 'wrench', custom: 'pencil', individual: 'pencil' };
+function catIconHtml(id, emoji) {
+  return CAT_SVG[id] ? ic(CAT_SVG[id]) : escapeHtml(emoji || '');
 }
 function catLabel(id) {
   const c = CATEGORIES.find(x => x.id === id);
@@ -5350,6 +5401,31 @@ async function loadShowcase() {
   const [hits, cols] = await Promise.allSettled([apiGet('/api/hits?limit=24'), apiGet('/api/collections')]);
   HITS = hits.status === 'fulfilled' && Array.isArray(hits.value?.hits) ? hits.value.hits : [];
   COLLECTIONS = cols.status === 'fulfilled' && Array.isArray(cols.value?.collections) ? cols.value.collections : [];
+}
+
+// Свіжий каталог після старту зі знімка: перемальовуємо лише якщо дані справді змінились
+async function refreshCatalogInBackground(snapshot, loadCatalog) {
+  // Спершу вся мережа; якщо щось не відповіло — лишаємось на знімку, а не на напівпорожніх даних
+  const fresh = {};
+  try {
+    await Promise.all(CATALOG_PATHS.map(async (path) => { fresh[path] = await apiGet(path); }));
+  } catch (_) {
+    return;
+  }
+  saveCatalogSnapshot();
+  if (CATALOG_PATHS.every(path => JSON.stringify(fresh[path]) === JSON.stringify(snapshot[path]))) return;
+  catalogSnapshot = fresh;
+  try {
+    await loadCatalog();
+  } finally {
+    catalogSnapshot = null;
+  }
+  refreshShowcaseDerived();
+  if (activePage === 'products' && SHOP.view === 'home') renderHome();
+  renderSales();
+  updateFavBadge();
+  updateCartBadge();
+  if (activePage !== 'cart') renderCheckout();
 }
 
 // ─── ОБРАНЕ: Telegram CloudStorage (однаково на телефоні й ПК), запасний варіант — localStorage ───
@@ -5676,8 +5752,8 @@ function categoriesHtml() {
   return `<div class="s-sec"><div class="s-h"><h3>Категорії</h3><span class="cnt">${cats.length}</span></div></div>
     <div class="hscroll">
       ${chip('all', 'Усі', PRODUCTS.length, true)}
-      ${cats.map(c => chip(c.id, `${escapeHtml(c.emoji || '')} ${escapeHtml(c.name)}`, c.count)).join('')}
-      ${CUSTOM_PRODUCTS.length ? chip('custom', `${escapeHtml(custom.emoji || '✏️')} ${escapeHtml(custom.name)}`, CUSTOM_PRODUCTS.length) : ''}
+      ${cats.map(c => chip(c.id, `${catIconHtml(c.id, c.emoji)}${escapeHtml(c.name)}`, c.count)).join('')}
+      ${CUSTOM_PRODUCTS.length ? chip('custom', `${catIconHtml('custom', custom.emoji || '✏️')}${escapeHtml(custom.name)}`, CUSTOM_PRODUCTS.length) : ''}
     </div>`;
 }
 function collectionsHtml() {
@@ -5790,7 +5866,7 @@ function listData(l) {
   if (!l || l.type === 'all') return { title: 'Усі товари', items: PRODUCTS.slice(), natural: false };
   if (l.type === 'cat') {
     const items = l.id === 'custom' ? CUSTOM_PRODUCTS.slice() : PRODUCTS.filter(p => p.cat === l.id);
-    return { title: catLabel(l.id), items, natural: false };
+    return { title: catName(l.id), items, natural: false };
   }
   const c = COLLECTIONS.find(x => x.id === l.id);
   return { title: c?.name || 'Добірка', items: c ? collectionProducts(c) : [], natural: true };
@@ -6309,14 +6385,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   tg?.onEvent?.('contactRequested', onContactRequested);
   bindShopEvents();
   bindSheetInputs();
-  renderHomeSkeleton();
-
-  await Promise.all([loadProducts(), loadFilaments(), loadCategories(), loadPromotions(), loadShowcase(), loadShopConfig()]);
+  const loadCatalog = () => Promise.all([loadProducts(), loadFilaments(), loadCategories(), loadPromotions(), loadShowcase(), loadShopConfig()]);
+  const snapshot = readCatalogSnapshot();
+  if (snapshot) {
+    // Миттєвий старт зі знімка; мережа — у фоні нижче
+    catalogSnapshot = snapshot;
+    await loadCatalog();
+    catalogSnapshot = null;
+  } else {
+    renderHomeSkeleton();
+    await loadCatalog();
+    saveCatalogSnapshot();
+  }
   renderCheckout();
   trackEvent('catalog_open');
 
   refreshShowcaseDerived();
   renderHome();
+  if (snapshot) refreshCatalogInBackground(snapshot, loadCatalog);
   if (tg?.initData) loadPendingReviews().then(() => { if (activePage === 'products') renderHome(); });
   renderSales();
   updateFavBadge();
@@ -6505,7 +6591,7 @@ async function applyCoupon() {
       btn.disabled = false;
     }
   } catch (e) {
-    statusEl.textContent = 'Помилка з\'єднання ❌';
+    statusEl.textContent = /^Забагато/.test(e?.message || '') ? e.message : 'Помилка з\'єднання ❌';
     statusEl.className = 'coupon-status error';
     btn.disabled = false;
   }
@@ -6513,12 +6599,8 @@ async function applyCoupon() {
 
 </script>
 <script>
-  if ('serviceWorker' in navigator) {
-    const swPath = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-      ? '/sw.js'
-      : '/poselyanov3dprint/sw.js';
-    navigator.serviceWorker.register(swPath).catch(() => {});
-  }
+  // Сервіс-воркер не використовується: прибираємо старі реєстрації, нових не ставимо
+  navigator.serviceWorker?.getRegistrations?.().then(regs => regs.forEach(r => r.unregister())).catch(() => {});
 </script>
 </body>
 </html>
