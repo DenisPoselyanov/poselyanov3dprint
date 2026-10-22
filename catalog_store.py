@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import config
 from db_core import db_connect, is_postgres, sql
+from services.slugs import unique_slug
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +27,13 @@ PRODUCTS_CACHE: list[dict] = []
 CUSTOM_PRODUCTS_CACHE: list[dict] = []
 CATEGORIES_CACHE: list[dict] = []
 FILAMENTS_CACHE: list[dict] = []
+
+# Статуси товару: active — у магазині, hidden — прихований, archive — в архіві (м'яке видалення).
+PRODUCT_STATUSES = ("active", "hidden", "archive")
+# JSON-бекенд: приховані й архівні товари (стандартні й «індивідуальні») лежать окремо від кешів вітрини,
+# щоб PRODUCTS_CACHE / CUSTOM_PRODUCTS_CACHE і далі містили лише активні товари.
+INACTIVE_PRODUCTS_CACHE: list[dict] = []
+INACTIVE_CUSTOM_PRODUCTS_CACHE: list[dict] = []
 
 
 def _replace_cache_list(cache: list, items: list) -> None:
@@ -51,27 +62,121 @@ def load_products_file(path: str):
     return []
 
 
-def load_filaments_file(path: str = config.FILAMENTS_FILE):
-    p = Path(path)
+def load_filaments_file(path: str | None = None):
+    p = Path(path or config.FILAMENTS_FILE)
     if p.exists():
         return json.loads(p.read_text(encoding="utf-8"))
     return []
 
 
-def load_categories_file(path: str = config.CATEGORIES_FILE):
-    p = Path(path)
+def load_categories_file(path: str | None = None):
+    p = Path(path or config.CATEGORIES_FILE)
     if p.exists():
         return json.loads(p.read_text(encoding="utf-8"))
     return []
 
 
 def _serialize_custom_fields(value) -> str:
-    """Рядок зберігаємо як є, список — як JSON; порожнє значення — порожній рядок (не '""')."""
+    """Рядок зберігаємо як є, список чи обʼєкт — як JSON; порожнє значення — порожній рядок (не '""')."""
     if not value:
         return ""
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False)
+
+
+# Опис і примітка в картці товару (REDESIGN.md, розд. 3.4 — «Згорнутий»)
+DESCRIPTION_MAX = 3000
+NOTE_MAX = 300
+VIDEO_URL_MAX = 500
+# Персоналізація індивідуального товару: підпис поля, ліміт символів, підказка, плейсхолдер, верхній регістр
+PERS_LABEL_MAX = 60
+PERS_TEXT_MAX = 200
+PERS_LIMIT_MAX = 200
+
+
+def clean_text(value, max_len: int) -> str:
+    """Текст з адмінки: без \\r, без пробілів по краях, не довший за max_len. Абзаци зберігаються."""
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    return text[:max_len].rstrip()
+
+
+def clean_video_url(value) -> str:
+    url = str(value or "").strip()
+    if not url:
+        return ""
+    if not url.startswith("https://") or len(url) > VIDEO_URL_MAX or any(ch in url for ch in ' "<>'):
+        raise ValueError("Посилання на відео має бути https:// (mp4)")
+    return url
+
+
+def normalize_custom_fields(value):
+    """Поле персоналізації: рядок (лише підпис — старий формат) або {label, max, hint, placeholder, upper}.
+
+    Без підпису поля немає ("" ). Якщо задано лише підпис — зберігаємо рядком,
+    щоб старий формат лишався зворотно сумісним.
+    """
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw.startswith("{"):
+            return raw[:PERS_LABEL_MAX]
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            return raw[:PERS_LABEL_MAX]
+    if not isinstance(value, dict):
+        return ""
+    label = clean_text(value.get("label"), PERS_LABEL_MAX)
+    if not label:
+        return ""
+    out: dict = {"label": label}
+    try:
+        max_len = int(value.get("max") or 0)
+    except (TypeError, ValueError):
+        max_len = 0
+    if max_len > 0:
+        out["max"] = min(max_len, PERS_LIMIT_MAX)
+    for key in ("hint", "placeholder"):
+        text = clean_text(value.get(key), PERS_TEXT_MAX)
+        if text:
+            out[key] = text
+    if value.get("upper") in (True, 1, "1", "true", "on"):
+        out["upper"] = True
+    return out if len(out) > 1 else label
+
+
+def _apply_product_texts(product: dict, data: dict) -> None:
+    """Опис, примітка й відео: порожнє значення прибирає поле з товару."""
+    for key, max_len in (("description", DESCRIPTION_MAX), ("note", NOTE_MAX)):
+        if key in data:
+            text = clean_text(data.get(key), max_len)
+            if text:
+                product[key] = text
+            else:
+                product.pop(key, None)
+    if "video" in data:
+        url = clean_video_url(data.get("video"))
+        if url:
+            product["video"] = url
+        else:
+            product.pop("video", None)
+
+
+def _row_status(row: dict) -> str:
+    """Статус рядка БД / JSON-товару; старі записи без `status` рахуються за `active`."""
+    status = str(row.get("status") or "").strip().lower()
+    if status in PRODUCT_STATUSES:
+        # Запис, знятий старим кодом (active=false без зміни status), лишається архівним.
+        if status == "active" and row.get("active") is False:
+            return "archive"
+        return status
+    return "active" if row.get("active", True) else "archive"
+
+
+def product_status(product: dict | None) -> str:
+    return _row_status(product or {})
 
 
 def _row_to_product(row: dict) -> dict:
@@ -81,7 +186,7 @@ def _row_to_product(row: dict) -> dict:
     custom_fields = row.get("custom_fields")
     if isinstance(custom_fields, str) and custom_fields.strip() in ('""', "null"):
         custom_fields = ""
-    if isinstance(custom_fields, str) and custom_fields.startswith("["):
+    if isinstance(custom_fields, str) and custom_fields.startswith(("[", "{")):
         try:
             custom_fields = json.loads(custom_fields)
         except json.JSONDecodeError:
@@ -111,7 +216,22 @@ def _row_to_product(row: dict) -> dict:
         p["luminousFilamentChoice"] = bool(row.get("luminous_filament_choice", row.get("luminousFilamentChoice")))
     if custom_fields:
         p["custom_fields"] = custom_fields
+    for key in ("description", "note", "video"):
+        value = (row.get(key) or "").strip()
+        if value:
+            p[key] = value
+    status = _row_status(row)
+    if status != "active":
+        p["status"] = status
+    created_at = row.get("created_at") or row.get("createdAt")
+    if created_at:
+        # Для добірки «Новинки» і бейджа «Новинка» на вітрині.
+        p["createdAt"] = created_at.isoformat() if isinstance(created_at, datetime) else str(created_at)
     return p
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _row_to_category(row: dict) -> dict:
@@ -132,7 +252,18 @@ def _row_to_filament(row: dict) -> dict:
         "name": row.get("name") or "",
         "hex": row.get("hex") or "",
         "available": bool(row.get("available")),
+        # glow: «світиться в темряві». Старі записи без поля: світними вважаються id `luminous*`
+        "glow": bool(row["glow"]) if row.get("glow") is not None else str(row["id"]).startswith("luminous"),
     }
+
+
+def is_glow_filament(filament: dict | None) -> bool:
+    """Світний колір: явне поле `glow`, а для старих записів — id, що починається з `luminous`."""
+    if not filament:
+        return False
+    if filament.get("glow") is not None:
+        return bool(filament.get("glow"))
+    return str(filament.get("id") or "").startswith("luminous")
 
 
 def init_catalog_tables(conn) -> None:
@@ -169,7 +300,11 @@ def init_catalog_tables(conn) -> None:
             contract_price BOOLEAN DEFAULT false,
             is_custom BOOLEAN DEFAULT false,
             active BOOLEAN DEFAULT true,
-            created_at TIMESTAMPTZ DEFAULT NOW()
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            description TEXT DEFAULT '',
+            note TEXT DEFAULT '',
+            video TEXT DEFAULT ''
         )
     """)
     conn.execute("""
@@ -181,11 +316,27 @@ def init_catalog_tables(conn) -> None:
             sort_order INTEGER DEFAULT 0
         )
     """)
+    # Етап 5 редизайну: прапорець «світиться». Спершу без DEFAULT, щоб заповнити старі рядки за id; повторний запуск нічого не міняє.
+    conn.execute("ALTER TABLE filaments ADD COLUMN IF NOT EXISTS glow BOOLEAN")
+    conn.execute("UPDATE filaments SET glow = (id LIKE 'luminous%') WHERE glow IS NULL")
+    conn.execute("ALTER TABLE filaments ALTER COLUMN glow SET DEFAULT false")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_products_active ON products(active)")
     conn.execute(
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false"
     )
+    # Без DEFAULT у ADD COLUMN: старі товари лишаються без дати, а не стають «новинками» всі разом.
+    conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ")
+    conn.execute("ALTER TABLE products ALTER COLUMN created_at SET DEFAULT NOW()")
+    # Етап 2 редизайну: опис і примітка в картці товару, відео в галереї
+    for column in ("description", "note", "video"):
+        conn.execute(f"ALTER TABLE products ADD COLUMN IF NOT EXISTS {column} TEXT DEFAULT ''")
+    # Етап 5 редизайну: статус товару active/hidden/archive замість лише `active`.
+    # Спершу без DEFAULT, щоб відрізнити старі рядки (NULL) і заповнити їх з `active`; повторний запуск нічого не міняє.
+    conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT")
+    conn.execute("UPDATE products SET status = CASE WHEN active THEN 'active' ELSE 'archive' END WHERE status IS NULL")
+    conn.execute("ALTER TABLE products ALTER COLUMN status SET DEFAULT 'active'")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_products_status ON products(status)")
     # Раніше порожнє поле зберігалося як json.dumps("") == '""' і показувалося в адмінці як ✍️ "".
     conn.execute("UPDATE products SET custom_fields = '' WHERE custom_fields IN ('\"\"', 'null')")
     sync_products_id_sequence(conn)
@@ -227,7 +378,7 @@ def reload_filaments_cache(force: bool = False):
     if use_catalog_db():
         conn = db_connect(dict_rows=True)
         rows = conn.execute(
-            "SELECT id, name, hex, available FROM filaments ORDER BY sort_order, id"
+            "SELECT id, name, hex, available, glow FROM filaments ORDER BY sort_order, id"
         ).fetchall()
         conn.close()
         _replace_cache_list(FILAMENTS_CACHE, [_row_to_filament(dict(r)) for r in rows])
@@ -271,7 +422,7 @@ def reload_products_cache(force: bool = False):
     if use_catalog_db():
         conn = db_connect(dict_rows=True)
         rows = conn.execute(
-            "SELECT * FROM products WHERE active = true ORDER BY id"
+            "SELECT * FROM products WHERE status = 'active' AND active = true ORDER BY id"
         ).fetchall()
         conn.close()
         standard, custom = [], []
@@ -297,14 +448,18 @@ def reload_products_cache(force: bool = False):
         current = _products_mtime if path == config.PRODUCTS_FILE else _custom_mtime
         if force or mtime != current:
             data = load_products_file(path)
+            active = [p for p in data if product_status(p) == "active"]
+            inactive = [p for p in data if product_status(p) != "active"]
             if path == config.PRODUCTS_FILE:
-                _replace_cache_list(PRODUCTS_CACHE, data)
+                _replace_cache_list(PRODUCTS_CACHE, active)
+                _replace_cache_list(INACTIVE_PRODUCTS_CACHE, inactive)
                 globals()["_products_mtime"] = mtime
             else:
-                _replace_cache_list(CUSTOM_PRODUCTS_CACHE, data)
+                _replace_cache_list(CUSTOM_PRODUCTS_CACHE, active)
+                _replace_cache_list(INACTIVE_CUSTOM_PRODUCTS_CACHE, inactive)
                 globals()["_custom_mtime"] = mtime
             changed = True
-            logger.info("Оновлено кеш: %s (%s товарів)", path, len(data))
+            logger.info("Оновлено кеш: %s (%s товарів, неактивних %s)", path, len(data), len(inactive))
     return changed
 
 
@@ -319,7 +474,7 @@ def get_product_by_id(product_id: int):
         return None
     if use_catalog_db():
         conn = db_connect(dict_rows=True)
-        row = conn.execute(sql("SELECT * FROM products WHERE id = ? AND active = true"), (product_id,)).fetchone()
+        row = conn.execute(sql("SELECT * FROM products WHERE id = ? AND status = 'active' AND active = true"), (product_id,)).fetchone()
         conn.close()
         return _row_to_product(dict(row)) if row else None
     reload_products_cache()
@@ -327,6 +482,40 @@ def get_product_by_id(product_id: int):
         if p.get("id") == product_id:
             return p
     return None
+
+
+def get_product_any(product_id: int):
+    """Товар будь-якого статусу (для адмінки): активний, прихований чи архівний."""
+    if not product_id:
+        return None
+    if use_catalog_db():
+        conn = db_connect(dict_rows=True)
+        try:
+            row = conn.execute(sql("SELECT * FROM products WHERE id = ?"), (product_id,)).fetchone()
+        finally:
+            conn.close()
+        return _row_to_product(dict(row)) if row else None
+    reload_products_cache()
+    for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE + INACTIVE_PRODUCTS_CACHE + INACTIVE_CUSTOM_PRODUCTS_CACHE:
+        if p.get("id") == product_id:
+            return p
+    return None
+
+
+def get_admin_products() -> list[dict]:
+    """Усі товари всіх статусів для таблиці в адмінці; у кожного є `status`. Копії, кеш не чіпаємо."""
+    if use_catalog_db():
+        conn = db_connect(dict_rows=True)
+        try:
+            rows = conn.execute("SELECT * FROM products ORDER BY id").fetchall()
+        finally:
+            conn.close()
+        products = [_row_to_product(dict(r)) for r in rows]
+    else:
+        reload_products_cache()
+        products = PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE + INACTIVE_PRODUCTS_CACHE + INACTIVE_CUSTOM_PRODUCTS_CACHE
+        products = sorted(products, key=lambda p: p.get("id") or 0)
+    return [{**p, "status": product_status(p)} for p in products]
 
 
 def get_all_products():
@@ -388,11 +577,10 @@ def get_filament_by_id(filament_id: str):
 def save_products_to_file():
     if use_catalog_db():
         return
-    _atomic_write_text(Path(config.PRODUCTS_FILE), json.dumps(PRODUCTS_CACHE, ensure_ascii=False, indent=2))
-    _atomic_write_text(
-        Path(config.CUSTOM_PRODUCTS_FILE),
-        json.dumps(CUSTOM_PRODUCTS_CACHE, ensure_ascii=False, indent=2),
-    )
+    standard = sorted(PRODUCTS_CACHE + INACTIVE_PRODUCTS_CACHE, key=lambda p: p.get("id") or 0)
+    custom = sorted(CUSTOM_PRODUCTS_CACHE + INACTIVE_CUSTOM_PRODUCTS_CACHE, key=lambda p: p.get("id") or 0)
+    _atomic_write_text(Path(config.PRODUCTS_FILE), json.dumps(standard, ensure_ascii=False, indent=2))
+    _atomic_write_text(Path(config.CUSTOM_PRODUCTS_FILE), json.dumps(custom, ensure_ascii=False, indent=2))
     reload_products_cache(force=True)
 
 
@@ -411,13 +599,15 @@ def save_filaments_to_file():
 
 
 def _insert_product_db(product: dict, is_custom: bool) -> int:
+    status = product_status(product)
     conn = db_connect()
     cur = conn.execute(
         """
         INSERT INTO products (
             category_id, name, emoji, mat, price, old_price, photos, custom_fields,
-            hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, active
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
+            hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, active,
+            status, description, note, video
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
         """,
         (
@@ -437,6 +627,11 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
             product.get("stlLink", ""),
             bool(product.get("contractPrice")),
             is_custom,
+            status == "active",
+            status,
+            product.get("description", ""),
+            product.get("note", ""),
+            product.get("video", ""),
         ),
     )
     new_id = cur.fetchone()[0]
@@ -447,6 +642,7 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
 
 def add_product(data: dict):
     try:
+        clean_video_url(data.get("video"))  # невалідне посилання — помилка ще до змін
         category_id = data.get("cat", "toy")
         if not is_valid_category_id(category_id):
             return {"ok": False, "error": "Невірна або неактивна категорія"}
@@ -469,13 +665,20 @@ def add_product(data: dict):
             "hot": data.get("hot", False),
             "pinned": data.get("pinned", False),
             "stlLink": data.get("stlLink", ""),
+            "createdAt": _now_iso(),
         }
+        new_status = str(data.get("status") or "active")
+        if new_status not in PRODUCT_STATUSES:
+            return {"ok": False, "error": "Невірний статус товару"}
+        if new_status != "active":
+            product["status"] = new_status
+        _apply_product_texts(product, data)
         if contract_price:
             product["contractPrice"] = True
         elif old_price:
             product["oldPrice"] = int(old_price)
         if is_custom:
-            product["custom_fields"] = data.get("custom_fields", "")
+            product["custom_fields"] = normalize_custom_fields(data.get("custom_fields", ""))
         else:
             product["gift"] = False if contract_price else data.get("gift", False)
             product["filamentChoice"] = data.get("filamentChoice", True)
@@ -485,10 +688,18 @@ def add_product(data: dict):
         if use_catalog_db():
             new_id = _insert_product_db(product, is_custom)
         else:
-            target_list = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
-            new_id = 101 if is_custom and not target_list else (max(p.get("id", 0) for p in target_list) + 1 if target_list else (101 if is_custom else 1))
+            # ID рахуємо і за неактивними товарами, щоб архівний товар не віддав свій номер новому.
+            if is_custom:
+                existing = CUSTOM_PRODUCTS_CACHE + INACTIVE_CUSTOM_PRODUCTS_CACHE
+                new_id = max((p.get("id", 0) for p in existing), default=100) + 1
+            else:
+                existing = PRODUCTS_CACHE + INACTIVE_PRODUCTS_CACHE
+                new_id = max((p.get("id", 0) for p in existing), default=0) + 1
             product["id"] = new_id
-            target_list.append(product)
+            if new_status == "active":
+                (CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE).append(product)
+            else:
+                (INACTIVE_CUSTOM_PRODUCTS_CACHE if is_custom else INACTIVE_PRODUCTS_CACHE).append(product)
             save_products_to_file()
 
         logger.info("Товар додано: %s (ID: %s)", product["name"], new_id)
@@ -501,7 +712,8 @@ def add_product(data: dict):
 
 def update_product(product_id: int, data: dict):
     try:
-        product = get_product_by_id(product_id)
+        clean_video_url(data.get("video"))  # невалідне посилання — помилка ще до змін у кеші
+        product = get_product_any(product_id)
         if not product:
             return {"ok": False, "error": "Товар не знайдено"}
 
@@ -523,6 +735,7 @@ def update_product(product_id: int, data: dict):
             "stlLink": data.get("stlLink", product.get("stlLink", "")),
             "cat": next_category,
         })
+        _apply_product_texts(product, data)
 
         contract_price = bool(data.get("contractPrice"))
         if contract_price:
@@ -564,7 +777,7 @@ def update_product(product_id: int, data: dict):
                     product.pop("luminousFilamentChoice", None)
             product.pop("custom_fields", None)
         else:
-            product["custom_fields"] = data.get("custom_fields", product.get("custom_fields", ""))
+            product["custom_fields"] = normalize_custom_fields(data.get("custom_fields", product.get("custom_fields", "")))
             product.pop("gift", None)
             product.pop("filamentChoice", None)
             product.pop("luminousFilamentChoice", None)
@@ -576,7 +789,8 @@ def update_product(product_id: int, data: dict):
                 UPDATE products SET
                     category_id = %s, name = %s, emoji = %s, mat = %s, price = %s, old_price = %s,
                     photos = %s::jsonb, custom_fields = %s, hot = %s, gift = %s, filament_choice = %s,
-                    luminous_filament_choice = %s, pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s
+                    luminous_filament_choice = %s, pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s,
+                    description = %s, note = %s, video = %s
                 WHERE id = %s
                 """,
                 (
@@ -591,6 +805,9 @@ def update_product(product_id: int, data: dict):
                     product.get("stlLink", ""),
                     bool(product.get("contractPrice")),
                     is_next_custom,
+                    product.get("description", ""),
+                    product.get("note", ""),
+                    product.get("video", ""),
                     product_id,
                 ),
             )
@@ -598,11 +815,7 @@ def update_product(product_id: int, data: dict):
             conn.close()
         else:
             if is_current_custom != is_next_custom:
-                source = CUSTOM_PRODUCTS_CACHE if is_current_custom else PRODUCTS_CACHE
-                dest = CUSTOM_PRODUCTS_CACHE if is_next_custom else PRODUCTS_CACHE
-                source[:] = [p for p in source if p.get("id") != product_id]
-                if product not in dest:
-                    dest.append(product)
+                _json_rebalance()
             save_products_to_file()
 
         logger.info("Товар оновлено: %s (ID: %s)", product["name"], product_id)
@@ -614,34 +827,300 @@ def update_product(product_id: int, data: dict):
 
 
 def delete_product(product_id: int):
+    """М'яке видалення: товар іде в архів (його можна повернути через set_product_status)."""
+    result = set_product_status(product_id, "archive")
+    if result.get("ok"):
+        logger.info("Товар в архіві (ID: %s)", product_id)
+    return result
+
+
+def _json_rebalance() -> None:
+    """JSON-бекенд: розкласти всі товари по чотирьох списках за статусом і категорією (custom — окремий файл)."""
+    everything = PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE + INACTIVE_PRODUCTS_CACHE + INACTIVE_CUSTOM_PRODUCTS_CACHE
+
+    def pick(active: bool, custom: bool) -> list[dict]:
+        return sorted(
+            (p for p in everything
+             if (product_status(p) == "active") == active and (p.get("cat") == "custom") == custom),
+            key=lambda p: p.get("id") or 0,
+        )
+
+    _replace_cache_list(PRODUCTS_CACHE, pick(True, False))
+    _replace_cache_list(CUSTOM_PRODUCTS_CACHE, pick(True, True))
+    _replace_cache_list(INACTIVE_PRODUCTS_CACHE, pick(False, False))
+    _replace_cache_list(INACTIVE_CUSTOM_PRODUCTS_CACHE, pick(False, True))
+
+
+_DB_COLUMNS = {
+    "price": "price", "oldPrice": "old_price", "hot": "hot", "pinned": "pinned",
+    "gift": "gift", "cat": "category_id",
+}
+
+
+def _apply_changes(product: dict, changes: dict) -> None:
+    """Змінити словник товару за `changes` (ключі як у JSON-каталозі); порожня стара ціна прибирає oldPrice."""
+    for key, value in changes.items():
+        if key == "status":
+            if value == "active":
+                product.pop("status", None)
+            else:
+                product["status"] = value
+        elif key == "oldPrice" and not value:
+            product.pop("oldPrice", None)
+        else:
+            product[key] = value
+
+
+def _persist_changes(updates: list[tuple[dict, dict]]) -> None:
+    """Записати зміни [(товар, changes)] одним проходом: одна транзакція (БД) або один запис файлів (JSON)."""
+    if use_catalog_db():
+        conn = db_connect()
+        try:
+            for product, changes in updates:
+                sets, params = [], []
+                for key, value in changes.items():
+                    if key == "status":
+                        sets += ["status = %s", "active = %s"]
+                        params += [value, value == "active"]
+                    elif key in _DB_COLUMNS:
+                        sets.append(f"{_DB_COLUMNS[key]} = %s")
+                        params.append((value or None) if key == "oldPrice" else value)
+                if sets:
+                    conn.execute(f"UPDATE products SET {', '.join(sets)} WHERE id = %s", (*params, product["id"]))
+            conn.commit()
+        finally:
+            conn.close()
+    else:
+        _json_rebalance()
+        save_products_to_file()
+    reload_products_cache(force=True)
+
+
+def set_product_status(product_id: int, status: str):
+    if status not in PRODUCT_STATUSES:
+        return {"ok": False, "error": "Невірний статус товару"}
     try:
-        product = get_product_by_id(product_id)
+        product = get_product_any(product_id)
         if not product:
             return {"ok": False, "error": "Товар не знайдено"}
-
-        if use_catalog_db():
-            conn = db_connect()
-            conn.execute("UPDATE products SET active = false WHERE id = %s", (product_id,))
-            conn.commit()
-            conn.close()
-        else:
-            is_custom = product.get("cat") == "custom"
-            target = CUSTOM_PRODUCTS_CACHE if is_custom else PRODUCTS_CACHE
-            target[:] = [p for p in target if p.get("id") != product_id]
-            save_products_to_file()
-
-        logger.info("Товар видалено: %s (ID: %s)", product.get("name"), product_id)
-        reload_products_cache(force=True)
-        return {"ok": True}
+        if product_status(product) != status:
+            changes = {"status": status}
+            _apply_changes(product, changes)
+            _persist_changes([(product, changes)])
+        return {"ok": True, "status": status}
     except Exception as e:
-        logger.exception("Помилка видалення товару")
+        logger.exception("Помилка зміни статусу товару")
         return {"ok": False, "error": str(e)}
+
+
+def _int_field(value, name: str, *, allow_zero: bool = True) -> int:
+    if isinstance(value, bool) or value is None or str(value).strip() == "":
+        raise ValueError(f"Невірне значення: {name}")
+    try:
+        number = int(float(str(value).replace(",", ".")))
+    except (TypeError, ValueError):
+        raise ValueError(f"Невірне значення: {name}") from None
+    if number < 0 or (number == 0 and not allow_zero) or number > 1_000_000:
+        raise ValueError(f"Невірне значення: {name}")
+    return number
+
+
+def _patch_changes(product: dict, fields: dict) -> dict:
+    """Перевірені зміни для швидкого оновлення (ціна, стара ціна, прапорці). ValueError — зрозуміле повідомлення."""
+    if not isinstance(fields, dict) or not fields:
+        raise ValueError("Немає що змінювати")
+    unknown = set(fields) - {"price", "oldPrice", "hot", "pinned", "gift"}
+    if unknown:
+        raise ValueError("Недозволені поля: " + ", ".join(sorted(unknown)))
+    is_contract = bool(product.get("contractPrice"))
+    is_custom = product.get("cat") == "custom"
+    changes: dict = {}
+    for flag in ("hot", "pinned", "gift"):
+        if flag in fields:
+            if not isinstance(fields[flag], bool):
+                raise ValueError(f"Невірне значення: {flag}")
+            if flag == "gift" and fields[flag] and (is_custom or is_contract):
+                raise ValueError("Подарунком не може бути договірний чи індивідуальний товар")
+            changes[flag] = fields[flag]
+    if "price" in fields or "oldPrice" in fields:
+        if is_contract:
+            raise ValueError("Договірна ціна: змініть її в редакторі товару")
+        price = _int_field(fields["price"], "ціна", allow_zero=False) if "price" in fields else int(product.get("price") or 0)
+        if "oldPrice" in fields:
+            old = fields["oldPrice"]
+            old_price = None if old in (None, "", 0, "0") else _int_field(old, "стара ціна", allow_zero=False)
+        else:
+            old_price = product.get("oldPrice")
+        ok, error = validate_product_prices(price, old_price)
+        if not ok:
+            raise ValueError(error)
+        if "price" in fields:
+            changes["price"] = price
+        if "oldPrice" in fields:
+            changes["oldPrice"] = old_price
+    return changes
+
+
+def get_admin_product(product_id: int):
+    product = get_product_any(product_id)
+    return {**product, "status": product_status(product)} if product else None
+
+
+def patch_product(product_id: int, fields: dict):
+    """Швидке часткове оновлення: ціна, стара ціна, hot / pinned / gift (товар будь-якого статусу)."""
+    try:
+        product = get_product_any(product_id)
+        if not product:
+            return {"ok": False, "error": "Товар не знайдено"}
+        changes = _patch_changes(product, fields)
+        _apply_changes(product, changes)
+        _persist_changes([(product, changes)])
+        return {"ok": True, "product": get_admin_product(product_id)}
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        logger.exception("Помилка швидкого оновлення товару")
+        return {"ok": False, "error": str(e)}
+
+
+BULK_ACTIONS = ("discount", "clear_discount", "category", "status")
+MAX_BULK_IDS = 500
+
+
+def bulk_update_products(ids, action: str, value=None):
+    """Масова дія: discount (відсоток 1–90 від поточної/старої ціни), clear_discount, category, status.
+
+    Договірні товари і «Індивідуальне» пропускаються там, де дія до них не стосується; вони йдуть у `skipped`.
+    """
+    try:
+        if action not in BULK_ACTIONS:
+            return {"ok": False, "error": "Невідома дія"}
+        if not isinstance(ids, list) or not ids:
+            return {"ok": False, "error": "Не вибрано жодного товару"}
+        if len(ids) > MAX_BULK_IDS:
+            return {"ok": False, "error": f"Забагато товарів (максимум {MAX_BULK_IDS})"}
+        clean_ids: list[int] = []
+        for raw in ids:
+            if isinstance(raw, bool):
+                return {"ok": False, "error": "Невірний ID товару"}
+            try:
+                pid = int(raw)
+            except (TypeError, ValueError):
+                return {"ok": False, "error": "Невірний ID товару"}
+            if pid > 0 and pid not in clean_ids:
+                clean_ids.append(pid)
+        if not clean_ids:
+            return {"ok": False, "error": "Не вибрано жодного товару"}
+
+        percent = 0
+        category_id = ""
+        if action == "discount":
+            try:
+                percent = _int_field(value, "відсоток", allow_zero=False)
+            except ValueError:
+                return {"ok": False, "error": "Знижка — число від 1 до 90"}
+            if percent > 90:
+                return {"ok": False, "error": "Знижка — число від 1 до 90"}
+        elif action == "category":
+            category_id = str(value or "").strip()
+            if not is_valid_category_id(category_id):
+                return {"ok": False, "error": "Невірна або неактивна категорія"}
+            if category_id == "custom":
+                return {"ok": False, "error": "У «Індивідуальне» масово переносити не можна"}
+        elif action == "status" and value not in PRODUCT_STATUSES:
+            return {"ok": False, "error": "Невірний статус товару"}
+
+        updates: list[tuple[dict, dict]] = []
+        skipped: list[dict] = []
+        missing: list[int] = []
+        for pid in clean_ids:
+            product = get_product_any(pid)
+            if not product:
+                missing.append(pid)
+                continue
+            changes: dict = {}
+            reason = ""
+            if action == "status":
+                if product_status(product) != value:
+                    changes = {"status": value}
+            elif action == "category":
+                if product.get("cat") == "custom":
+                    reason = "індивідуальне"
+                elif product.get("cat") != category_id:
+                    changes = {"cat": category_id}
+            elif product.get("contractPrice"):
+                reason = "договірна ціна"
+            elif action == "discount":
+                base = int(product.get("oldPrice") or product.get("price") or 0)
+                new_price = round(base * (100 - percent) / 100)
+                if new_price < 1 or new_price >= base:
+                    reason = "ціна занадто мала"
+                else:
+                    changes = {"price": new_price, "oldPrice": base}
+            elif product.get("oldPrice"):  # clear_discount
+                changes = {"price": int(product["oldPrice"]), "oldPrice": None}
+            if reason:
+                skipped.append({"id": pid, "reason": reason})
+            elif changes:
+                updates.append((product, changes))
+        for product, changes in updates:
+            _apply_changes(product, changes)
+        if updates:
+            _persist_changes(updates)
+        return {"ok": True, "updated": len(updates), "skipped": skipped, "missing": missing}
+    except Exception as e:
+        logger.exception("Помилка масової дії над товарами")
+        return {"ok": False, "error": str(e)}
+
+
+def duplicate_product(product_id: int):
+    """Копія товару: назва + « (копія)», статус «прихований» — щоб не з'явився в магазині до перевірки."""
+    product = get_product_any(product_id)
+    if not product:
+        return {"ok": False, "error": "Товар не знайдено"}
+    data = {k: copy.deepcopy(v) for k, v in product.items() if k not in ("id", "createdAt", "status")}
+    data["name"] = (str(product.get("name") or "").strip() + " (копія)")[:200]
+    data["status"] = "hidden"
+    return add_product(data)
+
+
+QUICK_SLOTS = (1, 2, 3, 4)
+
+
+def _normalize_quick_slot(value):
+    """None / '' -> None; інакше ціле 1..4 (слот швидких категорій на головній)."""
+    if value is None or value == "":
+        return None
+    slot = int(value)
+    if slot not in QUICK_SLOTS:
+        raise ValueError("Слот має бути від 1 до 4")
+    return slot
+
+
+def _release_quick_slot(slot, except_id: str) -> None:
+    """Слот може займати одна категорія: попередня власниця втрачає його (у кеші; у БД — окремим запитом)."""
+    if slot is None:
+        return
+    for other in CATEGORIES_CACHE:
+        if other.get("id") != except_id and other.get("quickSlot") == slot:
+            other["quickSlot"] = None
+    if use_catalog_db():
+        conn = db_connect()
+        try:
+            conn.execute("UPDATE categories SET quick_slot = NULL WHERE quick_slot = %s AND id <> %s", (slot, except_id))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def add_category(data: dict):
     try:
-        category_id = str(data.get("id", "")).strip().lower()
         name = str(data.get("name", "")).strip()
+        category_id = str(data.get("id", "")).strip().lower()
+        if not category_id and name:
+            # ID не передали — генеруємо з назви (транслітерація), унікальний
+            reload_categories_cache()
+            category_id = unique_slug(name, [c.get("id") for c in CATEGORIES_CACHE], fallback="category")
         emoji = str(data.get("emoji", "")).strip() or "📦"
         badge_class = str(data.get("badgeClass", "")).strip() or f"category-{category_id}"
 
@@ -658,8 +1137,9 @@ def add_category(data: dict):
             "badgeClass": badge_class,
             "order": int(data.get("order", max_order + 1)),
             "active": bool(data.get("active", True)),
-            "quickSlot": data.get("quickSlot"),
+            "quickSlot": _normalize_quick_slot(data.get("quickSlot")),
         }
+        _release_quick_slot(category["quickSlot"], category_id)
 
         if use_catalog_db():
             conn = db_connect()
@@ -696,7 +1176,11 @@ def update_category(category_id: str, data: dict):
             if new_id != category_id and get_category_by_id(new_id):
                 return {"ok": False, "error": "Категорія з таким ID вже існує"}
             if new_id != category_id:
-                products_to_recat = [p for p in get_all_products() if p.get("cat") == category_id]
+                # усі статуси: приховані й архівні товари теж мають піти за новим ID
+                products_to_recat = [
+                    p for p in (PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE + INACTIVE_PRODUCTS_CACHE + INACTIVE_CUSTOM_PRODUCTS_CACHE)
+                    if p.get("cat") == category_id
+                ]
                 for product in products_to_recat:
                     product["cat"] = new_id
                 if use_catalog_db() and products_to_recat:
@@ -723,8 +1207,8 @@ def update_category(category_id: str, data: dict):
         if "active" in data:
             category["active"] = bool(data.get("active"))
         if "quickSlot" in data:
-            slot = data.get("quickSlot")
-            category["quickSlot"] = int(slot) if slot is not None else None
+            category["quickSlot"] = _normalize_quick_slot(data.get("quickSlot"))
+            _release_quick_slot(category["quickSlot"], category_id)
 
         if use_catalog_db():
             conn = db_connect()
@@ -743,8 +1227,7 @@ def update_category(category_id: str, data: dict):
             conn.close()
         else:
             save_categories_to_file()
-            if any(p.get("cat") == category_id for p in get_all_products()):
-                save_products_to_file()
+            save_products_to_file()  # після зміни ID категорії товари (всі статуси) вже посилаються на новий
 
         reload_categories_cache(force=True)
         return {"ok": True, "category": category}
@@ -759,11 +1242,12 @@ def delete_category(category_id: str):
         if not category:
             return {"ok": False, "error": "Категорія не знайдена"}
 
-        products_in_category = [p for p in get_all_products() if p.get("cat") == category_id]
+        # рахуємо і приховані та архівні: вони теж посилаються на категорію (FK у Postgres)
+        products_in_category = [p for p in get_admin_products() if p.get("cat") == category_id]
         if products_in_category:
             return {
                 "ok": False,
-                "error": f"Не можна видалити категорію: у ній є товари ({len(products_in_category)})",
+                "error": f"Не можна видалити категорію: у ній є товари ({len(products_in_category)}), зокрема приховані й в архіві",
             }
 
         if use_catalog_db():
@@ -782,6 +1266,143 @@ def delete_category(category_id: str):
         return {"ok": False, "error": str(e)}
 
 
+def _valid_hex(value) -> bool:
+    return bool(re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", str(value or "").strip()))
+
+
+def filament_usage_counts() -> dict[str, int]:
+    """Скільки товарів (активні й приховані, без архіву) пропонують колір: `id -> N`.
+
+    У товарі не зберігається список кольорів: покупцю доступні всі кольори в наявності, якщо в товарі
+    увімкнено вибір кольору, а світні — лише коли додатково увімкнено `luminousFilamentChoice`.
+    """
+    reload_filaments_cache()
+    products = [
+        p for p in get_admin_products()
+        if product_status(p) != "archive" and p.get("cat") != "custom" and p.get("filamentChoice") is not False
+    ]
+    regular = len(products)
+    glow = sum(1 for p in products if p.get("luminousFilamentChoice"))
+    return {str(f.get("id")): (glow if is_glow_filament(f) else regular) for f in FILAMENTS_CACHE}
+
+
+def _persist_filament(filament: dict, *, sort_order: int | None = None) -> None:
+    """Записує колір у БД (upsert) або у filaments.json + таблицю filament_colors."""
+    glow = bool(filament.get("glow"))
+    if use_catalog_db():
+        conn = db_connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO filaments (id, name, hex, available, glow, sort_order)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name, hex = EXCLUDED.hex,
+                    available = EXCLUDED.available, glow = EXCLUDED.glow
+                """,
+                (filament["id"], filament.get("name"), filament.get("hex"), bool(filament.get("available")),
+                 glow, 999 if sort_order is None else sort_order),
+            )
+            sync_filament_colors_table(conn, filament)
+            conn.commit()
+        finally:
+            conn.close()
+    else:
+        save_filaments_to_file()
+        conn = db_connect()
+        try:
+            sync_filament_colors_table(conn, filament)
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def add_filament(data: dict):
+    """Новий колір. ID — з назви (транслітерація), якщо не передано."""
+    try:
+        reload_filaments_cache()
+        name = str(data.get("name", "")).strip()
+        if not name:
+            return {"ok": False, "error": "Назва філаменту обов'язкова"}
+        if len(name) > 60:
+            return {"ok": False, "error": "Назва філаменту задовга (до 60 символів)"}
+        hex_value = str(data.get("hex", "")).strip()
+        if not _valid_hex(hex_value):
+            return {"ok": False, "error": "Колір має бути у HEX-форматі (#RGB або #RRGGBB)"}
+        existing_ids = [str(f.get("id")) for f in FILAMENTS_CACHE]
+        requested_id = str(data.get("id", "")).strip().lower()
+        if requested_id:
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,31}", requested_id):
+                return {"ok": False, "error": "ID може містити лише латиницю, цифри й дефіс"}
+            if requested_id in existing_ids:
+                return {"ok": False, "error": "Колір з таким ID вже існує"}
+            filament_id = requested_id
+        else:
+            filament_id = unique_slug(name, existing_ids, fallback="color")
+        if any(str(f.get("name") or "").strip().lower() == name.lower() for f in FILAMENTS_CACHE):
+            return {"ok": False, "error": "Колір з такою назвою вже існує"}
+        filament = {
+            "id": filament_id,
+            "name": name,
+            "hex": hex_value,
+            "available": bool(data.get("available", True)),
+            "glow": bool(data.get("glow", False)),
+        }
+        if not use_catalog_db():
+            FILAMENTS_CACHE.append(filament)
+        _persist_filament(filament, sort_order=len(FILAMENTS_CACHE) + 1)
+        reload_filaments_cache(force=True)
+        saved = get_filament_by_id(filament_id)
+        if not saved:
+            return {"ok": False, "error": "Не вдалося зберегти філамент"}
+        logger.info("Філамент додано: %s", filament_id)
+        return {"ok": True, "filament": {**saved, "glow": is_glow_filament(saved)}}
+    except Exception as e:
+        logger.exception("Помилка додавання філаменту")
+        return {"ok": False, "error": str(e)}
+
+
+def delete_filament(filament_id: str, force: bool = False):
+    """Видалення кольору. Якщо його пропонують товари — відмова з `used_by`, доки не передано force.
+
+    Минулі замовлення не страждають: у позиціях колір збережено назвою.
+    """
+    try:
+        filament = get_filament_by_id(filament_id)
+        if not filament:
+            return {"ok": False, "error": "Філамент не знайдено"}
+        used_by = filament_usage_counts().get(str(filament.get("id")), 0)
+        if used_by and not force:
+            return {
+                "ok": False,
+                "used_by": used_by,
+                "error": f"Колір пропонується в товарах ({used_by}). Краще позначити «Закінчився».",
+            }
+        if use_catalog_db():
+            conn = db_connect()
+            try:
+                conn.execute("DELETE FROM filaments WHERE id = %s", (filament_id,))
+                conn.execute("DELETE FROM filament_colors WHERE id = %s", (filament_id,))
+                conn.commit()
+            finally:
+                conn.close()
+        else:
+            FILAMENTS_CACHE[:] = [f for f in FILAMENTS_CACHE if str(f.get("id")) != str(filament_id)]
+            save_filaments_to_file()
+            conn = db_connect()
+            try:
+                conn.execute(sql("DELETE FROM filament_colors WHERE id = ?"), (filament_id,))
+                conn.commit()
+            finally:
+                conn.close()
+        reload_filaments_cache(force=True)
+        logger.info("Філамент видалено: %s", filament_id)
+        return {"ok": True, "used_by": used_by}
+    except Exception as e:
+        logger.exception("Помилка видалення філаменту")
+        return {"ok": False, "error": str(e)}
+
+
 def update_filament(filament_id: str, data: dict):
     try:
         filament = get_filament_by_id(filament_id)
@@ -795,53 +1416,59 @@ def update_filament(filament_id: str, data: dict):
             filament["name"] = name
         if "hex" in data:
             hex_value = str(data.get("hex", "")).strip()
-            if not hex_value.startswith("#") or len(hex_value) not in (4, 7):
+            if not _valid_hex(hex_value):
                 return {"ok": False, "error": "Колір має бути у HEX-форматі (#RGB або #RRGGBB)"}
             filament["hex"] = hex_value
         if "available" in data:
             filament["available"] = bool(data.get("available"))
-
-        if use_catalog_db():
-            conn = db_connect()
-            cur = conn.execute(
-                "UPDATE filaments SET name = %s, hex = %s, available = %s WHERE id = %s",
-                (filament.get("name"), filament.get("hex"), filament.get("available"), filament_id),
-            )
-            if is_postgres() and getattr(cur, "rowcount", 1) == 0:
-                conn.execute(
-                    """
-                    INSERT INTO filaments (id, name, hex, available, sort_order)
-                    VALUES (%s, %s, %s, %s, 999)
-                    ON CONFLICT (id) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        hex = EXCLUDED.hex,
-                        available = EXCLUDED.available
-                    """,
-                    (
-                        filament_id,
-                        filament.get("name"),
-                        filament.get("hex"),
-                        filament.get("available"),
-                    ),
-                )
-            sync_filament_colors_table(conn, filament)
-            conn.commit()
-            conn.close()
+        if "glow" in data:
+            filament["glow"] = bool(data.get("glow"))
         else:
-            save_filaments_to_file()
-            conn = db_connect()
-            sync_filament_colors_table(conn, filament)
-            conn.commit()
-            conn.close()
+            filament["glow"] = is_glow_filament(filament)
 
+        _persist_filament(filament)
         reload_filaments_cache(force=True)
         saved = get_filament_by_id(filament_id)
         if not saved:
             return {"ok": False, "error": "Не вдалося зберегти філамент"}
         logger.info("Філамент оновлено: %s", saved.get("id"))
-        return {"ok": True, "filament": saved}
+        return {"ok": True, "filament": {**saved, "glow": is_glow_filament(saved)}}
     except Exception as e:
         logger.exception("Помилка оновлення філаменту")
+        return {"ok": False, "error": str(e)}
+
+
+def reorder_categories(ids) -> dict:
+    """Масовий порядок категорій: `ids` — нова послідовність; не названі лишаються після них у поточному порядку."""
+    try:
+        if not isinstance(ids, list) or not ids or len(ids) > 200:
+            return {"ok": False, "error": "Потрібен непорожній список ID категорій"}
+        ids = [str(i).strip() for i in ids]
+        if len(set(ids)) != len(ids):
+            return {"ok": False, "error": "ID категорій не повинні повторюватися"}
+        reload_categories_cache()
+        known = {c["id"]: c for c in CATEGORIES_CACHE}
+        unknown = [i for i in ids if i not in known]
+        if unknown:
+            return {"ok": False, "error": f"Невідома категорія: {unknown[0]}"}
+        rest = [c["id"] for c in sorted(CATEGORIES_CACHE, key=lambda c: c.get("order", 999)) if c["id"] not in ids]
+        final = ids + rest
+        if use_catalog_db():
+            conn = db_connect()
+            try:
+                for position, cid in enumerate(final, start=1):
+                    conn.execute("UPDATE categories SET sort_order = %s WHERE id = %s", (position, cid))
+                conn.commit()
+            finally:
+                conn.close()
+        else:
+            for position, cid in enumerate(final, start=1):
+                known[cid]["order"] = position
+            save_categories_to_file()
+        reload_categories_cache(force=True)
+        return {"ok": True, "order": final}
+    except Exception as e:
+        logger.exception("Помилка зміни порядку категорій")
         return {"ok": False, "error": str(e)}
 
 

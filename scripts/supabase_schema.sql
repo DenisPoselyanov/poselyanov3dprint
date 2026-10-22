@@ -45,6 +45,15 @@ CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS luminous_filament_choice BOOLEAN DEFAULT false;
 
+-- Етап 5 редизайну: прапорець «світиться в темряві» для кольору (спершу без DEFAULT, щоб заповнити старі рядки)
+ALTER TABLE filaments ADD COLUMN IF NOT EXISTS glow BOOLEAN;
+UPDATE filaments SET glow = (id LIKE 'luminous%') WHERE glow IS NULL;
+ALTER TABLE filaments ALTER COLUMN glow SET DEFAULT false;
+-- Етап 5: статус товару active/hidden/archive (бот робить те саме на старті); `active` лишається = (status = 'active')
+ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT;
+UPDATE products SET status = CASE WHEN active THEN 'active' ELSE 'archive' END WHERE status IS NULL;
+ALTER TABLE products ALTER COLUMN status SET DEFAULT 'active';
+
 -- Transaction tables
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT PRIMARY KEY,
@@ -182,5 +191,48 @@ UPDATE filament_colors SET name = 'Світний зелений' WHERE id = 'lu
 UPDATE filament_colors SET name = 'Світний синій' WHERE id = 'luminous-blue';
 UPDATE filament_colors SET name = 'Світний бірюзовий' WHERE id = 'luminous-aqua';
 UPDATE filament_colors SET name = 'Світний рожевий' WHERE id = 'luminous-pink';
+
+-- Акції (таблицю створює і застартово мігрує сам бот — services/promotions.py; тут для довідки).
+-- Слайс 5: accent (токен кольору банера) і show_timer (показувати таймер до кінця).
+CREATE TABLE IF NOT EXISTS promotions (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    subtitle TEXT NOT NULL DEFAULT '',
+    emoji TEXT NOT NULL DEFAULT '🔥',
+    badge TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 100,
+    value INTEGER NOT NULL DEFAULT 0,
+    min_order INTEGER NOT NULL DEFAULT 0,
+    category TEXT NOT NULL DEFAULT '',
+    min_items INTEGER NOT NULL DEFAULT 0,
+    max_gift_price INTEGER NOT NULL DEFAULT 0,
+    starts_at TIMESTAMPTZ,
+    ends_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS accent TEXT NOT NULL DEFAULT '';
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS show_timer INTEGER NOT NULL DEFAULT 1;
+
+-- Розсилки (таблицю створює і мігрує сам бот — services/broadcasts.py; тут для довідки).
+-- Слайс 6 етапу 5. Переходи: подія events.type = 'broadcast_open' (value = id розсилки).
+CREATE TABLE IF NOT EXISTS broadcasts (
+    id BIGSERIAL PRIMARY KEY,
+    segment TEXT NOT NULL DEFAULT 'all',
+    text TEXT NOT NULL DEFAULT '',
+    photo TEXT NOT NULL DEFAULT '',
+    button_label TEXT NOT NULL DEFAULT '',
+    button_target TEXT NOT NULL DEFAULT '',
+    scheduled_at TIMESTAMPTZ,
+    status TEXT NOT NULL DEFAULT 'draft',
+    total INTEGER NOT NULL DEFAULT 0,
+    delivered INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0,
+    clicks INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    sent_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_broadcasts_status_sched ON broadcasts(status, scheduled_at);
 
 COMMIT;

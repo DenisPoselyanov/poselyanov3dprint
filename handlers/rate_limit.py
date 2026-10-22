@@ -41,6 +41,66 @@ def command_cooldown(seconds: float) -> Callable[[F], F]:
     return decorator
 
 
+_EVENT_WINDOW_SEC = 60.0
+_EVENT_MAX_PER_WINDOW = 30
+_event_calls: dict[int, list[float]] = {}
+
+
+def allow_event(user_id: int) -> bool:
+    """Не більше _EVENT_MAX_PER_WINDOW подій аналітики на користувача за хвилину."""
+    now = time.monotonic()
+    recent = [t for t in _event_calls.get(user_id, ()) if now - t < _EVENT_WINDOW_SEC]
+    if len(recent) >= _EVENT_MAX_PER_WINDOW:
+        _event_calls[user_id] = recent
+        return False
+    recent.append(now)
+    _event_calls[user_id] = recent
+    if len(_event_calls) > 10_000:
+        # Не даємо словнику рости безмежно: викидаємо тих, хто давно мовчить.
+        for uid in [u for u, ts in _event_calls.items() if not ts or now - ts[-1] >= _EVENT_WINDOW_SEC]:
+            _event_calls.pop(uid, None)
+    return True
+
+
+_LOOKUP_MAX_PER_WINDOW = 90
+_lookup_calls: dict[int, list[float]] = {}
+
+
+def allow_delivery_lookup(user_id: int) -> bool:
+    """Довідники міст/відділень: не більше 90 запитів на користувача за хвилину."""
+    now = time.monotonic()
+    recent = [t for t in _lookup_calls.get(user_id, ()) if now - t < _EVENT_WINDOW_SEC]
+    if len(recent) >= _LOOKUP_MAX_PER_WINDOW:
+        _lookup_calls[user_id] = recent
+        return False
+    recent.append(now)
+    _lookup_calls[user_id] = recent
+    if len(_lookup_calls) > 10_000:
+        for uid in [u for u, ts in _lookup_calls.items() if not ts or now - ts[-1] >= _EVENT_WINDOW_SEC]:
+            _lookup_calls.pop(uid, None)
+    return True
+
+
+_UPLOAD_WINDOW_SEC = 3600.0
+_UPLOAD_MAX_PER_WINDOW = 10
+_upload_calls: dict[int, list[float]] = {}
+
+
+def allow_review_upload(user_id: int) -> bool:
+    """Фото до відгуку: не більше 10 завантажень на користувача за годину."""
+    now = time.monotonic()
+    recent = [t for t in _upload_calls.get(user_id, ()) if now - t < _UPLOAD_WINDOW_SEC]
+    if len(recent) >= _UPLOAD_MAX_PER_WINDOW:
+        _upload_calls[user_id] = recent
+        return False
+    recent.append(now)
+    _upload_calls[user_id] = recent
+    return True
+
+
 def reset_rate_limits() -> None:
     """Скидає in-memory cooldown (корисно для тестів)."""
     _last_call.clear()
+    _event_calls.clear()
+    _upload_calls.clear()
+    _lookup_calls.clear()

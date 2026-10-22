@@ -45,6 +45,45 @@ def _migrate_user_activity_columns(conn) -> None:
         conn.execute("UPDATE users SET activity_count = 1, last_seen_at = joined_at WHERE activity_count = 0")
 
 
+ORDER_EXTRA_COLUMNS = {
+    "delivery_method": "TEXT DEFAULT ''",
+    "city": "TEXT DEFAULT ''",
+    "city_ref": "TEXT DEFAULT ''",
+    "branch": "TEXT DEFAULT ''",
+    "branch_ref": "TEXT DEFAULT ''",
+    "recipient_name": "TEXT DEFAULT ''",
+    "phone": "TEXT DEFAULT ''",
+    "pay_method": "TEXT DEFAULT ''",
+    "ttn": "TEXT DEFAULT ''",
+    "internal_note": "TEXT DEFAULT ''",
+    "source": "TEXT DEFAULT 'miniapp'",
+    "promotion_id": "TEXT DEFAULT ''",
+    "gift_product_id": "BIGINT",
+    "delivered_at": "TIMESTAMPTZ",
+    "review_requested_at": "TIMESTAMPTZ",
+}
+
+ORDER_ITEM_EXTRA_COLUMNS = {
+    "personalization": "TEXT DEFAULT ''",
+    "personalization_note": "TEXT DEFAULT ''",
+    "is_gift": "INTEGER DEFAULT 0",
+    "printed": "INTEGER DEFAULT 0",
+}
+
+
+def _ensure_columns(conn, table: str, columns: dict[str, str], *, postgres: bool) -> None:
+    """Idempotent ADD COLUMN for both backends (sqlite has no IF NOT EXISTS)."""
+    if postgres:
+        for name, ddl in columns.items():
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {ddl}")
+        return
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    for name, ddl in columns.items():
+        if name not in existing:
+            sqlite_ddl = ddl.replace("BIGINT", "INTEGER")
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sqlite_ddl}")
+
+
 def _migrate_coupon_uses_status(conn) -> None:
     """Add coupon_uses.status and fix uses_count for pending reservations."""
     if _is_postgres():
@@ -119,7 +158,11 @@ def row_to_dict(row) -> dict:
 
 def init_db() -> None:
     # Локальний імпорт, щоб уникнути циклічної залежності services.promotions -> db_utils.
+    from services.broadcasts import init_broadcasts_table
+    from services.collections import init_collections_table
+    from services.events import init_events_table
     from services.promotions import init_promotions_table
+    from services.reviews import init_reviews_table
     from services.settings import init_settings_table
 
     conn = db_connect()
@@ -226,6 +269,8 @@ def init_db() -> None:
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS comment TEXT DEFAULT ''")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_pending INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS channel_message_id BIGINT")
+        _ensure_columns(conn, "orders", ORDER_EXTRA_COLUMNS, postgres=True)
+        _ensure_columns(conn, "order_items", ORDER_ITEM_EXTRA_COLUMNS, postgres=True)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id)")
@@ -243,6 +288,10 @@ def init_db() -> None:
         init_catalog_tables(conn)
         init_promotions_table(conn)
         init_settings_table(conn)
+        init_collections_table(conn)
+        init_events_table(conn)
+        init_reviews_table(conn)
+        init_broadcasts_table(conn)
     else:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -358,6 +407,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE orders ADD COLUMN channel_message_id INTEGER")
         if "promotion_discount" not in o_cols:
             conn.execute("ALTER TABLE orders ADD COLUMN promotion_discount INTEGER DEFAULT 0")
+        _ensure_columns(conn, "orders", ORDER_EXTRA_COLUMNS, postgres=False)
+        _ensure_columns(conn, "order_items", ORDER_ITEM_EXTRA_COLUMNS, postgres=False)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_coupon_allowed_users_code ON coupon_allowed_users(code)"
         )
@@ -369,6 +420,10 @@ def init_db() -> None:
         """)
         init_promotions_table(conn)
         init_settings_table(conn)
+        init_collections_table(conn)
+        init_events_table(conn)
+        init_reviews_table(conn)
+        init_broadcasts_table(conn)
 
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)

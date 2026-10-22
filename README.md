@@ -31,6 +31,11 @@ Set `LOCAL_DEV_MODE=true` and `VALIDATE_INIT_DATA=false` for local browser testi
 | `security_utils.py` | SSRF protection, static allowlist |
 | `rich_messages.py` | Telegram rich HTML messages |
 
+## Redesign
+
+Shop and admin redesign plan, screen specs and chosen variants: [REDESIGN.md](REDESIGN.md).
+Prototype source for reference: [docs/prototype/](docs/prototype/).
+
 ## Production (VPS)
 
 See [deploy/README.md](deploy/README.md).

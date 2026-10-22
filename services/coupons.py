@@ -589,6 +589,45 @@ def get_coupon(code: str) -> dict | None:
     return coupon
 
 
+_START_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
+
+
+def coupon_deep_link(code: str) -> str:
+    """Посилання на магазин, що одразу застосовує купон (index.html читає startapp=coupon_КОД).
+
+    Telegram дозволяє в start_param лише A-Z a-z 0-9 _ -, тож для кодів з кирилицею
+    чи пробілами посилання не існує — повертаємо порожній рядок."""
+    code = str(code or "").strip().upper()
+    if not _START_PARAM_RE.match(code):
+        return ""
+    return f"https://t.me/{config.BOT_USERNAME}?startapp=coupon_{code}"
+
+
+def _attach_coupon_stats(conn, coupons: list[dict]) -> None:
+    """revenue/orders — виторг і кількість замовлень з купоном у статусах «підтверджено…доставлено»
+    (SOLD_STATUSES, як виторг на «Огляді»); link — deep-link у магазин."""
+    from services.hits import SOLD_STATUSES
+
+    placeholders = ", ".join("?" * len(SOLD_STATUSES))
+    rows = conn.execute(
+        _sql(
+            "SELECT UPPER(coupon_code) AS code, COUNT(*) AS n, COALESCE(SUM(total_price), 0) AS revenue "
+            f"FROM orders WHERE coupon_code IS NOT NULL AND coupon_code <> '' AND status IN ({placeholders}) "
+            "GROUP BY UPPER(coupon_code)"
+        ),
+        tuple(SOLD_STATUSES),
+    ).fetchall()
+    stats = {}
+    for row in rows:
+        r = row_to_dict(row)
+        stats[str(r["code"])] = (int(r.get("n") or 0), int(r.get("revenue") or 0))
+    for c in coupons:
+        n, rev = stats.get(str(c.get("code", "")).upper(), (0, 0))
+        c["orders"] = n
+        c["revenue"] = rev
+        c["link"] = coupon_deep_link(c["code"])
+
+
 def list_coupons() -> list[dict]:
     conn = db_connect(dict_rows=True)
     rows = conn.execute(
@@ -600,6 +639,14 @@ def list_coupons() -> list[dict]:
     ).fetchall()
     coupons = [row_to_dict(r) for r in rows]
     _attach_allowed_users(conn, coupons)
+    try:
+        _attach_coupon_stats(conn, coupons)
+    except Exception:
+        logger.warning("coupon stats failed", exc_info=True)
+        for c in coupons:
+            c.setdefault("orders", 0)
+            c.setdefault("revenue", 0)
+            c["link"] = coupon_deep_link(c["code"])
     conn.close()
     return coupons
 
@@ -927,3 +974,32 @@ def get_my_coupons(user_id: int):
     ).fetchall()
     conn.close()
     return rows
+
+
+PERSONAL_COUPON_PERCENT = 10
+PERSONAL_COUPON_DAYS = 30
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def create_personal_coupon(user_id: int, percent: int = PERSONAL_COUPON_PERCENT, days: int = PERSONAL_COUPON_DAYS) -> dict:
+    """Персональний купон −N% для одного клієнта: одноразовий, лише для нього, діє `days` днів.
+    Код латиницею (щоб працювало посилання startapp=coupon_КОД) і унікальний."""
+    import secrets
+    from datetime import timedelta
+
+    user_id = int(user_id)
+    expires = (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%Y-%m-%d")
+    for _ in range(20):
+        code = "P" + "".join(secrets.choice(_CODE_ALPHABET) for _ in range(7))
+        if get_coupon(code):
+            continue
+        res = create_coupon({
+            "code": code, "type": "percent", "value": int(percent), "uses_max": 1, "one_per_user": 1,
+            "expires_at": expires, "personal_user_id": user_id, "allowed_user_ids": [user_id],
+        })
+        if res.get("ok"):
+            return {"ok": True, "code": code, "percent": int(percent), "expires_at": expires,
+                    "link": coupon_deep_link(code), "user_id": user_id}
+        if "вже існує" not in str(res.get("error", "")):
+            return res
+    return {"ok": False, "error": "Не вдалося згенерувати унікальний код"}

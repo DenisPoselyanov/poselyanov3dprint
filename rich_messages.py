@@ -81,6 +81,10 @@ STATUS_LABELS_FULL = {
     "confirmed": ("✅", "Підтверджено", "Замовлення прийнято у роботу!"),
     "cancelled": ("❌", "Скасовано", "Якщо є питання — напиши Денису"),
     "draft": ("📝", "Під питанням", "Денис уточнює деталі замовлення"),
+    "printing": ("🖨️", "Друкується", "Орієнтовно буде готове за 1–2 дні"),
+    "ready": ("📦", "Готове до відправки", "Скоро відправлю"),
+    "shipped": ("🚚", "Відправлено", "ТТН — у «Моїх замовленнях»"),
+    "delivered": ("🎉", "Отримано", "Дякую, що обрав мене 💙"),
 }
 
 STATUS_LABELS_SHORT = {
@@ -88,7 +92,32 @@ STATUS_LABELS_SHORT = {
     "confirmed": ("✅", "Підтверджено"),
     "cancelled": ("❌", "Скасовано"),
     "draft": ("📝", "Під питанням"),
+    "printing": ("🖨️", "Друкується"),
+    "ready": ("📦", "Готове"),
+    "shipped": ("🚚", "Відправлено"),
+    "delivered": ("🎉", "Отримано"),
 }
+
+# Повідомлення клієнту на кожному кроці (чернетки з REDESIGN.md, розд. 5.2).
+CLIENT_STATUS_TEXT = {
+    "draft": "По замовленню №{id} є питання — Денис уточнює деталі.",
+    "confirmed": "Замовлення №{id} підтверджено! Реквізити для оплати — у повідомленні вище.",
+    "printing": "Почав друкувати замовлення №{id}. Орієнтовно буде готове за 1–2 дні.",
+    "ready": "Замовлення №{id} надруковано й запаковано — скоро відправлю.",
+    "shipped": "Відправив замовлення №{id}! ТТН: <code>{ttn}</code>. Відстежити: novaposhta.ua",
+    "delivered": "Замовлення №{id} отримано! Дякую 💙",
+    "cancelled": "Замовлення №{id} скасовано. Якщо є питання — напиши Денису.",
+}
+
+
+def build_client_status_update(order_id: int, status: str, ttn: str | None = None) -> str | None:
+    """HTML-повідомлення клієнту про зміну статусу; None — для цього статусу нічого не шлемо."""
+    template = CLIENT_STATUS_TEXT.get(status)
+    if not template:
+        return None
+    icon = STATUS_LABELS_SHORT.get(status, ("📦", ""))[0]
+    body = template.format(id=int(order_id), ttn=escape(ttn or "—"))
+    return f"<p>{icon} {body}</p>"
 
 
 def escape(text: str | None) -> str:

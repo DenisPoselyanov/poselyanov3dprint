@@ -34,6 +34,14 @@ INIT_DATA_MAX_AGE_SEC = int(os.environ.get("INIT_DATA_MAX_AGE_SEC", "86400"))
 # Loaded from env if set, otherwise generated fresh each process start.
 ADMIN_BYPASS_TOKEN: str = os.environ.get("ADMIN_BYPASS_TOKEN") or secrets.token_urlsafe(32)
 
+# Доставка: ключ Нової Пошти (business.novaposhta.ua -> Налаштування -> Безпека -> Ключі API).
+# Без ключа «Нова Пошта» у кошику не показується — лишається самовивіз.
+NOVAPOSHTA_API_KEY = os.environ.get("NOVAPOSHTA_API_KEY", "").strip()
+UKRPOSHTA_TOKEN = os.environ.get("UKRPOSHTA_TOKEN", "").strip()
+
+# Username бота (без @) — для deep-link `t.me/<bot>?startapp=…` (купони в адмінці)
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "poselyanov3dprint_bot").strip().lstrip("@") or "poselyanov3dprint_bot"
+
 PROMOTION_ENABLED = os.environ.get("PROMOTION_ENABLED", "true").lower() in ("1", "true", "yes")
 
 # Канал, підписка на який потрібна для промокодів з галочкою «Лише для підписників».

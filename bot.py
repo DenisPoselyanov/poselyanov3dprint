@@ -10,6 +10,7 @@ import html
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import time
@@ -42,6 +43,7 @@ from rich_messages import (
     build_admin_orders_batch,
     build_broadcast_report,
     build_client_order_confirmation,
+    build_client_status_update,
     build_admin_coupon_created_notification,
     build_personal_coupon_notification,
     build_order_history,
@@ -56,6 +58,7 @@ from rich_messages import (
     build_contact,
     build_admin_panel_hint,
     edit_rich_message,
+    escape,
     is_telegram_rate_limited,
     send_rich_message,
 )
@@ -77,10 +80,21 @@ from catalog_store import (
     FILAMENTS_CACHE,
     PRODUCTS_CACHE,
     add_category,
+    add_filament,
     add_product,
     bootstrap_json_catalog,
+    bulk_update_products,
+    duplicate_product,
+    get_admin_product,
+    get_admin_products,
+    patch_product,
+    set_product_status,
     delete_category,
+    delete_filament,
     delete_product,
+    filament_usage_counts,
+    is_glow_filament,
+    reorder_categories,
     get_all_categories,
     get_all_products,
     get_category_by_id,
@@ -104,6 +118,7 @@ from security_utils import is_safe_http_url, is_static_file_allowed
 import app_state
 from services.coupons import (
     CouponConsumptionError,
+    create_personal_coupon,
     add_coupon_users,
     channel_gated_coupons,
     check_coupon,
@@ -119,15 +134,47 @@ from services.coupons import (
     set_coupon_active,
     update_coupon,
 )
+from services.collections import (
+    create_collection,
+    delete_collection,
+    list_admin_collections,
+    preview_collection,
+    product_collection_ids,
+    reorder_collections,
+    set_collection_products,
+    set_product_collections,
+    update_collection,
+    visible_collections,
+)
 from services.db_utils import init_db, row_to_dict as _row_to_dict
+from services.events import EVENT_TYPES, FUNNEL_EVENT_TYPES, popular_searches, record_funnel_event, record_search
+from services.hits import bought_together, top_selling_products
+from services.product_stats import admin_products_with_stats
 from services.promotions import (
     create_promotion,
     delete_promotion,
     get_active_promotions,
-    list_promotions,
+    get_gift_rule,
+    list_promotions_admin,
     public_promotions,
     set_promotion_active,
     update_promotion,
+)
+from services.reviews import (
+    ReviewError,
+    admin_list_reviews,
+    admin_review_counts,
+    delete_review,
+    pending_review_count,
+    set_admin_reply,
+    get_review,
+    mark_review_requested,
+    orders_due_review_request,
+    pending_reviews,
+    product_reviews,
+    set_review_status,
+    submit_review,
+    with_stats,
 )
 from services.settings import (
     admin_settings,
@@ -135,12 +182,20 @@ from services.settings import (
     update_admin_settings,
 )
 from services.orders import (
+    is_valid_transition,
+    list_user_orders,
+    update_order_fields,
     delete_order,
     find_gift_product_id,
     get_idempotent_order,
     get_order_with_items,
     get_orders_sharing_channel_message,
     get_orders_with_items_batch,
+    count_orders_by_status,
+    get_print_queue,
+    next_status_after_print,
+    set_item_printed,
+    expand_status_filter,
     list_orders,
     save_idempotent_order,
     save_order,
@@ -152,7 +207,12 @@ from services.orders import (
     user_order_lock as _user_order_lock,
 )
 from services.stats import get_stats
+import services.broadcasts as broadcasts_svc
 from services.users import (
+    export_users,
+    get_user,
+    segment_counts,
+    users_to_csv,
     get_all_users,
     get_user_display_name,
     is_user_blocked,
@@ -163,15 +223,18 @@ from services.users import (
     save_user_id,
     set_blocked,
 )
-from services.validation import validate_order_payload
+from services.validation import validate_checkout_fields, validate_order_payload
 from services.notifications import notify_coupon_created
 from handlers.register import (
     TELEGRAM_ALLOWED_UPDATES,
     configure_bot_commands,
     register_telegram_handlers,
 )
-from handlers.rate_limit import command_cooldown
+from handlers.rate_limit import allow_delivery_lookup, allow_event, allow_review_upload, command_cooldown
 from routes.setup import register_http_routes
+import services.delivery as delivery
+from services.manual_orders import orders_to_csv, parse_manual_order
+from services.overview import get_overview
 
 BOT_TOKEN = config.BOT_TOKEN
 OWNER_ID = config.OWNER_ID
@@ -181,6 +244,8 @@ DB_FILE = config.DB_FILE
 VALIDATE_INIT_DATA = config.VALIDATE_INIT_DATA
 PROMOTION_ENABLED = config.PROMOTION_ENABLED
 MAX_UPLOAD_BYTES = config.MAX_UPLOAD_BYTES
+REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024
+REVIEW_REQUEST_POLL_SEC = 1800
 MAX_UPLOAD_REQUEST_BYTES = config.MAX_UPLOAD_REQUEST_BYTES
 CLOUDINARY_UPLOAD_TIMEOUT = 60
 
@@ -484,6 +549,27 @@ async def upload_photo_to_cloudinary(file_data: bytes, filename: str = "product_
     return await asyncio.to_thread(upload_photo_to_cloudinary_sync, file_data, filename, content_type)
 
 
+VIDEO_CONTENT_TYPES = ("video/mp4", "video/quicktime", "video/webm")
+
+
+def upload_video_to_cloudinary_sync(file_data: bytes, filename: str = "product_video"):
+    """Відео товару в галерею (етап 2 редизайну). Вітрина бере легкий mp4 через трансформацію Cloudinary."""
+    if len(file_data) > MAX_UPLOAD_BYTES:
+        return {"ok": False, "error": f"Відео занадто велике. Максимум {MAX_UPLOAD_BYTES // 1024 // 1024}MB"}
+    try:
+        result = _cloudinary_upload_with_timeout(file_data, {
+            "folder": "poselyanov3dprint",
+            "resource_type": "video",
+            "public_id": f"{filename}_{int(datetime.now().timestamp())}",
+        })
+    except concurrent.futures.TimeoutError:
+        return {"ok": False, "error": "Час очікування завантаження на Cloudinary вичерпано"}
+    except Exception as e:
+        logger.error(f"❌ Помилка завантаження відео на Cloudinary: {e}")
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "url": result.get("secure_url"), "duration": result.get("duration"), "size": result.get("bytes")}
+
+
 async def handle_options(request: web.Request):
     return web.Response(status=200, headers=cors_headers(request))
 
@@ -495,8 +581,11 @@ async def handle_health(request: web.Request):
     )
 
 
-def _order_ok_response(request: web.Request, order_id: int, *, duplicate: bool = False) -> web.Response:
-    body: dict = {"ok": True, "order_id": int(order_id)}
+def _order_ok_response(
+    request: web.Request, order_id: int, *, duplicate: bool = False, is_new: bool = True
+) -> web.Response:
+    # is_new=false — позиції додано до ще не підтвердженого замовлення (воно зберігає старий номер)
+    body: dict = {"ok": True, "order_id": int(order_id), "is_new": bool(is_new)}
     if duplicate:
         body["duplicate"] = True
     return web.json_response(body, headers=cors_headers(request))
@@ -722,7 +811,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await asyncio.sleep(config.BROADCAST_DELAY_SEC)
         except Exception as e:
             logger.warning(f"Broadcast error for {user_id}: {e}")
-            if "bot was blocked" in str(e) or "user is deactivated" in str(e):
+            if broadcasts_svc.is_undeliverable_error(e):
                 set_blocked(user_id, True)
             failed += 1
 
@@ -1284,7 +1373,7 @@ def _build_order_status_channel_markup(
 ) -> InlineKeyboardMarkup | None:
     write_button = _make_contact_button(user_id, username, first_name or "клієнт")
 
-    if status == "confirmed":
+    if status == "confirmed" or status in FULFILMENT_STATUS_LABELS:
         return InlineKeyboardMarkup([[write_button]]) if write_button else None
     if status == "cancelled":
         return None
@@ -1304,13 +1393,28 @@ def _build_order_status_channel_markup(
     return _build_single_order_channel_markup(order_id, price_pending, user_id, username, first_name)
 
 
+FULFILMENT_STATUS_LABELS = {
+    "printing": "🖨️ Друкується",
+    "ready": "📦 Готове до відправки",
+    "shipped": "🚚 Відправлено",
+    "delivered": "🎉 Отримано",
+}
+
+
 async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
     """Синхронізує статус замовлення з повідомленням у Telegram-каналі (як order_action)."""
-    status_map = {"confirm": "confirmed", "draft": "draft", "cancel": "cancelled"}
+    status_map = {
+        "confirm": "confirmed", "draft": "draft", "cancel": "cancelled",
+        "printing": "printing", "ready": "ready", "shipped": "shipped", "delivered": "delivered",
+    }
     label_map = {
         "confirm": "✅ Підтверджено",
         "draft": "❓ Під питанням",
         "cancel": "❌ Відмінено",
+        "printing": "🖨️ Друкується",
+        "ready": "📦 Готове до відправки",
+        "shipped": "🚚 Відправлено",
+        "delivered": "🎉 Отримано",
     }
     if action not in status_map:
         return
@@ -1419,6 +1523,8 @@ def _build_admin_batch_section_data(order_id: int, order: dict | None = None, it
         sl = "❌ Відмінено"
     elif status == "draft":
         sl = "❓ Під питанням"
+    elif status in FULFILMENT_STATUS_LABELS:
+        sl = FULFILMENT_STATUS_LABELS[status]
     else:
         sl = None
     admin_items = [
@@ -1475,7 +1581,7 @@ def _build_admin_batch(
 
     rows = []
     for s in sections:
-        if s.get("status") in ("confirmed", "cancelled"):
+        if s.get("status") in ("confirmed", "cancelled", *FULFILMENT_STATUS_LABELS):
             continue
         oid = s["order_id"]
         if s.get("price_pending"):
@@ -1968,7 +2074,7 @@ async def handle_order(request):
         return web.Response(status=400, text="Bad JSON", headers=cors_headers(request))
 
     auth, err = resolve_request_user(request, data)
-    if err:
+    if err is not None:
         return err
 
     user_id = auth.get("user_id") or data.get("user_id") or 0
@@ -2005,6 +2111,23 @@ async def handle_order(request):
     if not ok:
         return web.json_response({"ok": False, "error": result}, status=400, headers=cors_headers(request))
 
+    ok, checkout = validate_checkout_fields(data)
+    if not ok:
+        return web.json_response({"ok": False, "error": checkout}, status=400, headers=cors_headers(request))
+
+    # Акцію для статистики визначає сервер, а не клієнт: знижка > подарунок > безкоштовна доставка
+    gift_rule = get_gift_rule() if checkout.get("gift_product_id") else None
+    attributed_promo = (
+        result.get("promotion_id")
+        or (gift_rule["id"] if gift_rule else "")
+        or result.get("free_ship_promotion_id")
+        or ""
+    )
+    if attributed_promo:
+        checkout["promotion_id"] = attributed_promo
+    else:
+        checkout.pop("promotion_id", None)
+
     items = result["items"]
     total_price = result["total_price"]
     coupon_discount = result.get("coupon_discount", 0)
@@ -2036,19 +2159,24 @@ async def handle_order(request):
                 "♻️ Idempotent duplicate: user=%s order=#%s",
                 uid, cached["order_id"],
             )
-            return _order_ok_response(request, int(cached["order_id"]), duplicate=True)
+            return _order_ok_response(
+                request, int(cached["order_id"]), duplicate=True, is_new=bool(cached.get("is_new", 1))
+            )
 
     async with _user_order_lock(uid):
         if idempotency_key and uid > 0:
             cached = await run_db(get_idempotent_order, uid, idempotency_key)
             if cached:
-                return _order_ok_response(request, int(cached["order_id"]), duplicate=True)
+                return _order_ok_response(
+                request, int(cached["order_id"]), duplicate=True, is_new=bool(cached.get("is_new", 1))
+            )
 
         try:
             order_id, is_new = await run_db(
                 save_order,
                 user_id or 0, username, first_name, items, total_price, comment,
                 gift, coupon_code, total_discount, price_pending, promotion_discount,
+                checkout,
             )
         except CouponConsumptionError as e:
             return web.json_response(
@@ -2104,7 +2232,7 @@ async def handle_order(request):
         gift=gift,
         price_pending=price_pending,
     ))
-    return _order_ok_response(request, order_id)
+    return _order_ok_response(request, order_id, is_new=is_new)
 
 
 # ─── АДМІН HANDLERS ─────────────────────────────────────────
@@ -2186,10 +2314,11 @@ def _public_product(product: dict) -> dict:
 
 
 async def handle_get_products(request: web.Request):
-    """Отримати список всіх товарів"""
+    """Отримати список всіх товарів (з рейтингом і «продано» — REDESIGN.md, розд. 5.3)"""
     products = get_all_products()
     if not _is_admin_viewer(request):
         products = [_public_product(p) for p in products]
+    products = await run_db(with_stats, products)
     return web.json_response(products, headers=cors_headers(request))
 
 
@@ -2198,10 +2327,10 @@ async def handle_get_categories(request: web.Request):
     include_inactive = request.query.get("includeInactive", "false").lower() in ("1", "true", "yes")
     if include_inactive:
         auth, err = resolve_request_user(request, {})
-        if err:
+        if err is not None:
             return err
         denied = require_admin(request, auth)
-        if denied:
+        if denied is not None:
             return denied
     categories = get_all_categories(active_only=not include_inactive)
     return web.json_response(categories, headers=cors_headers(request))
@@ -2210,27 +2339,62 @@ async def handle_get_categories(request: web.Request):
 async def handle_get_filaments(request: web.Request):
     """Отримати список філаментів."""
     reload_filaments_cache()
-    return web.json_response(FILAMENTS_CACHE, headers=cors_headers(request))
+    filaments = [{**f, "glow": is_glow_filament(f)} for f in FILAMENTS_CACHE]
+    if _is_admin_viewer(request):
+        # Для адмінки: у скількох товарах колір пропонується («у N товарах»)
+        usage = await run_db(filament_usage_counts)
+        filaments = [{**f, "used_by": usage.get(str(f.get("id")), 0)} for f in filaments]
+    return web.json_response(filaments, headers=cors_headers(request))
 
 
 async def handle_get_product(request: web.Request):
     """Отримати товар за ID"""
     product_id = int(request.match_info.get('id', 0))
-    product = get_product_by_id(product_id)
+    is_admin = _is_admin_viewer(request)
+    # Адмін бачить і приховані та архівні товари (редактор); покупцям — лише активні.
+    product = get_admin_product(product_id) if is_admin else get_product_by_id(product_id)
     if not product:
         return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
-    if not _is_admin_viewer(request):
+    if not is_admin:
         product = _public_product(product)
+    product = (await run_db(with_stats, [product]))[0]
     return web.json_response(product, headers=cors_headers(request))
+
+
+def _product_id_param(request: web.Request) -> int:
+    try:
+        return int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def handle_get_product_reviews(request: web.Request):
+    """Схвалені відгуки товару, нові першими (картка товару, блок «Відгуки»)."""
+    product_id = _product_id_param(request)
+    if not product_id:
+        return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    data = await run_db(
+        product_reviews, product_id, _query_int(request, "limit", 10), _query_int(request, "offset", 0)
+    )
+    return web.json_response(data, headers=cors_headers(request))
+
+
+async def handle_get_product_related(request: web.Request):
+    """«З цим купують»: товари, що найчастіше були в одному замовленні з цим."""
+    product_id = _product_id_param(request)
+    if not product_id:
+        return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    ids = await run_db(bought_together, product_id, _query_int(request, "limit", 8))
+    return web.json_response({"product_ids": ids}, headers=cors_headers(request))
 
 
 async def handle_update_filament(request: web.Request):
     """Оновити існуючий філамент."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     try:
         filament_id = request.match_info.get('id', '')
@@ -2242,13 +2406,72 @@ async def handle_update_filament(request: web.Request):
         return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
 
 
+async def handle_create_filament(request: web.Request):
+    """Додати колір філаменту (ID — з назви, якщо не передано)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Очікується JSON-обʼєкт")
+        result = add_filament(data)
+        status = 201 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
+async def handle_delete_filament(request: web.Request):
+    """Видалити колір. Якщо він пропонується в товарах — 409 з used_by; ?force=1 видаляє попри це."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    filament_id = request.match_info.get('id', '')
+    force = request.query.get("force", "").lower() in ("1", "true", "yes")
+    result = await run_db(delete_filament, filament_id, force)
+    if result.get("ok"):
+        status = 200
+    elif "used_by" in result:
+        status = 409
+    elif result.get("error") == "Філамент не знайдено":
+        status = 404
+    else:
+        status = 400
+    return web.json_response(result, status=status, headers=cors_headers(request))
+
+
+async def handle_reorder_categories(request: web.Request):
+    """Порядок категорій одним запитом: {"ids": ["toy", "key", …]}."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+        ids = data.get("ids") if isinstance(data, dict) else None
+        result = await run_db(reorder_categories, ids)
+        status = 200 if result.get("ok") else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
+
+
 async def handle_create_category(request: web.Request):
     """Створити нову категорію"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2263,10 +2486,10 @@ async def handle_create_category(request: web.Request):
 async def handle_update_category(request: web.Request):
     """Оновити категорію"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2282,10 +2505,10 @@ async def handle_update_category(request: web.Request):
 async def handle_delete_category(request: web.Request):
     """Видалити категорію"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2300,11 +2523,11 @@ async def handle_delete_category(request: web.Request):
 async def handle_create_product(request: web.Request):
     """Створити новий товар"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2319,11 +2542,11 @@ async def handle_create_product(request: web.Request):
 async def handle_update_product(request: web.Request):
     """Редагувати товар"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2339,11 +2562,11 @@ async def handle_update_product(request: web.Request):
 async def handle_delete_product(request: web.Request):
     """Видалити товар"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2355,28 +2578,611 @@ async def handle_delete_product(request: web.Request):
         return web.json_response({"error": str(e)}, status=400, headers=cors_headers(request))
 
 
+async def _admin_guard(request: web.Request):
+    """None, якщо запит від адміна; інакше готова відповідь 401/403."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    return require_admin(request, auth)
+
+
+async def _json_body(request: web.Request):
+    """Тіло запиту як dict або (None, відповідь 400)."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = None
+    if not isinstance(data, dict):
+        return None, web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    return data, None
+
+
+def _result_response(request: web.Request, result: dict, ok_status: int = 200):
+    return web.json_response(result, status=ok_status if result.get("ok") else 400, headers=cors_headers(request))
+
+
+async def handle_get_admin_products(request: web.Request):
+    """Усі товари всіх статусів зі статистикою (перегляди, кошик, продажі) для таблиці в адмінці."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    products = await run_db(lambda: admin_products_with_stats(get_admin_products()))
+    return web.json_response(products, headers=cors_headers(request))
+
+
+async def handle_set_product_status(request: web.Request):
+    """Статус товару: active / hidden / archive."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    result = await run_db(set_product_status, _product_id_param(request), str(data.get("status") or ""))
+    return _result_response(request, result)
+
+
+async def handle_patch_product(request: web.Request):
+    """Швидке оновлення: ціна, стара ціна, hot / pinned / gift."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    result = await run_db(patch_product, _product_id_param(request), data)
+    return _result_response(request, result)
+
+
+async def handle_bulk_products(request: web.Request):
+    """Масові дії: {ids, action: discount|clear_discount|category|status, value}."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    result = await run_db(bulk_update_products, data.get("ids"), str(data.get("action") or ""), data.get("value"))
+    return _result_response(request, result)
+
+
+async def handle_duplicate_product(request: web.Request):
+    """Копія товару (прихована)."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    result = await run_db(duplicate_product, _product_id_param(request))
+    return _result_response(request, result, 201)
+
+
 async def handle_get_orders(request: web.Request):
     """Список замовлень для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     pending_only = request.query.get("pending_price", "false").lower() in ("1", "true", "yes")
-    limit = min(100, max(1, int(request.query.get("limit", "50") or 50)))
-    orders = await run_db(list_orders, pending_price_only=pending_only, limit=limit)
+    try:
+        limit = min(200, max(1, int(request.query.get("limit", "50") or 50)))
+    except ValueError:
+        limit = 50
+    statuses = expand_status_filter(request.query.get("status"))
+    orders = await run_db(
+        list_orders, pending_price_only=pending_only, limit=limit, statuses=statuses or None
+    )
     return web.json_response(orders, headers=cors_headers(request))
+
+
+async def handle_get_print_queue(request: web.Request):
+    """Черга друку: позиції confirmed/printing, згруповані за кольором."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    return web.json_response(await run_db(get_print_queue), headers=cors_headers(request))
+
+
+async def handle_set_item_printed(request: web.Request):
+    """Відмітка «надруковано»: перша -> printing, усі -> ready (клієнт отримує повідомлення)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+
+    try:
+        item_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+        printed = bool(data.get("printed"))
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+
+    state = await run_db(set_item_printed, item_id, printed)
+    if not state:
+        return web.json_response(
+            {"ok": False, "error": "Позицію не знайдено"}, status=404, headers=cors_headers(request)
+        )
+    result = {"ok": True, **state}
+    order_id = state["order_id"]
+    # Статус перечитуємо: за цей час його могла змінити інша відмітка чи адмін.
+    order, _ = await run_db(get_order_with_items, order_id)
+    current_status = (order or {}).get("status") or state["status"]
+    target = next_status_after_print(current_status, state["total"], state["printed"])
+    if target and is_valid_transition(current_status, target):
+        await _sync_order_status_to_telegram(order_id, target)
+        result["status"] = target
+        result["client_notified"] = await _notify_client_status(order or {"id": order_id}, target)
+    return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_create_manual_order(request: web.Request):
+    """Замовлення вручну (Instagram, OLX, особисто): одразу підтверджене, без повідомлення клієнту."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    ok, parsed = parse_manual_order(data if isinstance(data, dict) else {})
+    if not ok:
+        return web.json_response({"ok": False, "error": parsed}, status=400, headers=cors_headers(request))
+
+    def _create() -> int:
+        order_id, _ = save_order(
+            parsed["user_id"], parsed["username"], parsed["first_name"], parsed["items"],
+            parsed["total_price"], parsed["comment"], extra=parsed["extra"], merge=False,
+        )
+        if parsed["status"] != "new":
+            update_order_status(order_id, parsed["status"])
+        return order_id
+
+    order_id = await run_db(_create)
+    return web.json_response({"ok": True, "id": order_id}, headers=cors_headers(request))
+
+
+async def handle_send_order_message(request: web.Request):
+    """Надіслати клієнту в бот текст (шаблон з адмінки, відредагований адміном)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+
+    try:
+        order_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+        text = str(data.get("text") or "").strip()
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    if not text or len(text) > 2000:
+        return web.json_response(
+            {"ok": False, "error": "Текст має бути від 1 до 2000 символів"}, status=400, headers=cors_headers(request)
+        )
+
+    order, _ = await run_db(get_order_with_items, order_id)
+    if not order:
+        return web.json_response(
+            {"ok": False, "error": "Замовлення не знайдено"}, status=404, headers=cors_headers(request)
+        )
+    user_id = int(order.get("user_id") or 0)
+    if user_id <= 0:
+        return web.json_response(
+            {"ok": False, "error": "У цього замовлення немає Telegram-клієнта — надішліть повідомлення вручну"},
+            status=409,
+            headers=cors_headers(request),
+        )
+    paragraphs = "".join(f"<p>{html.escape(line)}</p>" for line in text.splitlines() if line.strip())
+    try:
+        await send_rich_message(bot_app.bot, user_id, paragraphs)
+    except Exception as e:
+        logger.warning("Не вдалось надіслати повідомлення клієнту %s (замовлення #%s): %s", user_id, order_id, e)
+        return web.json_response(
+            {"ok": False, "error": "Клієнт не отримав повідомлення (можливо, заблокував бота)"},
+            status=502,
+            headers=cors_headers(request),
+        )
+    return web.json_response({"ok": True}, headers=cors_headers(request))
+
+
+async def handle_export_orders_csv(request: web.Request):
+    """CSV усіх (або відфільтрованих за status) замовлень."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    statuses = expand_status_filter(request.query.get("status"))
+    rows = await run_db(list_orders, limit=5000, statuses=statuses or None)
+    body = chr(0xFEFF) + orders_to_csv(rows)  # BOM, щоб Excel розпізнав UTF-8
+    headers = {
+        **cors_headers(request),
+        "Content-Disposition": 'attachment; filename="orders.csv"',
+    }
+    return web.Response(body=body.encode("utf-8"), content_type="text/csv", charset="utf-8", headers=headers)
+
+
+async def handle_get_overview(request: web.Request):
+    """Огляд: KPI, виторг по днях, воронка, топ товарів, «потребує уваги»."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    try:
+        days = int(request.query.get("days", "7") or 7)
+    except ValueError:
+        days = 7
+    return web.json_response(await run_db(get_overview, days), headers=cors_headers(request))
+
+
+async def handle_get_order_counts(request: web.Request):
+    """Лічильники замовлень для вкладок і бічного меню адмінки."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    counts = await run_db(count_orders_by_status)
+    try:  # лічильник «Відгуки» в меню; збій не повинен ламати лічильники замовлень
+        counts["reviews_pending"] = await run_db(pending_review_count)
+    except Exception:
+        logger.warning("order counts: не вдалось порахувати відгуки на модерації", exc_info=True)
+    return web.json_response(counts, headers=cors_headers(request))
+
+
+async def handle_update_order(request: web.Request):
+    """ТТН і внутрішня нотатка (клієнт нотатку не бачить)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+
+    try:
+        order_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    fields = {k: data[k] for k in ("ttn", "internal_note") if k in data}
+    if not fields:
+        return web.json_response(
+            {"ok": False, "error": "Нічого оновлювати: очікуються ttn або internal_note"},
+            status=400,
+            headers=cors_headers(request),
+        )
+    if "ttn" in fields:
+        fields["ttn"] = re.sub(r"\s+", "", str(fields["ttn"] or ""))
+    if not await run_db(update_order_fields, order_id, fields):
+        return web.json_response(
+            {"ok": False, "error": "Замовлення не знайдено"}, status=404, headers=cors_headers(request)
+        )
+    return web.json_response({"ok": True}, headers=cors_headers(request))
+
+
+async def _notify_client_status(order: dict, status: str, ttn: str | None = None) -> bool:
+    """Повідомлення клієнту про новий статус. Помилка доставки не блокує зміну статусу."""
+    user_id = int(order.get("user_id") or 0)
+    html_text = build_client_status_update(int(order["id"]), status, ttn)
+    if user_id <= 0 or not html_text:
+        return False
+    try:
+        await send_rich_message(bot_app.bot, user_id, html_text)
+        return True
+    except Exception as e:
+        logger.warning("Не вдалось сповістити клієнта %s про статус #%s: %s", user_id, order.get("id"), e)
+        return False
+
+
+async def handle_get_my_orders(request: web.Request):
+    """Замовлення поточного покупця (за initData) для «Моїх замовлень»."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0:
+        return web.json_response({"orders": []}, headers=cors_headers(request))
+    orders = await run_db(list_user_orders, user_id, _query_int(request, "limit", 30))
+    return web.json_response({"orders": orders}, headers=cors_headers(request))
+
+
+async def handle_get_pending_reviews(request: web.Request):
+    """Що покупець ще може оцінити (товари доставлених замовлень без відгуку)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    items = await run_db(pending_reviews, auth.get("user_id") or 0)
+    return web.json_response({"items": items}, headers=cors_headers(request))
+
+
+async def handle_upload_review_photo(request: web.Request):
+    """Фото до відгуку від покупця: лише зображення, з лімітами розміру й кількості."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0:
+        return web.json_response({"ok": False, "error": "invalid_init_data"}, status=403, headers=cors_headers(request))
+    if not allow_review_upload(user_id):
+        return web.json_response({"ok": False, "error": "Забагато фото, спробуй пізніше"}, status=429, headers=cors_headers(request))
+    try:
+        form = await request.post()
+        file_field = form.get("file")
+        if not file_field or not isinstance(file_field, web.FileField):
+            return web.json_response({"ok": False, "error": "Файл не знайдено"}, status=400, headers=cors_headers(request))
+        file_data = file_field.file.read()
+        if len(file_data) > REVIEW_PHOTO_MAX_BYTES:
+            return web.json_response(
+                {"ok": False, "error": f"Фото завелике. Максимум {REVIEW_PHOTO_MAX_BYTES // 1024 // 1024}MB"},
+                status=413,
+                headers=cors_headers(request),
+            )
+        content_type = file_field.content_type or ""
+        if not content_type.startswith("image/") or is_animated_image(file_data, content_type):
+            return web.json_response({"ok": False, "error": "Потрібне звичайне фото"}, status=400, headers=cors_headers(request))
+        content_type = normalize_image_content_type(file_data, content_type)
+        result = await upload_photo_to_cloudinary(file_data, f"review_{user_id}", content_type)
+        if not result.get("ok"):
+            return web.json_response({"ok": False, "error": "Не вдалось завантажити фото"}, status=400, headers=cors_headers(request))
+        return web.json_response({"ok": True, "url": result["url"]}, headers=cors_headers(request))
+    except Exception:
+        logger.exception("review photo upload failed for user=%s", user_id)
+        return web.json_response({"ok": False, "error": "Не вдалось завантажити фото"}, status=400, headers=cors_headers(request))
+
+
+def _review_moderation_html(review: dict, product_name: str) -> str:
+    stars = "★" * int(review["rating"]) + "☆" * (5 - int(review["rating"]))
+    text = escape(review.get("text") or "—")
+    links = [
+        f'<a href="{escape(url)}">фото {n}</a>' for n, url in enumerate(review.get("photos") or [], 1)
+    ]
+    photos_line = f"<p>📷 {' · '.join(links)}</p>" if links else ""
+    return (
+        f"<h2>⭐ Новий відгук #{review['id']}</h2>"
+        f"<p><b>{escape(product_name)}</b> · замовлення #{review['order_id']}</p>"
+        f"<p>{stars} · {escape(review.get('author_name') or 'Покупець')}</p>"
+        f"<p>{text}</p>{photos_line}"
+    )
+
+
+def _review_moderation_markup(review_id: int, status: str) -> InlineKeyboardMarkup:
+    if status == "approved":
+        row = [InlineKeyboardButton("🙈 Сховати", callback_data=f"rev_hide_{review_id}")]
+    elif status == "hidden":
+        row = [InlineKeyboardButton("✅ Опублікувати", callback_data=f"rev_pub_{review_id}")]
+    else:
+        row = [
+            InlineKeyboardButton("✅ Опублікувати", callback_data=f"rev_pub_{review_id}"),
+            InlineKeyboardButton("🙈 Сховати", callback_data=f"rev_hide_{review_id}"),
+        ]
+    return InlineKeyboardMarkup([row])
+
+
+async def handle_post_review(request: web.Request):
+    """Відгук покупця: лише на товар із доставленого замовлення, один на пару (замовлення, товар)."""
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    auth, err = resolve_request_user(request, data if isinstance(data, dict) else {})
+    if err is not None:
+        return err
+    if not isinstance(data, dict):
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    try:
+        result = await run_db(
+            submit_review,
+            auth.get("user_id") or 0,
+            auth.get("first_name") or "",
+            data.get("order_id"),
+            data.get("product_id"),
+            data.get("rating"),
+            data.get("text"),
+            data.get("photos"),
+        )
+    except ReviewError as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+
+    review = await run_db(get_review, result["id"])
+    if review:
+        product_name = next(
+            (p.get("name") for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE if p.get("id") == review["product_id"]),
+            f"товар {review['product_id']}",
+        )
+        try:
+            await send_rich_message(
+                bot_app.bot,
+                ORDERS_CHAT_ID,
+                _review_moderation_html(review, product_name),
+                reply_markup=_review_moderation_markup(review["id"], review["status"]),
+            )
+        except Exception as e:
+            logger.warning("Не вдалось надіслати відгук #%s на модерацію: %s", result["id"], e)
+    return web.json_response({"ok": True, **result}, headers=cors_headers(request))
+
+
+def _catalog_product_map() -> dict[int, dict]:
+    """{id: товар} для товарів усіх статусів (відгук може стосуватись прихованого чи архівного)."""
+    from catalog_store import INACTIVE_CUSTOM_PRODUCTS_CACHE, INACTIVE_PRODUCTS_CACHE
+
+    out = {}
+    for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE + INACTIVE_PRODUCTS_CACHE + INACTIVE_CUSTOM_PRODUCTS_CACHE:
+        try:
+            out[int(p.get("id"))] = p
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _review_review_id(request: web.Request) -> int:
+    try:
+        return int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _review_not_found(request: web.Request):
+    return web.json_response({"ok": False, "error": "Відгук не знайдено"}, status=404, headers=cors_headers(request))
+
+
+async def handle_get_admin_reviews(request: web.Request):
+    """Відгуки для сторінки «Відгуки»: ?status=pending|approved|hidden|all&q=&rating=&limit=.
+    Разом із лічильниками (вкладки, середній рейтинг, кількість на модерації)."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    status = request.query.get("status", "all")
+    if status not in ("pending", "approved", "hidden", "all"):
+        return web.json_response({"ok": False, "error": "Невірний статус"}, status=400, headers=cors_headers(request))
+    products = _catalog_product_map()
+    names = {pid: str(p.get("name") or "") for pid, p in products.items()}
+    reviews = await run_db(
+        admin_list_reviews,
+        status,
+        request.query.get("q", ""),
+        request.query.get("rating"),
+        _query_int(request, "limit", 100),
+        names,
+    )
+    for item in reviews:
+        p = products.get(item["product_id"])
+        photos = p.get("photos") if p else None
+        item["product_name"] = (p.get("name") if p else None) or f"Товар #{item['product_id']}"
+        item["product_photo"] = photos[0] if isinstance(photos, list) and photos else ""
+        item["product_emoji"] = (p.get("emoji") if p else "") or ""
+    counts = await run_db(admin_review_counts)
+    return web.json_response({"reviews": reviews, "counts": counts}, headers=cors_headers(request))
+
+
+async def handle_set_admin_review_status(request: web.Request):
+    """PUT /api/admin/reviews/{id}/status {status: approved|hidden|pending}."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    status = data.get("status")
+    if status not in ("pending", "approved", "hidden"):
+        return web.json_response({"ok": False, "error": "Невірний статус"}, status=400, headers=cors_headers(request))
+    review_id = _review_review_id(request)
+    if not await run_db(get_review, review_id):
+        return _review_not_found(request)
+    await run_db(set_review_status, review_id, status)
+    return web.json_response(
+        {"ok": True, "counts": await run_db(admin_review_counts)}, headers=cors_headers(request)
+    )
+
+
+async def handle_set_admin_review_reply(request: web.Request):
+    """PUT /api/admin/reviews/{id}/reply {reply}: ≤1000 символів, порожня відповідь прибирає її."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    try:
+        found = await run_db(set_admin_reply, _review_review_id(request), data.get("reply"))
+    except ReviewError as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
+    if not found:
+        return _review_not_found(request)
+    return web.json_response({"ok": True}, headers=cors_headers(request))
+
+
+async def handle_delete_admin_review(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    if not await run_db(delete_review, _review_review_id(request)):
+        return _review_not_found(request)
+    return web.json_response(
+        {"ok": True, "counts": await run_db(admin_review_counts)}, headers=cors_headers(request)
+    )
+
+
+async def review_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопки «Опублікувати / Сховати» під відгуком у чаті замовлень."""
+    query = update.callback_query
+    await query.answer()
+    if query.from_user.id != OWNER_ID:
+        return
+    _, action, raw_id = query.data.split("_", 2)
+    review_id = int(raw_id)
+    status = "approved" if action == "pub" else "hidden"
+    if not await run_db(set_review_status, review_id, status):
+        return
+    try:
+        await query.edit_message_reply_markup(reply_markup=_review_moderation_markup(review_id, status))
+    except Exception as e:
+        logger.warning("review_action: не вдалось оновити кнопки #%s: %s", review_id, e)
+
+
+async def send_due_review_requests() -> int:
+    """Запит відгуку через 3 дні після `delivered`. Позначаємо навіть при помилці, щоб не спамити."""
+    due = await run_db(orders_due_review_request)
+    sent = 0
+    for item in due:
+        await run_db(mark_review_requested, item["order_id"])
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "⭐ Оцінити",
+                url=f"https://t.me/poselyanov3dprint_bot?startapp=review_{item['order_id']}",
+            )
+        ]])
+        try:
+            await send_rich_message(
+                bot_app.bot,
+                item["user_id"],
+                f"<p>💙 Як тобі замовлення №{item['order_id']}? Буду вдячний за відгук — він допомагає іншим обрати.</p>",
+                reply_markup=markup,
+            )
+            sent += 1
+        except Exception as e:
+            logger.warning("Запит відгуку для #%s не доставлено: %s", item["order_id"], e)
+    return sent
+
+
+async def _review_request_loop() -> None:
+    while True:
+        try:
+            await send_due_review_requests()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("review request loop failed")
+        await asyncio.sleep(REVIEW_REQUEST_POLL_SEC)
 
 
 async def handle_get_order(request: web.Request):
     """Деталі замовлення з позиціями."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     order_id = int(request.match_info.get("id", 0))
@@ -2389,10 +3195,10 @@ async def handle_get_order(request: web.Request):
 async def handle_update_order_pricing(request: web.Request):
     """Оновити ціни позицій замовлення."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2510,10 +3316,10 @@ async def handle_update_order_pricing(request: web.Request):
 async def handle_update_order_status(request: web.Request):
     """Змінити статус замовлення та синхронізувати з Telegram-каналом."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2524,10 +3330,14 @@ async def handle_update_order_status(request: web.Request):
             "confirmed": "confirm",
             "cancelled": "cancel",
             "draft": "draft",
+            **{s: s for s in FULFILMENT_STATUS_LABELS},
         }
         if status not in action_map:
             return web.json_response(
-                {"ok": False, "error": "Невідомий статус. Дозволено: confirmed, cancelled, draft"},
+                {
+                    "ok": False,
+                    "error": "Невідомий статус. Дозволено: confirmed, printing, ready, shipped, delivered, cancelled, draft",
+                },
                 status=400,
                 headers=cors_headers(request),
             )
@@ -2540,8 +3350,31 @@ async def handle_update_order_status(request: web.Request):
                 headers=cors_headers(request),
             )
 
+        old_status = order.get("status") or "new"
+        if not is_valid_transition(old_status, status):
+            return web.json_response(
+                {"ok": False, "error": f"Перехід {old_status} → {status} недозволений"},
+                status=409,
+                headers=cors_headers(request),
+            )
+
+        ttn = str(data.get("ttn") or order.get("ttn") or "").strip()
+        if status == "shipped":
+            if not ttn:
+                return web.json_response(
+                    {"ok": False, "error": "Для статусу shipped потрібна ТТН"},
+                    status=400,
+                    headers=cors_headers(request),
+                )
+            await run_db(update_order_fields, order_id, {"ttn": ttn})
+
         await _sync_order_status_to_telegram(order_id, action_map[status])
-        return web.json_response({"ok": True, "status": status}, headers=cors_headers(request))
+
+        notified = await _notify_client_status(order, status, ttn)
+        return web.json_response(
+            {"ok": True, "status": status, "client_notified": notified},
+            headers=cors_headers(request),
+        )
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
 
@@ -2549,10 +3382,10 @@ async def handle_update_order_status(request: web.Request):
 async def handle_delete_order(request: web.Request):
     """Видалити замовлення."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2567,10 +3400,10 @@ async def handle_delete_order(request: web.Request):
 async def handle_get_coupons(request: web.Request):
     """Список купонів для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     return web.json_response(await run_db(list_coupons), headers=cors_headers(request))
 
@@ -2578,10 +3411,10 @@ async def handle_get_coupons(request: web.Request):
 async def handle_create_coupon(request: web.Request):
     """Створити купон."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2604,10 +3437,10 @@ async def handle_create_coupon(request: web.Request):
 async def handle_update_coupon(request: web.Request):
     """Оновити купон."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2636,10 +3469,10 @@ async def handle_update_coupon(request: web.Request):
 async def handle_add_coupon_users(request: web.Request):
     """Додати Telegram ID до whitelist купона."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2673,10 +3506,10 @@ async def handle_add_coupon_users(request: web.Request):
 async def handle_remove_coupon_user(request: web.Request):
     """Прибрати Telegram ID з whitelist купона."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2692,10 +3525,10 @@ async def handle_remove_coupon_user(request: web.Request):
 async def handle_delete_coupon(request: web.Request):
     """Видалити купон."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2712,24 +3545,241 @@ async def handle_get_public_promotions(request: web.Request):
     return web.json_response(await run_db(public_promotions), headers=cors_headers(request))
 
 
+def _query_int(request: web.Request, name: str, default: int) -> int:
+    try:
+        return int(request.query.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+async def handle_get_config(request: web.Request):
+    """Публічна конфігурація магазину: доступні способи доставки."""
+    return web.json_response(
+        {
+            "delivery_methods": delivery.available_methods(),
+            "np_lookup": delivery.np_lookup_enabled(),
+        },
+        headers=cors_headers(request),
+    )
+
+
+async def _delivery_lookup(request: web.Request, fetch):
+    """Спільна обгортка довідників: авторизація, ліміт, відмова API -> текстове поле у фронті."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if not allow_delivery_lookup(user_id):
+        return web.json_response({"ok": False, "error": "rate_limited"}, status=429, headers=cors_headers(request))
+    try:
+        items = await fetch()
+    except delivery.DeliveryUnavailable:
+        return web.json_response(
+            {"ok": False, "error": "unavailable", "items": []}, status=503, headers=cors_headers(request)
+        )
+    payload = items if isinstance(items, dict) else {"items": items}
+    return web.json_response({"ok": True, **payload}, headers=cors_headers(request))
+
+
+async def handle_np_cities(request: web.Request):
+    """Пошук міста, смт чи села для Нової Пошти: ?q="""
+    return await _delivery_lookup(request, lambda: delivery.np_cities(request.query.get("q", "")))
+
+
+async def handle_np_warehouses(request: web.Request):
+    """Відділення й поштомати НП: ?city=<ref>&kind=all|branch|postomat&q=<пошук>"""
+    return await _delivery_lookup(
+        request,
+        lambda: delivery.np_warehouses(
+            request.query.get("city", ""), request.query.get("kind", "all"), request.query.get("q", "")
+        ),
+    )
+
+
+async def handle_get_hits(request: web.Request):
+    """Топ продажів з реальних замовлень: хіти на головній, добірка «Хіти», сортування «Популярні»."""
+    hits = await run_db(
+        top_selling_products, _query_int(request, "days", 90), _query_int(request, "limit", 12)
+    )
+    return web.json_response({"hits": hits}, headers=cors_headers(request))
+
+
+async def handle_get_collections(request: web.Request):
+    """Активні добірки для головної («Стопка»)."""
+    return web.json_response({"collections": await run_db(visible_collections)}, headers=cors_headers(request))
+
+
+def _collection_response(request: web.Request, result: dict, ok_status: int = 200):
+    status = ok_status if result.get("ok") else (404 if result.get("not_found") else 400)
+    return web.json_response(result, status=status, headers=cors_headers(request))
+
+
+async def handle_get_admin_collections(request: web.Request):
+    """Усі добірки (і вимкнені) для адмінки: склад, режим, кількість товарів, що бачить покупець."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    return web.json_response({"collections": await run_db(list_admin_collections)}, headers=cors_headers(request))
+
+
+async def handle_create_collection(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    return _collection_response(request, await run_db(create_collection, data), 201)
+
+
+async def handle_update_collection(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    return _collection_response(request, await run_db(update_collection, request.match_info.get("id", ""), data))
+
+
+async def handle_delete_collection(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    return _collection_response(request, await run_db(delete_collection, request.match_info.get("id", "")))
+
+
+async def handle_reorder_collections(request: web.Request):
+    """Порядок добірок: {"ids": ["new", "glow", …]}."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    return _collection_response(request, await run_db(reorder_collections, data.get("ids")))
+
+
+async def handle_preview_collection(request: web.Request):
+    """«Зараз підходить: N товарів» для форми добірки: {mode, rule | product_ids}."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    return _collection_response(request, await run_db(preview_collection, data))
+
+
+async def handle_set_collection_products(request: web.Request):
+    """Упорядкований склад ручної добірки: {"product_ids": [3, 1, 2]}."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    return _collection_response(
+        request, await run_db(set_collection_products, request.match_info.get("id", ""), data.get("product_ids"))
+    )
+
+
+async def handle_get_product_collections(request: web.Request):
+    """ID ручних добірок товару (секція «Добірки» в редакторі)."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    ids = await run_db(product_collection_ids, _product_id_param(request))
+    return web.json_response({"ok": True, "collections": ids}, headers=cors_headers(request))
+
+
+async def handle_set_product_collections(request: web.Request):
+    """Ручні добірки товару: {"collections": ["gift-ideas", …]}."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    return _collection_response(
+        request, await run_db(set_product_collections, _product_id_param(request), data.get("collections"))
+    )
+
+
+async def handle_get_popular_searches(request: web.Request):
+    """«Шукають найчастіше» на екрані пошуку."""
+    queries = await run_db(
+        popular_searches, _query_int(request, "days", 30), _query_int(request, "limit", 5)
+    )
+    return web.json_response({"queries": queries}, headers=cors_headers(request))
+
+
+async def handle_post_event(request: web.Request):
+    """Подія аналітики з вітрини: `search` і події воронки."""
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    if not isinstance(data, dict) or data.get("type") not in EVENT_TYPES:
+        return web.json_response({"ok": False, "error": "unknown_event"}, status=400, headers=cors_headers(request))
+
+    auth, err = resolve_request_user(request, data)
+    if err is not None:
+        return err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if not user_id:
+        return web.json_response({"ok": True, "recorded": False}, headers=cors_headers(request))
+    if not allow_event(user_id):
+        return web.json_response({"ok": False, "error": "rate_limited"}, status=429, headers=cors_headers(request))
+
+    if data["type"] == "broadcast_open":
+        try:
+            bid = int(data.get("broadcast_id") or 0)
+        except (TypeError, ValueError):
+            bid = 0
+        recorded = await run_db(broadcasts_svc.record_click, user_id, bid)
+        return web.json_response({"ok": True, "recorded": recorded}, headers=cors_headers(request))
+
+    if data["type"] in FUNNEL_EVENT_TYPES:
+        try:
+            product_id = int(data.get("product_id") or 0) or None
+        except (TypeError, ValueError):
+            product_id = None
+        recorded = await run_db(record_funnel_event, user_id, data["type"], product_id)
+        return web.json_response({"ok": True, "recorded": recorded}, headers=cors_headers(request))
+
+    try:
+        results = int(data.get("results") or 0)
+    except (TypeError, ValueError):
+        results = 0
+    recorded = await run_db(record_search, user_id, data.get("query"), results)
+    return web.json_response({"ok": True, "recorded": recorded}, headers=cors_headers(request))
+
+
 async def handle_get_promotions(request: web.Request):
     """Повний список акцій для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
-    return web.json_response(await run_db(list_promotions), headers=cors_headers(request))
+    return web.json_response(await run_db(list_promotions_admin), headers=cors_headers(request))
 
 
 async def handle_get_users(request: web.Request):
     """Список користувачів бота з лічильниками запусків для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     q = request.query
@@ -2749,17 +3799,204 @@ async def handle_get_users(request: web.Request):
         limit=limit,
         offset=offset,
         blocked=q.get("blocked") or "all",
+        segment=q.get("segment") or "all",
     )
+    if q.get("counts") in ("1", "true"):
+        result["segment_counts"] = await run_db(
+            segment_counts, (q.get("search") or "")[:64], q.get("blocked") or "all"
+        )
     return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_export_users_csv(request: web.Request):
+    """CSV клієнтів (з урахуванням segment/search/blocked)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    q = request.query
+    rows = await run_db(
+        export_users, (q.get("search") or "")[:64], q.get("blocked") or "all", q.get("segment") or "all"
+    )
+    body = chr(0xFEFF) + users_to_csv(rows)
+    headers = {**cors_headers(request), "Content-Disposition": 'attachment; filename="clients.csv"'}
+    return web.Response(body=body.encode("utf-8"), content_type="text/csv", charset="utf-8", headers=headers)
+
+
+async def handle_create_personal_coupon(request: web.Request):
+    """Персональний купон -10% для клієнта (одноразовий, лише йому, 30 днів)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    try:
+        user_id = int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0 or not await run_db(get_user, user_id):
+        return web.json_response({"ok": False, "error": "Клієнта не знайдено"}, status=404, headers=cors_headers(request))
+    result = await run_db(create_personal_coupon, user_id)
+    return web.json_response(result, status=200 if result.get("ok") else 400, headers=cors_headers(request))
+
+
+async def handle_send_user_message(request: web.Request):
+    """Надіслати клієнту в бот текст (наприклад, код купона)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    try:
+        user_id = int(request.match_info.get("id", 0))
+        data = await request.json()
+        text = str(data.get("text") or "").strip()
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    if not text or len(text) > 2000 or user_id <= 0:
+        return web.json_response(
+            {"ok": False, "error": "Текст має бути від 1 до 2000 символів"}, status=400, headers=cors_headers(request)
+        )
+    if not await run_db(get_user, user_id):
+        return web.json_response({"ok": False, "error": "Клієнта не знайдено"}, status=404, headers=cors_headers(request))
+    paragraphs = "".join(f"<p>{html.escape(line)}</p>" for line in text.splitlines() if line.strip())
+    try:
+        if bot_app is None:
+            raise RuntimeError("bot is not running")
+        await send_rich_message(bot_app.bot, user_id, paragraphs)
+    except Exception as e:
+        logger.warning("Не вдалось надіслати повідомлення клієнту %s: %s", user_id, e)
+        if broadcasts_svc.is_undeliverable_error(e):
+            await run_db(set_blocked, user_id, True)
+        return web.json_response(
+            {"ok": False, "error": "Клієнт не отримав повідомлення (можливо, заблокував бота)"},
+            status=502, headers=cors_headers(request),
+        )
+    return web.json_response({"ok": True}, headers=cors_headers(request))
+
+
+# ─── РОЗСИЛКИ ────────────────────────────────────────────────
+
+def _make_broadcast_sender():
+    """Функція відправки одному отримувачу. Єдине місце, що реально б'є в Telegram -
+    тести й перегляд підміняють її (monkeypatch bot._make_broadcast_sender)."""
+    from rich_messages import _telegram_retry
+
+    async def send_one(user_id: int, b: dict):
+        markup = None
+        if b.get("button_label") and b.get("button_target"):
+            url = broadcasts_svc.button_url(b["id"], b["button_target"])
+            if url:
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton(b["button_label"], url=url)]])
+        tg_bot = bot_app.bot
+        if b.get("photo"):
+            await _telegram_retry(
+                lambda: tg_bot.send_photo(chat_id=user_id, photo=b["photo"], caption=b["text"], reply_markup=markup),
+                label="broadcast photo",
+            )
+        else:
+            await _telegram_retry(
+                lambda: tg_bot.send_message(chat_id=user_id, text=b["text"], reply_markup=markup),
+                label="broadcast message",
+            )
+
+    return send_one
+
+
+_broadcast_tasks: set = set()
+
+
+def _spawn_broadcast(bid: int) -> None:
+    task = asyncio.create_task(broadcasts_svc.send_broadcast(bid, _make_broadcast_sender()))
+    _broadcast_tasks.add(task)
+    task.add_done_callback(_broadcast_tasks.discard)
+
+
+async def _broadcast_scheduler_loop() -> None:
+    """Раз на 30 с відправляє розсилки, час яких настав (захист від дубля - claim у send_broadcast)."""
+    while True:
+        try:
+            await broadcasts_svc.run_due_broadcasts(_make_broadcast_sender())
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("broadcast scheduler failed")
+        await asyncio.sleep(30)
+
+
+async def _admin_guard(request: web.Request):
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    return require_admin(request, auth)
+
+
+async def handle_get_broadcasts(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    items = await run_db(broadcasts_svc.list_broadcasts)
+    return web.json_response({"broadcasts": items}, headers=cors_headers(request))
+
+
+async def handle_preview_broadcast(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    result = await run_db(broadcasts_svc.preview_recipients, (data or {}).get("segment"))
+    return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_create_broadcast(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    result = await run_db(broadcasts_svc.create_broadcast, data if isinstance(data, dict) else {})
+    if not result.get("ok"):
+        return web.json_response(result, status=400, headers=cors_headers(request))
+    if result.pop("send_now", False):
+        _spawn_broadcast(result["id"])
+    return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_delete_broadcast(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        bid = int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        bid = 0
+    outcome = await run_db(broadcasts_svc.delete_broadcast, bid)
+    if outcome == "deleted":
+        return web.json_response({"ok": True}, headers=cors_headers(request))
+    if outcome == "locked":
+        return web.json_response(
+            {"ok": False, "error": "Видалити можна лише відкладену розсилку або чернетку"},
+            status=409, headers=cors_headers(request),
+        )
+    return web.json_response({"ok": False, "error": "Не знайдено"}, status=404, headers=cors_headers(request))
 
 
 async def handle_get_settings(request: web.Request):
     """Глобальні налаштування магазину для адмін-панелі."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
     return web.json_response(await run_db(admin_settings), headers=cors_headers(request))
 
@@ -2774,10 +4011,10 @@ async def handle_update_settings(request: web.Request):
         )
 
     auth, err = resolve_request_user(request, data)
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     result = await run_db(update_admin_settings, data)
@@ -2788,10 +4025,10 @@ async def handle_update_settings(request: web.Request):
 async def handle_create_promotion(request: web.Request):
     """Створити акцію."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2806,10 +4043,10 @@ async def handle_create_promotion(request: web.Request):
 async def handle_update_promotion(request: web.Request):
     """Оновити акцію або лише перемкнути її активність."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2828,10 +4065,10 @@ async def handle_update_promotion(request: web.Request):
 async def handle_delete_promotion(request: web.Request):
     """Видалити акцію."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2846,10 +4083,10 @@ async def handle_delete_promotion(request: web.Request):
 async def handle_upload_photo(request: web.Request):
     """Завантажити фото на Cloudinary з повною обробкою помилок"""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2902,13 +4139,43 @@ async def handle_upload_photo(request: web.Request):
         )
 
 
+async def handle_upload_video(request: web.Request):
+    """Завантажити відео товару (mp4/mov/webm) на Cloudinary."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    try:
+        form = await request.post()
+    except web.HTTPRequestEntityTooLarge:
+        return web.json_response(
+            {"ok": False, "error": f"❌ Файл занадто великий. Максимум {MAX_UPLOAD_BYTES // 1024 // 1024}MB"},
+            status=413, headers=cors_headers(request),
+        )
+    file_field = form.get("file")
+    if not isinstance(file_field, web.FileField):
+        return web.json_response({"ok": False, "error": "❌ Файл не знайдено"}, status=400, headers=cors_headers(request))
+    content_type = (file_field.content_type or "").lower()
+    if content_type not in VIDEO_CONTENT_TYPES:
+        return web.json_response(
+            {"ok": False, "error": "❌ Потрібне відео mp4, mov або webm"}, status=400, headers=cors_headers(request)
+        )
+    file_data = file_field.file.read()
+    filename = (file_field.filename or "product_video").rsplit(".", 1)[0][:60] or "product_video"
+    result = await asyncio.to_thread(upload_video_to_cloudinary_sync, file_data, filename)
+    status = 200 if result.get("ok") else 400
+    return web.json_response(result, status=status, headers=cors_headers(request))
+
+
 async def handle_upload_photo_url(request: web.Request):
     """Завантажити фото на Cloudinary за URL (зручно для анімованих GIF/WebP з інтернету)."""
     auth, err = resolve_request_user(request, {})
-    if err:
+    if err is not None:
         return err
     denied = require_admin(request, auth)
-    if denied:
+    if denied is not None:
         return denied
 
     try:
@@ -2947,7 +4214,7 @@ async def handle_check_coupon(request):
         return web.Response(status=400, text="Bad JSON", headers=cors_headers(request))
 
     auth, err = resolve_request_user(request, data)
-    if err:
+    if err is not None:
         return err
 
     code = (data.get("code") or "").strip()
@@ -3029,6 +4296,12 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     write_button = btn
                 elif btn.url and ("t.me/" in btn.url or btn.url.startswith("tg://user?id=")):
                     write_button = btn
+
+    target_status = {"confirm": "confirmed", "draft": "draft", "cancel": "cancelled"}.get(action)
+    if target_status:
+        current, _ = await run_db(get_order_with_items, order_id)
+        if current and not is_valid_transition(current.get("status") or "new", target_status):
+            return  # застаріла кнопка: замовлення вже далі по ланцюжку
 
     if action == "confirm":
         await run_db(update_order_status, order_id, "confirmed")
@@ -3199,6 +4472,12 @@ def main():
     global bot_app
     config.validate_startup_config()
     init_db()
+    try:
+        interrupted = broadcasts_svc.recover_interrupted()
+        if interrupted:
+            logger.warning("Розсилок, перерваних рестартом, позначено failed: %s", interrupted)
+    except Exception:
+        logger.exception("broadcast recovery failed")
     bootstrap_json_catalog(force=True)
     logger.info(
         "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom | філаментів: %s | категорій: %s",
@@ -3264,7 +4543,11 @@ def main():
                 ("contact", "📬 Контакти"),
             ]
             await configure_bot_commands(bot_app, owner_id=OWNER_ID, user_commands=user_commands)
+            review_task = asyncio.create_task(_review_request_loop())
+            broadcast_task = asyncio.create_task(_broadcast_scheduler_loop())
             await stop_event.wait()
+            review_task.cancel()
+            broadcast_task.cancel()
 
             logger.info("Зупиняю Telegram polling...")
             await bot_app.updater.stop()

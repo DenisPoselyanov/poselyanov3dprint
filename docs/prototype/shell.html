@@ -1,0 +1,41 @@
+
+<header class="shell-top">
+  <div class="brand">
+    <div class="brand-mark">3D</div>
+    <div>
+      <div class="brand-name">Poselyanov 3D Print</div>
+      <div class="brand-sub">Інтерактивний прототип · усе клікабельне</div>
+    </div>
+  </div>
+  <div class="seg" role="group" aria-label="Що показати">
+    <button type="button" id="mode-shop" aria-pressed="true">Магазин</button>
+    <button type="button" id="mode-admin" aria-pressed="false">Адмінка</button>
+  </div>
+  <div class="shell-actions">
+    <label class="switch-label" for="markers-toggle">
+      <span class="sw"><input type="checkbox" id="markers-toggle" checked><span></span></span>
+      Мітки змін <span class="nw">1</span>
+    </label>
+    <button type="button" class="icon-btn" id="theme-btn" aria-label="Перемкнути тему"></button>
+  </div>
+</header>
+
+<main>
+  <section class="view" id="view-shop">
+    <div class="shop-layout">
+      <div class="phone-wrap"><div class="phone" id="phone"></div></div>
+      <aside class="notes" id="shop-notes"></aside>
+    </div>
+  </section>
+  <section class="view" id="view-admin" hidden>
+    <div class="adm-frame" id="admin-root"></div>
+  </section>
+</main>
+<div id="drawer-root"></div>
+
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script src="shop.js"></script>
+<script src="admin.js"></script>
+
+</body></html>
