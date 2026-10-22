@@ -226,9 +226,14 @@
     display: none; position: fixed; inset: 0 var(--app-edge);
     background: var(--card-bg);
     z-index: 10000; flex-direction: column;
-    align-items: center; justify-content: center;
+    align-items: center; justify-content: flex-start;
     text-align: center; padding: 32px;
+    overflow-y: auto; overscroll-behavior: contain;
   }
+  /* auto-поля центрують вміст, а на низькому екрані дають скрол замість обрізання зверху */
+  .success-screen > :first-child { margin-top: auto; }
+  .success-screen > :last-child { margin-bottom: auto; }
+  .success-screen > * { flex-shrink: 0; }
   .success-screen.open { display: flex; animation: fadeInUp .35s ease; }
   .success-emoji { font-size: 72px; margin-bottom: 16px; animation: pop .4s .1s cubic-bezier(.34,1.56,.64,1) both; }
   @keyframes pop {
@@ -1643,11 +1648,11 @@
   <div class="success-check"><span data-icon="check"></span></div>
   <div class="success-title">Замовлення прийнято!</div>
   <div class="success-num" id="success-num"></div>
-  <div class="success-sub">Я напишу тобі в Telegram протягом години — підтвердимо деталі й оплату. Якщо в замовленні є товари з договірною ціною — напишу з фінальною сумою.</div>
+  <div class="success-sub">Ми вже отримали замовлення. Деталі та оплату підтвердимо в Telegram. Якщо в замовленні є товари з договірною ціною, повідомимо фінальну суму.</div>
   <ul class="tl" aria-label="Що буде далі">
-    <li class="done"><b>Прийнято</b>Замовлення вже в мене</li>
-    <li><b>Підтвердження і оплата</b>Напишу тобі в Telegram</li>
-    <li><b>Друк</b>Зазвичай 1–2 дні</li>
+    <li class="done"><b>Прийнято</b>Ми отримали замовлення</li>
+    <li><b>Підтвердження і оплата</b>Зв’яжемося з тобою в Telegram</li>
+    <li><b>Друк</b>Виготовляємо твоє замовлення</li>
     <li><b>Відправка</b>ТТН прийде сюди й у бот</li>
   </ul>
   <div class="success-actions">
