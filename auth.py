@@ -66,12 +66,34 @@ def _is_private_ip(ip_str: str) -> bool:
         return False
 
 
+_PROXY_HEADERS = ("X-Forwarded-For", "X-Real-IP", "Forwarded", "X-Forwarded-Host", "Ngrok-Agent-Ips")
+
+
+def _is_proxied(request: web.Request) -> bool:
+    """Запит прийшов через проксі/тунель (nginx, ngrok): request.remote — адреса проксі, а не клієнта."""
+    return any(h in request.headers for h in _PROXY_HEADERS)
+
+
+def _direct_client_ip(request: web.Request):
+    """IP клієнта, лише якщо він під'єднався напряму; для запитів через проксі — None."""
+    if _is_proxied(request):
+        return None
+    try:
+        return ipaddress.ip_address(request.remote or "")
+    except ValueError:
+        return None
+
+
 def is_local_network_request(request: web.Request) -> bool:
-    """Повертає True якщо запит надійшов з локальної мережі (і ALLOW_LOCAL_NETWORK=true)."""
+    """Повертає True якщо запит надійшов напряму з локальної мережі (і ALLOW_LOCAL_NETWORK=true).
+
+    Заголовкам не довіряємо: через ngrok у Docker request.remote — приватна адреса контейнера,
+    тож проксійовані запити локальними не вважаються.
+    """
     if not config.ALLOW_LOCAL_NETWORK:
         return False
-    client_ip = request.remote or ""
-    return _is_private_ip(client_ip)
+    ip = _direct_client_ip(request)
+    return bool(ip and ip.is_private)
 
 
 def cors_headers(request: web.Request) -> dict:
@@ -128,7 +150,7 @@ def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None,
         return auth, None
 
     # Without initData validation, only allow spoofed user_id on localhost dev.
-    if not config.LOCAL_DEV_MODE:
+    if not config.LOCAL_DEV_MODE or not (is_local_dev_origin(request) or is_local_network_request(request)):
         return None, web.json_response(
             {"ok": False, "error": "invalid_init_data"},
             status=403,
@@ -147,19 +169,12 @@ def resolve_request_user(request: web.Request, data: dict) -> tuple[dict | None,
 
 
 def is_local_dev_origin(request: web.Request) -> bool:
+    """Запит з цього ж комп'ютера (LOCAL_DEV_MODE). Origin і Host підробляються будь-ким — дивимось
+    лише на фактичну адресу з'єднання."""
     if not config.LOCAL_DEV_MODE:
         return False
-    # Origin header is only sent on cross-origin requests; for direct browser
-    # navigation it is absent — fall back to the Host header.
-    origin = request.headers.get("Origin", "").strip()
-    if origin:
-        try:
-            host = (urlparse(origin).hostname or "").lower()
-            return host in {"localhost", "127.0.0.1"}
-        except Exception:
-            return False
-    host_header = request.headers.get("Host", "").split(":")[0].strip().lower()
-    return host_header in {"localhost", "127.0.0.1"}
+    ip = _direct_client_ip(request)
+    return bool(ip and ip.is_loopback)
 
 
 def is_admin_authorized(request: web.Request, auth: dict | None) -> bool:
