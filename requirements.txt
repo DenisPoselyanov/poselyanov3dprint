@@ -4,3 +4,4 @@ aiohttp==3.11.11
 cloudinary==1.41.0
 Pillow==11.1.0
 psycopg[binary]==3.2.4
+anthropic==2.1.0

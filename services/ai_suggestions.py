@@ -1,0 +1,445 @@
+"""Пропозиції товарів від ШІ: Claude шукає моделі для друку й готує картки в стилі каталогу.
+
+Кнопка «Знайти нові» в адмінці запускає фоновий пошук (`start_generation`). Claude з веб-пошуком
+переглядає MakerWorld / Printables / Thingiverse, повертає товари через інструмент `submit_products`,
+а ми зберігаємо їх у таблицю `ai_suggestions` зі статусом `new`. У каталог нічого не потрапляє
+автоматично: адмін відкриває пропозицію у звичайній формі товару, править і зберігає, після чого
+пропозиція стає `published` з номером створеного товару. Ліцензію моделі ШІ не фільтрує, лише описує.
+
+Клієнт Claude ін'єктується (`client=`), тож тести працюють без мережі й ключа.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+from datetime import datetime, timezone
+
+import config
+from catalog_store import DESCRIPTION_MAX, NOTE_MAX, get_admin_products, get_all_categories
+from db_core import db_connect, is_postgres, run_db, sql as _sql
+
+logger = logging.getLogger(__name__)
+
+STATUSES = ("new", "published", "rejected")
+COUNT_MIN, COUNT_MAX, COUNT_DEFAULT = 1, 10, 5
+FOCUS_MAX = 300
+PRICE_MIN, PRICE_MAX = 20, 20000
+NAME_MAX = 80
+MAT_MAX = 80
+TEXT_MAX = 600
+IMAGES_MAX = 4
+MAX_CONTINUATIONS = 8
+
+_job: dict = {"running": False, "startedAt": "", "finishedAt": "", "added": 0, "error": ""}
+_tasks: set = set()
+
+
+def init_ai_suggestions_table(conn) -> None:
+    if is_postgres():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ai_suggestions (
+                id            BIGSERIAL PRIMARY KEY,
+                status        TEXT NOT NULL DEFAULT 'new',
+                name          TEXT NOT NULL DEFAULT '',
+                data          TEXT NOT NULL DEFAULT '{}',
+                source_url    TEXT NOT NULL DEFAULT '',
+                source_title  TEXT NOT NULL DEFAULT '',
+                license       TEXT NOT NULL DEFAULT '',
+                reason        TEXT NOT NULL DEFAULT '',
+                images        TEXT NOT NULL DEFAULT '[]',
+                product_id    BIGINT,
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ai_suggestions (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                status        TEXT NOT NULL DEFAULT 'new',
+                name          TEXT NOT NULL DEFAULT '',
+                data          TEXT NOT NULL DEFAULT '{}',
+                source_url    TEXT NOT NULL DEFAULT '',
+                source_title  TEXT NOT NULL DEFAULT '',
+                license       TEXT NOT NULL DEFAULT '',
+                reason        TEXT NOT NULL DEFAULT '',
+                images        TEXT NOT NULL DEFAULT '[]',
+                product_id    INTEGER,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_suggestions_status ON ai_suggestions(status)")
+
+
+def is_enabled() -> bool:
+    return bool(config.ANTHROPIC_API_KEY)
+
+
+def _iso(value) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    s = str(value)
+    # SQLite віддає UTC без пояса — позначаємо явно, щоб браузер не читав це як локальний час
+    return s.replace(" ", "T") + "Z" if re.match(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$", s) else s
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+# ── Читання / зміна статусу ─────────────────────────────────────────
+
+_COLUMNS = "id, status, name, data, source_url, source_title, license, reason, images, product_id, created_at"
+
+
+def _row_to_item(row) -> dict:
+    (sid, status, name, data, source_url, source_title, license_, reason, images, product_id, created_at) = row
+    try:
+        product = json.loads(data or "{}")
+    except json.JSONDecodeError:
+        product = {}
+    try:
+        image_list = json.loads(images or "[]")
+    except json.JSONDecodeError:
+        image_list = []
+    return {
+        "id": int(sid),
+        "status": status,
+        "name": name,
+        "product": product,
+        "sourceUrl": source_url,
+        "sourceTitle": source_title,
+        "license": license_,
+        "reason": reason,
+        "images": image_list,
+        "productId": int(product_id) if product_id else None,
+        "createdAt": _iso(created_at),
+    }
+
+
+def list_suggestions() -> list[dict]:
+    conn = db_connect()
+    try:
+        rows = conn.execute(f"SELECT {_COLUMNS} FROM ai_suggestions ORDER BY id DESC LIMIT 300").fetchall()
+    finally:
+        conn.close()
+    return [_row_to_item(r) for r in rows]
+
+
+def set_status(suggestion_id: int, status: str, product_id=None) -> dict:
+    if status not in STATUSES:
+        return {"ok": False, "error": "Невірний статус"}
+    pid = None
+    if status == "published":
+        try:
+            pid = int(product_id)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "Потрібен номер створеного товару"}
+    conn = db_connect()
+    try:
+        cur = conn.execute(
+            _sql("UPDATE ai_suggestions SET status = ?, product_id = ? WHERE id = ?"),
+            (status, pid, int(suggestion_id)),
+        )
+        conn.commit()
+        found = cur.rowcount > 0
+    finally:
+        conn.close()
+    return {"ok": True} if found else {"ok": False, "error": "Не знайдено"}
+
+
+def delete_suggestion(suggestion_id: int) -> bool:
+    conn = db_connect()
+    try:
+        cur = conn.execute(_sql("DELETE FROM ai_suggestions WHERE id = ?"), (int(suggestion_id),))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def _known_names() -> list[str]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT name FROM ai_suggestions").fetchall()
+    finally:
+        conn.close()
+    return [r[0] for r in rows if r[0]]
+
+
+# ── Нормалізація відповіді ШІ ───────────────────────────────────────
+
+def _text(value, max_len: int) -> str:
+    return re.sub(r"[ \t]+", " ", str(value or "")).strip()[:max_len]
+
+
+def _https(value) -> str:
+    url = str(value or "").strip()
+    return url if re.match(r"^https://[^\s\"'<>]{3,1000}$", url) else ""
+
+
+def normalize_item(raw: dict, category_ids: list[str]) -> dict | None:
+    """Пропозиція з відповіді ШІ -> поля для БД; None, якщо без назви чи ціни."""
+    if not isinstance(raw, dict):
+        return None
+    name = _text(raw.get("name"), NAME_MAX)
+    try:
+        price = int(round(float(raw.get("price"))))
+    except (TypeError, ValueError):
+        price = 0
+    if not name or price <= 0:
+        return None
+    price = max(PRICE_MIN, min(PRICE_MAX, price))
+    cat = str(raw.get("cat") or "").strip()
+    if cat not in category_ids:
+        cat = next((c for c in category_ids if c != "custom"), "toy")
+    emoji = _text(raw.get("emoji"), 8) or "📦"
+    product = {
+        "name": name,
+        "cat": cat,
+        "emoji": emoji,
+        "mat": _text(raw.get("mat"), MAT_MAX) or "PLA",
+        "price": price,
+        "description": str(raw.get("description") or "").strip()[:DESCRIPTION_MAX],
+        "note": _text(raw.get("note"), NOTE_MAX),
+        "filamentChoice": bool(raw.get("filament_choice", True)),
+        "gift": bool(raw.get("gift", False)),
+    }
+    images = []
+    for url in raw.get("image_urls") or []:
+        url = _https(url)
+        if url and url not in images:
+            images.append(url)
+    return {
+        "name": name,
+        "product": product,
+        "source_url": _https(raw.get("source_url")),
+        "source_title": _text(raw.get("source_title"), 200),
+        "license": _text(raw.get("license"), TEXT_MAX),
+        "reason": _text(raw.get("reason"), TEXT_MAX),
+        "images": images[:IMAGES_MAX],
+    }
+
+
+def save_items(items: list[dict]) -> int:
+    if not items:
+        return 0
+    conn = db_connect()
+    try:
+        for it in items:
+            conn.execute(
+                _sql(
+                    "INSERT INTO ai_suggestions (status, name, data, source_url, source_title, license, reason, images) "
+                    "VALUES ('new', ?, ?, ?, ?, ?, ?, ?)"
+                ),
+                (
+                    it["name"],
+                    json.dumps(it["product"], ensure_ascii=False),
+                    it["source_url"],
+                    it["source_title"],
+                    it["license"],
+                    it["reason"],
+                    json.dumps(it["images"]),
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return len(items)
+
+
+# ── Промпт і виклик Claude ──────────────────────────────────────────
+
+SUBMIT_TOOL = {
+    "name": "submit_products",
+    "description": "Зберегти знайдені товари як пропозиції для адміна магазину. Викликати один раз у кінці, з усіма товарами.",
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["items"],
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "name", "cat", "emoji", "mat", "price", "description", "note",
+                        "filament_choice", "gift", "source_url", "source_title", "license",
+                        "reason", "image_urls",
+                    ],
+                    "properties": {
+                        "name": {"type": "string", "description": "Назва товару для вітрини, коротко, як у каталозі"},
+                        "cat": {"type": "string", "description": "id категорії з переліку"},
+                        "emoji": {"type": "string", "description": "Один emoji"},
+                        "mat": {"type": "string", "description": "Короткий рядок під назвою, як у каталозі, напр. «PLA · різні кольори»"},
+                        "price": {"type": "integer", "description": "Ціна в гривнях"},
+                        "description": {"type": "string", "description": "Опис для картки товару"},
+                        "note": {"type": "string", "description": "Коротка примітка (розмір, час друку тощо) або порожній рядок"},
+                        "filament_choice": {"type": "boolean", "description": "Чи може покупець вибрати колір"},
+                        "gift": {"type": "boolean", "description": "Чи годиться як дрібний подарунок до замовлення"},
+                        "source_url": {"type": "string", "description": "Посилання на сторінку моделі"},
+                        "source_title": {"type": "string", "description": "Назва моделі на сайті й автор"},
+                        "license": {"type": "string", "description": "Ліцензія моделі і чи дозволено продавати друк"},
+                        "reason": {"type": "string", "description": "Чому цей товар підійде магазину"},
+                        "image_urls": {"type": "array", "items": {"type": "string"}, "description": "Прямі https-посилання на фото моделі"},
+                    },
+                },
+            }
+        },
+    },
+}
+
+SYSTEM_PROMPT = """Ти допомагаєш власнику маленького українського магазину 3D-друку в Telegram (Mini App) поповнювати каталог.
+Магазин друкує на FDM-принтері пластиком PLA (є й світний у темряві), продає по Україні, доставка Новою Поштою.
+Покупці — переважно діти, підлітки й молодь: іграшки, антистреси, брелки, дрібні подарунки, корисні речі для дому й гаджетів.
+
+Твоє завдання — знайти в інтернеті моделі для 3D-друку, які добре продаватимуться саме в цьому магазині, і підготувати
+для кожної картку товару так, ніби її написав власник. Шукай на MakerWorld, Printables, Thingiverse, Cults3D:
+популярні моделі (багато завантажень, лайків, друків), тренди, сезонні речі.
+
+Вимоги до вибору:
+- модель реально друкується на звичайному FDM без складного складання і без фарбування;
+- собівартість і час друку дозволяють продавати за ціною, близькою до цін магазину;
+- товар не повторює те, що вже є в каталозі, і не є вже запропонованим раніше;
+- різноманітність: не всі товари з однієї категорії, якщо власник не просив інакше.
+
+Ліцензії не фільтруй: власник за потреби купить комерційну ліцензію. Але для кожного товару чесно напиши в полі license,
+яка ліцензія на сторінці моделі і чи дозволено продавати друк. Якщо не дозволено або не зрозуміло — так і напиши,
+що для продажу треба купити комерційну ліцензію чи домовитися з автором.
+
+Картка товару:
+- пиши українською, у тому ж стилі, тоні й довжині, що й наявні товари магазину (приклади нижче);
+- назва коротка й зрозуміла покупцю, без артикулів і англійських хвостів, якщо їх немає у прикладах;
+- ціну орієнтуй на ціни схожих товарів у каталозі;
+- image_urls — прямі посилання на фото зі сторінки моделі (og:image або галерея), лише якщо ти їх бачив; інакше порожній список.
+
+Коли закінчиш пошук, виклич інструмент submit_products один раз з усіма товарами. Не пиши окремого звіту текстом."""
+
+
+def _catalog_brief() -> str:
+    categories = [c for c in get_all_categories() if c.get("id")]
+    cat_lines = "\n".join(f"- {c['id']}: {c.get('emoji', '')} {c.get('name', '')}" for c in categories)
+    products = []
+    for p in get_admin_products():
+        if p.get("status") == "archive":
+            continue
+        item = {k: p[k] for k in ("name", "cat", "mat", "price", "oldPrice", "description", "note") if p.get(k)}
+        products.append(item)
+    return (
+        "Категорії магазину (у полі cat використовуй id):\n"
+        f"{cat_lines}\n\n"
+        "Наявні товари магазину (стиль і ціни для орієнтиру; їх не пропонуй):\n"
+        f"{json.dumps(products, ensure_ascii=False, indent=1)}"
+    )
+
+
+def build_request_text(count: int, focus: str, known: list[str]) -> str:
+    parts = [f"Знайди {count} нових товарів для магазину."]
+    if focus:
+        parts.append(f"Побажання власника: {focus}")
+    if known:
+        parts.append("Ці назви вже пропонувалися раніше, їх і дуже схожі не повторюй:\n" + "\n".join(f"- {n}" for n in known[-150:]))
+    return "\n\n".join(parts)
+
+
+def _make_client():
+    import anthropic
+
+    return anthropic.AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY, timeout=600.0)
+
+
+async def ask_claude(client, request_text: str, catalog_brief: str) -> list[dict]:
+    """Пошук моделей і картки товарів: список сирих товарів з інструмента submit_products."""
+    messages = [{"role": "user", "content": request_text}]
+    system = [
+        {"type": "text", "text": SYSTEM_PROMPT},
+        {"type": "text", "text": catalog_brief, "cache_control": {"type": "ephemeral"}},
+    ]
+    tools = [
+        {"type": "web_search_20260209", "name": "web_search", "max_uses": 15},
+        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 20},
+        SUBMIT_TOOL,
+    ]
+    for _ in range(MAX_CONTINUATIONS):
+        response = await client.beta.messages.create(
+            model=config.AI_SUGGESTIONS_MODEL,
+            max_tokens=32000,
+            system=system,
+            messages=messages,
+            tools=tools,
+            thinking={"type": "adaptive"},
+            output_config={"effort": "medium"},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "submit_products":
+                items = (block.input or {}).get("items")
+                return items if isinstance(items, list) else []
+        if response.stop_reason == "pause_turn":
+            # Серверний цикл пошуку дійшов до ліміту кроків — продовжуємо з того ж місця
+            messages = [messages[0], {"role": "assistant", "content": response.content}]
+            continue
+        if response.stop_reason == "refusal":
+            raise RuntimeError("ШІ відмовився виконати запит")
+        if response.stop_reason == "max_tokens":
+            raise RuntimeError("Відповідь ШІ обрізалася; спробуй менше товарів за раз")
+        raise RuntimeError("ШІ не повернув жодного товару")
+    raise RuntimeError("Пошук тривав занадто довго; спробуй ще раз")
+
+
+async def generate(count: int, focus: str, client=None) -> int:
+    """Один пошук: питає Claude, нормалізує й зберігає пропозиції. Повертає кількість доданих."""
+    brief = await run_db(_catalog_brief)
+    known = await run_db(_known_names)
+    existing = {p.get("name", "").strip().lower() for p in await run_db(get_admin_products)}
+    category_ids = [c["id"] for c in await run_db(get_all_categories)]
+    raw_items = await ask_claude(client or _make_client(), build_request_text(count, focus, known), brief)
+    seen = existing | {n.strip().lower() for n in known}
+    items = []
+    for raw in raw_items:
+        item = normalize_item(raw, category_ids)
+        if item and item["name"].lower() not in seen:
+            seen.add(item["name"].lower())
+            items.append(item)
+    return await run_db(save_items, items)
+
+
+def job_state() -> dict:
+    return dict(_job)
+
+
+async def _run_job(count: int, focus: str, client) -> None:
+    try:
+        _job["added"] = await generate(count, focus, client)
+    except Exception as e:  # помилку показуємо в адмінці, а не губимо у фоні
+        logger.exception("AI suggestions failed")
+        _job["error"] = str(e) or e.__class__.__name__
+    finally:
+        _job["running"] = False
+        _job["finishedAt"] = _now_iso()
+
+
+def start_generation(data: dict, client=None) -> dict:
+    """Запускає фоновий пошук (лише один одночасно). Викликати з event loop."""
+    if client is None and not is_enabled():
+        return {"ok": False, "error": "Не задано ANTHROPIC_API_KEY на сервері"}
+    if _job["running"]:
+        return {"ok": False, "error": "Пошук уже йде"}
+    try:
+        count = int(data.get("count") or COUNT_DEFAULT)
+    except (TypeError, ValueError):
+        count = COUNT_DEFAULT
+    count = max(COUNT_MIN, min(COUNT_MAX, count))
+    focus = _text(data.get("focus"), FOCUS_MAX)
+    _job.update(running=True, startedAt=_now_iso(), finishedAt="", added=0, error="")
+    task = asyncio.create_task(_run_job(count, focus, client))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    return {"ok": True, "job": job_state()}

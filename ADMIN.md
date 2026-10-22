@@ -14,6 +14,10 @@
 - Керування купонами
 - Керування акціями (вкладка **🔥 Акції**)
 - Перегляд користувачів бота з лічильниками запусків (вкладка **👥 Користувачі**)
+- **✨ Пропозиції ШІ**: кнопка «Знайти нові» — Claude шукає популярні моделі (MakerWorld, Printables, Thingiverse)
+  і пише картки товарів у стилі каталогу (назва, опис, ціна, категорія) з посиланням на модель і поясненням ліцензії.
+  «Відкрити й додати» відкриває звичайну форму товару з заповненими полями; після збереження пропозиція переходить у «Додані».
+  Потрібен `ANTHROPIC_API_KEY` (окрема оплата Claude API); модель — `AI_SUGGESTIONS_MODEL`, за замовчуванням `claude-opus-5-5`.
 
 UI-файл: `admin-panel.html`  
 Backend-обробники: у `bot.py`
@@ -120,6 +124,10 @@ python bot.py
 - `PUT /api/admin/promotions/{id}` — оновити акцію або перемкнути `{"active": true|false}`
 - `DELETE /api/admin/promotions/{id}` — видалити акцію
 - `GET /api/admin/users` — список користувачів бота
+- `GET /api/admin/ai-suggestions` — пропозиції ШІ і стан пошуку
+- `POST /api/admin/ai-suggestions/generate` — запустити пошук `{"count": 1..10, "focus": "…"}` (у фоні)
+- `PUT /api/admin/ai-suggestions/{id}` — статус `new` / `rejected` / `published` (+ `productId`)
+- `DELETE /api/admin/ai-suggestions/{id}` — видалити пропозицію
 
 ---
 

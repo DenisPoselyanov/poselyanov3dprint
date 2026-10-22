@@ -2825,6 +2825,31 @@
             .rv-actions .pt-menu { margin-left: 0; }
         }
 
+        /* Пропозиції ШІ */
+        .ai-gen { display: grid; gap: 10px; margin: 0 0 12px; padding: 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; }
+        .ai-gen-text { font-size: 13px; color: var(--text-secondary); line-height: 1.45; }
+        .ai-gen-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .ai-gen-row input.orders-search { flex: 1 1 260px; width: auto; max-width: none; }
+        .ai-gen-row select.orders-search { flex: 0 0 auto; width: auto; }
+        .ai-job { font-size: 13px; color: var(--text-muted); }
+        .ai-job:empty { display: none; }
+        .ai-job.err { color: var(--sale); }
+        .ai-job.run { color: var(--accent); font-weight: 600; }
+        .ai-card.is-done { opacity: .72; }
+        .ai-price { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .ai-desc { font-size: 13px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+        .ai-row { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+        .ai-row b { color: var(--text-main); }
+        .ai-row a { color: var(--accent); }
+        .ai-lic { padding: 8px 12px; border-left: 3px solid var(--amber); background: var(--bg-section); border-radius: 0 10px 10px 0; }
+        .ai-src { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border: 1px dashed var(--border-alt); border-radius: 12px; background: var(--bg-section); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+        .ai-src[hidden] { display: none; }
+        .ai-src a { color: var(--accent); }
+        .ai-src-imgs { display: flex; gap: 8px; flex-wrap: wrap; }
+        .ai-src-img { display: grid; gap: 4px; width: 84px; }
+        .ai-src-img img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); }
+        .ai-src-img button { font-size: 12px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--border-alt); background: var(--bg-card); color: var(--text-main); cursor: pointer; }
+
         /* Філаменти */
         .fl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 16px; }
         .fl-card { display: flex; flex-direction: column; gap: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; min-width: 0; }
@@ -2909,6 +2934,7 @@
                 <button class="page-tab sb-item" type="button" data-page="categories" onclick="switchPage('categories'); toggleSidebar(false)"><span class="sb-ico" data-icon="categories" style="display:contents"></span>Категорії</button>
                 <button class="page-tab sb-item" type="button" data-page="collections" onclick="switchPage('collections'); toggleSidebar(false)"><span class="sb-ico" data-icon="collections" style="display:contents"></span>Добірки</button>
                 <button class="page-tab sb-item" type="button" data-page="filaments" onclick="switchPage('filaments'); toggleSidebar(false)"><span class="sb-ico" data-icon="filaments" style="display:contents"></span>Філаменти</button>
+                <button class="page-tab sb-item" type="button" data-page="ai" onclick="switchPage('ai'); toggleSidebar(false)"><span class="sb-ico" data-icon="ai" style="display:contents"></span>Пропозиції ШІ<span class="sb-count" id="navCountAi"></span></button>
                 <div class="sb-group">Маркетинг</div>
                 <button class="page-tab sb-item" type="button" data-page="promotions" onclick="switchPage('promotions'); toggleSidebar(false)"><span class="sb-ico" data-icon="promotions" style="display:contents"></span>Акції</button>
                 <button class="page-tab sb-item" type="button" data-page="coupons" onclick="switchPage('coupons'); toggleSidebar(false)"><span class="sb-ico" data-icon="coupons" style="display:contents"></span>Купони</button>
@@ -3153,6 +3179,28 @@
                 <div id="filamentsList" class="fl-grid"></div>
             </section>
 
+            <section id="aiPage" class="page-section">
+                <div class="orders-toolbar">
+                    <h2>✨ Пропозиції ШІ</h2>
+                    <div class="orders-toolbar-right">
+                        <button class="btn btn-secondary" type="button" onclick="loadAiSuggestions()">🔄 Оновити</button>
+                    </div>
+                </div>
+                <div class="ai-gen">
+                    <div class="ai-gen-text">ШІ шукає популярні моделі на MakerWorld, Printables, Thingiverse і пише картки товарів у стилі каталогу. У магазин нічого не потрапляє, поки ти не відкриєш пропозицію й не збережеш товар.</div>
+                    <div class="ai-gen-row">
+                        <input type="text" id="aiFocus" class="orders-search" maxlength="300" placeholder="Побажання (необовʼязково): напр. подарунки до Нового року, для рибалок">
+                        <select id="aiCount" class="orders-search" aria-label="Скільки товарів">
+                            <option value="3">3 товари</option><option value="5" selected>5 товарів</option><option value="8">8 товарів</option><option value="10">10 товарів</option>
+                        </select>
+                        <button class="btn btn-primary" type="button" id="aiGenerateBtn" onclick="generateAiSuggestions()">✨ Знайти нові</button>
+                    </div>
+                    <div id="aiJob" class="ai-job"></div>
+                </div>
+                <div id="aiTabs" class="orders-tabs"></div>
+                <div id="aiList" class="rv-list"></div>
+            </section>
+
             <section id="reviewsPage" class="page-section">
                 <div class="orders-toolbar">
                     <h2>⭐ Відгуки</h2>
@@ -3350,6 +3398,7 @@
 
                             <section class="dr-sec" aria-labelledby="secMedia">
                                 <h3 id="secMedia">Фото і відео</h3>
+                                <div id="aiSourceBox" class="ai-src" hidden></div>
                                 <div class="form-group">
                                     <div class="drag-drop" id="dragDrop">
                                         <div class="drag-drop-text">📸 Перетягни фото сюди або натисни для вибору</div>
@@ -4160,6 +4209,7 @@
         let currentPage = 'products';
         let uploadedPhotos = [];
         let productFormSnapshot = null;
+        let currentAiSuggestionId = null; // форма товару відкрита з пропозиції ШІ
         let currentProductStatus = 'active';
         let allProducts = [];
         let activeFlags = new Set();
@@ -4508,6 +4558,7 @@
             if (page === 'collections') loadCollections();
             if (page === 'reviews') loadReviews();
             if (page === 'broadcasts') loadBroadcasts();
+            if (page === 'ai') loadAiSuggestions();
         }
 
         function renderCategoryFilterMenu() {
@@ -5201,6 +5252,7 @@
         const PAGE_TITLES = {
             overview: 'Огляд', orders: 'Замовлення', queue: 'Черга друку', products: 'Товари', categories: 'Категорії', collections: 'Добірки',
             filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', reviews: 'Відгуки', users: 'Клієнти', broadcasts: 'Розсилки',
+            ai: 'Пропозиції ШІ',
         };
 
         const NAV_ICON_PATHS = {
@@ -5216,6 +5268,7 @@
             reviews: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/>',
             users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 3.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-4-6.3"/>',
             broadcasts: '<path d="m3 11 18-8v18l-18-8Z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+            ai: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/>',
             fullscreen: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
             search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
             bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/>',
@@ -6634,6 +6687,8 @@
 
         function openAddModal() {
             currentProductId = null;
+            currentAiSuggestionId = null;
+            renderAiSourceBox(null);
             currentProductStatus = 'active';
             uploadedPhotos = [];
             document.getElementById('modalTitle').textContent = '➕ Новий товар';
@@ -6675,6 +6730,7 @@
             closeEmojiPicker();
             modal.classList.remove('active');
             currentProductId = null;
+            currentAiSuggestionId = null;
             uploadedPhotos = [];
             productFormSnapshot = null;
             productCollectionIds = [];
@@ -7650,6 +7706,8 @@
                 const product = await res.json();
 
                 currentProductId = id;
+                currentAiSuggestionId = null;
+                renderAiSourceBox(null);
                 currentProductStatus = ['active', 'hidden', 'archive'].includes(product.status) ? product.status : 'active';
                 uploadedPhotos = [...(product.photos || [])];
                 document.getElementById('modalTitle').textContent = `✏️ Редагувати товар #${id}`;
@@ -8277,6 +8335,14 @@
                             if (collectionsLoaded) loadCollections();
                         } catch (collErr) {
                             statusNote += ` Добірки не збережено: ${collErr.message}`;
+                        }
+                    }
+                    if (!currentProductId && currentAiSuggestionId && savedId) {
+                        try {
+                            await productApi(`/admin/ai-suggestions/${currentAiSuggestionId}`, 'PUT', { status: 'published', productId: savedId });
+                            if (currentPage === 'ai') loadAiSuggestions();
+                        } catch (aiErr) {
+                            statusNote += ` Пропозицію не позначено доданою: ${aiErr.message}`;
                         }
                     }
                     showToast(statusNote ? 'Товар збережено.' + statusNote : 'Товар збережено ✅', statusNote ? 'info' : 'success');
@@ -10240,6 +10306,218 @@
                 ordersCounts.reviews_pending = reviewsCounts.pending || 0;
                 refreshNavCounts();
             }
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // ПРОПОЗИЦІЇ ШІ: пошук моделей, картки в стилі каталогу, додавання через форму товару
+        // ═══════════════════════════════════════════════════════════
+
+        const AI_TABS = [
+            { key: 'new', label: 'Нові' },
+            { key: 'published', label: 'Додані' },
+            { key: 'rejected', label: 'Відхилені' },
+        ];
+        let aiItems = [];
+        let aiJob = null;
+        let aiEnabled = true;
+        let aiLoaded = false;
+        let aiTab = 'new';
+        let aiPollTimer = null;
+
+        async function loadAiSuggestions() {
+            const wasRunning = !!aiJob?.running;
+            try {
+                const data = await productApi('/admin/ai-suggestions', 'GET');
+                aiItems = Array.isArray(data.items) ? data.items : [];
+                aiJob = data.job || null;
+                aiEnabled = data.enabled !== false;
+                aiLoaded = true;
+                if (wasRunning && aiJob && !aiJob.running) {
+                    if (aiJob.error) showToast('Пошук не вдався: ' + aiJob.error, 'error');
+                    else showToast(`Готово. Нових пропозицій: ${aiJob.added}`, 'success');
+                }
+                renderAiPage();
+            } catch (e) {
+                showToast(e.message || 'Не вдалося завантажити пропозиції', 'error');
+            }
+            clearTimeout(aiPollTimer);
+            if (aiJob?.running && currentPage === 'ai') aiPollTimer = setTimeout(loadAiSuggestions, 6000);
+        }
+
+        function renderAiPage() {
+            const counts = { new: 0, published: 0, rejected: 0 };
+            aiItems.forEach(it => { counts[it.status] = (counts[it.status] || 0) + 1; });
+            setNavCount('navCountAi', counts.new);
+
+            const btn = document.getElementById('aiGenerateBtn');
+            if (btn) {
+                btn.disabled = !aiEnabled || !!aiJob?.running;
+                btn.textContent = aiJob?.running ? '⏳ Шукаю…' : '✨ Знайти нові';
+            }
+            const job = document.getElementById('aiJob');
+            if (job) {
+                let text = '';
+                let cls = 'ai-job';
+                if (!aiEnabled) {
+                    text = 'Пошук вимкнено: на сервері не задано ANTHROPIC_API_KEY (ключ Claude API з console.anthropic.com).';
+                    cls += ' err';
+                } else if (aiJob?.running) {
+                    text = 'ШІ шукає товари — зазвичай це 2–5 хвилин. Сторінку можна закрити, пропозиції збережуться.';
+                    cls += ' run';
+                } else if (aiJob?.error) {
+                    text = 'Останній пошук не вдався: ' + aiJob.error;
+                    cls += ' err';
+                } else if (aiJob?.finishedAt) {
+                    text = `Нових пропозицій з останнього пошуку: ${aiJob.added}.`;
+                }
+                job.className = cls;
+                job.textContent = text;
+            }
+
+            const tabs = document.getElementById('aiTabs');
+            if (tabs) {
+                tabs.innerHTML = AI_TABS.map(t => `<button type="button" class="orders-tab${aiTab === t.key ? ' active' : ''}" onclick="setAiTab('${t.key}')">
+                    ${t.label} <span class="orders-tab-n">${counts[t.key] || 0}</span></button>`).join('');
+            }
+            const list = document.getElementById('aiList');
+            if (!list) return;
+            if (!aiLoaded) { list.innerHTML = '<div class="rv-empty">Завантаження…</div>'; return; }
+            const items = aiItems.filter(it => it.status === aiTab);
+            const empty = aiTab === 'new'
+                ? 'Нових пропозицій немає. Натисни «Знайти нові» — ШІ підбере товари для магазину.'
+                : aiTab === 'published' ? 'Ще жодної пропозиції не додано в магазин.' : 'Відхилених пропозицій немає.';
+            list.innerHTML = items.length ? items.map(aiCardHtml).join('') : `<div class="rv-empty">${escapeHtml(empty)}</div>`;
+        }
+
+        function setAiTab(key) {
+            aiTab = key;
+            renderAiPage();
+        }
+
+        function aiCardHtml(it) {
+            const p = it.product || {};
+            const cat = p.cat ? getCategoryMeta(p.cat) : null;
+            const cover = (it.images || [])[0];
+            const meta = [cat ? `${cat.emoji || ''} ${cat.name}` : '', p.mat || ''].filter(Boolean).join(' · ');
+            let actions = '';
+            if (it.status === 'new') {
+                actions = `<button class="btn btn-primary" type="button" onclick="openAiSuggestion(${it.id})">✏️ Відкрити й додати</button>
+                    <button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">Відхилити</button>`;
+            } else if (it.status === 'published') {
+                actions = it.productId
+                    ? `<button class="btn btn-secondary" type="button" onclick="editProduct(${it.productId})">Товар #${it.productId}</button>`
+                    : '';
+            } else {
+                actions = `<button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'new')">Повернути в нові</button>
+                    <button class="btn btn-secondary" type="button" onclick="deleteAiSuggestion(${it.id})">Видалити</button>`;
+            }
+            return `<article class="rv-card ai-card${it.status === 'new' ? '' : ' is-done'}">
+                <div class="rv-top">
+                    <div class="rv-prod">
+                        <div class="rv-th">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : escapeHtml(p.emoji || '📦')}</div>
+                        <div style="min-width:0">
+                            <div class="rv-pname">${escapeHtml(p.emoji || '')} ${escapeHtml(p.name || it.name)}</div>
+                            <div class="rv-meta">${escapeHtml(meta)}</div>
+                        </div>
+                    </div>
+                    <span class="ai-price">${Number(p.price) || 0} ₴</span>
+                </div>
+                ${p.description ? `<div class="ai-desc">${escapeHtml(p.description)}</div>` : ''}
+                ${p.note ? `<div class="ai-row">ⓘ ${escapeHtml(p.note)}</div>` : ''}
+                ${it.reason ? `<div class="ai-row"><b>Чому:</b> ${escapeHtml(it.reason)}</div>` : ''}
+                ${it.sourceUrl ? `<div class="ai-row"><b>Модель:</b> <a href="${escapeAttr(it.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.sourceTitle || it.sourceUrl)}</a></div>` : ''}
+                ${it.license ? `<div class="ai-row ai-lic"><b>Ліцензія:</b> ${escapeHtml(it.license)}</div>` : ''}
+                <div class="rv-actions">${actions}</div>
+            </article>`;
+        }
+
+        function openAiSuggestion(id) {
+            const it = aiItems.find(x => x.id === id);
+            if (!it) return;
+            const p = it.product || {};
+            openAddModal();
+            currentAiSuggestionId = id;
+            document.getElementById('modalTitle').textContent = '✨ Новий товар з пропозиції ШІ';
+            const form = document.getElementById('productForm');
+            renderCategorySelectOptions(p.cat);
+            form.cat.value = p.cat || '';
+            form.name.value = p.name || '';
+            form.emoji.value = p.emoji || '📦';
+            syncEmojiTrigger(form.emoji);
+            form.price.value = p.price || '';
+            form.mat.value = p.mat || '';
+            form.description.value = p.description || '';
+            form.note.value = p.note || '';
+            if (p.cat !== 'custom') {
+                form.filamentChoice.checked = p.filamentChoice !== false;
+                form.gift.checked = !!p.gift;
+            }
+            updateCategoryFields();
+            toggleFilamentChoiceFields();
+            renderAiSourceBox(it);
+            captureProductFormSnapshot();
+            onProductFormChange();
+        }
+
+        // У формі товару: звідки модель, ліцензія і фото з джерела (додаються лише кнопкою)
+        function renderAiSourceBox(it) {
+            const box = document.getElementById('aiSourceBox');
+            if (!box) return;
+            if (!it) { box.hidden = true; box.innerHTML = ''; return; }
+            const imgs = (it.images || []).map((url, i) => `<div class="ai-src-img">
+                    <img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer">
+                    <button type="button" onclick="addAiSourcePhoto(${it.id}, ${i})">+ Додати</button>
+                </div>`).join('');
+            box.innerHTML = `
+                <div><b>✨ Пропозиція ШІ.</b> ${it.sourceUrl ? `Модель: <a href="${escapeAttr(it.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.sourceTitle || it.sourceUrl)}</a>` : ''}</div>
+                ${it.license ? `<div class="ai-lic"><b>Ліцензія:</b> ${escapeHtml(it.license)}</div>` : ''}
+                ${imgs ? `<div>Фото з джерела — краще заміни їх своїми після друку:</div><div class="ai-src-imgs">${imgs}</div>` : '<div>Фото з джерела немає — додай свої.</div>'}`;
+            box.hidden = false;
+        }
+
+        function addAiSourcePhoto(id, index) {
+            const url = (aiItems.find(x => x.id === id)?.images || [])[index];
+            const input = document.getElementById('photoUrlInput');
+            if (!input || !url) return;
+            input.value = url;
+            uploadPhotoFromUrl();
+        }
+
+        async function setAiSuggestionStatus(id, status) {
+            try {
+                await productApi(`/admin/ai-suggestions/${id}`, 'PUT', { status });
+                showToast(status === 'rejected' ? 'Пропозицію відхилено' : 'Пропозицію повернуто в нові', 'success');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося змінити пропозицію', 'error');
+            }
+            await loadAiSuggestions();
+        }
+
+        async function deleteAiSuggestion(id) {
+            if (!(await askConfirm('Видалити пропозицію назавжди? ШІ зможе запропонувати цей товар знову.'))) return;
+            try {
+                await productApi(`/admin/ai-suggestions/${id}`, 'DELETE');
+                showToast('Пропозицію видалено', 'success');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося видалити', 'error');
+            }
+            await loadAiSuggestions();
+        }
+
+        async function generateAiSuggestions() {
+            const focus = (document.getElementById('aiFocus')?.value || '').trim();
+            const count = parseInt(document.getElementById('aiCount')?.value, 10) || 5;
+            try {
+                const data = await productApi('/admin/ai-suggestions/generate', 'POST', { count, focus });
+                aiJob = data.job || { running: true };
+                aiTab = 'new';
+                renderAiPage();
+                showToast('Пошук запущено — це займе кілька хвилин', 'info');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося запустити пошук', 'error');
+            }
+            clearTimeout(aiPollTimer);
+            aiPollTimer = setTimeout(loadAiSuggestions, 6000);
         }
 
         async function loadReviews() {

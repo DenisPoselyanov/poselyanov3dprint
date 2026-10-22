@@ -39,6 +39,10 @@ ADMIN_BYPASS_TOKEN: str = os.environ.get("ADMIN_BYPASS_TOKEN") or secrets.token_
 NOVAPOSHTA_API_KEY = os.environ.get("NOVAPOSHTA_API_KEY", "").strip()
 UKRPOSHTA_TOKEN = os.environ.get("UKRPOSHTA_TOKEN", "").strip()
 
+# «Пропозиції ШІ» в адмінці: ключ Claude API (console.anthropic.com). Без ключа кнопка пошуку вимкнена.
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+AI_SUGGESTIONS_MODEL = os.environ.get("AI_SUGGESTIONS_MODEL", "claude-opus-5-5").strip() or "claude-opus-5-5"
+
 # Username бота (без @) — для deep-link `t.me/<bot>?startapp=…` (купони в адмінці)
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "poselyanov3dprint_bot").strip().lstrip("@") or "poselyanov3dprint_bot"
 

@@ -120,6 +120,26 @@ _c.execute("UPDATE broadcasts SET status='sent', total=40, delivered=36, failed=
 _c.execute("INSERT INTO events (type, user_id, value) VALUES ('broadcast_open', 103, ?)", (_b1["id"],))
 _c.commit(); _c.close()
 _bc.create_broadcast({"text": "Знижка -10% на брелки до неділі", "segment": "all", "scheduled_at": (_now + _dt.timedelta(days=2)).isoformat()})
+# Пропозиції ШІ: кілька готових і заглушка Claude замість мережі (кнопка «Знайти нові» додає один товар за ~3 с)
+import services.ai_suggestions as _ai
+from types import SimpleNamespace as _NS
+_ai_sample = lambda n, cat, emo, price, lic, img: {"name": n, "cat": cat, "emoji": emo, "mat": "PLA · різні кольори", "price": price,
+    "description": f"{n} — популярна модель, друкується без підтримок.\nГарний дрібний подарунок.", "note": "Розмір близько 8 см",
+    "filament_choice": True, "gift": False, "source_url": "https://makerworld.com/en/models/1", "source_title": f"{n} by Designer",
+    "license": lic, "reason": "Багато завантажень і лайків, схоже на хіти магазину", "image_urls": [img]}
+_ai.save_items([_ai.normalize_item(_ai_sample(*a), ["toy", "anti", "gifts"]) for a in (
+    ("Гнучкий восьминіг", "toy", "🐙", 180, "Standard Digital File License — продаж друку не дозволено, треба комерційна ліцензія", "https://picsum.photos/seed/ai1/400/400"),
+    ("Кліккер-кубик", "anti", "🎲", 120, "CC BY 4.0 — продаж дозволено із зазначенням автора", "https://picsum.photos/seed/ai2/400/400"),
+)])
+_ai_n = [0]
+async def _fake_ai_create(**kwargs):
+    import asyncio as _aio
+    await _aio.sleep(3)
+    _ai_n[0] += 1
+    return _NS(stop_reason="tool_use", content=[_NS(type="tool_use", name="submit_products", input={"items": [
+        _ai_sample(f"Дракончик-брелок {_ai_n[0]}", "gifts", "🐲", 90, "Ліцензія не вказана — треба уточнити в автора", "https://picsum.photos/seed/ai3/400/400")]})])
+_ai._make_client = lambda: _NS(beta=_NS(messages=_NS(create=_fake_ai_create)))
+_ai.is_enabled = lambda: True
 app = web.Application(client_max_size=30 * 1024 * 1024)
 
 
@@ -130,4 +150,4 @@ async def _local_api_config(request):
 
 app.router.add_get("/api-config.js", _local_api_config)
 register_http_routes(app, bot)
-web.run_app(app, host="127.0.0.1", port=8081, print=None)
+web.run_app(app, host="127.0.0.1", port=int(sys.argv[1]) if len(sys.argv) > 1 else 8081, print=None)

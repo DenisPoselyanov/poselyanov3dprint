@@ -208,6 +208,7 @@ from services.orders import (
 )
 from services.stats import get_stats
 import services.broadcasts as broadcasts_svc
+import services.ai_suggestions as ai_suggestions_svc
 from services.users import (
     export_users,
     get_user,
@@ -3987,6 +3988,61 @@ async def handle_delete_broadcast(request: web.Request):
             {"ok": False, "error": "Видалити можна лише відкладену розсилку або чернетку"},
             status=409, headers=cors_headers(request),
         )
+    return web.json_response({"ok": False, "error": "Не знайдено"}, status=404, headers=cors_headers(request))
+
+
+async def handle_get_ai_suggestions(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    items = await run_db(ai_suggestions_svc.list_suggestions)
+    return web.json_response(
+        {"items": items, "job": ai_suggestions_svc.job_state(), "enabled": ai_suggestions_svc.is_enabled()},
+        headers=cors_headers(request),
+    )
+
+
+async def handle_generate_ai_suggestions(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    result = ai_suggestions_svc.start_generation(data if isinstance(data, dict) else {})
+    status = 200 if result.get("ok") else 409 if result.get("error") == "Пошук уже йде" else 400
+    return web.json_response(result, status=status, headers=cors_headers(request))
+
+
+async def handle_update_ai_suggestion(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        sid = int(request.match_info.get("id", 0))
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    if not isinstance(data, dict):
+        data = {}
+    result = await run_db(ai_suggestions_svc.set_status, sid, str(data.get("status") or ""), data.get("productId"))
+    if not result.get("ok"):
+        status = 404 if result.get("error") == "Не знайдено" else 400
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    return web.json_response(result, headers=cors_headers(request))
+
+
+async def handle_delete_ai_suggestion(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        sid = int(request.match_info.get("id", 0))
+    except (TypeError, ValueError):
+        sid = 0
+    if await run_db(ai_suggestions_svc.delete_suggestion, sid):
+        return web.json_response({"ok": True}, headers=cors_headers(request))
     return web.json_response({"ok": False, "error": "Не знайдено"}, status=404, headers=cors_headers(request))
 
 
