@@ -10747,6 +10747,11 @@
         let reviewsSearchTimer = null;
         const reviewReplyDrafts = new Map(); // id -> текст відповіді, що редагується
         let reviewLightbox = { photos: [], index: 0 };
+        // Cloudinary-версія фото відгуку потрібного розміру (оригінал для мініатюри — зайві мегабайти)
+        function reviewPhotoUrl(url, w) {
+            const m = /^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(v\d+\/.+\.(?:jpe?g|png|heic))$/i.exec(String(url || '').trim());
+            return m ? `${m[1]}f_auto,q_auto,w_${w}/${m[2]}` : url;
+        }
 
         function reviewStarsHtml(n) {
             return '★'.repeat(n) + `<span class="off">${'★'.repeat(5 - n)}</span>`;
@@ -11125,7 +11130,7 @@
                 : escapeHtml(r.product_emoji || '📦');
             const username = r.client_username ? ` · @${escapeHtml(r.client_username)}` : '';
             const photos = (r.photos || []).map((u, i) =>
-                `<button type="button" class="rv-photo" aria-label="Збільшити фото ${i + 1}" onclick="openReviewLightbox(${r.id}, ${i})"><img src="${escapeAttr(u)}" alt="" loading="lazy"></button>`).join('');
+                `<button type="button" class="rv-photo" aria-label="Збільшити фото ${i + 1}" onclick="openReviewLightbox(${r.id}, ${i})"><img src="${escapeAttr(reviewPhotoUrl(u, 200))}" alt="" loading="lazy" decoding="async"></button>`).join('');
             const editing = reviewReplyDrafts.has(r.id);
             const publish = r.status !== 'approved'
                 ? `<button type="button" class="btn btn-primary" onclick="setReviewStatus(${r.id}, 'approved')">Опублікувати</button>` : '';
@@ -11250,7 +11255,7 @@
             const box = document.getElementById('rvLightbox');
             if (!box) return;
             const { photos, index } = reviewLightbox;
-            box.querySelector('img').src = photos[index] || '';
+            box.querySelector('img').src = reviewPhotoUrl(photos[index] || '', 1400);
             box.querySelector('.lb-n').textContent = photos.length > 1 ? `${index + 1} / ${photos.length}` : '';
             box.querySelector('.lb-prev').style.display = photos.length > 1 ? 'grid' : 'none';
             box.querySelector('.lb-next').style.display = photos.length > 1 ? 'grid' : 'none';

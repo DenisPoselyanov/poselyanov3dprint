@@ -1557,15 +1557,11 @@
           </button>
           <div class="coupon-input-wrap" id="couponInputWrap" style="display:none">
             <div class="coupon-row">
-              <div class="coupon-field" id="couponField">
+              <div class="coupon-field no-paste" id="couponField">
                 <input type="text" id="couponInput" class="coupon-input" placeholder="Введіть код" maxlength="32"
                       autocomplete="off" autocapitalize="characters" spellcheck="false"
                       oninput="this.value = this.value.toUpperCase(); syncCouponUi()"
                       onkeydown="if(event.key==='Enter') applyCoupon()">
-                <button type="button" class="coupon-paste" id="couponPaste" onclick="pasteCoupon()" aria-label="Вставити з буфера обміну">
-                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1.5"/><path d="M16 5h1.5A1.5 1.5 0 0 1 19 6.5v13a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5v-13A1.5 1.5 0 0 1 6.5 5H8"/></svg>
-                  Вставити
-                </button>
               </div>
               <button class="coupon-btn" id="couponBtn" onclick="applyCoupon()">Застосувати</button>
             </div>
@@ -6303,36 +6299,7 @@ function syncCouponUi() {
   const input = document.getElementById('couponInput');
   if (!input) return;
   const empty = !input.value.trim();
-  document.getElementById('couponField')?.classList.toggle('no-paste', !empty || input.disabled);
-  document.getElementById('couponBtn')?.classList.toggle('idle', empty && !input.disabled);
-}
-
-async function pasteCoupon() {
-  const input = document.getElementById('couponInput');
-  if (!input || input.disabled || isSubmitting) return;
-  let text = '';
-  try {
-    const tg = window.Telegram?.WebApp;
-    if (tg?.readTextFromClipboard) {
-      text = await new Promise(res => {
-        let done = false;
-        const t = setTimeout(() => { if (!done) { done = true; res(''); } }, 1500);
-        try { tg.readTextFromClipboard(v => { if (!done) { done = true; clearTimeout(t); res(v || ''); } }); }
-        catch (_) { done = true; clearTimeout(t); res(''); }
-      });
-    }
-    if (!text && navigator.clipboard?.readText) text = await navigator.clipboard.readText();
-  } catch (_) {}
-  const code = (text || '').trim().toUpperCase().replace(/[^A-Z0-9А-ЯІЇЄҐ_-]/g, '').slice(0, 32);
-  if (!code) {
-    input.focus();
-    showToast({ msg: 'Не вдалось прочитати буфер — вставте код у поле вручну (Ctrl+V або утримайте палець)', icon: 'alert', duration: 3200 });
-    return;
-  }
-  input.value = code;
-  syncCouponUi();
-  try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch (_) {}
-  input.focus();
+    document.getElementById('couponBtn')?.classList.toggle('idle', empty && !input.disabled);
 }
 
 // Пояснення під полем промокоду: сумується він з акцією чи замінює її.
