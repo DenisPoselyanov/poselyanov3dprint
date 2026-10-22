@@ -1472,4 +1472,21 @@ def reorder_categories(ids) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def _migrate_catalog_schema_on_import() -> None:
+    """Кеш каталогу вантажиться при імпорті, раніше за init_db(): на БД зі старою схемою
+    (нема products.status, filaments.glow…) SELECT впав би. Міграції ідемпотентні (IF NOT EXISTS)."""
+    if not use_catalog_db() or not is_postgres():
+        return
+    conn = db_connect()
+    try:
+        init_catalog_tables(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("Не вдалося мігрувати схему каталогу перед завантаженням кешу")
+    finally:
+        conn.close()
+
+
+_migrate_catalog_schema_on_import()
 bootstrap_json_catalog(force=True)
