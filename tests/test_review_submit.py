@@ -220,3 +220,48 @@ def test_no_bonus_for_rating_only_review(env):
     oid = _delivered_order(orders)
     result = reviews.submit_review(7, "Іван", oid, 11, 5, "ок")
     assert reviews.grant_review_bonus(result["id"]) is None
+
+
+def test_bonus_can_be_switched_off(env):
+    orders, reviews, settings = env
+    assert reviews.bonus_config()["photo_percent"] == 10
+    assert settings.update_admin_settings({"review_bonus_enabled": False})["settings"]["review_bonus_enabled"] is False
+    assert reviews.bonus_config() is None
+    oid = _delivered_order(orders)
+    result = reviews.submit_review(7, "Іван", oid, 11, 5, "Дуже гарна якість друку, дякую", [GOOD_PHOTO])
+    reviews.set_review_status(result["id"], "approved")
+    assert reviews.grant_review_bonus(result["id"]) is None
+    settings.update_admin_settings({"review_bonus_enabled": True})
+    assert reviews.grant_review_bonus(result["id"])["percent"] == 10
+
+
+def test_test_orders_excluded_from_stats(env):
+    orders, reviews, settings = env
+    from services.stats import get_stats
+    from services.manual_orders import parse_manual_order
+
+    base = {"customer_name": "Я", "user_id": 7, "status": "confirmed",
+            "items": [{"product_name": "X", "product_id": 11, "price": 100, "quantity": 1}]}
+    ok, real = parse_manual_order(base)
+    ok2, test = parse_manual_order({**base, "is_test": True})
+    assert ok and ok2 and test["extra"]["is_test"] is True
+    for parsed in (real, test):
+        oid, _ = orders.save_order(parsed["user_id"], "", parsed["first_name"], parsed["items"],
+                                   parsed["total_price"], "", extra=parsed["extra"], merge=False)
+        orders.update_order_status(oid, parsed["status"])
+    stats = get_stats()
+    assert stats[1] == 1 and stats[5] == 100  # order_count, earned: лише справжнє
+    assert any(o["is_test"] for o in orders.list_orders())
+
+
+def test_mark_existing_order_as_test(env):
+    orders, reviews, settings = env
+    from services.stats import get_stats
+
+    oid = _delivered_order(orders)
+    before = get_stats()[1]
+    assert orders.update_order_fields(oid, {"is_test": 1})
+    assert get_stats()[1] == before - 1
+    assert next(o for o in orders.list_orders() if o["id"] == oid)["is_test"] == 1
+    assert orders.update_order_fields(oid, {"is_test": 0})
+    assert get_stats()[1] == before

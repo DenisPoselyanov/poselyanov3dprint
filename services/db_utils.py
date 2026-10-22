@@ -63,6 +63,7 @@ ORDER_EXTRA_COLUMNS = {
     "review_requested_at": "TIMESTAMPTZ",
     "review_reminded_at": "TIMESTAMPTZ",
     "review_bonus_code": "TEXT DEFAULT ''",
+    "is_test": "INTEGER DEFAULT 0",
 }
 
 ORDER_ITEM_EXTRA_COLUMNS = {
@@ -162,8 +163,8 @@ def init_db() -> None:
     # Локальний імпорт, щоб уникнути циклічної залежності services.promotions -> db_utils.
     from services.ai_suggestions import init_ai_suggestions_table
     from services.broadcasts import init_broadcasts_table
-    from services.collections import init_collections_table
     from services.channel_posts import init_channel_posts_table
+    from services.collections import init_collections_table
     from services.events import init_events_table
     from services.promotions import init_promotions_table
     from services.reviews import init_reviews_table
@@ -307,8 +308,8 @@ def init_db() -> None:
         init_events_table(conn)
         init_reviews_table(conn)
         init_broadcasts_table(conn)
-        init_ai_suggestions_table(conn)
         init_channel_posts_table(conn)
+        init_ai_suggestions_table(conn)
     else:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -452,8 +453,8 @@ def init_db() -> None:
         init_events_table(conn)
         init_reviews_table(conn)
         init_broadcasts_table(conn)
-        init_ai_suggestions_table(conn)
         init_channel_posts_table(conn)
+        init_ai_suggestions_table(conn)
 
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)

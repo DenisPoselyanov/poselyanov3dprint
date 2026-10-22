@@ -2785,7 +2785,7 @@ async def handle_get_order_counts(request: web.Request):
 
 
 async def handle_update_order(request: web.Request):
-    """ТТН і внутрішня нотатка (клієнт нотатку не бачить)."""
+    """ТТН, внутрішня нотатка (клієнт її не бачить) і позначка «тестове» (не рахується в статистиці)."""
     auth, err = resolve_request_user(request, {})
     if err is not None:
         return err
@@ -2798,10 +2798,10 @@ async def handle_update_order(request: web.Request):
         data = await request.json()
     except (TypeError, ValueError):
         return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
-    fields = {k: data[k] for k in ("ttn", "internal_note") if k in data}
+    fields = {k: data[k] for k in ("ttn", "internal_note", "is_test") if k in data}
     if not fields:
         return web.json_response(
-            {"ok": False, "error": "Нічого оновлювати: очікуються ttn або internal_note"},
+            {"ok": False, "error": "Нічого оновлювати: очікуються ttn, internal_note або is_test"},
             status=400,
             headers=cors_headers(request),
         )

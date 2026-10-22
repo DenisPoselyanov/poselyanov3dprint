@@ -123,7 +123,7 @@ def _purchases_join() -> tuple[str, tuple]:
         f"SUM(CASE WHEN status IN ({marks}) THEN 1 ELSE 0 END) AS cnt, "
         f"SUM(CASE WHEN status IN ({marks}) THEN COALESCE(total_price, 0) ELSE 0 END) AS spent, "
         f"MAX(CASE WHEN status IN ({marks}) THEN ordered_at END) AS last_order_at, "
-        "COUNT(*) AS all_cnt FROM orders GROUP BY user_id) p ON p.user_id = u.id"
+        "COUNT(*) AS all_cnt FROM orders WHERE COALESCE(is_test, 0) = 0 GROUP BY user_id) p ON p.user_id = u.id"
     )
     return sql, statuses * 3
 

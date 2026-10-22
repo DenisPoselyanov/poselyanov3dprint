@@ -710,6 +710,29 @@
             .order-details-panel .order-field { margin-top: 10px; gap: 4px; }
             .order-details-panel textarea.order-field-input { min-height: 0; }
         }
+        /* Деталі замовлення: єдина сітка — картки з однаковими відступами (12px між блоками, 12×14 усередині) */
+        .order-details-panel .od-main, .order-details-panel .od-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+        .order-details-panel .od-grid { display: grid; gap: 12px; }
+        .order-details-panel .order-stepper { margin: 0 0 12px; }
+        .od-card, .order-details-panel .order-field {
+            margin: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card);
+        }
+        .od-card-title, .order-details-panel .order-field > label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: none; letter-spacing: 0; margin: 0 0 8px; display: block; }
+        .order-details-panel .order-field { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+        .order-details-panel .order-field > .order-field-input, .order-details-panel .order-field > select { margin: 0 0 8px; }
+        .order-details-panel .order-field > .btn { align-self: flex-start; padding: 8px 14px; }
+        .order-details-panel .order-field > :last-child { margin-bottom: 0; }
+        .order-details-panel .order-field-input { padding: 8px 12px; min-height: 38px; }
+        .order-details-panel textarea.order-field-input { min-height: 64px; resize: vertical; }
+        .od-info { display: flex; flex-direction: column; gap: 10px; }
+        .od-info .order-customer-info { background: none; padding: 0; margin: 0; border-radius: 0; font-size: 13px; line-height: 1.55; }
+        .od-info .order-customer-info + .order-customer-info { padding-top: 10px; border-top: 1px dashed var(--border-row); }
+        .od-card .order-item-row { padding: 8px 0; }
+        .od-card .order-item-row:first-of-type { padding-top: 0; }
+        .od-card .order-summary-row { padding: 4px 0; }
+        .od-card .order-summary-row.total { margin-top: 6px; padding-top: 10px; }
+        .od-card .order-summary-row:last-child { padding-bottom: 0; }
+        .od-test { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); font-size: 13px; font-weight: 600; cursor: pointer; }
         .order-next-btn { white-space: nowrap; }
         .order-more { position: relative; }
         .order-more > summary { list-style: none; cursor: pointer; }
@@ -736,6 +759,7 @@
         .order-step.current .order-step-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
         .order-step.current, .order-step.done { color: var(--text-main); }
         .order-stepper-note { margin: 4px 0 12px; font-weight: 700; color: #dc2626; }
+        .od-test small { font-weight: 400; color: var(--text-muted); margin-left: 4px; }
         .order-field { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
         .order-field > label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
         .order-field-row { display: flex; gap: 8px; width: 100%; flex-wrap: wrap; }
@@ -2330,7 +2354,7 @@
         .pt-bulk select { max-width: 180px; }
         .pt-bulk .btn { padding: 7px 12px; font-size: 13px; }
         .pt-scroll { overflow-x: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; }
-        .pt-table { width: 100%; border-collapse: collapse; min-width: 880px; }
+        .pt-table { width: 100%; border-collapse: collapse; min-width: 820px; }
         .pt-table th {
             text-align: left; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
             color: var(--text-faint); padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
@@ -2349,7 +2373,14 @@
         .pt-prod-text { min-width: 0; }
         .pt-name { font-weight: 700; color: var(--text-main); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .pt-sub { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
-        .pt-price-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+        .pt-price-wrap { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+        .pt-table th.c-price, .pt-table td.c-price { width: 190px; }
+        .pt-table th.c-flags, .pt-table td.c-flags { width: 245px; }
+        .pt-table th.c-stats, .pt-table td.c-stats { width: 225px; }
+        .pt-table th.c-status, .pt-table td.c-status { width: 90px; }
+        .pt-table th.c-menu, .pt-table td.c-menu { width: 48px; }
+        .pt-table td { padding-top: 7px; padding-bottom: 7px; }
+        .pt-st-ic { display: none; }
         .pt-price-line { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); }
         .pt-price {
             width: 84px; padding: 6px 8px; border: 1px solid var(--border-input); border-radius: 9px; background: var(--bg-input);
@@ -2416,12 +2447,18 @@
             .pt-table .c-chk { grid-column: 1; grid-row: 1; width: auto; padding: 2px 0 0; }
             .pt-table .c-prod { grid-column: 2; grid-row: 1; min-width: 0; }
             .pt-table .c-menu { grid-column: 3; grid-row: 1; }
-            .pt-table .c-price, .pt-table .c-flags, .pt-table .c-stats { grid-column: 2 / 4; }
-            .pt-table .c-status { display: none; }
+            .pt-table td.c-price { grid-column: 2; grid-row: 2; width: auto; align-self: center; }
+            .pt-table td.c-stats { grid-column: 3; grid-row: 2; width: auto; align-self: center; }
+            .pt-table td.c-flags { grid-column: 2 / 4; grid-row: 3; width: auto; }
+            .pt-table td.c-status { display: none; }
+            .pt-row { gap: 8px 10px; }
+            .pt-st-ic { display: inline; margin-right: 2px; }
+            .pt-stats { gap: 10px; }
+            .pt-stats .lbl { display: none; }
+            .pt-flags { flex-wrap: nowrap; }
             .pt-prod { min-width: 0; }
             .pt-name, .pt-sub { max-width: none; }
             .pt-price-wrap { flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
-            .pt-flags { flex-wrap: wrap; }
         }
 
         /* ═══ КЛІЄНТИ І РОЗСИЛКИ (етап 5, слайс 6) ═══ */
@@ -3026,6 +3063,21 @@
                         </div>
                     </div>
                     <input type="hidden" id="categoryFilter" value="">
+                    <select class="filter-btn" id="productsAddedFilter" aria-label="Коли додано" onchange="filterProducts()">
+                        <option value="">📅 Додано будь-коли</option>
+                        <option value="7">📅 Додано за 7 днів</option>
+                        <option value="30">📅 Додано за 30 днів</option>
+                        <option value="90">📅 Додано за 90 днів</option>
+                        <option value="365">📅 Додано за рік</option>
+                    </select>
+                    <select class="filter-btn" id="productsSort" aria-label="Сортування" onchange="filterProducts()">
+                        <option value="">↕ Як у магазині</option>
+                        <option value="new">Спочатку нові</option>
+                        <option value="old">Спочатку старі</option>
+                        <option value="price_asc">Ціна: від меншої</option>
+                        <option value="price_desc">Ціна: від більшої</option>
+                        <option value="name">Назва А–Я</option>
+                    </select>
                     <div class="flag-chips-row" id="flagChipsRow">
                         <button class="chip" data-flag="sale" type="button" onclick="toggleFlagFilter('sale')">🏷️ Акційні</button>
                         <button class="chip" data-flag="hot" type="button" onclick="toggleFlagFilter('hot')">🔥 Гарячий</button>
@@ -3256,6 +3308,19 @@
                     <h2>⭐ Відгуки</h2>
                     <div class="orders-toolbar-right">
                         <button class="btn btn-secondary" type="button" onclick="loadReviews()">🔄 Оновити</button>
+                    </div>
+                </div>
+                <div style="border:1px solid var(--border); border-radius:12px; padding:12px 16px; margin:0 0 12px; background:var(--bg-surface-alt);">
+                    <div class="toggle-row">
+                        <span class="toggle-row-label">🎁 Купон за відгук (−10% з фото, −5% за текст)</span>
+                        <label class="switch" title="Акція «купон за відгук»">
+                            <input type="checkbox" id="reviewBonusToggle" onchange="saveReviewBonus(this.checked)">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+                        Вимкнено — форма відгуку й повідомлення в чаті не згадують купон, нові купони не видаються.
+                        Уже видані купони продовжують діяти.
                     </div>
                 </div>
                 <div id="reviewsSummary" class="rv-summary"></div>
@@ -3795,6 +3860,22 @@
                     <input type="number" name="user_id" min="0" step="1">
                 </div>
                 <div class="form-group">
+                    <label>Статус</label>
+                    <select name="status">
+                        <option value="confirmed">Підтверджено</option>
+                        <option value="delivered">Отримано (клієнт зможе залишити відгук)</option>
+                        <option value="new">Нове</option>
+                        <option value="printing">Друкується</option>
+                        <option value="shipped">Відправлено</option>
+                    </select>
+                </div>
+                <label class="toggle-row" style="gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; margin-bottom:14px; cursor:pointer;">
+                    <span class="toggle-row-label">🧪 Тестове / минуле замовлення
+                        <small style="display:block; font-weight:400; color:var(--text-muted); margin-top:2px;">Не враховується у виторгу, топах, хітах і статистиці клієнтів та акцій. Для відгуків потрібен Telegram ID клієнта й позиції з каталогу.</small>
+                    </span>
+                    <span class="switch"><input type="checkbox" name="is_test" value="1"><span class="switch-slider"></span></span>
+                </label>
+                <div class="form-group">
                     <label>Позиції</label>
                     <datalist id="manualProductsList"></datalist>
                     <div id="manualItems"></div>
@@ -4267,6 +4348,7 @@
         let allCoupons = [];
         let allPromotions = [];
         let couponStackingEnabled = false;
+        let reviewBonusEnabled = true;
         let currentPromotionId = null;
         let allUsers = [];
         let usersTotal = 0;
@@ -6168,10 +6250,37 @@
             filterProducts();
         }
 
+        // Дата додавання товару (старі товари без createdAt → 0, тобто «найстаріші»)
+        function productAddedTs(p) {
+            const t = p.createdAt ? Date.parse(p.createdAt) : NaN;
+            return Number.isNaN(t) ? 0 : t;
+        }
+
+        function formatProductAdded(p) {
+            const ts = productAddedTs(p);
+            if (!ts) return '';
+            const d = new Date(ts), pad = (n) => String(n).padStart(2, '0');
+            return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`;
+        }
+
+        function sortProducts(list) {
+            const mode = document.getElementById('productsSort')?.value || '';
+            const byAdded = (a, b) => (productAddedTs(b) - productAddedTs(a)) || (Number(b.id) - Number(a.id));
+            if (mode === 'new') list.sort(byAdded);
+            else if (mode === 'old') list.sort((a, b) => -byAdded(a, b));
+            else if (mode === 'price_asc') list.sort((a, b) => (a.price || 0) - (b.price || 0));
+            else if (mode === 'price_desc') list.sort((a, b) => (b.price || 0) - (a.price || 0));
+            else if (mode === 'name') list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'uk'));
+        }
+
         // Функція фільтрації товарів
         function filterProducts() {
             const search = document.getElementById('searchInput')?.value?.toLowerCase() || '';
             const cat = document.getElementById('categoryFilter')?.value || '';
+
+            const addedDays = parseInt(document.getElementById('productsAddedFilter')?.value || '0', 10);
+            const addedSince = addedDays ? Date.now() - addedDays * 86400000 : 0;
+            const matchAdded = (p) => !addedSince || (productAddedTs(p) >= addedSince);
 
             const inTab = adminProducts.filter(p => productStatusOf(p) === productsTab);
             const filtered = inTab.filter(p => {
@@ -6181,8 +6290,9 @@
                     || [...activeFlags].every(flag => flag === 'sale'
                         ? (!p.contractPrice && p.oldPrice && p.oldPrice > p.price)
                         : p[flag]);
-                return matchSearch && matchCat && matchFlags;
+                return matchSearch && matchCat && matchFlags && matchAdded(p);
             });
+            sortProducts(filtered);
 
             const counter = document.getElementById('productsCount');
             if (counter) {
@@ -6280,6 +6390,7 @@
                 <button type="button" onclick="closeProductMenus(); duplicateProduct(${p.id})">Дублювати</button>`;
             if (status === 'active') {
                 menu += `<a href="https://t.me/poselyanov3dprint_bot?startapp=product_${p.id}" target="_blank" rel="noopener" onclick="closeProductMenus()">Подивитись у магазині</a>
+                    <button type="button" onclick="closeProductMenus(); openChannelPostDialog(${p.id})">📣 Опублікувати в канал</button>
                     <button type="button" onclick="closeProductMenus(); setProductStatus(${p.id}, 'hidden')">Приховати</button>`;
             } else if (status === 'hidden') {
                 menu += `<button type="button" onclick="closeProductMenus(); setProductStatus(${p.id}, 'active')">Показати в магазині</button>`;
@@ -6296,7 +6407,7 @@
                             ${thumb}
                             <div class="pt-prod-text">
                                 <div class="pt-name" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</div>
-                                <div class="pt-sub">${escapeHtml(categoryMeta.emoji)} ${escapeHtml(categoryMeta.name)} · ID ${p.id}</div>
+                                <div class="pt-sub">${escapeHtml(categoryMeta.emoji)} ${escapeHtml(categoryMeta.name)} · ID ${p.id}${formatProductAdded(p) ? ` · 📅 ${formatProductAdded(p)}` : ''}</div>
                             </div>
                         </div>
                     </td>
@@ -6305,9 +6416,9 @@
                         ${flagBtn('hot', 'Хіт', false)}${flagBtn('pinned', 'Закріплений', false)}${flagBtn('gift', 'Подарунок', giftBlocked)}
                     </div></td>
                     <td class="c-stats"><div class="pt-stats">
-                        <span title="Перегляди картки (унікальні користувачі за добу)"><b>${p.views || 0}</b> перегл.</span>
-                        <span title="Додавання в кошик (унікальні користувачі за добу)"><b>${p.cart_adds || 0}</b> кошик</span>
-                        <span title="Продано штук (підтверджені й далі)"><b>${p.sold || 0}</b> продано</span>
+                        <span title="Перегляди картки (унікальні користувачі за добу)"><span class="pt-st-ic">👁</span><b>${p.views || 0}</b> <span class="lbl">перегл.</span></span>
+                        <span title="Додавання в кошик (унікальні користувачі за добу)"><span class="pt-st-ic">🛒</span><b>${p.cart_adds || 0}</b> <span class="lbl">кошик</span></span>
+                        <span title="Продано штук (підтверджені й далі)"><span class="pt-st-ic">✅</span><b>${p.sold || 0}</b> <span class="lbl">продано</span></span>
                     </div></td>
                     <td class="c-status"><span class="pt-st ${status}">${PRODUCT_STATUS_LABELS[status]}</span></td>
                     <td class="c-menu">
@@ -6340,7 +6451,7 @@
                 <table class="pt-table">
                     <thead><tr>
                         <th class="c-chk"><input type="checkbox" id="ptSelectAll" aria-label="Вибрати всі" ${allSelected ? 'checked' : ''} onchange="toggleAllProducts(this.checked)"></th>
-                        <th>Товар</th><th>Ціна</th><th>Прапорці</th><th>Перегляди · кошик · продажі</th><th>Статус</th><th></th>
+                        <th>Товар</th><th class="c-price">Ціна</th><th class="c-flags">Прапорці</th><th class="c-stats">Перегляди · кошик · продажі</th><th class="c-status">Статус</th><th class="c-menu"></th>
                     </tr></thead>
                     <tbody>${products.map(productRowHtml).join('')}</tbody>
                 </table>`;
@@ -6390,7 +6501,6 @@
             const raw = input.value.trim().replace(/\s+/g, '');
             if (raw === String(p.price)) return;
             if (!/^\d+$/.test(raw) || Number(raw) < 1) {
-                    <button type="button" onclick="closeProductMenus(); openChannelPostDialog(${p.id})">📣 Опублікувати в канал</button>
                 showToast('Ціна — ціле число від 1', 'error');
                 input.value = p.price;
                 return;
@@ -6446,116 +6556,6 @@
             }
         }
 
-        // Старе «видалення» тепер переносить в архів
-        function deleteProduct(id) {
-            return setProductStatus(id, 'archive');
-        }
-
-        async function duplicateProduct(id) {
-            try {
-                const data = await productApi(`/products/${id}/duplicate`, 'POST');
-                showToast(`Копію створено (ID ${data.id}) — вона прихована, див. вкладку «Приховані»`, 'success');
-                await loadProducts(true);
-            } catch (e) {
-                showToast(e.message || 'Не вдалося створити копію', 'error');
-            }
-        }
-
-        // ── Вибір і масові дії ──
-        function toggleProductSelect(id, checked) {
-            if (checked) selectedProductIds.add(id); else selectedProductIds.delete(id);
-            document.querySelector(`.pt-row[data-id="${id}"]`)?.classList.toggle('sel', checked);
-            const all = document.getElementById('ptSelectAll');
-            if (all) all.checked = visibleProducts.length > 0 && visibleProducts.every(p => selectedProductIds.has(p.id));
-            updateBulkBar();
-        }
-
-        function toggleAllProducts(checked) {
-            visibleProducts.forEach(p => { if (checked) selectedProductIds.add(p.id); else selectedProductIds.delete(p.id); });
-            document.querySelectorAll('.pt-row').forEach(row => {
-                const on = selectedProductIds.has(Number(row.dataset.id));
-                row.classList.toggle('sel', on);
-                const cb = row.querySelector('.c-chk input');
-                if (cb) cb.checked = on;
-            });
-            updateBulkBar();
-        }
-
-        function clearProductSelection() {
-            selectedProductIds.clear();
-            filterProducts();
-        }
-
-        function updateBulkBar() {
-            const bar = document.getElementById('productsBulk');
-            if (!bar) return;
-            const n = selectedProductIds.size;
-            bar.classList.toggle('show', n > 0);
-            if (!n) return;
-            document.getElementById('bulkCount').textContent = `Вибрано: ${n}`;
-            const catSelect = document.getElementById('bulkCategory');
-            const prev = catSelect.value;
-            catSelect.innerHTML = '<option value="">Категорія…</option>' + allCategories
-                .filter(c => c.active !== false && c.id !== 'custom')
-                .map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.emoji)} ${escapeHtml(c.name)}</option>`).join('');
-            catSelect.value = prev;
-            const priceGroup = document.getElementById('bulkPriceGroup');
-            priceGroup.style.display = productsTab === 'archive' ? 'none' : '';
-            document.getElementById('bulkCategoryGroup').style.display = productsTab === 'archive' ? 'none' : '';
-            const statusBtns = {
-                active: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'hidden')">Приховати</button>
-                         <button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'archive')">В архів</button>`,
-                hidden: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'active')">Показати в магазині</button>
-                         <button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'archive')">В архів</button>`,
-                archive: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'active')">Повернути в магазин</button>`,
-            };
-            document.getElementById('bulkStatusButtons').innerHTML = statusBtns[productsTab];
-        }
-
-        function bulkDiscountApply() {
-            const value = Number(document.getElementById('bulkDiscount').value);
-            if (!Number.isInteger(value) || value < 1 || value > 90) {
-                showToast('Знижка — ціле число від 1 до 90', 'error');
-                return;
-            }
-            bulkProducts('discount', value);
-        }
-
-        function bulkCategoryApply() {
-            const value = document.getElementById('bulkCategory').value;
-            if (!value) {
-                showToast('Виберіть категорію', 'error');
-                return;
-            }
-            bulkProducts('category', value);
-        }
-
-        async function bulkProducts(action, value) {
-            const ids = [...selectedProductIds];
-            if (!ids.length) return;
-            const labels = {
-                discount: `Знижка ${value}% на ${ids.length} товар(ів)? Ціна зменшиться, стара ціна збережеться.`,
-                clear_discount: `Скинути знижку на ${ids.length} товар(ів)? Повернеться стара ціна.`,
-                category: `Перенести ${ids.length} товар(ів) в іншу категорію?`,
-                status: { hidden: `Приховати ${ids.length} товар(ів) з магазину?`, archive: `Перенести ${ids.length} товар(ів) в архів?`, active: `Повернути ${ids.length} товар(ів) в магазин?` }[value],
-            };
-            if (!(await askConfirm(labels[action]))) return;
-            try {
-                const data = await productApi('/products/bulk', 'POST', { ids, action, value });
-                const skipped = (data.skipped || []).length;
-                showToast(`Оновлено: ${data.updated}${skipped ? `, пропущено: ${skipped} (${data.skipped[0].reason})` : ''}`, skipped ? 'info' : 'success');
-                selectedProductIds.clear();
-                await loadProducts(true);
-            } catch (e) {
-                showToast(e.message || 'Не вдалося виконати дію', 'error');
-            }
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // МОДАЛЬНЕ ВІКНО
-        // ═══════════════════════════════════════════════════════════
-
-        function toggleContractPriceFields() {
         // ─── Публікація товару в канал ───────────────────────────
         const CHANNEL_RUBRICS = [
             { key: 'new', label: '🆕 Новинка' },
@@ -6677,6 +6677,116 @@
             };
         }
 
+        // Старе «видалення» тепер переносить в архів
+        function deleteProduct(id) {
+            return setProductStatus(id, 'archive');
+        }
+
+        async function duplicateProduct(id) {
+            try {
+                const data = await productApi(`/products/${id}/duplicate`, 'POST');
+                showToast(`Копію створено (ID ${data.id}) — вона прихована, див. вкладку «Приховані»`, 'success');
+                await loadProducts(true);
+            } catch (e) {
+                showToast(e.message || 'Не вдалося створити копію', 'error');
+            }
+        }
+
+        // ── Вибір і масові дії ──
+        function toggleProductSelect(id, checked) {
+            if (checked) selectedProductIds.add(id); else selectedProductIds.delete(id);
+            document.querySelector(`.pt-row[data-id="${id}"]`)?.classList.toggle('sel', checked);
+            const all = document.getElementById('ptSelectAll');
+            if (all) all.checked = visibleProducts.length > 0 && visibleProducts.every(p => selectedProductIds.has(p.id));
+            updateBulkBar();
+        }
+
+        function toggleAllProducts(checked) {
+            visibleProducts.forEach(p => { if (checked) selectedProductIds.add(p.id); else selectedProductIds.delete(p.id); });
+            document.querySelectorAll('.pt-row').forEach(row => {
+                const on = selectedProductIds.has(Number(row.dataset.id));
+                row.classList.toggle('sel', on);
+                const cb = row.querySelector('.c-chk input');
+                if (cb) cb.checked = on;
+            });
+            updateBulkBar();
+        }
+
+        function clearProductSelection() {
+            selectedProductIds.clear();
+            filterProducts();
+        }
+
+        function updateBulkBar() {
+            const bar = document.getElementById('productsBulk');
+            if (!bar) return;
+            const n = selectedProductIds.size;
+            bar.classList.toggle('show', n > 0);
+            if (!n) return;
+            document.getElementById('bulkCount').textContent = `Вибрано: ${n}`;
+            const catSelect = document.getElementById('bulkCategory');
+            const prev = catSelect.value;
+            catSelect.innerHTML = '<option value="">Категорія…</option>' + allCategories
+                .filter(c => c.active !== false && c.id !== 'custom')
+                .map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.emoji)} ${escapeHtml(c.name)}</option>`).join('');
+            catSelect.value = prev;
+            const priceGroup = document.getElementById('bulkPriceGroup');
+            priceGroup.style.display = productsTab === 'archive' ? 'none' : '';
+            document.getElementById('bulkCategoryGroup').style.display = productsTab === 'archive' ? 'none' : '';
+            const statusBtns = {
+                active: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'hidden')">Приховати</button>
+                         <button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'archive')">В архів</button>`,
+                hidden: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'active')">Показати в магазині</button>
+                         <button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'archive')">В архів</button>`,
+                archive: `<button type="button" class="btn btn-secondary" onclick="bulkProducts('status', 'active')">Повернути в магазин</button>`,
+            };
+            document.getElementById('bulkStatusButtons').innerHTML = statusBtns[productsTab];
+        }
+
+        function bulkDiscountApply() {
+            const value = Number(document.getElementById('bulkDiscount').value);
+            if (!Number.isInteger(value) || value < 1 || value > 90) {
+                showToast('Знижка — ціле число від 1 до 90', 'error');
+                return;
+            }
+            bulkProducts('discount', value);
+        }
+
+        function bulkCategoryApply() {
+            const value = document.getElementById('bulkCategory').value;
+            if (!value) {
+                showToast('Виберіть категорію', 'error');
+                return;
+            }
+            bulkProducts('category', value);
+        }
+
+        async function bulkProducts(action, value) {
+            const ids = [...selectedProductIds];
+            if (!ids.length) return;
+            const labels = {
+                discount: `Знижка ${value}% на ${ids.length} товар(ів)? Ціна зменшиться, стара ціна збережеться.`,
+                clear_discount: `Скинути знижку на ${ids.length} товар(ів)? Повернеться стара ціна.`,
+                category: `Перенести ${ids.length} товар(ів) в іншу категорію?`,
+                status: { hidden: `Приховати ${ids.length} товар(ів) з магазину?`, archive: `Перенести ${ids.length} товар(ів) в архів?`, active: `Повернути ${ids.length} товар(ів) в магазин?` }[value],
+            };
+            if (!(await askConfirm(labels[action]))) return;
+            try {
+                const data = await productApi('/products/bulk', 'POST', { ids, action, value });
+                const skipped = (data.skipped || []).length;
+                showToast(`Оновлено: ${data.updated}${skipped ? `, пропущено: ${skipped} (${data.skipped[0].reason})` : ''}`, skipped ? 'info' : 'success');
+                selectedProductIds.clear();
+                await loadProducts(true);
+            } catch (e) {
+                showToast(e.message || 'Не вдалося виконати дію', 'error');
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // МОДАЛЬНЕ ВІКНО
+        // ═══════════════════════════════════════════════════════════
+
+        function toggleContractPriceFields() {
             const checked = document.getElementById('contractPriceToggle').checked;
             const group = document.getElementById('priceFieldsGroup');
             const hint = document.getElementById('contractPriceHint');
@@ -8937,6 +9047,9 @@
                 if (!res.ok) throw new Error(`Помилка налаштувань (${res.status})`);
                 const data = await res.json();
                 couponStackingEnabled = !!data.coupon_stacking_enabled;
+                reviewBonusEnabled = data.review_bonus_enabled !== false;
+                const rbt = document.getElementById('reviewBonusToggle');
+                if (rbt) rbt.checked = reviewBonusEnabled;
                 const soldInput = document.getElementById('soldCountMinInput');
                 if (soldInput) soldInput.value = data.sold_count_min ?? 5;
             } catch (e) {
@@ -8963,6 +9076,29 @@
             } catch (e) {
                 showToast(e.message || 'Помилка збереження налаштування', 'error');
                 loadSettings();
+            }
+        }
+
+        async function saveReviewBonus(enabled) {
+            const toggle = document.getElementById('reviewBonusToggle');
+            if (toggle) toggle.disabled = true;
+            try {
+                const res = await fetch(API_BASE + '/admin/settings', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData,
+                    },
+                    body: JSON.stringify({ review_bonus_enabled: !!enabled }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти');
+                reviewBonusEnabled = result.settings?.review_bonus_enabled !== false;
+                showToast(reviewBonusEnabled ? 'Купон за відгук увімкнено ✅' : 'Купон за відгук вимкнено', 'success');
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження налаштування', 'error');
+            } finally {
+                if (toggle) { toggle.disabled = false; toggle.checked = reviewBonusEnabled; }
             }
         }
 
@@ -9892,6 +10028,7 @@
                             <div class="order-card-top">
                                 <span class="order-card-id">#${o.id}</span>
                                 ${renderOrderStatusBadge(status)}
+                                ${o.is_test ? '<span class="order-ttn-chip" title="Не враховується в статистиці">🧪 Тест</span>' : ''}
                                 ${o.ttn ? `<span class="order-ttn-chip">ТТН ${escapeHtml(o.ttn)}</span>` : ''}
                             </div>
                             <div class="order-card-meta">${userLine} · ${formatOrderDate(o.ordered_at)}</div>
@@ -10146,6 +10283,7 @@
                 user_id: fd.get('user_id'), source: fd.get('source'), delivery_method: fd.get('delivery_method'),
                 city: fd.get('city'), branch: fd.get('branch'), pay_method: fd.get('pay_method'),
                 comment: fd.get('comment'), items,
+                status: fd.get('status') || 'confirmed', is_test: fd.get('is_test') === '1',
             };
             try {
                 const res = await fetch(API_BASE + '/orders', {
@@ -10297,6 +10435,7 @@
                 container.innerHTML = `
                     ${renderOrderStepper(status)}
                     <div class="od-grid"><div class="od-main">
+                    <div class="od-card od-info">
                     <div class="order-customer-info">
                         <div><strong>Клієнт:</strong> ${escapeHtml(order.first_name || '—')} · ${userLine}</div>
                         ${order.comment ? `<div><strong>Коментар:</strong> ${escapeHtml(order.comment)}</div>` : ''}
@@ -10304,6 +10443,9 @@
                         ${giftItems.length ? `<div><strong>Позиції-подарунки:</strong> ${giftItems.map(g => escapeHtml(g.product_name)).join(', ')}</div>` : ''}
                     </div>
                     ${renderOrderDeliveryBlock(order)}
+                    </div>
+                    <div class="od-card">
+                    <span class="od-card-title">Склад замовлення</span>
                     ${items.map(renderOrderItemRow).join('')}
                     ${summaryRows.join('')}
                     ${hasContractItems ? `
@@ -10313,6 +10455,11 @@
                         </label>
                         <button class="btn btn-primary" type="button" onclick="saveOrderPricing(${orderId})">💾 Зберегти ціну</button>
                     ` : ''}
+                    </div>
+                    <label class="od-test">
+                        <span>🧪 Тестове замовлення <small>не рахується в статистиці</small></span>
+                        <span class="switch"><input type="checkbox" ${order.is_test ? 'checked' : ''} onchange="toggleOrderTest(${orderId}, this.checked)"><span class="switch-slider"></span></span>
+                    </label>
                     </div><div class="od-side">
                     ${ttnNeeded ? `
                     <div class="order-field">
@@ -10361,6 +10508,12 @@
             const value = (document.getElementById(`order-ttn-${orderId}`)?.value || '').replace(/\s+/g, '');
             if (value && !/^\d{14}$/.test(value)) { showToast('ТТН Нової пошти — рівно 14 цифр', 'error'); return; }
             if (await putOrderFields(orderId, { ttn: value }, 'ТТН збережено ✅')) renderOrdersList();
+        }
+
+        async function toggleOrderTest(orderId, checked) {
+            const ok = await putOrderFields(orderId, { is_test: checked ? 1 : 0 },
+                checked ? 'Позначено як тестове — у статистиці не рахується 🧪' : 'Знову враховується в статистиці');
+            if (ok) renderOrdersList();
         }
 
         async function saveOrderNote(orderId) {

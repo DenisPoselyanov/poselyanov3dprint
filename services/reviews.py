@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 from db_core import db_connect, is_postgres, sql as _sql
 from services.hits import SOLD_STATUSES
-from services.settings import sold_count_min
+from services.settings import review_bonus_enabled, sold_count_min
 
 logger = logging.getLogger(__name__)
 
@@ -576,8 +576,10 @@ def mark_review_reminded(order_id: int) -> None:
 
 # ─── БОНУС ЗА ВІДГУК ─────────────────────────────────────────────
 
-def bonus_config() -> dict:
-    """Умови бонусу для форми відгуку й повідомлень."""
+def bonus_config() -> dict | None:
+    """Умови бонусу для форми відгуку й повідомлень; None — акцію вимкнено в адмінці."""
+    if not review_bonus_enabled():
+        return None
     return {
         "text_percent": BONUS_TEXT_PERCENT,
         "photo_percent": BONUS_PHOTO_PERCENT,
@@ -601,6 +603,8 @@ def grant_review_bonus(review_id: int) -> dict | None:
     Повертає {"code","percent","expires_at","link","user_id","order_id"} або None."""
     from services.coupons import create_personal_coupon
 
+    if not review_bonus_enabled():
+        return None
     review = get_review(review_id)
     if not review or review["status"] != "approved":
         return None

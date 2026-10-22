@@ -249,7 +249,7 @@ def _attribution() -> dict[int, tuple[int, int]]:
                 SELECT e.value, COUNT(DISTINCT o.id), COALESCE(SUM(o.total_price), 0)
                 FROM events e
                 JOIN orders o ON o.user_id = e.user_id AND o.ordered_at >= e.created_at
-                             AND o.ordered_at <= {horizon} AND o.status IN ({marks})
+                             AND o.ordered_at <= {horizon} AND o.status IN ({marks}) AND COALESCE(o.is_test, 0) = 0
                 WHERE e.type = 'broadcast_open'
                 GROUP BY e.value
                 """

@@ -126,6 +126,11 @@ def build_client_status_update(order_id: int, status: str, ttn: str | None = Non
     if not entry:
         return None
     title, text = entry
+    if status == "delivered":
+        from services.settings import review_bonus_enabled
+
+        if not review_bonus_enabled():
+            text = "Дякую, що обрав нас 💙\nЯк тобі? Оціни одним дотиком — це допомагає іншим обрати."
     icon = STATUS_LABELS_SHORT.get(status, ("📦", ""))[0]
     fmt = {"id": int(order_id), "ttn": escape(ttn or "—")}
     blocks = [f"<h2>{icon} {title.format(**fmt)}</h2>", "<hr/>"]

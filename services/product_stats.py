@@ -38,7 +38,7 @@ def product_admin_stats() -> dict[int, dict[str, int]]:
                 SELECT oi.product_id, SUM(oi.quantity)
                 FROM order_items oi
                 JOIN orders o ON o.id = oi.order_id
-                WHERE o.status IN ({placeholders}) AND oi.product_id IS NOT NULL AND oi.product_id > 0
+                WHERE o.status IN ({placeholders}) AND COALESCE(o.is_test, 0) = 0 AND oi.product_id IS NOT NULL AND oi.product_id > 0
                 GROUP BY oi.product_id
             """),
             SOLD_STATUSES,

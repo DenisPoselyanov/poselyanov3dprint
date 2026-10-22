@@ -399,7 +399,7 @@ def promotion_stats() -> dict[str, dict]:
                 "COALESCE(SUM(CASE WHEN gift_product_id IS NOT NULL AND gift_product_id <> 0 "
                 "THEN 1 ELSE 0 END), 0) AS gifts "
                 f"FROM orders WHERE promotion_id IS NOT NULL AND promotion_id <> '' "
-                f"AND status IN ({placeholders}) GROUP BY promotion_id"
+                f"AND status IN ({placeholders}) AND COALESCE(is_test, 0) = 0 GROUP BY promotion_id"
             ),
             tuple(SOLD_STATUSES),
         ).fetchall()

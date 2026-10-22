@@ -39,7 +39,7 @@ STATUS_TO_STEP = {
 # Поля замовлення, які можна міняти через update_order_fields.
 EDITABLE_ORDER_FIELDS = frozenset({
     "delivery_method", "city", "city_ref", "branch", "branch_ref", "recipient_name",
-    "phone", "pay_method", "ttn", "internal_note", "source", "promotion_id", "gift_product_id",
+    "phone", "pay_method", "ttn", "internal_note", "source", "promotion_id", "gift_product_id", "is_test",
 })
 _DELIVERY_METHODS = ("np", "up", "self")
 _PAY_METHODS = ("card", "cod")
@@ -62,6 +62,9 @@ def _clean_extra(extra: dict | None) -> dict:
     out: dict = {}
     for key, value in (extra or {}).items():
         if key not in EDITABLE_ORDER_FIELDS:
+            continue
+        if key == "is_test":
+            out[key] = 1 if value in (1, True, "1", "true", "on") else 0
             continue
         if key == "gift_product_id":
             try:
@@ -520,7 +523,7 @@ def get_order_with_items(order_id: int):
                    gift_product_name, coupon_code, discount_amount, promotion_discount,
                    status, ordered_at, price_pending, channel_message_id,
                    delivery_method, city, branch, recipient_name, phone, pay_method,
-                   ttn, internal_note, source, delivered_at
+                   ttn, internal_note, source, delivered_at, is_test
             FROM orders WHERE id = ?
         """),
         (order_id,),
@@ -619,7 +622,7 @@ _LIST_COLUMNS = """
     id, user_id, username, first_name, total_price, comment,
     gift_product_name, coupon_code, discount_amount, promotion_discount,
     status, ordered_at, price_pending, delivery_method, city, branch,
-    recipient_name, phone, pay_method, ttn, internal_note, source, delivered_at
+    recipient_name, phone, pay_method, ttn, internal_note, source, delivered_at, is_test
 """
 
 

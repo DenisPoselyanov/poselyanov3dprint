@@ -20,12 +20,15 @@ COUPON_STACKING_KEY = "coupon_stacking_enabled"
 SOLD_COUNT_MIN_KEY = "sold_count_min"
 # Публікувати відгуки одразу чи після схвалення (форма відгуку — етап 3)
 REVIEWS_AUTO_PUBLISH_KEY = "reviews_auto_publish"
+# Акція «купон за відгук»: вимкнена — форма й повідомлення про неї мовчать, нові купони не видаються
+REVIEW_BONUS_ENABLED_KEY = "review_bonus_enabled"
 
 # Дефолти — стан «як було до появи фічі».
 DEFAULTS: dict[str, str] = {
     COUPON_STACKING_KEY: "0",
     SOLD_COUNT_MIN_KEY: "5",
     REVIEWS_AUTO_PUBLISH_KEY: "0",
+    REVIEW_BONUS_ENABLED_KEY: "1",
 }
 SOLD_COUNT_MIN_LIMIT = 10_000
 
@@ -136,6 +139,10 @@ def sold_count_min() -> int:
         return int(DEFAULTS[SOLD_COUNT_MIN_KEY])
 
 
+def review_bonus_enabled() -> bool:
+    return get_bool(REVIEW_BONUS_ENABLED_KEY)
+
+
 def public_settings() -> dict:
     """Налаштування, які потрібні вітрині."""
     return {"coupon_stacking_enabled": coupon_stacking_enabled()}
@@ -146,12 +153,13 @@ def admin_settings() -> dict:
         "coupon_stacking_enabled": coupon_stacking_enabled(),
         "sold_count_min": sold_count_min(),
         "reviews_auto_publish": get_bool(REVIEWS_AUTO_PUBLISH_KEY),
+        "review_bonus_enabled": review_bonus_enabled(),
     }
 
 
 def update_admin_settings(data: dict) -> dict:
     updates: dict[str, str] = {}
-    for key in (COUPON_STACKING_KEY, REVIEWS_AUTO_PUBLISH_KEY):
+    for key in (COUPON_STACKING_KEY, REVIEWS_AUTO_PUBLISH_KEY, REVIEW_BONUS_ENABLED_KEY):
         if key in data:
             updates[key] = "1" if data.get(key) in (1, True, "1", "true", "on", "yes") else "0"
     if SOLD_COUNT_MIN_KEY in data:

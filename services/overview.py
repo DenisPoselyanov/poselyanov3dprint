@@ -62,7 +62,7 @@ def _period_stats(conn, start: datetime, end: datetime) -> dict:
         conn.execute(
             _sql(
                 f"SELECT COUNT(*) AS n, COALESCE(SUM(total_price), 0) AS revenue FROM orders "
-                f"WHERE status IN ({placeholders}) AND ordered_at >= ? AND ordered_at < ?"
+                f"WHERE status IN ({placeholders}) AND ordered_at >= ? AND ordered_at < ? AND COALESCE(is_test, 0) = 0"
             ),
             (*SOLD_STATUSES, s, e),
         ).fetchone()
@@ -80,7 +80,7 @@ def _period_stats(conn, start: datetime, end: datetime) -> dict:
     ordered_users = _distinct_users(
         conn,
         "SELECT COUNT(DISTINCT user_id) AS n FROM orders "
-        "WHERE user_id > 0 AND status NOT IN ('cancelled', 'draft') AND ordered_at >= ? AND ordered_at < ?",
+        "WHERE user_id > 0 AND status NOT IN ('cancelled', 'draft') AND ordered_at >= ? AND ordered_at < ? AND COALESCE(is_test, 0) = 0",
         (s, e),
     )
     catalog_users = events_users("catalog_open")
@@ -107,7 +107,7 @@ def _first_sale_day(conn, fallback: date) -> date:
     placeholders = ", ".join("?" * len(SOLD_STATUSES))
     row = row_to_dict(
         conn.execute(
-            _sql(f"SELECT MIN(ordered_at) AS first FROM orders WHERE status IN ({placeholders})"),
+            _sql(f"SELECT MIN(ordered_at) AS first FROM orders WHERE status IN ({placeholders}) AND COALESCE(is_test, 0) = 0"),
             SOLD_STATUSES,
         ).fetchone()
     )
@@ -156,7 +156,7 @@ def get_overview(days: int = 7, now: datetime | None = None) -> dict:
             for r in conn.execute(
                 _sql(
                     f"SELECT ordered_at, total_price FROM orders "
-                    f"WHERE status IN ({placeholders}) AND ordered_at >= ? AND ordered_at < ?"
+                    f"WHERE status IN ({placeholders}) AND ordered_at >= ? AND ordered_at < ? AND COALESCE(is_test, 0) = 0"
                 ),
                 (*SOLD_STATUSES, _db_ts(chart_start), _db_ts(end)),
             ).fetchall()
@@ -181,7 +181,7 @@ def get_overview(days: int = 7, now: datetime | None = None) -> dict:
                     f"SELECT oi.product_name AS name, SUM(oi.quantity) AS qty, "
                     f"SUM(oi.price * oi.quantity) AS revenue "
                     f"FROM order_items oi JOIN orders o ON o.id = oi.order_id "
-                    f"WHERE o.status IN ({placeholders}) AND o.ordered_at >= ? AND o.ordered_at < ? "
+                    f"WHERE o.status IN ({placeholders}) AND o.ordered_at >= ? AND o.ordered_at < ? AND COALESCE(o.is_test, 0) = 0 "
                     f"AND COALESCE(oi.is_gift, 0) = 0 "
                     f"GROUP BY oi.product_name ORDER BY qty DESC, revenue DESC LIMIT ?"
                 ),

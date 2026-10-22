@@ -34,7 +34,7 @@ def _fetch_hits(days: int, limit: int) -> list[dict]:
                 SELECT oi.product_id, SUM(oi.quantity) AS qty
                 FROM order_items oi
                 JOIN orders o ON o.id = oi.order_id
-                WHERE o.status IN ({placeholders})
+                WHERE o.status IN ({placeholders}) AND COALESCE(o.is_test, 0) = 0
                   AND o.ordered_at > {date_expr}
                   AND oi.product_id IS NOT NULL
                 GROUP BY oi.product_id
@@ -88,7 +88,7 @@ def _fetch_bought_together(product_id: int, limit: int) -> list[int]:
                 WHERE mine.product_id = ?
                   AND other.product_id IS NOT NULL AND other.product_id > 0
                   AND other.product_id <> mine.product_id
-                  AND o.status IN ({placeholders})
+                  AND o.status IN ({placeholders}) AND COALESCE(o.is_test, 0) = 0
                 GROUP BY other.product_id
                 ORDER BY n DESC, other.product_id ASC
                 LIMIT ?

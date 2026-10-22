@@ -97,6 +97,7 @@ def parse_manual_order(data: dict) -> tuple[bool, dict | str]:
         "phone": phone or "",
         "pay_method": str(data.get("pay_method") or ""),
         "internal_note": str(data.get("internal_note") or ""),
+        "is_test": bool(data.get("is_test")),
     }
 
     status = str(data.get("status") or "confirmed").strip().lower()

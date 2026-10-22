@@ -335,6 +335,15 @@
   .rev-photos .ph button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; line-height: 1; cursor: pointer; z-index: 2; }
   .rev-photos .add { border: 1.5px dashed var(--line-2); display: grid; place-items: center; align-content: center; gap: 2px; color: var(--ink-3); cursor: pointer; background: none; font-size: 11px; font-weight: 600; }
   .rev-photos .add svg.i { width: 20px; height: 20px; }
+  .rev-badge { position: absolute; top: -7px; right: -7px; padding: 2px 6px; border-radius: 999px; background: var(--amber); color: #1a1200; font: 800 10px/1.2 inherit; font-style: normal; }
+  .rev-photos .add { overflow: visible; }
+  .rev-photos .add.wide { flex: 1; width: auto; height: 46px; display: flex; flex-direction: row; justify-content: center; gap: 8px; font-size: 13px; }
+  .rev-photos .add.wide .rev-badge { position: static; margin-left: 2px; }
+  .has-photo .rev-badge { display: none; }
+  .rev-bonus.won { background: color-mix(in srgb, #2ecc71 16%, transparent); color: #5fdc93; }
+  .rev-count { font-size: 12px; color: var(--ink-3); margin-top: -4px; display: flex; align-items: center; gap: 4px; transition: color .2s; }
+  .rev-count.ok { color: #5fdc93; font-weight: 600; }
+  .rev-count svg.i { width: 14px; height: 14px; }
   .rev-ph-hint { font-size: 12px; color: var(--amber-ink, var(--amber)); font-weight: 600; max-width: 170px; line-height: 1.3; }
   .rev-coupon { display: grid; gap: 4px; justify-items: center; padding: 14px 16px; border: 1.5px dashed var(--amber); border-radius: 14px; background: var(--amber-soft); width: 100%; }
   .rev-coupon code { font-size: 24px; font-weight: 800; letter-spacing: 2px; color: var(--ink); }
@@ -4502,14 +4511,31 @@ function revPhotosInner(pid) {
   const photos = d.photos.map(p =>
     `<div class="ph${p.busy ? ' busy' : ''}">${p.preview ? `<img src="${escapeAttr(p.preview)}" alt="">` : ''}${p.busy ? '' : `<button type="button" data-act="review-photo-del" data-pid="${pid}" data-id="${p.id}" aria-label="Прибрати фото">×</button>`}</div>`).join('');
   const add = d.photos.length < REV_PHOTOS_MAX
-    ? `<button type="button" class="add" data-act="review-photo-add" data-pid="${pid}" aria-label="Додати фото">${ic('plus')}Фото</button>` : '';
-  const hint = !d.photos.length && REVIEW_BONUS ? `<span class="rev-ph-hint">З фото — купон −${REVIEW_BONUS.photo_percent}%</span>` : '';
-  return photos + add + hint;
+    ? `<button type="button" class="add${d.photos.length ? '' : ' wide'}" data-act="review-photo-add" data-pid="${pid}" aria-label="Додати фото">${ic('plus')}${d.photos.length ? 'Ще' : 'Додати фото'}${!d.photos.length && REVIEW_BONUS ? `<i class="rev-badge">−${REVIEW_BONUS.photo_percent}%</i>` : ''}</button>` : '';
+  return photos + add;
+}
+function revTextLen(pid) { return (revDraft(pid).text || '').trim().length; }
+function revCountHtml(pid) {
+  const n = revTextLen(pid), min = REVIEW_BONUS.text_min;
+  if (n >= min) return `${ic('check')}Достатньо для купона · ${n} ${plural(n, 'символ', 'символи', 'символів')}`;
+  return `${n} / ${min} символів для купона −${REVIEW_BONUS.text_percent}%`;
+}
+function revTextInput(pid, el) {
+  revDraft(pid).text = el.value;
+  const c = document.getElementById(`rev-count-${pid}`);
+  if (c) {
+    const was = c.classList.contains('ok');
+    c.classList.toggle('ok', revTextLen(pid) >= REVIEW_BONUS.text_min);
+    c.innerHTML = revCountHtml(pid);
+    if (!was && c.classList.contains('ok')) haptic('select');
+  }
+  revSyncFoot();
 }
 function revExtraHtml(pid) {
   const d = revDraft(pid);
   return `<div class="rev-extra">
-    <textarea class="rev-text" maxlength="1000" placeholder="Що сподобалось? Як вийшов друк? (необовʼязково)" oninput="revDraft(${pid}).text = this.value">${escapeHtml(d.text)}</textarea>
+    <textarea class="rev-text" maxlength="1000" placeholder="Що сподобалось? Як вийшов друк? (необовʼязково)" oninput="revTextInput(${pid}, this)">${escapeHtml(d.text)}</textarea>
+    ${REVIEW_BONUS ? `<div class="rev-count${revTextLen(pid) >= REVIEW_BONUS.text_min ? ' ok' : ''}" id="rev-count-${pid}">${revCountHtml(pid)}</div>` : ''}
     <div class="rev-photos">${revPhotosInner(pid)}</div>
     <input type="file" id="rev-file-${pid}" accept="image/*" multiple hidden onchange="revAddFiles(${pid}, this.files); this.value = ''">
   </div>`;
@@ -4540,9 +4566,26 @@ function revFootHtml() {
   return `${REV.err ? `<div class="chk-err">${escapeHtml(REV.err)}</div>` : ''}
     <button type="button" class="btn primary" data-act="review-send"${REV.sending || busy || !rated ? ' disabled' : ''}>${label}</button>`;
 }
+// Один купон на все замовлення: банер показує, що вже заробено, а не повторює умови біля кожного товару
+function revBonusHtml() {
+  const b = REVIEW_BONUS;
+  if (!b) return '';
+  const drafts = reviewItems().map(x => revDraft(x.product_id));
+  const hasPhoto = drafts.some(d => d.photos.length);
+  const hasText = drafts.some(d => (d.text || '').trim().length >= b.text_min);
+  if (hasPhoto) return `<b>Купон −${b.photo_percent}% буде твій</b> після публікації відгуку 🎉`;
+  if (hasText) return `<b>Купон −${b.text_percent}%</b> заробив. Додай фото до будь-якого товару — буде <b>−${b.photo_percent}%</b>`;
+  return `Купон: <b>−${b.photo_percent}%</b> за відгук із фото або <b>−${b.text_percent}%</b> за текст від ${b.text_min} символів. Один купон на все замовлення`;
+}
 function revSyncFoot() {
   const foot = document.getElementById('rev-foot');
   if (foot) foot.innerHTML = revFootHtml();
+  const bn = document.getElementById('rev-bonus');
+  if (bn) {
+    bn.querySelector('span').innerHTML = revBonusHtml();
+    bn.classList.toggle('won', reviewItems().some(x => revDraft(x.product_id).photos.length || revTextLen(x.product_id) >= REVIEW_BONUS.text_min));
+  }
+  document.getElementById('review-body')?.classList.toggle('has-photo', reviewItems().some(x => revDraft(x.product_id).photos.length));
 }
 function revSetRating(pid, n) {
   const d = revDraft(pid);
@@ -4591,7 +4634,7 @@ function renderReviewForm() {
   const sub = items.length > 1 ? `${tovar(items.length)} · оціни ті, що хочеш` : 'Кілька слів допоможуть іншим обрати';
   body.innerHTML = `${head('Твій відгук', sub)}
     <div class="rev-scroll">
-      ${b ? `<div class="rev-bonus">${ic('gift')}<span>Купон <b>−${b.photo_percent}%</b> за відгук із фото або <b>−${b.text_percent}%</b> за текст від ${b.text_min} символів</span></div>` : ''}
+      ${b ? `<div class="rev-bonus" id="rev-bonus">${ic('gift')}<span>${revBonusHtml()}</span></div>` : ''}
       ${items.map(x => revItemHtml(x, items.length === 1)).join('')}
     </div>
     <div class="rev-foot" id="rev-foot">${revFootHtml()}</div>`;
@@ -6189,6 +6232,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const colLink = /^collection_([A-Za-z0-9_-]+)$/.exec(startParam);
     if (colLink && COLLECTIONS.some(c => c.id === colLink[1])) openList('coll', colLink[1]);
   }
+  // Пост у каналі: ch_<id>[_product_N] - так само рахуємо перехід, залишок відкриває товар
+  const chLink = /^ch_(\d+)(?:_(.+))?$/.exec(startParam || '');
+  if (chLink) {
+    if (tg?.initData) {
+      fetch(API_BASE + '/api/events', {
+        method: 'POST', headers: apiHeaders(), keepalive: true,
+        body: JSON.stringify({ type: 'channel_open', post_id: Number(chLink[1]) }),
+      }).catch(() => {});
+    }
+    startParam = chLink[2] || '';
+  }
   const couponLink = /^coupon_([A-Za-z0-9_-]{2,32})$/.exec(startParam || '');
   if (couponLink) {
     pendingCouponCode = couponLink[1].toUpperCase();
@@ -6232,17 +6286,6 @@ document.addEventListener('keydown', e => {
 /// ─── КУПОНИ ───────────────────────────────────────────────
 let appliedCoupon = null; // { code, type, value, discount, stackable }
 
-  // Пост у каналі: ch_<id>[_product_N] - так само рахуємо перехід, залишок відкриває товар
-  const chLink = /^ch_(\d+)(?:_(.+))?$/.exec(startParam || '');
-  if (chLink) {
-    if (tg?.initData) {
-      fetch(API_BASE + '/api/events', {
-        method: 'POST', headers: apiHeaders(), keepalive: true,
-        body: JSON.stringify({ type: 'channel_open', post_id: Number(chLink[1]) }),
-      }).catch(() => {});
-    }
-    startParam = chLink[2] || '';
-  }
 // Повертає поле промокоду в початковий стан (після оформлення замовлення).
 function resetCouponField() {
   const input = document.getElementById('couponInput');

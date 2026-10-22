@@ -612,7 +612,7 @@ def _attach_coupon_stats(conn, coupons: list[dict]) -> None:
     rows = conn.execute(
         _sql(
             "SELECT UPPER(coupon_code) AS code, COUNT(*) AS n, COALESCE(SUM(total_price), 0) AS revenue "
-            f"FROM orders WHERE coupon_code IS NOT NULL AND coupon_code <> '' AND status IN ({placeholders}) "
+            f"FROM orders WHERE coupon_code IS NOT NULL AND coupon_code <> '' AND status IN ({placeholders}) AND COALESCE(is_test, 0) = 0 "
             "GROUP BY UPPER(coupon_code)"
         ),
         tuple(SOLD_STATUSES),
