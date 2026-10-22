@@ -274,3 +274,10 @@ def test_test_orders_can_be_excluded(orders):
     assert orders.count_orders_by_status(include_test=False)["all"] == 1
     assert {r["id"] for r in orders.list_orders(include_test=False)} == {a}
     assert {r["id"] for r in orders.list_orders()} == {a, b}
+
+
+def test_only_test_orders(orders):
+    a, b = (_make_order(orders, user_id=i) for i in (1, 2))
+    orders.update_order_fields(b, {"is_test": 1})
+    assert orders.count_orders_by_status(only_test=True)["all"] == 1
+    assert {r["id"] for r in orders.list_orders(only_test=True)} == {b}

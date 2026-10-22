@@ -2595,8 +2595,12 @@ async def handle_duplicate_product(request: web.Request):
 
 
 def _include_test(request: web.Request) -> bool:
-    """Тестові замовлення в адмінці приховані, доки не передано include_test=1."""
-    return request.query.get("include_test", "").lower() in ("1", "true", "yes")
+    """Тестові замовлення в адмінці приховані, доки не передано include_test=1 (або test=only)."""
+    return request.query.get("include_test", "").lower() in ("1", "true", "yes") or _only_test(request)
+
+
+def _only_test(request: web.Request) -> bool:
+    return request.query.get("test", "").lower() == "only"
 
 
 async def handle_get_orders(request: web.Request):
@@ -2620,6 +2624,7 @@ async def handle_get_orders(request: web.Request):
         limit=limit,
         statuses=statuses or None,
         include_test=_include_test(request),
+        only_test=_only_test(request),
     )
     return web.json_response(orders, headers=cors_headers(request))
 
@@ -2785,7 +2790,7 @@ async def handle_get_order_counts(request: web.Request):
     denied = require_admin(request, auth)
     if denied is not None:
         return denied
-    counts = await run_db(count_orders_by_status, _include_test(request))
+    counts = await run_db(count_orders_by_status, _include_test(request), _only_test(request))
     try:  # лічильник «Відгуки» в меню; збій не повинен ламати лічильники замовлень
         counts["reviews_pending"] = await run_db(pending_review_count)
     except Exception:

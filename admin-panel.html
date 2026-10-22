@@ -3149,10 +3149,11 @@
                             <input type="checkbox" id="ordersPendingFilter" onchange="loadOrders()">
                             Лише потребують ціни
                         </label>
-                        <label style="display:flex; align-items:center; gap:8px; font-size:14px;" title="Тестові замовлення за замовчуванням не враховуються">
-                            <input type="checkbox" id="ordersShowTest" onchange="loadOrders()">
-                            🧪 Тестові
-                        </label>
+                        <select id="ordersTestMode" class="orders-search" style="width:auto;" aria-label="Тестові замовлення" onchange="loadOrders()">
+                            <option value="">Без тестових</option>
+                            <option value="only">🧪 Лише тестові</option>
+                            <option value="all">Усі, з тестовими</option>
+                        </select>
                         <div class="orders-view-toggle">
                             <button type="button" id="ordersViewList" class="active" onclick="setOrdersView('list')">Список</button>
                             <button type="button" id="ordersViewKanban" onclick="setOrdersView('kanban')">Канбан</button>
@@ -10047,13 +10048,14 @@
             renderOrdersList();
         }
 
-        function showTestOrders() {
-            return !!document.getElementById('ordersShowTest')?.checked;
+        function testOrdersQuery() {
+            const mode = document.getElementById('ordersTestMode')?.value || '';
+            return mode === 'only' ? 'test=only' : (mode === 'all' ? 'include_test=1' : '');
         }
 
         async function loadOrderCounts() {
             try {
-                const res = await fetch(API_BASE + '/orders/counts' + (showTestOrders() ? '?include_test=1' : ''));
+                const res = await fetch(API_BASE + '/orders/counts' + (testOrdersQuery() ? '?' + testOrdersQuery() : ''));
                 if (res.ok) ordersCounts = await res.json();
             } catch (_) { /* лічильники не критичні */ }
             renderOrderTabs();
@@ -10072,7 +10074,8 @@
                 if (ordersView === 'kanban') params.set('status', 'new,draft,work,shipped');
                 else if (ordersTab !== 'all') params.set('status', ordersTab);
                 if (pendingOnly) params.set('pending_price', 'true');
-                if (showTestOrders()) params.set('include_test', '1');
+                const tq = testOrdersQuery();
+                if (tq) params.set(tq.split('=')[0], tq.split('=')[1]);
                 const [res] = await Promise.all([
                     fetch(API_BASE + '/orders?' + params.toString()),
                     loadOrderCounts(),

@@ -639,10 +639,10 @@ def expand_status_filter(raw: str | None) -> list[str]:
     return out
 
 
-def count_orders_by_status(include_test: bool = True) -> dict[str, int]:
+def count_orders_by_status(include_test: bool = True, only_test: bool = False) -> dict[str, int]:
     """Лічильники для вкладок: по кожній групі, «all» і «pending_price». Тестові — за бажанням."""
     conn = db_connect(dict_rows=True)
-    no_test = "" if include_test else " AND COALESCE(is_test, 0) = 0"
+    no_test = " AND COALESCE(is_test, 0) = 1" if only_test else ("" if include_test else " AND COALESCE(is_test, 0) = 0")
     rows = conn.execute(
         _sql(f"SELECT status, COUNT(*) AS n FROM orders WHERE 1 = 1{no_test} GROUP BY status")
     ).fetchall()
@@ -666,12 +666,15 @@ def list_orders(
     limit: int = 50,
     statuses: list[str] | None = None,
     include_test: bool = True,
+    only_test: bool = False,
 ):
     conn = db_connect(dict_rows=True)
     sql = f"SELECT {_LIST_COLUMNS} FROM orders"
     where: list[str] = []
     params: list = []
-    if not include_test:
+    if only_test:
+        where.append("COALESCE(is_test, 0) = 1")
+    elif not include_test:
         where.append("COALESCE(is_test, 0) = 0")
     if pending_price_only:
         where.append("price_pending = ?")
