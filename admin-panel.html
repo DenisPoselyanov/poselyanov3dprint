@@ -2861,6 +2861,9 @@
         .ai-src { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border: 1px dashed var(--border-alt); border-radius: 12px; background: var(--bg-section); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
         .ai-src[hidden] { display: none; }
         .ai-src a { color: var(--accent); }
+        .ai-zoom { cursor: zoom-in; }
+        .ai-gallery { display: flex; gap: 6px; flex-wrap: wrap; }
+        .ai-gallery img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-section); cursor: zoom-in; }
         .ai-src-open { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--border-alt); background: var(--bg-card); color: var(--text-main) !important; font-weight: 600; text-decoration: none; }
         .ai-src-imgs { display: flex; gap: 8px; flex-wrap: wrap; }
         .ai-src-img { display: grid; gap: 4px; width: 84px; }
@@ -8080,7 +8083,7 @@
             const preview = document.getElementById('photoPreview');
             preview.innerHTML = uploadedPhotos.map((url, i) => `
                 <div class="preview-item" draggable="true" data-index="${i}">
-                    <img src="${escapeAttr(url)}" alt="фото">
+                    <img src="${escapeAttr(url)}" alt="фото" class="ai-zoom" onclick="openPhotoViewer(uploadedPhotos, ${i})" title="Переглянути фото">
                     <button type="button" class="remove" onclick="removePhoto(${i})" aria-label="Прибрати фото">×</button>
                     ${i === 0
                         ? '<span class="cover-tag">Обкладинка</span>'
@@ -10464,7 +10467,7 @@
             return `<article class="rv-card ai-card${it.status === 'new' ? '' : ' is-done'}">
                 <div class="rv-top">
                     <div class="rv-prod">
-                        <div class="rv-th">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : escapeHtml(p.emoji || '📦')}</div>
+                        <div class="rv-th">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" class="ai-zoom" onclick="openAiPhoto(${it.id}, 0)" title="Переглянути фото">` : escapeHtml(p.emoji || '📦')}</div>
                         <div style="min-width:0">
                             <div class="rv-pname">${escapeHtml(p.name || it.name)}</div>
                             <div class="ai-chips">
@@ -10477,6 +10480,7 @@
                     <span class="ai-price">${Number(p.price) || 0} ₴</span>
                 </div>
                 ${p.description ? `<div class="ai-desc">${escapeHtml(p.description)}</div>` : ''}
+                ${(it.images || []).length > 1 ? `<div class="ai-gallery">${it.images.map((url, i) => `<img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" class="ai-zoom" onclick="openAiPhoto(${it.id}, ${i})" title="Переглянути фото ${i + 1}">`).join('')}</div>` : ''}
                 ${p.note ? `<div class="ai-row">ⓘ ${escapeHtml(p.note)}</div>` : ''}
                 ${it.reason ? `<div class="ai-row"><b>Чому:</b> ${escapeHtml(it.reason)}</div>` : ''}
                 ${it.license ? `<details class="ai-lic"><summary>⚖️ Ліцензія ${aiLicenseBadge(it.license)}</summary><div class="lic-text">${escapeHtml(it.license)}</div></details>` : ''}
@@ -10531,7 +10535,7 @@
             if (!box) return;
             if (!it) { box.hidden = true; box.innerHTML = ''; return; }
             const imgs = (it.images || []).map((url, i) => `<div class="ai-src-img">
-                    <img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer">
+                    <img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" class="ai-zoom" onclick="openAiPhoto(${it.id}, ${i})" title="Переглянути фото">
                     <button type="button" onclick="addAiSourcePhoto(${it.id}, ${i})">+ Додати</button>
                 </div>`).join('');
             box.innerHTML = `
@@ -10808,6 +10812,20 @@
         function closeReviewLightbox() {
             const box = document.getElementById('rvLightbox');
             if (box) box.classList.remove('open');
+        }
+
+        // Перегляд будь-яких фото товару (форма, пропозиції ШІ): ті самі стрілки й Esc
+        function openPhotoViewer(photos, index = 0) {
+            const list = (photos || []).filter(Boolean);
+            if (!list.length) return;
+            reviewLightbox = { photos: list, index: Math.min(Math.max(index, 0), list.length - 1) };
+            document.getElementById('rvLightbox').classList.add('open');
+            renderReviewLightbox();
+        }
+
+        function openAiPhoto(id, index) {
+            const it = aiItems.find(x => x.id === id);
+            if (it) openPhotoViewer(it.images || [], index);
         }
 
         document.addEventListener('keydown', (e) => {
