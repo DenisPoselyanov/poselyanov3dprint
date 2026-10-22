@@ -594,6 +594,12 @@
   .chk-list:empty { display: none; }
   .chk-opt { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
   .chk-opt:last-child { border-bottom: 0; }
+  .chk-picked { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 12px; background: var(--blue-soft); box-shadow: 0 0 0 1.5px var(--blue); }
+  .chk-picked-ico { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; }
+  .chk-picked-ico svg.i { width: 15px; height: 15px; }
+  .chk-picked-txt { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.35; }
+  .chk-picked-txt small { display: block; font-size: 11px; font-weight: 600; color: var(--ink-3); margin-bottom: 2px; }
+  .chk-picked-chg { flex: none; border: 0; background: none; color: var(--blue); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 2px; }
   .chk-opt small { display: block; color: var(--ink-3); font-size: 11.5px; }
   .chk-opt[aria-pressed="true"] { background: var(--blue-soft); color: var(--blue-ink); font-weight: 700; }
   .chk-row { display: flex; gap: 8px; }
@@ -3727,7 +3733,11 @@ function chkNpHtml() {
     ${cityErr ? `<div class="chk-err">${escapeHtml(cityErr)}</div>` : ''}
     <div class="chk-list" id="chk-city-list">${chkCitiesHtml()}</div></div>`;
   if (npLookupOn()) {
-    if (CHK.cityRef) {
+    if (CHK.cityRef && CHK.branchRef && CHK.branch && !CHK.whEditing) {
+      html += `<div class="chk-picked"><span class="chk-picked-ico">${ic('check')}</span>
+        <div class="chk-picked-txt"><small>Обране відділення</small>${escapeHtml(CHK.branch)}</div>
+        <button type="button" class="chk-picked-chg" onclick="chkChangeBranch()">Змінити</button></div>`;
+    } else if (CHK.cityRef) {
       html += `<div class="chk-seg">${[['all', 'Усі'], ['branch', 'Відділення'], ['postomat', 'Поштомати']].map(([k, l]) =>
         `<button type="button" class="cat-chip" aria-pressed="${CHK.kind === k}" onclick="chkSetKind('${k}')">${l}</button>`).join('')}</div>
         <input class="chk-input" id="chk-wh-q" type="search" value="${escapeAttr(CHK.whQuery)}" maxlength="40"
@@ -3836,7 +3846,7 @@ function chkPickCity(i) {
   const c = CHK.cities[i];
   if (!c) return;
   CHK.city = [c.name, c.area].filter(Boolean).join(', ');
-  CHK.cityRef = c.ref; CHK.branch = ''; CHK.branchRef = ''; CHK.cities = []; CHK.whQuery = '';
+  CHK.cityRef = c.ref; CHK.branch = ''; CHK.branchRef = ''; CHK.cities = []; CHK.whQuery = ''; CHK.whEditing = false;
   delete CHK.errors['chk-city'];
   haptic('select'); saveCheckout();
   loadWarehouses();
@@ -3869,9 +3879,14 @@ async function loadWarehouses({ keepInput = false } = {}) {
 function chkPickBranch(i) {
   const w = CHK.warehouses[i];
   if (!w) return;
-  CHK.branch = w.name; CHK.branchRef = w.ref;
+  CHK.branch = w.name; CHK.branchRef = w.ref; CHK.whEditing = false;
   delete CHK.errors['chk-branch'];
   haptic('select'); saveCheckout(); renderCheckout();
+}
+function chkChangeBranch() {
+  CHK.whEditing = true;
+  haptic('select');
+  if (CHK.warehouses.length) renderCheckout(); else loadWarehouses();
 }
 function chkSharePhone() {
   const t = tgApp();
