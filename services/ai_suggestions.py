@@ -532,6 +532,30 @@ async def ask_photos(client, request_text: str) -> list[str]:
     return urls if isinstance(urls, list) else []
 
 
+class _PublicOnlyResolver:
+    """aiohttp-резолвер: повертає лише глобальні адреси, інакше помилка підключення."""
+
+    def __new__(cls):
+        import aiohttp
+        from aiohttp.abc import AbstractResolver
+
+        class Resolver(AbstractResolver):
+            def __init__(self):
+                self._inner = aiohttp.ThreadedResolver()
+
+            async def resolve(self, host, port=0, family=socket.AF_INET):
+                found = await self._inner.resolve(host, port, family)
+                safe = [a for a in found if ipaddress.ip_address(a["host"].split("%")[0]).is_global]
+                if not safe:
+                    raise OSError(f"{host}: немає публічних адрес")
+                return safe
+
+            async def close(self):
+                await self._inner.close()
+
+        return Resolver()
+
+
 async def _is_public_host(url: str) -> bool:
     """SSRF-захист: URL приходять із веб-контенту, тож хост має резолвитися лише в публічні адреси."""
     host = urlparse(url).hostname
@@ -572,7 +596,10 @@ async def verify_images(urls: list[str]) -> list[str]:
     import aiohttp
 
     timeout = aiohttp.ClientTimeout(total=VERIFY_TIMEOUT)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    # Резолвер віддає з'єднанню лише перевірені публічні адреси (без підміни DNS між перевіркою й підключенням);
+    # IP-літерали в URL резолвер оминають, їх відсікає _is_public_host. trust_env вимкнено: без проксі зі змінних середовища.
+    connector = aiohttp.TCPConnector(resolver=_PublicOnlyResolver())
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector, trust_env=False) as session:
         flags = await asyncio.gather(*(_url_ok(session, u) for u in urls))
     return [u for u, ok in zip(urls, flags) if ok]
 

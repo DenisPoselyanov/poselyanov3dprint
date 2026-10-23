@@ -250,3 +250,20 @@ def test_url_check_rejects_non_public_hosts():
         assert await ai._is_public_host("https://8.8.8.8/a.jpg")
 
     asyncio.run(run())
+
+
+def test_resolver_drops_private_addresses():
+    async def run():
+        resolver = ai._PublicOnlyResolver()
+
+        async def fake(host, port=0, family=0):
+            return [{"host": "10.0.0.1", "port": port}] if host == "evil.test" else [
+                {"host": "10.0.0.1", "port": port}, {"host": "8.8.8.8", "port": port}]
+
+        resolver._inner.resolve = fake
+        with pytest.raises(OSError):
+            await resolver.resolve("evil.test", 443)
+        assert [a["host"] for a in await resolver.resolve("mixed.test", 443)] == ["8.8.8.8"]
+        await resolver.close()
+
+    asyncio.run(run())
