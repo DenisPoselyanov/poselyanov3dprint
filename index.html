@@ -3293,9 +3293,6 @@ function updateCarousel(animate = true) {
     const img = s.querySelector('img');
     if (img && img.style.transform) resetImageZoom(img, false);
   });
-  zoomScale = 1;
-  carPinching = false;
-  pinchDist = null;
 }
 
 // Навігація галереєю (dir: -1 вліво, 1 вправо), по колу
@@ -3322,41 +3319,192 @@ function pinchTouchesCenter(touches) {
   };
 }
 
-function zoomOriginPercents(img, centerX, centerY) {
-  const rect = img.getBoundingClientRect();
-  if (!rect.width || !rect.height) return { x: 50, y: 50 };
-  return {
-    x: Math.min(100, Math.max(0, ((centerX - rect.left) / rect.width) * 100)),
-    y: Math.min(100, Math.max(0, ((centerY - rect.top) / rect.height) * 100)),
-  };
-}
-
-function applyPinchZoom(img, scale, centerX, centerY) {
-  if (!img) return;
-  const o = zoomOriginPercents(img, centerX, centerY);
-  img.style.transition = 'none';
-  img.style.transformOrigin = `${o.x}% ${o.y}%`;
-  img.style.transform = scale > 1.001 ? `scale(${scale})` : '';
-}
-
+// Скидає зум фото (стан зуму живе на самому <img> у img._z)
 function resetImageZoom(img, animate = true) {
   if (!img) return;
-  if (animate) {
-    img.style.transition = 'transform .35s cubic-bezier(.34,1.2,.64,1)';
-    img.style.transform = '';
-    img.style.transformOrigin = 'center center';
-    setTimeout(() => { img.style.transition = ''; }, 350);
-  } else {
-    img.style.transition = '';
-    img.style.transform = '';
-    img.style.transformOrigin = '';
+  img._z = null;
+  img.style.transformOrigin = 'center center';
+  img.style.transition = animate ? 'transform .25s cubic-bezier(.2,.8,.2,1)' : '';
+  img.style.transform = '';
+  const wrap = img.closest('#carousel-wrap');
+  if (wrap) wrap.style.touchAction = '';
+  if (animate) setTimeout(() => { img.style.transition = ''; }, 280);
+}
+
+// Зум фото: щипок навколо точки між пальцями (зум лишається після відпускання),
+// перетягування одним пальцем у збільшеному стані, подвійний тап/клік, Ctrl+колесо/щипок тачпада.
+// getImg() — поточне фото (або null). Повертає { scale(), gestured, reset(animate) }.
+function bindZoom(host, getImg, { signal, doubleTap = false, wheel = false } = {}) {
+  const api = {
+    scale: () => getImg()?._z?.s ?? 1,
+    gestured: false,   // у цій послідовності дотиків був зум/подвійний тап — свайп-навігацію ігноруємо
+    reset: (animate = true) => resetImageZoom(getImg(), animate),
+  };
+  const Z_MIN = 0.8;   // під час щипка можна трохи «стиснути» нижче 1, після відпускання повертається
+  const z = img => (img._z ||= { s: 1, tx: 0, ty: 0 });
+
+  function clampPan(img, v) {
+    if (v.s <= 1) { v.tx = v.ty = 0; return; }
+    const mx = (v.s - 1) * img.offsetWidth / 2;
+    const my = (v.s - 1) * img.offsetHeight / 2;
+    v.tx = Math.min(mx, Math.max(-mx, v.tx));
+    v.ty = Math.min(my, Math.max(-my, v.ty));
   }
+
+  function paint(img, animate) {
+    const v = z(img);
+    img.style.transformOrigin = 'center center';
+    img.style.transition = animate ? 'transform .25s cubic-bezier(.2,.8,.2,1)' : 'none';
+    img.style.transform = (v.s === 1 && !v.tx && !v.ty) ? '' : `translate(${v.tx}px, ${v.ty}px) scale(${v.s})`;
+    host.style.touchAction = v.s > 1.001 ? 'none' : '';
+    if (animate) setTimeout(() => { if (img.style.transition !== 'none') img.style.transition = ''; }, 280);
+  }
+
+  // Змінює масштаб так, щоб точка (px, py) екрана лишалась на місці; (dx, dy) — додатковий зсув
+  function zoomAt(img, newS, px, py, dx = 0, dy = 0) {
+    const v = z(img);
+    const r = img.getBoundingClientRect();
+    const cx = r.left + r.width / 2 - v.tx;   // центр фото без зсуву (масштаб іде від центру)
+    const cy = r.top + r.height / 2 - v.ty;
+    const k = newS / v.s;
+    v.tx = (px - cx) - (px - cx - v.tx) * k + dx;
+    v.ty = (py - cy) - (py - cy - v.ty) * k + dy;
+    v.s = newS;
+  }
+
+  function settle(img) {
+    const v = z(img);
+    if (v.s < 1.02) { resetImageZoom(img, true); return; }
+    clampPan(img, v);
+    paint(img, true);
+  }
+
+  let mode = null;        // 'pinch' | 'pan'
+  let lastDist = 0, lastC = null, lastP = null;
+  let tap = null, lastTap = null;
+
+  host.addEventListener('touchstart', e => {
+    const img = getImg();
+    if (!img) return;
+    if (e.touches.length === 1) {
+      api.gestured = false;
+      const t = e.touches[0];
+      lastP = { x: t.clientX, y: t.clientY };
+      mode = api.scale() > 1 ? 'pan' : null;
+      tap = { t: Date.now(), x: t.clientX, y: t.clientY, moved: false };
+      if (mode === 'pan') img.style.transition = 'none';
+    } else if (e.touches.length === 2) {
+      api.gestured = true;
+      mode = 'pinch';
+      tap = null;
+      lastDist = pinchTouchesDistance(e.touches) || 1;
+      lastC = pinchTouchesCenter(e.touches);
+      img.style.transition = 'none';
+    }
+  }, { passive: true, signal });
+
+  host.addEventListener('touchmove', e => {
+    const img = getImg();
+    if (!img) return;
+    if (tap && e.touches.length === 1 && Math.hypot(e.touches[0].clientX - tap.x, e.touches[0].clientY - tap.y) > 10) tap.moved = true;
+    if (mode === 'pinch' && e.touches.length >= 2) {
+      e.preventDefault();
+      const v = z(img);
+      const d = pinchTouchesDistance(e.touches) || lastDist;
+      const c = pinchTouchesCenter(e.touches);
+      const ns = Math.min(Math.max(v.s * d / lastDist, Z_MIN), ZOOM_MAX);
+      zoomAt(img, ns, lastC.x, lastC.y, c.x - lastC.x, c.y - lastC.y);
+      if (ns >= 1) clampPan(img, v);
+      paint(img, false);
+      lastDist = d;
+      lastC = c;
+    } else if (mode === 'pan' && e.touches.length === 1) {
+      e.preventDefault();
+      const t = e.touches[0];
+      const v = z(img);
+      v.tx += t.clientX - lastP.x;
+      v.ty += t.clientY - lastP.y;
+      lastP = { x: t.clientX, y: t.clientY };
+      clampPan(img, v);
+      paint(img, false);
+    }
+  }, { passive: false, signal });
+
+  function onEnd(e) {
+    const img = getImg();
+    if (!img) { mode = null; return; }
+    if (e.touches.length === 1 && mode === 'pinch') {
+      // відпустили один палець зі щипка: далі — перетягування (якщо збільшено)
+      lastP = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      mode = api.scale() > 1.02 ? 'pan' : null;
+      if (!mode) settle(img);
+      return;
+    }
+    if (e.touches.length > 0) return;
+    const wasZooming = mode !== null;
+    mode = null;
+    if (wasZooming) settle(img);
+    if (!doubleTap || !tap || tap.moved || api.gestured || e.type !== 'touchend') { tap = null; return; }
+    const now = Date.now();
+    if (now - tap.t > 300) { tap = null; return; }
+    const t = e.changedTouches[0];
+    if (lastTap && now - lastTap.t < 350 && Math.hypot(t.clientX - lastTap.x, t.clientY - lastTap.y) < 40) {
+      lastTap = null;
+      e.preventDefault();
+      api.gestured = true;
+      toggle(img, t.clientX, t.clientY);
+    } else {
+      lastTap = { t: now, x: t.clientX, y: t.clientY };
+    }
+    tap = null;
+  }
+  host.addEventListener('touchend', onEnd, { passive: false, signal });
+  host.addEventListener('touchcancel', onEnd, { passive: false, signal });
+
+  function toggle(img, x, y) {
+    const v = z(img);
+    if (v.s > 1.05) { resetImageZoom(img, true); return; }
+    zoomAt(img, 2.5, x, y);
+    clampPan(img, v);
+    paint(img, true);
+  }
+
+  if (doubleTap) {
+    host.addEventListener('dblclick', e => {
+      const img = getImg();
+      if (!img) return;
+      e.preventDefault();
+      toggle(img, e.clientX, e.clientY);
+    }, { signal });
+  }
+
+  if (wheel) {
+    host.addEventListener('wheel', e => {
+      const img = getImg();
+      if (!img) return;
+      const v = z(img);
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const ns = Math.min(Math.max(v.s * Math.exp(-e.deltaY * 0.01), 1), ZOOM_MAX);
+        if (ns <= 1.001) { resetImageZoom(img, false); return; }
+        zoomAt(img, ns, e.clientX, e.clientY);
+        clampPan(img, v);
+        paint(img, false);
+      } else if (v.s > 1.001) {
+        e.preventDefault();
+        v.tx -= e.deltaX;
+        v.ty -= e.deltaY;
+        clampPan(img, v);
+        paint(img, false);
+      }
+    }, { passive: false, signal });
+  }
+
+  return api;
 }
 
 let carSwipeX = null;
-let pinchDist = null;
-let zoomScale = 1;
-let carPinching = false;
+let carZoom = null;
 
 function getActiveSlide() {
   return document.querySelectorAll('#carousel-track .gal-slide')[carouselIndex];
@@ -3368,57 +3516,28 @@ function initCarouselSwipe() {
   if (w.dataset.bound) return;
   w.dataset.bound = '1';
 
+  carZoom = bindZoom(w, () => {
+    const s = getActiveSlide();
+    return s && s.dataset.photo != null ? s.querySelector('img') : null;
+  });
+
   w.addEventListener('touchstart', e => {
-    if (e.touches.length === 1) {
-      if (zoomScale <= 1) carSwipeX = e.touches[0].clientX;
-      pinchDist = null;
-      carPinching = false;
-    } else if (e.touches.length === 2) {
-      carSwipeX = null;
-      pinchDist = pinchTouchesDistance(e.touches);
-      carPinching = true;
-    }
+    if (e.touches.length === 1 && carZoom.scale() <= 1) carSwipeX = e.touches[0].clientX;
+    else carSwipeX = null;
   }, { passive: true });
 
-  w.addEventListener('touchmove', e => {
-    if (e.touches.length !== 2) return;
-    e.preventDefault();
-    const img = getActiveSlide()?.querySelector('img');
-    if (!img || getActiveSlide().dataset.photo == null) return;
-    if (pinchDist === null) {
-      pinchDist = pinchTouchesDistance(e.touches);
-      return;
-    }
-    const newDist = pinchTouchesDistance(e.touches);
-    const center = pinchTouchesCenter(e.touches);
-    zoomScale = Math.min(Math.max(zoomScale * (newDist / pinchDist), 1), ZOOM_MAX);
-    pinchDist = newDist;
-    carPinching = true;
-    carSwipeX = null;
-    applyPinchZoom(img, zoomScale, center.x, center.y);
-  }, { passive: false });
-
   w.addEventListener('touchend', e => {
-    if (carPinching) {
-      pinchDist = null;
-      if (e.touches.length > 0) return;
-      carPinching = false;
-      const img = getActiveSlide()?.querySelector('img');
-      zoomScale = 1;
-      if (img) resetImageZoom(img, true);
-      carSwipeX = null;
-      return;
-    }
-    if (carSwipeX === null) return;
+    if (carSwipeX === null || e.touches.length > 0) return;
     const dx = e.changedTouches[0].clientX - carSwipeX;
-    if (zoomScale <= 1 && Math.abs(dx) > 40) carouselNav(dx < 0 ? 1 : -1);
     carSwipeX = null;
+    if (carZoom.gestured || carZoom.scale() > 1) return;
+    if (Math.abs(dx) > 40) carouselNav(dx < 0 ? 1 : -1);
   }, { passive: true });
 
   // Горизонтальний жест тачпада гортає фото; вертикальне колесо — скролить картку
   let carWheelLock = false;
   w.addEventListener('wheel', e => {
-    if (e.ctrlKey || zoomScale > 1 || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    if (e.ctrlKey || (carZoom && carZoom.scale() > 1) || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
     e.preventDefault();
     if (carWheelLock) return;
     carWheelLock = true;
@@ -3429,6 +3548,7 @@ function initCarouselSwipe() {
   // Тап по фото — на весь екран, по відео — відтворення
   w.addEventListener('click', e => {
     if (e.target.closest('button, video')) return;
+    if (carZoom && carZoom.scale() > 1) { carZoom.reset(true); return; }
     const slide = e.target.closest('.gal-slide');
     if (!slide) return;
     if (slide.dataset.video) playGalleryVideo(slide);
@@ -3498,23 +3618,10 @@ function initLightboxSwipe() {
   l.addEventListener('click', e => {
     if (e.target === l) closeLightbox();
   }, { signal });
-  let lbZoom = 1;
-  let lbPinchDist = null;
-  let lbPinching = false;
-
-  function getLbImg() {
-    return l.querySelectorAll('.lightbox-slide img')[lbIndex];
-  }
-
-  function resetLbZoom(animate = true) {
-    lbZoom = 1;
-    lbPinchDist = null;
-    lbPinching = false;
-    resetImageZoom(getLbImg(), animate);
-  }
+  const zoom = bindZoom(l, () => l.querySelectorAll('.lightbox-slide img')[lbIndex],
+    { signal, doubleTap: true, wheel: true });
 
   l.querySelector('.lightbox-close').addEventListener('click', () => {
-    resetLbZoom(false);
     l.querySelectorAll('.lightbox-slide img').forEach(img => resetImageZoom(img, false));
     const lb = document.getElementById('lightbox');
     lb.style.transition = 'opacity .22s ease, transform .22s ease';
@@ -3523,48 +3630,17 @@ function initLightboxSwipe() {
   }, { signal });
 
   l.addEventListener('touchstart', e => {
-    if (e.touches.length === 2) {
-      lbPinching = true;
-      lbPinchDist = pinchTouchesDistance(e.touches);
+    if (e.touches.length === 1 && zoom.scale() <= 1) {
+      lbSwipeX = e.touches[0].clientX;
+      lbSwipeY = e.touches[0].clientY;
+    } else {
       lbSwipeX = null;
-    } else if (e.touches.length === 1 && !lbPinching) {
-      if (lbZoom <= 1) {
-        lbSwipeX = e.touches[0].clientX;
-        lbSwipeY = e.touches[0].clientY;
-      }
-      lbPinchDist = null;
     }
   }, { passive: true, signal });
 
-  l.addEventListener('touchmove', e => {
-    if (e.touches.length !== 2) return;
-    e.preventDefault();
-    const img = getLbImg();
-    if (!img) return;
-    if (lbPinchDist === null) {
-      lbPinchDist = pinchTouchesDistance(e.touches);
-      lbPinching = true;
-      return;
-    }
-    const newDist = pinchTouchesDistance(e.touches);
-    const center = pinchTouchesCenter(e.touches);
-    lbZoom = Math.min(Math.max(lbZoom * (newDist / lbPinchDist), 1), ZOOM_MAX);
-    lbPinchDist = newDist;
-    lbPinching = true;
-    lbSwipeX = null;
-    applyPinchZoom(img, lbZoom, center.x, center.y);
-  }, { passive: false, signal });
-
   l.addEventListener('touchend', e => {
-    if (lbPinching) {
-      lbPinchDist = null;
-      if (e.touches.length > 0) return;
-      resetLbZoom(true);
-      lbSwipeX = null;
-      return;
-    }
-
-    if (lbSwipeX === null || lbZoom > 1) return;
+    if (e.touches.length > 0) return;
+    if (lbSwipeX === null || zoom.gestured || zoom.scale() > 1) { lbSwipeX = null; return; }
     const dx = e.changedTouches[0].clientX - lbSwipeX;
     const dy = e.changedTouches[0].clientY - lbSwipeY;
 
@@ -3577,7 +3653,7 @@ function initLightboxSwipe() {
         l.style.opacity = '';
         l.style.transform = '';
         l.style.transition = '';
-        resetLbZoom(false);
+        zoom.reset(false);
       }, 220);
       lbSwipeX = null;
       return;
@@ -3585,7 +3661,6 @@ function initLightboxSwipe() {
     const photos = lbPhotos;
     if (Math.abs(dx) > 40 && photos.length > 1) {
       lbIndex = (lbIndex + (dx < 0 ? 1 : -1) + photos.length) % photos.length;
-      lbZoom = 1;
       updateLightbox();
     }
     lbSwipeX = null;
@@ -3593,34 +3668,13 @@ function initLightboxSwipe() {
   }, { passive: true, signal });
 
   l.addEventListener('wheel', e => {
-    if (e.ctrlKey) return;
-    if (lbZoom > 1) return;
+    if (e.ctrlKey || zoom.scale() > 1) return;
     e.preventDefault();
     const photos = lbPhotos;
     if (photos.length < 2) return;
     lbIndex = (lbIndex + (e.deltaY > 0 ? 1 : -1) + photos.length) % photos.length;
-    lbZoom = 1;
     updateLightbox();
   }, { passive: false, signal });
-
-  l.addEventListener('wheel', e => {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    const img = getLbImg();
-    if (!img) return;
-    lbZoom = Math.min(Math.max(lbZoom * (e.deltaY < 0 ? 1.1 : 0.9), 1), ZOOM_MAX);
-    if (lbZoom <= 1) {
-      resetLbZoom(true);
-    } else {
-      applyPinchZoom(img, lbZoom, e.clientX, e.clientY);
-    }
-  }, { passive: false, signal });
-
-  document.addEventListener('keyup', e => {
-    if (e.key !== 'Control') return;
-    if (lbZoom <= 1) return;
-    resetLbZoom(true);
-  }, { signal });
 }
 
 // ─── КАРТКА ТОВАРУ (REDESIGN.md, розд. 3.4): повноекранний лист, MainButton Telegram ───
