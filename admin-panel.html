@@ -8482,23 +8482,9 @@
             dragDropText.textContent = '🎞️ Завантаження анімації за URL...';
             btn.disabled = true;
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 180000);
-
             try {
-                const res = await fetch(API_BASE + '/upload-photo-url', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tgInitData
-                    },
-                    body: JSON.stringify({ url }),
-                    signal: controller.signal
-                });
-                const data = await readUploadResponse(res);
-
+                const data = await uploadPhotoUrlQuiet(url);
                 if (data.ok) {
-                    uploadedPhotos.push(data.url);
                     updatePhotoPreview();
                     input.value = '';
                     showToast('Фото завантажено ✅', 'success');
@@ -8511,10 +8497,54 @@
                     : 'Помилка завантаження';
                 showToast(msg, 'error');
             } finally {
-                clearTimeout(timeoutId);
                 dragDropText.textContent = originalText;
                 btn.disabled = false;
             }
+        }
+
+        // Завантаження одного фото за URL без тостів; успішне фото додається до uploadedPhotos
+        async function uploadPhotoUrlQuiet(url) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 180000);
+            try {
+                const res = await fetch(API_BASE + '/upload-photo-url', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tgInitData
+                    },
+                    body: JSON.stringify({ url }),
+                    signal: controller.signal
+                });
+                const data = await readUploadResponse(res);
+                if (data.ok) uploadedPhotos.push(data.url);
+                return data;
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+        // «Додати всі» з пропозиції ШІ: фото вантажаться по одному, щоб не перевантажувати сервер
+        async function addAllAiSourcePhotos(id) {
+            const urls = (aiItems.find(x => x.id === id)?.images || []).slice();
+            if (!urls.length) return;
+            const btn = document.getElementById('aiAddAllBtn');
+            if (btn) btn.disabled = true;
+            let ok = 0;
+            const failed = [];
+            for (let i = 0; i < urls.length; i++) {
+                if (btn) btn.textContent = `Завантажую ${i + 1} з ${urls.length}…`;
+                try {
+                    const data = await uploadPhotoUrlQuiet(urls[i]);
+                    if (data.ok) ok++; else failed.push(i + 1);
+                } catch (_) {
+                    failed.push(i + 1);
+                }
+            }
+            updatePhotoPreview();
+            if (btn) { btn.disabled = false; btn.textContent = `+ Додати всі (${urls.length})`; }
+            if (failed.length) showToast(`Додано ${ok} з ${urls.length}. Не вийшло: фото ${failed.join(', ')}`, 'error');
+            else showToast(`Додано всі фото: ${ok}`, 'success');
         }
 
         async function uploadProductVideo(file) {
@@ -11238,7 +11268,8 @@
                 <div><b>✨ Пропозиція ШІ.</b> ${it.sourceTitle ? escapeHtml(it.sourceTitle) : ''}</div>
                 ${aiStlUrl(it) ? `<a class="ai-src-open" href="${escapeAttr(aiStlUrl(it))}" target="_blank" rel="noopener noreferrer">${aiIsSearchUrl(aiStlUrl(it)) ? '🔎 Знайти модель' : '📐 Відкрити STL'} · ${escapeHtml(aiSourceName(aiStlUrl(it)))}</a>` : ''}
                 ${it.license ? `<div class="ai-row"><b>Ліцензія:</b> ${escapeHtml(it.license)}</div>` : ''}
-                ${imgs ? `<div>Фото з джерела — краще заміни їх своїми після друку:</div><div class="ai-src-imgs">${imgs}</div>` : '<div>Фото з джерела немає — додай свої.</div>'}`;
+                ${imgs ? `<div>Фото з джерела — краще заміни їх своїми після друку:</div><div class="ai-src-imgs">${imgs}</div>
+                <button type="button" id="aiAddAllBtn" class="btn btn-primary" onclick="addAllAiSourcePhotos(${it.id})">+ Додати всі (${(it.images || []).length})</button>` : '<div>Фото з джерела немає — додай свої.</div>'}`;
             box.hidden = false;
         }
 
