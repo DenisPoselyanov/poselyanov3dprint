@@ -3932,13 +3932,17 @@ let tgMainHandler = null;
 function updateMainButton() {
   if (!currentProduct || !isSheetOpen()) return;
   const b = sheetButton();
-  const own = !useTgMainButton();
+  // Товар з варіантами: нативна кнопка Telegram на телефонах показує ціну попереднього варіанта,
+  // тому для нього завжди власна кнопка внизу картки
+  const own = !useTgMainButton() || hasVariants(currentProduct);
   document.getElementById('m-main-bar').hidden = !own;
   document.body.classList.toggle('own-main', own);
   if (own) {
+    if (useTgMainButton()) releaseTgSheetMain();
     const btn = document.getElementById('m-add-btn');
     btn.innerHTML = `${ic(b.icon)}<span>${escapeHtml(b.text)}</span>`;
     btn.classList.toggle('done', !!b.done);
+    void btn.offsetWidth;   // примусове перемальовування (Android WebView інколи тримає старий текст)
     return;
   }
   releaseCartMain();
@@ -3964,8 +3968,11 @@ function pushTgMainButton(b) {
   } catch (_) {}
 }
 function hideMainButton() {
-  clearTimeout(tgMainResync);
   document.body.classList.remove('own-main');
+  releaseTgSheetMain();
+}
+function releaseTgSheetMain() {
+  clearTimeout(tgMainResync);
   if (!useTgMainButton()) return;
   const mb = tgApp().MainButton;
   try {
