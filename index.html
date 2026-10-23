@@ -716,15 +716,17 @@
   .cart-head h2 small { color: var(--ink-3); font-size: 15px; font-weight: 700; }
   .link-btn.danger { color: var(--sale); }
   .cart-progress { display: grid; gap: 8px; margin-bottom: 12px; }
-  .gift-card { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: var(--r); box-shadow: 0 0 0 1px var(--line); padding: 12px; margin-bottom: 10px; }
-  .gift-card .th { width: 56px; height: 56px; border-radius: 12px; background: var(--orange-soft); position: relative; display: grid; place-items: center; font-size: 24px; flex: none; }
+  /* Подарунок у кошику: та сама сітка, що й рядки товарів (фото 76px, назва, ціна), фото клікабельне */
+  .gift-card { display: flex; align-items: flex-start; gap: 12px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px; padding: 12px; margin-bottom: 10px; box-shadow: 0 3px 10px rgba(20, 27, 45, 0.04); }
+  .gift-card .th { position: relative; overflow: hidden; inline-size: 76px; block-size: 76px; flex: none; padding: 0; border: 0; border-radius: 12px; background: var(--bg); color: var(--muted); display: grid; place-items: center; font: inherit; font-size: 28px; cursor: pointer; }
   .gift-card .th.empty { border: 1.5px dashed var(--orange); background: none; }
-  .gift-card .th img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
-  .gift-card .th .gb { position: absolute; right: -6px; top: -6px; width: 22px; height: 22px; border-radius: 50%; background: var(--orange); color: #fff; display: grid; place-items: center; font-size: 12px; }
-  .gift-card .info { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-3); }
-  .gift-card .info b { display: block; font-size: 14px; color: var(--ink); margin-bottom: 2px; }
-  .gift-card .tag { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--orange-ink); background: var(--orange-soft); padding: 2px 8px; border-radius: 99px; margin-bottom: 4px; }
-  .gift-card .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; box-shadow: 0 0 0 1px var(--line-2); }
+  .gift-card .th img { inline-size: 100%; block-size: 100%; object-fit: cover; pointer-events: none; }
+  .gift-card .th .gb { position: absolute; right: 5px; top: 5px; width: 22px; height: 22px; border-radius: 50%; background: var(--orange); color: #fff; display: grid; place-items: center; font-size: 12px; box-shadow: 0 0 0 2px var(--card-bg); }
+  .gift-card .info { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 12.5px; color: var(--ink-3); }
+  .gift-card .info b { font-size: 15px; line-height: 1.25; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .gift-card .sub { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+  .gift-card .tag { font-size: 10.5px; font-weight: 700; color: var(--orange-ink); background: var(--orange-soft); padding: 2px 8px; border-radius: 99px; }
+  .gift-card .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; box-shadow: 0 0 0 1px var(--line-2); }
   .gift-card s { color: var(--ink-3); }
   .gift-card .free { color: var(--green); font-weight: 800; }
   .cart-upsell { margin: 14px 0 6px; }
@@ -2607,19 +2609,25 @@ function giftRowHtml() {
   if (!shouldShowGift()) return '';
   const max = GIFT_RULE?.max_gift_price;
   if (!selectedGift) {
-    return `<div class="gift-card" id="cart-gift-block"><div class="th empty">🎁</div>
-      <div class="info"><b>Обери подарунок</b>${max ? `до ${money(max)} · ` : ''}безкоштовно</div>
-      <button type="button" class="btn soft" onclick="openGiftModal()">Обрати подарунок</button></div>`;
+    return `<div class="gift-card" id="cart-gift-block">
+      <button type="button" class="th empty" onclick="openGiftModal()" aria-label="Обрати подарунок">🎁</button>
+      <div class="info"><b>Обери подарунок</b>
+        <div class="sub">${max ? `до ${money(max)} · ` : ''}безкоштовно</div>
+        <button type="button" class="link-btn" onclick="openGiftModal()">Обрати подарунок</button></div></div>`;
   }
   const p = findAnyProduct(selectedGift.id);
   const f = selectedGift.filamentId ? FILAMENTS.find(x => x.id === selectedGift.filamentId) : null;
   const thumb = selectedGift.photos?.length
     ? `<img src="${escapeAttr(photo(selectedGift.photos[0], { w: 160 }))}" alt="" decoding="async" crossorigin="anonymous">`
     : escapeHtml(selectedGift.emoji || '🎁');
-  return `<div class="gift-card" id="cart-gift-block"><div class="th">${thumb}<span class="gb">🎁</span></div>
-    <div class="info"><span class="tag">Подарунок</span><b>${escapeHtml(selectedGift.name)}</b>
-      ${selectedGift.filamentName ? `<span class="dot" style="background:${cssColor(f?.hex)}"></span>${escapeHtml(selectedGift.filamentName)} · ` : ''}${p ? `<s>${money(p.price)}</s> ` : ''}<span class="free">0 ₴</span></div>
-    <button type="button" class="btn soft" onclick="openGiftModal()">Змінити</button></div>`;
+  // Фото відкриває товар, як у рядках кошика; «Змінити» — текстовою дією під назвою
+  return `<div class="gift-card" id="cart-gift-block">
+    <button type="button" class="th" onclick="openModal(${selectedGift.id}, 'products')" aria-label="Переглянути ${escapeAttr(selectedGift.name)}">${thumb}<span class="gb">🎁</span></button>
+    <div class="info"><b>${escapeHtml(selectedGift.name)}</b>
+      <div class="sub"><span class="tag">Подарунок</span>
+        ${selectedGift.filamentName ? `<span class="dot" style="background:${cssColor(f?.hex)}"></span>${escapeHtml(selectedGift.filamentName)}` : ''}
+        ${p ? `<s>${money(p.price)}</s>` : ''}<span class="free">0 ₴</span></div>
+      <button type="button" class="link-btn" onclick="openGiftModal()">Змінити</button></div></div>`;
 }
 
 // Прогрес до знижки й подарунка: усі акції в одній компактній картці, найближчі до виконання — зверху.
