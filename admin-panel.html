@@ -8576,19 +8576,21 @@
             if (btn) btn.disabled = true;
             let ok = 0;
             const failed = [];
+            const reasons = new Set();
             for (let i = 0; i < urls.length; i++) {
                 if (btn) btn.textContent = `Завантажую ${i + 1} з ${urls.length}…`;
                 try {
                     const data = await uploadPhotoUrlQuiet(urls[i]);
-                    if (data.ok) ok++; else failed.push(i + 1);
-                } catch (_) {
+                    if (data.ok) ok++; else { failed.push(i + 1); reasons.add(String(data.error || 'невідома помилка').replace(/^❌\s*/, '')); }
+                } catch (e) {
                     failed.push(i + 1);
+                    reasons.add(e.name === 'AbortError' ? 'завантаження занадто довге' : 'немає зʼєднання із сервером');
                 }
                 if (i < urls.length - 1) await new Promise(r => setTimeout(r, 800)); // даємо серверу перевести подих між фото
             }
             updatePhotoPreview();
             if (btn) { btn.disabled = false; btn.textContent = `+ Додати всі (${urls.length})`; }
-            if (failed.length) showToast(`Додано ${ok} з ${urls.length}. Не вийшло: фото ${failed.join(', ')}`, 'error');
+            if (failed.length) showToast(`Додано ${ok} з ${urls.length}. Не вийшло: фото ${failed.join(', ')}. Причина: ${[...reasons].join('; ')}`, 'error');
             else showToast(`Додано всі фото: ${ok}`, 'success');
         }
 
