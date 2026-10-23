@@ -4405,6 +4405,20 @@ async def handle_update_ai_suggestion(request: web.Request):
     return web.json_response(result, headers=cors_headers(request))
 
 
+async def handle_add_ai_suggestion(request: web.Request):
+    """Додати пропозицію вручну (без ключа Claude): JSON у форматі пропозицій ШІ."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
+    result = await ai_suggestions_svc.add_manual(data)
+    status = 200 if result.get("ok") else 400
+    return web.json_response(result, status=status, headers=cors_headers(request))
+
+
 async def handle_delete_ai_suggestion(request: web.Request):
     denied = await _admin_guard(request)
     if denied is not None:

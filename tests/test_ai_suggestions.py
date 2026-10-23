@@ -267,3 +267,17 @@ def test_resolver_drops_private_addresses():
         await resolver.close()
 
     asyncio.run(run())
+
+
+def test_add_manual_follows_same_rules(env):
+    async def run():
+        ok = await ai.add_manual(_item(name="Ручний кролик"))
+        assert ok["ok"] and ok["name"] == "Ручний кролик"
+        assert not (await ai.add_manual(_item(name="ручний кролик")))["ok"]  # дубль
+        assert not (await ai.add_manual(_item(name="Демонічний кролик")))["ok"]  # чорний список
+        assert not (await ai.add_manual(_item(name="Fidget-спіраль")))["ok"]  # уже є в каталозі
+        assert not (await ai.add_manual({"name": "Без ціни"}))["ok"]
+
+    asyncio.run(run())
+    names = [i["name"] for i in ai.list_suggestions()]
+    assert names == ["Ручний кролик"] and ai.list_suggestions()[0]["status"] == "new"

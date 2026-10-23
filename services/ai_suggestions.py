@@ -699,6 +699,22 @@ async def enrich_photos(suggestion_id: int, client=None) -> int:
     return len(fresh)
 
 
+async def add_manual(raw: dict) -> dict:
+    """Пропозиція, додана вручну (без API): ті самі правила, що й для пропозицій ШІ — чорний список,
+    ліміт фото, перевірка посилань, дублікати. Потрапляє в «Нові», у каталог нічого не додає."""
+    category_ids = [c["id"] for c in await run_db(get_all_categories)]
+    item = normalize_item(raw if isinstance(raw, dict) else {}, category_ids)
+    if not item:
+        return {"ok": False, "error": "Потрібні назва і ціна, без тем із чорного списку"}
+    existing = {p.get("name", "").strip().lower() for p in await run_db(get_admin_products)}
+    existing |= {n.strip().lower() for n in await run_db(_known_names)}
+    if item["name"].lower() in existing:
+        return {"ok": False, "error": "Такий товар уже є в каталозі або серед пропозицій"}
+    item["images"] = await verify_images(item["images"])
+    await run_db(save_items, [item])
+    return {"ok": True, "name": item["name"], "images": len(item["images"])}
+
+
 def job_state() -> dict:
     return dict(_job)
 
