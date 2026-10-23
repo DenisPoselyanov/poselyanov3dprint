@@ -2264,6 +2264,8 @@
         .btn-secondary:hover { background: var(--bg-tab-active); }
         .btn-danger { background: var(--sale); color: #fff; }
         .btn-danger:hover { background: #c92d30; box-shadow: none; }
+        .btn-reject { background: rgba(231,76,60,.14); color: #ff7b6b; border-color: var(--sale); }
+        .btn-reject:hover { background: var(--sale); color: #fff; }
         .order-card, .queue-group, .ov-panel, .queue-kpi-card, .category-row { box-shadow: none; }
 
         .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
@@ -11167,7 +11169,7 @@
                 const morePhotos = (it.images || []).length < AI_PHOTOS_MAX
                     ? `<button class="btn btn-secondary" type="button" onclick="findAiPhotos(${it.id})" title="ШІ знайде ще фото: галерея, відгуки">🖼 Ще фото</button>` : '';
                 actions = `${stlBtn}${morePhotos}
-                    <button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">Відхилити</button>
+                    <button class="btn btn-reject" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">✕ Відхилити</button>
                     <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">✏️ Відкрити й додати</button>`;
             } else if (it.status === 'published') {
                 actions = `${stlBtn}${it.productId ? `<button class="btn btn-secondary ai-main" type="button" onclick="editProduct(${it.productId})">Товар #${it.productId}</button>` : ''}`;
