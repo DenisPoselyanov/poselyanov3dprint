@@ -11110,6 +11110,23 @@
             return risky ? '<span class="lic-badge">Перевір</span>' : '<span class="lic-badge ok">Дозволено</span>';
         }
 
+        // Лічильники з сайту моделі: скачування, лайки, друки, рейтинг (якщо є)
+        function aiCompact(n) {
+            if (n == null) return '';
+            if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + ' млн';
+            if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + ' тис';
+            return String(n);
+        }
+        function aiStatsHtml(s) {
+            if (!s) return '';
+            const parts = [];
+            if (s.rating != null) parts.push(`★ ${Number(s.rating).toFixed(2)}`);
+            if (s.downloads != null) parts.push(`⬇ ${aiCompact(s.downloads)}`);
+            if (s.likes != null) parts.push(`♥ ${aiCompact(s.likes)}`);
+            if (s.prints != null) parts.push(`🖨 ${aiCompact(s.prints)}`);
+            return parts.length ? `<div class="ai-chips">${parts.map(x => `<span class="ai-chip">${escapeHtml(x)}</span>`).join('')}</div>` : '';
+        }
+
         function aiCardHtml(it) {
             const p = it.product || {};
             const cat = p.cat ? getCategoryMeta(p.cat) : null;
@@ -11151,6 +11168,7 @@
                     <span class="ai-price">${Number(p.price) || 0} ₴</span>
                 </div>
                 ${p.description ? `<div class="ai-desc">${escapeHtml(p.description)}</div>` : ''}
+                ${aiStatsHtml(p.sourceStats)}
                 ${(p.variants || []).length ? `<div class="ai-chips">${p.variants.map(v => `<span class="ai-chip">${escapeHtml(v.name)} · ${Number(v.price) || 0} ₴</span>`).join('')}</div>` : ''}
                 ${(it.images || []).length > 1 ? `<div class="ai-photo-count">🖼 Фото: ${it.images.length} з ${AI_PHOTOS_MAX}</div><div class="ai-gallery">${it.images.map((url, i) => `<img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" class="ai-zoom" onclick="openAiPhoto(${it.id}, ${i})" title="Переглянути фото ${i + 1}">`).join('')}</div>` : ''}
                 ${p.note ? `<div class="ai-row">ⓘ ${escapeHtml(p.note)}</div>` : ''}

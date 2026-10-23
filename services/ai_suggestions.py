@@ -207,6 +207,27 @@ def _https(value) -> str:
     return url if re.match(r"^https://[^\s\"'<>]{3,1000}$", url) else ""
 
 
+def _source_stats(raw) -> dict:
+    """Лічильники сторінки моделі: лише додатні цілі числа й рейтинг 0–5; решта відкидається."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key in ("downloads", "likes", "prints"):
+        try:
+            value = int(raw.get(key))
+        except (TypeError, ValueError):
+            continue
+        if value >= 0:
+            out[key] = value
+    try:
+        rating = float(raw.get("rating"))
+        if 0 <= rating <= 5:
+            out["rating"] = round(rating, 2)
+    except (TypeError, ValueError):
+        pass
+    return out
+
+
 def _variants(raw) -> list[dict]:
     """Позиції товару (розміри) від ШІ -> [{name, price}]; менше двох придатних — товар без варіантів."""
     out, seen = [], set()
@@ -275,6 +296,9 @@ def normalize_item(raw: dict, category_ids: list[str]) -> dict | None:
     if variants:
         product["variants"] = variants
         product["gift"] = False
+    stats = _source_stats(raw.get("source_stats"))
+    if stats:
+        product["sourceStats"] = stats
     source_url = _https(raw.get("source_url"))
     # Посилання на STL: пряма сторінка завантаження; якщо ШІ її не дав, то сторінка моделі
     stl_link = _https(raw.get("stl_link")) or source_url
@@ -338,7 +362,7 @@ SUBMIT_TOOL = {
                     "required": [
                         "name", "cat", "emoji", "mat", "price", "description", "note",
                         "filament_choice", "gift", "source_url", "source_title", "license",
-                        "reason", "image_urls", "stl_link", "variants",
+                        "reason", "image_urls", "stl_link", "variants", "source_stats",
                     ],
                     "properties": {
                         "name": {"type": "string", "description": "Назва товару для вітрини, коротко, як у каталозі"},
@@ -356,6 +380,18 @@ SUBMIT_TOOL = {
                         "license": {"type": "string", "description": "Ліцензія моделі і чи дозволено продавати друк"},
                         "reason": {"type": "string", "description": "Чому цей товар підійде магазину"},
                         "image_urls": {"type": "array", "items": {"type": "string"}, "description": "Прямі https-посилання на фото: до 10, найкращі й різноманітні, зокрема фото з відгуків і розділу «Prints/Makes»"},
+                        "source_stats": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["downloads", "likes", "prints", "rating"],
+                            "description": "Лічильники зі сторінки моделі: скачування, лайки, друки, середній рейтинг (0–5). Невідоме — null",
+                            "properties": {
+                                "downloads": {"type": ["integer", "null"]},
+                                "likes": {"type": ["integer", "null"]},
+                                "prints": {"type": ["integer", "null"]},
+                                "rating": {"type": ["number", "null"]},
+                            },
+                        },
                         "variants": {
                             "type": "array",
                             "description": "Позиції (розміри) цього товару з цінами, якщо модель має кілька розмірів; інакше порожній список. 2–10 позицій, назва — що саме відрізняє (напр. «10 см»)",
@@ -400,6 +436,8 @@ SYSTEM_PROMPT = """Ти допомагаєш власнику маленьког
 - ціну орієнтуй на ціни схожих товарів у каталозі;
 - stl_link — сторінка завантаження файлів цієї самої моделі (лише якщо реально бачив її); не вигадуй посилань;
 - image_urls — прямі посилання (https) на фото й анімовані GIF, лише ті, що ти реально бачив; інакше порожній список. Файли .gif і .webp теж підходять.
+  НЕ бери фото з опису моделі (розділ «Description»): там часто реклама інших товарів автора, не має відношення до цієї моделі.
+  Беремо лише галерею моделі й фото з відгуків/«Prints» (реальні відбитки).
   Збирай якомога більше різних фото, до 10 на товар, щоб власник мав із чого вибрати: галерея моделі (og:image), а також фото
   з відгуків і розділів «Prints / Makes / Made it», коментарів зі світлинами — реальні відбитки часто виглядають краще за рендери.
   Віддавай перевагу чітким фото готової речі, різним кутам і кольорам; без дублікатів, логотипів, скриншотів слайсера й аватарок.
@@ -467,7 +505,8 @@ PHOTOS_TOOL = {
 }
 
 PHOTOS_PROMPT = """Ти шукаєш фото для картки товару в магазині 3D-друку. Дана конкретна модель (посилання на сторінку).
-Відкрий її сторінку й зберіть якомога більше різних якісних фото готової речі, до 10 штук:
+Відкрий її сторінку й зберіть якомога більше різних якісних фото готової речі, до 10 штук.
+НЕ бери фото з розділу «Description» (опису): там часто реклама інших товарів автора.
 - галерея моделі (основні фото, різні кути й кольори);
 - фото з відгуків, коментарів і розділів «Prints / Makes / Made it» — реальні відбитки людей часто кращі за рендери;
 - за потреби пошукай ту саму модель на інших сайтах (MakerWorld, Printables, Thingiverse, Cults3D).
@@ -667,6 +706,43 @@ def reject_blocked() -> int:
     finally:
         conn.close()
     return len(bad)
+
+
+def set_license_and_stats(suggestion_id: int, license_text, stats) -> None:
+    """Ліцензія (колонка) і лічильники (у даних товару, поле sourceStats)."""
+    item = get_suggestion(suggestion_id)
+    conn = db_connect()
+    try:
+        if license_text is not None:
+            conn.execute(_sql("UPDATE ai_suggestions SET license = ? WHERE id = ?"), (_text(license_text, TEXT_MAX), int(suggestion_id)))
+        if stats is not None:
+            product = dict(item["product"])
+            product["sourceStats"] = _source_stats(stats)
+            conn.execute(
+                _sql("UPDATE ai_suggestions SET data = ? WHERE id = ?"),
+                (json.dumps(product, ensure_ascii=False), int(suggestion_id)),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+async def update_suggestion(suggestion_id: int, data: dict) -> dict:
+    """Фото, ліцензія й лічильники пропозиції однією дією (вручну, зі сторінки моделі)."""
+    if not await run_db(get_suggestion, suggestion_id):
+        return {"ok": False, "error": "Не знайдено"}
+    result = {"ok": True}
+    if isinstance(data.get("images"), list):
+        images = (await verify_images(_clean_images(data["images"])))[:IMAGES_MAX]
+        if not images:
+            return {"ok": False, "error": "Жодного робочого посилання на фото"}
+        await run_db(set_images, suggestion_id, images)
+        result["images"] = len(images)
+    license_text = data.get("license") if isinstance(data.get("license"), str) else None
+    stats = data.get("sourceStats") if isinstance(data.get("sourceStats"), dict) else None
+    if license_text is not None or stats is not None:
+        await run_db(set_license_and_stats, suggestion_id, license_text, stats)
+    return result
 
 
 async def update_images(suggestion_id: int, urls: list) -> dict:

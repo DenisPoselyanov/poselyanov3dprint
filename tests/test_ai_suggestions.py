@@ -293,3 +293,22 @@ def test_update_images_replaces_gallery(env):
         assert ai.get_suggestion(sid)["images"] == ["https://example.com/new1.jpg", "https://example.com/new2.jpg"]
 
     asyncio.run(run())
+
+
+def test_source_stats_are_clean(env):
+    out = ai.normalize_item(_item(source_stats={"downloads": "73092", "likes": -1, "prints": None, "rating": 4.97}), ["toy"])
+    assert out["product"]["sourceStats"] == {"downloads": 73092, "rating": 4.97}
+    assert "sourceStats" not in ai.normalize_item(_item(source_stats={"rating": 9}), ["toy"])["product"]
+
+
+def test_update_suggestion_sets_license_and_stats(env):
+    async def run():
+        ai.save_items([ai.normalize_item(_item(), ["toy"])])
+        sid = ai.list_suggestions()[0]["id"]
+        assert await ai.update_suggestion(sid, {"license": "Standard Digital File License", "sourceStats": {"downloads": 362, "likes": 269}}) == {"ok": True}
+        item = ai.get_suggestion(sid)
+        assert item["license"] == "Standard Digital File License"
+        assert item["product"]["sourceStats"] == {"downloads": 362, "likes": 269}
+        assert not (await ai.update_suggestion(999, {"license": "x"}))["ok"]
+
+    asyncio.run(run())
