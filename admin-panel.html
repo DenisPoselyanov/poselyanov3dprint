@@ -8336,6 +8336,7 @@
                 onProductFormChange();
                 document.getElementById('modal').classList.add('active');
                 document.querySelector('#modal .dr-body').scrollTop = 0;
+                aiAttachSourceToProduct(id);
             } catch (e) {
                 showToast('Помилка завантаження товару', 'error');
             }
@@ -11293,7 +11294,7 @@
                     <button class="btn btn-reject" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">✕ Відхилити</button>
                     <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">${aiLoadDraft(it.id) ? '📝 Продовжити правки' : '✏️ Відкрити й додати'}</button>`;
             } else if (it.status === 'published') {
-                actions = `${stlBtn}${it.productId ? `<button class="btn btn-secondary ai-main" type="button" onclick="editProduct(${it.productId})">Товар #${it.productId}</button>` : ''}`;
+                actions = `${stlBtn}${it.productId ? `<button class="btn btn-secondary ai-main" type="button" onclick="editProduct(${it.productId})">✏️ Редагувати товар #${it.productId} · додати фото</button>` : ''}`;
             } else {
                 actions = `${stlBtn}
                     <button class="btn btn-secondary" type="button" onclick="deleteAiSuggestion(${it.id})">Видалити</button>
@@ -11452,6 +11453,22 @@
             captureProductFormSnapshot();
             onProductFormChange();
             aiRenderDraftBar();
+        }
+
+        // Товар, доданий з пропозиції ШІ, при редагуванні знову показує джерело й фото з нього (можна дозавантажити пропущені)
+        async function aiAttachSourceToProduct(productId) {
+            try {
+                if (!aiLoaded) {
+                    const data = await productApi('/admin/ai-suggestions', 'GET');
+                    aiItems = Array.isArray(data.items) ? data.items : [];
+                    aiJob = data.job || null;
+                    aiEnabled = data.enabled !== false;
+                    aiLoaded = true;
+                }
+                if (currentProductId !== productId) return; // форму вже закрили або відкрили інший товар
+                const it = aiItems.find(x => x.productId === productId);
+                if (it) renderAiSourceBox(it);
+            } catch (_) { /* не критично: форма працює й без блоку джерела */ }
         }
 
         // У формі товару: звідки модель, ліцензія і фото з джерела (додаються лише кнопкою)
