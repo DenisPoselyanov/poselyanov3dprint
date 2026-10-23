@@ -2990,6 +2990,10 @@
         .ai-actions .btn-reject { margin-left: auto; }
         .ai-src { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border: 1px dashed var(--border-alt); border-radius: 12px; background: var(--bg-section); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
         .ai-src[hidden] { display: none; }
+        .ai-draft { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 9px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); color: var(--text-main); }
+        .ai-draft[hidden] { display: none; }
+        .ai-draft .btn { margin-left: auto; padding: 6px 12px; font-size: 13px; min-height: 32px; }
+        .ai-chip.draft { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); }
         .ai-src a { color: var(--accent); }
         .ai-zoom { cursor: zoom-in; }
         .ai-gallery { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -3596,6 +3600,7 @@
 
                             <section class="dr-sec" aria-labelledby="secMedia">
                                 <h3 id="secMedia">Фото і відео</h3>
+                                <div id="aiDraftBar" class="ai-draft" hidden></div>
                                 <div id="aiSourceBox" class="ai-src" hidden></div>
                                 <div class="form-group">
                                     <div class="drag-drop" id="dragDrop">
@@ -7262,6 +7267,7 @@
             updatePriceCalc();
             renderProductPreview();
             setDirtyUi('productDirty', hasProductFormChanges());
+            if (typeof aiAutosaveDraft === 'function') aiAutosaveDraft();
         }
 
         function openAddModal() {
@@ -7315,6 +7321,7 @@
             productFormSnapshot = null;
             productCollectionIds = [];
             productCollectionsOrig = [];
+            if (currentPage === 'ai' && typeof renderAiPage === 'function') renderAiPage(); // оновити позначки «Чернетка»
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -8966,6 +8973,7 @@
                     if (!currentProductId && currentAiSuggestionId && savedId) {
                         try {
                             await productApi(`/admin/ai-suggestions/${currentAiSuggestionId}`, 'PUT', { status: 'published', productId: savedId });
+                            aiClearDraft(currentAiSuggestionId);
                             if (currentPage === 'ai') loadAiSuggestions();
                         } catch (aiErr) {
                             statusNote += ` Пропозицію не позначено доданою: ${aiErr.message}`;
@@ -11283,7 +11291,7 @@
                     ? `<button class="btn btn-secondary" type="button" onclick="findAiPhotos(${it.id})" title="ШІ знайде ще фото: галерея, відгуки">🖼 Ще фото</button>` : '';
                 actions = `${stlBtn}${morePhotos}
                     <button class="btn btn-reject" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">✕ Відхилити</button>
-                    <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">✏️ Відкрити й додати</button>`;
+                    <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">${aiLoadDraft(it.id) ? '📝 Продовжити правки' : '✏️ Відкрити й додати'}</button>`;
             } else if (it.status === 'published') {
                 actions = `${stlBtn}${it.productId ? `<button class="btn btn-secondary ai-main" type="button" onclick="editProduct(${it.productId})">Товар #${it.productId}</button>` : ''}`;
             } else {
@@ -11301,6 +11309,7 @@
                                 ${cat ? `<span class="ai-chip">${escapeHtml(cat.emoji || '')} ${escapeHtml(cat.name)}</span>` : ''}
                                 ${p.mat ? `<span class="ai-chip">${escapeHtml(p.mat)}</span>` : ''}
                                 ${srcName ? `<span class="ai-chip src">${escapeHtml(srcName)}</span>` : ''}
+                                ${it.status === 'new' && aiLoadDraft(it.id) ? '<span class="ai-chip draft" title="Є ваші незавершені правки">📝 Чернетка</span>' : ''}
                             </div>
                         </div>
                     </div>
@@ -11335,6 +11344,7 @@
             const p = it.product || {};
             openAddModal();
             currentAiSuggestionId = id;
+            aiOriginalState = null; // поки форму не заповнено, чернетку не пишемо
             document.getElementById('modalTitle').textContent = '✨ Новий товар з пропозиції ШІ';
             const form = document.getElementById('productForm');
             renderCategorySelectOptions(p.cat);
@@ -11355,8 +11365,93 @@
             toggleFilamentChoiceFields();
             if (Array.isArray(p.variants) && p.variants.length >= VARIANTS_MIN) loadVariantsDraft(p.variants);
             renderAiSourceBox(it);
+            // Те, що запропонував ШІ — еталон для «Повернути дані ШІ»; власні правки зберігаються як чернетка
+            aiOriginalState = aiFormState();
+            const draft = aiLoadDraft(id);
+            if (draft) {
+                aiApplyFormState(draft);
+                aiDraftRestored = true;
+            } else {
+                aiDraftRestored = false;
+            }
             captureProductFormSnapshot();
             onProductFormChange();
+            aiRenderDraftBar();
+        }
+
+        // ── Чернетки пропозицій ШІ: правки у формі (ціна, назва, опис…) зберігаються в браузері на кожну пропозицію
+        let aiOriginalState = null;
+        let aiDraftRestored = false;
+        const aiDraftKey = id => 'aiDraft:' + id;
+
+        function aiFormState() {
+            const form = document.getElementById('productForm');
+            const fields = {};
+            [...form.elements].forEach(e => {
+                if (!e.name || e.type === 'file' || e.type === 'button' || e.type === 'submit') return;
+                fields[e.name] = (e.type === 'checkbox' || e.type === 'radio') ? e.checked : e.value;
+            });
+            return { fields, variants: (productVariantsDraft || []).map(v => ({ ...v })) };
+        }
+
+        function aiApplyFormState(state) {
+            const form = document.getElementById('productForm');
+            const f = state.fields || {};
+            renderCategorySelectOptions(f.cat);
+            Object.keys(f).forEach(name => {
+                const e = form.elements[name];
+                if (!e || e.length !== undefined && !e.tagName) return; // RadioNodeList пропускаємо
+                if (e.type === 'checkbox' || e.type === 'radio') e.checked = !!f[name];
+                else if (e.type !== 'file') e.value = f[name];
+            });
+            syncEmojiTrigger(form.emoji);
+            updateCategoryFields();
+            toggleFilamentChoiceFields();
+            loadVariantsDraft(state.variants || []);
+            toggleContractPriceFields();
+        }
+
+        function aiLoadDraft(id) {
+            try {
+                const raw = localStorage.getItem(aiDraftKey(id));
+                return raw ? JSON.parse(raw) : null;
+            } catch (_) { return null; }
+        }
+
+        function aiClearDraft(id) {
+            try { localStorage.removeItem(aiDraftKey(id)); } catch (_) {}
+        }
+
+        function aiAutosaveDraft() {
+            if (!currentAiSuggestionId || !aiOriginalState) { aiRenderDraftBar(); return; }
+            const state = aiFormState();
+            try {
+                if (JSON.stringify(state) === JSON.stringify(aiOriginalState)) aiClearDraft(currentAiSuggestionId);
+                else localStorage.setItem(aiDraftKey(currentAiSuggestionId), JSON.stringify(state));
+            } catch (_) {}
+            aiRenderDraftBar();
+        }
+
+        function aiRenderDraftBar() {
+            const bar = document.getElementById('aiDraftBar');
+            if (!bar) return;
+            const changed = !!currentAiSuggestionId && !!aiOriginalState
+                && JSON.stringify(aiFormState()) !== JSON.stringify(aiOriginalState);
+            if (!changed) { bar.hidden = true; bar.innerHTML = ''; return; }
+            bar.innerHTML = `<span>📝 ${aiDraftRestored ? 'Відновлено вашу чернетку.' : 'Ви змінили дані ШІ.'} Зберігається автоматично — можна закрити й продовжити пізніше.</span>
+                <button type="button" class="btn btn-secondary" onclick="aiResetToOriginal()">↺ Повернути дані ШІ</button>`;
+            bar.hidden = false;
+        }
+
+        function aiResetToOriginal() {
+            if (!currentAiSuggestionId || !aiOriginalState) return;
+            if (!confirm('Повернути всі поля до того, що запропонував ШІ? Ваші правки буде втрачено.')) return;
+            aiApplyFormState(aiOriginalState);
+            aiClearDraft(currentAiSuggestionId);
+            aiDraftRestored = false;
+            captureProductFormSnapshot();
+            onProductFormChange();
+            aiRenderDraftBar();
         }
 
         // У формі товару: звідки модель, ліцензія і фото з джерела (додаються лише кнопкою)
@@ -11399,6 +11494,7 @@
             if (!(await askConfirm('Видалити пропозицію назавжди? ШІ зможе запропонувати цей товар знову.'))) return;
             try {
                 await productApi(`/admin/ai-suggestions/${id}`, 'DELETE');
+                aiClearDraft(id);
                 showToast('Пропозицію видалено', 'success');
             } catch (e) {
                 showToast(e.message || 'Не вдалося видалити', 'error');
