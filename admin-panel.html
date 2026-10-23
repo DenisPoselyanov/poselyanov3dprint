@@ -2985,7 +2985,9 @@
         .ai-lic .lic-text { padding: 0 12px 9px; color: var(--text-secondary); overflow-wrap: anywhere; }
         .ai-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .ai-actions .btn { padding: 8px 14px; font-size: 13px; min-height: 36px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-        .ai-actions .ai-main { margin-left: auto; }
+        /* Головна дія — на всю ширину зверху, другорядні (STL, копія, фото) зліва, «Відхилити» справа в тому ж рядку */
+        .ai-actions .ai-main { order: -1; flex: 1 1 100%; justify-content: center; min-height: 40px; font-size: 14px; }
+        .ai-actions .btn-reject { margin-left: auto; }
         .ai-src { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border: 1px dashed var(--border-alt); border-radius: 12px; background: var(--bg-section); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
         .ai-src[hidden] { display: none; }
         .ai-src a { color: var(--accent); }
