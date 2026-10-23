@@ -8495,7 +8495,7 @@
             }
             // Сторінка помилки від проксі (nginx) — HTML, його не показуємо адміну
             if (res.status === 502 || res.status === 503 || res.status === 504) {
-                return { ok: false, error: 'Сервер тимчасово недоступний. Спробуйте ще раз за хвилину.' };
+                return { ok: false, transient: true, error: 'Сервер тимчасово недоступний. Спробуйте ще раз за хвилину.' };
             }
             const plain = text && !text.trim().startsWith('<') && text.length < 300;
             return { ok: false, error: plain ? text : `Помилка сервера (${res.status}). Спробуйте ще раз.` };
@@ -8536,25 +8536,36 @@
         }
 
         // Завантаження одного фото за URL без тостів; успішне фото додається до uploadedPhotos
+        // Сервер на 502/503/504 (зайнятий або перезапускається) часто оживає за кілька секунд — тому до 3 спроб із паузою
         async function uploadPhotoUrlQuiet(url) {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 180000);
-            try {
-                const res = await fetch(API_BASE + '/upload-photo-url', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Telegram-Init-Data': tgInitData
-                    },
-                    body: JSON.stringify({ url }),
-                    signal: controller.signal
-                });
-                const data = await readUploadResponse(res);
-                if (data.ok) uploadedPhotos.push(data.url);
-                return data;
-            } finally {
-                clearTimeout(timeoutId);
+            const delays = [0, 3000, 8000];
+            let last = { ok: false, error: 'Помилка завантаження' };
+            for (let attempt = 0; attempt < delays.length; attempt++) {
+                if (delays[attempt]) await new Promise(r => setTimeout(r, delays[attempt]));
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 180000);
+                try {
+                    const res = await fetch(API_BASE + '/upload-photo-url', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Telegram-Init-Data': tgInitData
+                        },
+                        body: JSON.stringify({ url }),
+                        signal: controller.signal
+                    });
+                    const data = await readUploadResponse(res);
+                    if (data.ok) { uploadedPhotos.push(data.url); return data; }
+                    last = data;
+                    if (!data.transient) return data;
+                } catch (e) {
+                    if (e.name === 'AbortError') throw e;
+                    last = { ok: false, transient: true, error: 'Немає зʼєднання із сервером. Спробуйте ще раз.' };
+                } finally {
+                    clearTimeout(timeoutId);
+                }
             }
+            return last;
         }
 
         // «Додати всі» з пропозиції ШІ: фото вантажаться по одному, щоб не перевантажувати сервер
@@ -8573,6 +8584,7 @@
                 } catch (_) {
                     failed.push(i + 1);
                 }
+                if (i < urls.length - 1) await new Promise(r => setTimeout(r, 800)); // даємо серверу перевести подих між фото
             }
             updatePhotoPreview();
             if (btn) { btn.disabled = false; btn.textContent = `+ Додати всі (${urls.length})`; }
