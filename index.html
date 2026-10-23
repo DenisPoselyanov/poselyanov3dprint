@@ -3942,6 +3942,17 @@ function updateMainButton() {
     return;
   }
   releaseCartMain();
+  pushTgMainButton(b);
+  // Мобільні клієнти Telegram подекуди показують попередній текст кнопки (ціну попереднього варіанта):
+  // повторюємо актуальним станом, коли клієнт вже обробив першу зміну
+  clearTimeout(tgMainResync);
+  tgMainResync = setTimeout(() => {
+    if (!currentProduct || !isSheetOpen() || !useTgMainButton()) return;
+    pushTgMainButton(sheetButton());
+  }, 200);
+}
+let tgMainResync = null;
+function pushTgMainButton(b) {
   const mb = tgApp().MainButton;
   try {
     if (!tgMainHandler) {
@@ -3949,11 +3960,11 @@ function updateMainButton() {
       mb.onClick(tgMainHandler);
     }
     mb.setParams({ text: b.text, color: b.done ? MAIN_GREEN : MAIN_BLUE, text_color: '#FFFFFF', is_active: true, is_visible: true });
-    // Деякі клієнти Telegram не оновлюють текст кнопки, якщо змінився лише він (ціна варіанта)
     mb.setText(b.text);
   } catch (_) {}
 }
 function hideMainButton() {
+  clearTimeout(tgMainResync);
   document.body.classList.remove('own-main');
   if (!useTgMainButton()) return;
   const mb = tgApp().MainButton;
