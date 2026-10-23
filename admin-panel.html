@@ -3351,13 +3351,7 @@
             </section>
 
             <section id="aiPage" class="page-section">
-                <div class="orders-toolbar">
-                    <h2>✨ Пропозиції ШІ</h2>
-                    <div class="orders-toolbar-right">
-                        <button class="btn btn-secondary" type="button" id="aiPhotosBtn" onclick="findAiPhotos()" title="ШІ шукає ще фото (галерея, відгуки) для нових пропозицій, де їх менше 10">🖼 Доповнити фото</button>
-                        <button class="btn btn-secondary" type="button" onclick="loadAiSuggestions()">🔄 Оновити</button>
-                    </div>
-                </div>
+                <!-- Кнопки «Доповнити фото» (findAiPhotos) і «Оновити» (loadAiSuggestions) сховано, поки немає ANTHROPIC_API_KEY -->
                 <div id="aiTabs" class="orders-tabs"></div>
                 <div class="ai-filters">
                     <input type="search" class="orders-search ai-f-search" id="aiFSearch" placeholder="🔍 Назва, опис…" oninput="aiFilterChanged()">
