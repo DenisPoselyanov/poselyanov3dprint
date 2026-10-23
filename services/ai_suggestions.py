@@ -669,6 +669,17 @@ def reject_blocked() -> int:
     return len(bad)
 
 
+async def update_images(suggestion_id: int, urls: list) -> dict:
+    """Замінює фото пропозиції списком (вручну, напр. зі сторінки моделі). Посилання перевіряються як у ШІ."""
+    if not await run_db(get_suggestion, suggestion_id):
+        return {"ok": False, "error": "Не знайдено"}
+    images = (await verify_images(_clean_images(urls)))[:IMAGES_MAX]
+    if not images:
+        return {"ok": False, "error": "Жодного робочого посилання на фото"}
+    await run_db(set_images, suggestion_id, images)
+    return {"ok": True, "images": len(images)}
+
+
 def photo_targets(ids=None) -> list[int]:
     """Пропозиції, яким бракує фото: вказані id або всі нові з менш ніж IMAGES_MAX фото."""
     wanted = {int(i) for i in ids or []}

@@ -4398,6 +4398,10 @@ async def handle_update_ai_suggestion(request: web.Request):
         return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
     if not isinstance(data, dict):
         data = {}
+    if isinstance(data.get("images"), list):
+        result = await ai_suggestions_svc.update_images(sid, data["images"])
+        status = 404 if result.get("error") == "Не знайдено" else 400 if not result.get("ok") else 200
+        return web.json_response(result, status=status, headers=cors_headers(request))
     result = await run_db(ai_suggestions_svc.set_status, sid, str(data.get("status") or ""), data.get("productId"))
     if not result.get("ok"):
         status = 404 if result.get("error") == "Не знайдено" else 400

@@ -281,3 +281,15 @@ def test_add_manual_follows_same_rules(env):
     asyncio.run(run())
     names = [i["name"] for i in ai.list_suggestions()]
     assert names == ["Ручний кролик"] and ai.list_suggestions()[0]["status"] == "new"
+
+
+def test_update_images_replaces_gallery(env):
+    async def run():
+        ai.save_items([ai.normalize_item(_item(image_urls=["https://example.com/old.jpg"]), ["toy"])])
+        sid = ai.list_suggestions()[0]["id"]
+        assert not (await ai.update_images(999, ["https://example.com/x.jpg"]))["ok"]
+        result = await ai.update_images(sid, ["https://example.com/new1.jpg", "https://example.com/new2.jpg"])
+        assert result == {"ok": True, "images": 2}
+        assert ai.get_suggestion(sid)["images"] == ["https://example.com/new1.jpg", "https://example.com/new2.jpg"]
+
+    asyncio.run(run())
