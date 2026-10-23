@@ -8460,7 +8460,12 @@
                     error: 'Файл занадто великий. Спробуйте менше фото або завантаження за URL.'
                 };
             }
-            return { ok: false, error: text || `HTTP ${res.status}` };
+            // Сторінка помилки від проксі (nginx) — HTML, його не показуємо адміну
+            if (res.status === 502 || res.status === 503 || res.status === 504) {
+                return { ok: false, error: 'Сервер тимчасово недоступний. Спробуйте ще раз за хвилину.' };
+            }
+            const plain = text && !text.trim().startsWith('<') && text.length < 300;
+            return { ok: false, error: plain ? text : `Помилка сервера (${res.status}). Спробуйте ще раз.` };
         }
 
         async function uploadPhotoFromUrl() {
