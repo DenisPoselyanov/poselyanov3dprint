@@ -737,9 +737,9 @@
   .sum-row.total { font-size: 15px; color: var(--ink); font-weight: 800; border-top: 1px solid var(--line); padding-top: 10px; }
   .sum-row.total b { font-weight: 800; }
   .gift-sub { font-size: 12.5px; color: var(--ink-2); padding: 0 18px 10px; }
-  .gift-thumb { width: 44px; height: 44px; border-radius: 10px; overflow: hidden; background: var(--surface-2); flex: none; display: grid; place-items: center; font-size: 22px; cursor: pointer; }
+  .gift-thumb { width: 64px; height: 64px; border-radius: 12px; overflow: hidden; background: var(--surface-2); flex: none; display: grid; place-items: center; font-size: 26px; cursor: pointer; }
   .gift-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .gift-radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line-2); flex: none; }
+  .gift-radio { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-2); flex: none; }
   .gift-option.selected .gift-radio { border-color: var(--blue); background: radial-gradient(var(--blue) 44%, transparent 50%); }
 
   /* Підвал кошика */
@@ -934,32 +934,38 @@
     background: var(--line-2); border-radius: 2px;
     margin: 12px auto 0;
   }
-  .gift-modal-title {
-    font-size: 16px; font-weight: 800;
-    padding: 18px 18px 12px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
+  /* Вибір подарунку: та сама мова, що й екран відгуку (шапка 19px, картки 14px із тонкою рамкою, фото 64px) */
+  .gift-sheet { max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+  .gift-modal-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 18px 12px; }
+  .gift-modal-title h3 { font-size: 19px; font-weight: 800; line-height: 1.2; color: var(--ink); }
+  .gift-modal-title p { font-size: 13px; color: var(--ink-3); margin-top: 3px; line-height: 1.35; }
   .gift-modal-close {
-    width: 30px; height: 30px; border-radius: 50%;
-    background: var(--bg); border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px; color: var(--muted);
+    width: 32px; height: 32px; border-radius: 50%; flex: none;
+    background: var(--surface-2); border: 0; cursor: pointer;
+    display: grid; place-items: center;
+    font-size: 14px; color: var(--ink-2);
+  }
+  #gift-options-list {
+    flex: 1; min-height: 0;
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    padding: 1px 16px calc(16px + env(safe-area-inset-bottom));
+    display: grid; gap: 10px; align-content: start;
   }
   .gift-option {
     display: flex; align-items: center; gap: 12px;
-    padding: 12px 18px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--line);
     cursor: pointer;
-    border-radius: var(--radius-sm);
-    margin: 0 10px 4px;
-    transition: background .15s;
+    transition: box-shadow .2s ease, transform .15s ease;
   }
-  .gift-option:active { background: var(--border); }
-  .gift-option.selected { background: rgba(42,171,238,0.12); }
-  .gift-option-emoji { font-size: 28px; flex-shrink: 0; }
-  .gift-option-info { flex: 1; }
-  .gift-option-name { font-size: 13px; font-weight: 700; color: var(--text); }
-  .gift-option-price { font-size: 11px; color: var(--muted); }
-  .gift-option-check { font-size: 18px; color: var(--tg-blue); flex-shrink: 0; }
+  .gift-option:active { transform: scale(.98); }
+  .gift-option.selected { box-shadow: 0 0 0 1.5px var(--blue); }
+  .gift-option-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .gift-option-name { font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.25; }
+  .gift-option-price { font-size: 12.5px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+  .gift-option-price s { color: var(--ink-3); }
 
   /* ===== БЛОК КУПОНІВ ===== */
   .coupon-chip {
@@ -1753,13 +1759,12 @@
 
 <!-- GIFT CHOICE MODAL -->
 <div class="gift-modal-backdrop" id="gift-modal-backdrop" onclick="closeGiftModalIfBackdrop(event)">
-  <div class="gift-modal" id="gift-modal">
+  <div class="gift-modal gift-sheet" id="gift-modal" role="dialog" aria-label="Обери подарунок">
     <div class="modal-handle"></div>
     <div class="gift-modal-title">
-      Обери подарунок
+      <div><h3>Обери подарунок</h3><p id="gift-sub"></p></div>
       <button class="gift-modal-close" onclick="closeGiftModal()" aria-label="Закрити">✕</button>
     </div>
-    <div class="gift-sub" id="gift-sub"></div>
     <div id="gift-options-list"></div>
   </div>
 </div>
