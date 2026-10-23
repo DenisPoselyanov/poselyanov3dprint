@@ -3336,17 +3336,6 @@
                         <button class="btn btn-secondary" type="button" onclick="loadAiSuggestions()">🔄 Оновити</button>
                     </div>
                 </div>
-                <div class="ai-gen">
-                    <div class="ai-gen-text">ШІ шукає популярні моделі на MakerWorld, Printables, Thingiverse і пише картки товарів у стилі каталогу. У магазин нічого не потрапляє, поки ти не відкриєш пропозицію й не збережеш товар.</div>
-                    <div class="ai-gen-row">
-                        <input type="text" id="aiFocus" class="orders-search" maxlength="300" placeholder="Побажання (необовʼязково): напр. подарунки до Нового року, для рибалок">
-                        <select id="aiCount" class="orders-search" aria-label="Скільки товарів">
-                            <option value="3">3 товари</option><option value="5" selected>5 товарів</option><option value="8">8 товарів</option><option value="10">10 товарів</option>
-                        </select>
-                        <button class="btn btn-primary" type="button" id="aiGenerateBtn" onclick="generateAiSuggestions()">✨ Знайти нові</button>
-                    </div>
-                    <div id="aiJob" class="ai-job"></div>
-                </div>
                 <div id="aiTabs" class="orders-tabs"></div>
                 <div id="aiList" class="rv-list ai-list"></div>
             </section>
@@ -11110,7 +11099,7 @@
             if (!aiLoaded) { list.innerHTML = '<div class="rv-empty">Завантаження…</div>'; return; }
             const items = aiItems.filter(it => it.status === aiTab);
             const empty = aiTab === 'new'
-                ? 'Нових пропозицій немає. Натисни «Знайти нові» — ШІ підбере товари для магазину.'
+                ? 'Нових пропозицій немає.'
                 : aiTab === 'published' ? 'Ще жодної пропозиції не додано в магазин.' : 'Відхилених пропозицій немає.';
             list.innerHTML = items.length ? items.map(aiCardHtml).join('') : `<div class="rv-empty">${escapeHtml(empty)}</div>`;
         }
