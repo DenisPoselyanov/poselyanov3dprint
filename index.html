@@ -3754,7 +3754,7 @@ function sheetMainHtml(p) {
   } else if (hasVariants(p)) {
     const v = sheetVariant(p);
     price = v.contract
-      ? '<div class="contract-tag">Ціну цього варіанта порахую після замовлення</div>'
+      ? ''
       : `<div class="p-price"><span class="price">${money(v.price)}</span></div>`;
   } else if (isContractProduct(p)) {
     price = '<div class="contract-tag">Ціна залежить від конфігурації — порахую після замовлення</div>';
