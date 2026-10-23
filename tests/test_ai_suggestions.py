@@ -27,7 +27,12 @@ def env(monkeypatch, tmp_path):
     from services.db_utils import init_db
 
     init_db()
-    ai._job.update(running=False, startedAt="", finishedAt="", added=0, error="")
+    ai._job.update(running=False, startedAt="", finishedAt="", added=0, error="", kind="")
+
+    async def keep_all(urls):  # без мережі: посилання на фото не перевіряємо
+        return list(urls)
+
+    monkeypatch.setattr(ai, "verify_images", keep_all)
     yield tmp_path
 
 
@@ -160,3 +165,78 @@ def test_status_and_delete(env):
     assert ai.set_status(999, "new") == {"ok": False, "error": "Не знайдено"}
     assert ai.delete_suggestion(sid)
     assert ai.list_suggestions() == []
+
+
+def test_blocked_themes_are_dropped():
+    cats = ["toy"]
+    for bad in (
+        {"name": "Демонічний череп"},
+        {"name": "Брелок Halloween"},
+        {"description": "Чаклунський посох для ритуалів"},
+        {"source_title": "Evil Wizard Staff by X"},
+        {"note": "NSFW варіант"},
+    ):
+        assert ai.normalize_item(_item(**bad), cats) is None, bad
+    for good in ("Магнітний тримач", "Дракон Flexi", "Кумедний кролик", "Hello Kitty", "Spelling board"):
+        assert ai.normalize_item(_item(name=good), cats), good
+
+
+def test_variants_are_normalized_and_set_min_price():
+    cats = ["toy"]
+    out = ai.normalize_item(_item(variants=[
+        {"name": "15 см", "price": 250},
+        {"name": "10 см", "price": "180"},
+        {"name": "10 СМ", "price": 190},  # дубль назви
+        {"name": "", "price": 100},
+        {"name": "20 см", "price": 0},
+    ]), cats)
+    # лишилося дві придатні позиції, ціна товару = найнижча
+    assert [v["name"] for v in out["product"]["variants"]] == ["15 см", "10 см"]
+    assert out["product"]["price"] == 180 and out["product"]["gift"] is False
+    # менше двох позицій — товар без варіантів і зі своєю ціною
+    one = ai.normalize_item(_item(price=200, variants=[{"name": "10 см", "price": 150}]), cats)
+    assert "variants" not in one["product"] and one["product"]["price"] == 200
+
+
+def test_reject_blocked_moves_old_suggestions(env):
+    ok = ai.normalize_item(_item(name="Милий кролик"), ["toy"])
+    old_bad = ai.normalize_item(_item(name="Милий кролик 2"), ["toy"])
+    old_bad["product"]["description"] = "Ритуальний свічник"  # потрапив у базу до появи чорного списку
+    ai.save_items([ok, old_bad])
+    assert ai.reject_blocked() == 1
+    status = {i["name"]: i["status"] for i in ai.list_suggestions()}
+    assert status == {"Милий кролик": "new", "Милий кролик 2": "rejected"}
+    assert ai.reject_blocked() == 0
+
+
+def test_images_capped_at_ten():
+    urls = [f"https://example.com/{i}.jpg" for i in range(14)]
+    assert len(ai.normalize_item(_item(image_urls=urls), ["toy"])["images"]) == ai.IMAGES_MAX == 10
+
+
+def test_enrich_photos_merges_and_caps(env):
+    ai.save_items([ai.normalize_item(_item(image_urls=["https://example.com/a.jpg"]), ["toy"])])
+    sid = ai.list_suggestions()[0]["id"]
+    more = [f"https://example.com/{i}.jpg" for i in range(14)] + ["javascript:x"]
+    photos = SimpleNamespace(type="tool_use", name="submit_photos", input={"image_urls": more})
+    client = FakeClient([_resp([photos], "tool_use")])
+    added = asyncio.run(ai.enrich_photos(sid, client))
+    images = ai.get_suggestion(sid)["images"]
+    assert added == 9 and len(images) == 10
+    assert images[0] == "https://example.com/a.jpg" and len(set(images)) == 10
+    assert "https://makerworld.com/en/models/1" in client.calls[0]["messages"][0]["content"]
+    assert ai.photo_targets() == []  # галерея повна
+
+
+def test_photo_search_job(env):
+    async def run():
+        ai.save_items([ai.normalize_item(_item(), ["toy"])])
+        photos = SimpleNamespace(type="tool_use", name="submit_photos", input={"image_urls": ["https://example.com/b.jpg"]})
+        client = FakeClient([_resp([photos], "tool_use")])
+        assert ai.start_photo_search({}, client=client)["count"] == 1
+        await asyncio.gather(*list(ai._tasks))
+
+    asyncio.run(run())
+    state = ai.job_state()
+    assert state["kind"] == "photos" and state["added"] == 1 and not state["error"]
+    assert not ai.start_photo_search({"ids": [999]}, client=object())["ok"]  # такої пропозиції немає

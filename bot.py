@@ -4373,6 +4373,20 @@ async def handle_generate_ai_suggestions(request: web.Request):
     return web.json_response(result, status=status, headers=cors_headers(request))
 
 
+async def handle_ai_suggestion_photos(request: web.Request):
+    """Фоновий пошук додаткових фото: `{"ids": [..]}` або порожнє тіло — для всіх нових з неповною галереєю."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    result = ai_suggestions_svc.start_photo_search(data if isinstance(data, dict) else {})
+    status = 200 if result.get("ok") else 409 if result.get("error") == "Пошук уже йде" else 400
+    return web.json_response(result, status=status, headers=cors_headers(request))
+
+
 async def handle_update_ai_suggestion(request: web.Request):
     denied = await _admin_guard(request)
     if denied is not None:

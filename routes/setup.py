@@ -134,6 +134,7 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_get("/api/admin/ai-suggestions", handlers.handle_get_ai_suggestions)
     # Статичний шлях раніше за /{id}
     http_app.router.add_post("/api/admin/ai-suggestions/generate", handlers.handle_generate_ai_suggestions)
+    http_app.router.add_post("/api/admin/ai-suggestions/photos", handlers.handle_ai_suggestion_photos)
     http_app.router.add_put("/api/admin/ai-suggestions/{id}", handlers.handle_update_ai_suggestion)
     http_app.router.add_delete("/api/admin/ai-suggestions/{id}", handlers.handle_delete_ai_suggestion)
     http_app.router.add_get("/api/admin/settings", handlers.handle_get_settings)

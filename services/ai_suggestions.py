@@ -18,7 +18,9 @@ import re
 from datetime import datetime, timezone
 
 import config
-from catalog_store import DESCRIPTION_MAX, NOTE_MAX, get_admin_products, get_all_categories
+from catalog_store import (
+    DESCRIPTION_MAX, NOTE_MAX, VARIANT_NAME_MAX, VARIANTS_MAX, VARIANTS_MIN, get_admin_products, get_all_categories,
+)
 from db_core import db_connect, is_postgres, run_db, sql as _sql
 
 logger = logging.getLogger(__name__)
@@ -30,10 +32,30 @@ PRICE_MIN, PRICE_MAX = 20, 20000
 NAME_MAX = 80
 MAT_MAX = 80
 TEXT_MAX = 600
-IMAGES_MAX = 6
+IMAGES_MAX = 10
 MAX_CONTINUATIONS = 8
+VERIFY_TIMEOUT = 8
 
-_job: dict = {"running": False, "startedAt": "", "finishedAt": "", "added": 0, "error": ""}
+# Теми, які магазин не продає: демонічне, Гелловін, магія, окультне, брудне/дорослеє.
+# Шукаємо як початок слова (укр./англ. корені) у назві, описі, примітці й назві моделі — збіг відкидає пропозицію.
+# Список змінюється тут; перелік і причини — у ADMIN.md, розділ «Пропозиції ШІ».
+BLOCKED_STEMS = (
+    # демонічне, окультне, магічне
+    "демон", "диявол", "дияв", "сатан", "пекл", "пентаграм", "окульт", "ритуал", "некромант", "чаклун",
+    "відьм", "відьом", "магі", "заклинан", "бафомет", "люцифер", "вуду", "таро",
+    "demon", "devil", "satan", "pentagram", "occult", "ritual", "necromanc", "sorcer", "witch", "wizard",
+    "magic", "spells", "voodoo", "tarot", "baphomet", "lucifer", "cursed", "evil", "hellish",
+    # Гелловін і похмуре
+    "хелоу", "хелов", "хеллов", "геловін", "геллов", "halloween", "spooky", "creepy", "horror", "жах",
+    "вампір", "vampire", "зомбі", "zombie", "привид", "ghost", "череп", "skull", "скелет", "skeleton",
+    "reaper", "могил", "кров", "blood", "gore",
+    # брудне й для дорослих
+    "nsfw", "18+", "ерот", "erotic", "секс", "sex", "порно", "porn", "пеніс", "penis", "phallic", "фалос",
+    "dick", "boob", "naked", "nude", "голий", "матюк", "fuck", "shit", "лайно", "poop", "turd", "какаш",
+)
+_BLOCKED_RE = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(s) for s in BLOCKED_STEMS) + ")", re.IGNORECASE)
+
+_job: dict = {"running": False, "startedAt": "", "finishedAt": "", "added": 0, "error": "", "kind": ""}
 _tasks: set = set()
 
 
@@ -182,11 +204,46 @@ def _https(value) -> str:
     return url if re.match(r"^https://[^\s\"'<>]{3,1000}$", url) else ""
 
 
+def _variants(raw) -> list[dict]:
+    """Позиції товару (розміри) від ШІ -> [{name, price}]; менше двох придатних — товар без варіантів."""
+    out, seen = [], set()
+    for v in raw if isinstance(raw, list) else []:
+        if not isinstance(v, dict):
+            continue
+        name = " ".join(_text(v.get("name"), VARIANT_NAME_MAX).split())
+        try:
+            price = int(round(float(v.get("price"))))
+        except (TypeError, ValueError):
+            continue
+        if not name or price <= 0 or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        out.append({"name": name, "price": max(PRICE_MIN, min(PRICE_MAX, price))})
+    return out[:VARIANTS_MAX] if len(out) >= VARIANTS_MIN else []
+
+
+def blocked_match(*texts) -> str:
+    """Перше слово із чорного списку тем у наданих текстах; порожній рядок — усе гаразд."""
+    m = _BLOCKED_RE.search(" ".join(str(t or "") for t in texts))
+    return m.group(0) if m else ""
+
+
+def _clean_images(urls) -> list[str]:
+    images = []
+    for url in urls or []:
+        url = _https(url)
+        if url and url not in images:
+            images.append(url)
+    return images
+
+
 def normalize_item(raw: dict, category_ids: list[str]) -> dict | None:
-    """Пропозиція з відповіді ШІ -> поля для БД; None, якщо без назви чи ціни."""
+    """Пропозиція з відповіді ШІ -> поля для БД; None, якщо без назви чи ціни або тема з чорного списку."""
     if not isinstance(raw, dict):
         return None
     name = _text(raw.get("name"), NAME_MAX)
+    if blocked_match(name, raw.get("description"), raw.get("note"), raw.get("source_title"), raw.get("mat")):
+        return None
     try:
         price = int(round(float(raw.get("price"))))
     except (TypeError, ValueError):
@@ -194,6 +251,9 @@ def normalize_item(raw: dict, category_ids: list[str]) -> dict | None:
     if not name or price <= 0:
         return None
     price = max(PRICE_MIN, min(PRICE_MAX, price))
+    variants = _variants(raw.get("variants"))
+    if variants:
+        price = min(v["price"] for v in variants)
     cat = str(raw.get("cat") or "").strip()
     if cat not in category_ids:
         cat = next((c for c in category_ids if c != "custom"), "toy")
@@ -209,16 +269,15 @@ def normalize_item(raw: dict, category_ids: list[str]) -> dict | None:
         "filamentChoice": bool(raw.get("filament_choice", True)),
         "gift": bool(raw.get("gift", False)),
     }
+    if variants:
+        product["variants"] = variants
+        product["gift"] = False
     source_url = _https(raw.get("source_url"))
     # Посилання на STL: пряма сторінка завантаження; якщо ШІ її не дав, то сторінка моделі
     stl_link = _https(raw.get("stl_link")) or source_url
     if stl_link:
         product["stlLink"] = stl_link
-    images = []
-    for url in raw.get("image_urls") or []:
-        url = _https(url)
-        if url and url not in images:
-            images.append(url)
+    images = _clean_images(raw.get("image_urls"))
     return {
         "name": name,
         "product": product,
@@ -276,7 +335,7 @@ SUBMIT_TOOL = {
                     "required": [
                         "name", "cat", "emoji", "mat", "price", "description", "note",
                         "filament_choice", "gift", "source_url", "source_title", "license",
-                        "reason", "image_urls", "stl_link",
+                        "reason", "image_urls", "stl_link", "variants",
                     ],
                     "properties": {
                         "name": {"type": "string", "description": "Назва товару для вітрини, коротко, як у каталозі"},
@@ -293,7 +352,20 @@ SUBMIT_TOOL = {
                         "source_title": {"type": "string", "description": "Назва моделі на сайті й автор"},
                         "license": {"type": "string", "description": "Ліцензія моделі і чи дозволено продавати друк"},
                         "reason": {"type": "string", "description": "Чому цей товар підійде магазину"},
-                        "image_urls": {"type": "array", "items": {"type": "string"}, "description": "Прямі https-посилання на фото моделі"},
+                        "image_urls": {"type": "array", "items": {"type": "string"}, "description": "Прямі https-посилання на фото: до 10, найкращі й різноманітні, зокрема фото з відгуків і розділу «Prints/Makes»"},
+                        "variants": {
+                            "type": "array",
+                            "description": "Позиції (розміри) цього товару з цінами, якщо модель має кілька розмірів; інакше порожній список. 2–10 позицій, назва — що саме відрізняє (напр. «10 см»)",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["name", "price"],
+                                "properties": {
+                                    "name": {"type": "string", "description": "Підпис позиції: розмір чи комплектація, до 40 символів"},
+                                    "price": {"type": "integer", "description": "Ціна позиції в гривнях"},
+                                },
+                            },
+                        },
                     },
                 },
             }
@@ -324,7 +396,16 @@ SYSTEM_PROMPT = """Ти допомагаєш власнику маленьког
 - назва коротка й зрозуміла покупцю, без артикулів і англійських хвостів, якщо їх немає у прикладах;
 - ціну орієнтуй на ціни схожих товарів у каталозі;
 - stl_link — сторінка завантаження файлів цієї самої моделі (лише якщо реально бачив її); не вигадуй посилань;
-- image_urls — прямі посилання (https) на фото й анімовані GIF зі сторінки моделі (og:image або галерея), лише якщо ти їх бачив; інакше порожній список. Файли .gif і .webp теж підходять.
+- image_urls — прямі посилання (https) на фото й анімовані GIF, лише ті, що ти реально бачив; інакше порожній список. Файли .gif і .webp теж підходять.
+  Збирай якомога більше різних фото, до 10 на товар, щоб власник мав із чого вибрати: галерея моделі (og:image), а також фото
+  з відгуків і розділів «Prints / Makes / Made it», коментарів зі світлинами — реальні відбитки часто виглядають краще за рендери.
+  Віддавай перевагу чітким фото готової речі, різним кутам і кольорам; без дублікатів, логотипів, скриншотів слайсера й аватарок.
+- variants — якщо в моделі є кілька розмірів чи комплектацій, дай 2–10 позицій і підпиши кожну (напр. «10 см», «15 см», «З кільцем»)
+  з окремою ціною; якщо розмір один — порожній список і одна ціна в price (тоді price — найнижча ціна позицій).
+
+Чого НЕ пропонувати ніколи (магазин це не продає): усе демонічне, окультне й магічне (демони, дияволи, чаклуни, відьми, ритуали,
+пентаграми, таро), тематику Гелловіну й похмуре (черепи, скелети, вампіри, зомбі, привиди, кров, жахи), брудне, грубе чи для
+дорослих. Такі моделі пропускай, навіть якщо вони дуже популярні. Обирай світле, миле, кумедне, корисне й подарункове.
 
 Мова: ЗАВЖДИ українська. Усі текстові поля (name, mat, description, note, reason, license, source_title-пояснення) пиши українською,
 навіть якщо сторінка моделі англійською: описи, ліцензії й причини перекладай. Назви-бренди й імена авторів можна лишати латиницею.
@@ -364,18 +445,44 @@ def _make_client():
     return anthropic.AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY, timeout=600.0)
 
 
-async def ask_claude(client, request_text: str, catalog_brief: str) -> list[dict]:
-    """Пошук моделей і картки товарів: список сирих товарів з інструмента submit_products."""
+PHOTOS_TOOL = {
+    "name": "submit_photos",
+    "description": "Зберегти знайдені фото моделі. Викликати один раз у кінці.",
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["image_urls"],
+        "properties": {
+            "image_urls": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Прямі https-посилання на фото (jpg/png/webp/gif), до 10, без дублікатів",
+            }
+        },
+    },
+}
+
+PHOTOS_PROMPT = """Ти шукаєш фото для картки товару в магазині 3D-друку. Дана конкретна модель (посилання на сторінку).
+Відкрий її сторінку й зберіть якомога більше різних якісних фото готової речі, до 10 штук:
+- галерея моделі (основні фото, різні кути й кольори);
+- фото з відгуків, коментарів і розділів «Prints / Makes / Made it» — реальні відбитки людей часто кращі за рендери;
+- за потреби пошукай ту саму модель на інших сайтах (MakerWorld, Printables, Thingiverse, Cults3D).
+Потрібні прямі https-посилання на файли зображень (jpg, png, webp, gif), які ти реально бачив у коді сторінки. Нічого не вигадуй.
+Без логотипів, аватарок, скриншотів слайсера, дублікатів і фото іншої моделі. Не бери нічого демонічного, магічного, про Гелловін чи брудного.
+Коли закінчиш, виклич submit_photos один раз. Не пиши окремого звіту текстом."""
+
+
+def _web_tools(searches: int, fetches: int) -> list[dict]:
+    return [
+        {"type": "web_search_20260209", "name": "web_search", "max_uses": searches},
+        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": fetches},
+    ]
+
+
+async def _converse(client, system: list[dict], request_text: str, tools: list[dict], submit_name: str) -> dict:
+    """Діалог із Claude, доки він не викличе submit-інструмент; повертає його вхідні дані."""
     messages = [{"role": "user", "content": request_text}]
-    system = [
-        {"type": "text", "text": SYSTEM_PROMPT},
-        {"type": "text", "text": catalog_brief, "cache_control": {"type": "ephemeral"}},
-    ]
-    tools = [
-        {"type": "web_search_20260209", "name": "web_search", "max_uses": 15},
-        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 20},
-        SUBMIT_TOOL,
-    ]
     for _ in range(MAX_CONTINUATIONS):
         response = await client.beta.messages.create(
             model=config.AI_SUGGESTIONS_MODEL,
@@ -389,9 +496,8 @@ async def ask_claude(client, request_text: str, catalog_brief: str) -> list[dict
             fallbacks="default",
         )
         for block in response.content:
-            if block.type == "tool_use" and block.name == "submit_products":
-                items = (block.input or {}).get("items")
-                return items if isinstance(items, list) else []
+            if block.type == "tool_use" and block.name == submit_name:
+                return block.input or {}
         if response.stop_reason == "pause_turn":
             # Серверний цикл пошуку дійшов до ліміту кроків — продовжуємо з того ж місця
             messages = [messages[0], {"role": "assistant", "content": response.content}]
@@ -400,12 +506,58 @@ async def ask_claude(client, request_text: str, catalog_brief: str) -> list[dict
             raise RuntimeError("ШІ відмовився виконати запит")
         if response.stop_reason == "max_tokens":
             raise RuntimeError("Відповідь ШІ обрізалася; спробуй менше товарів за раз")
-        raise RuntimeError("ШІ не повернув жодного товару")
+        raise RuntimeError("ШІ не повернув жодного результату")
     raise RuntimeError("Пошук тривав занадто довго; спробуй ще раз")
+
+
+async def ask_claude(client, request_text: str, catalog_brief: str) -> list[dict]:
+    """Пошук моделей і картки товарів: список сирих товарів з інструмента submit_products."""
+    system = [
+        {"type": "text", "text": SYSTEM_PROMPT},
+        {"type": "text", "text": catalog_brief, "cache_control": {"type": "ephemeral"}},
+    ]
+    result = await _converse(client, system, request_text, _web_tools(15, 25) + [SUBMIT_TOOL], "submit_products")
+    items = result.get("items")
+    return items if isinstance(items, list) else []
+
+
+async def ask_photos(client, request_text: str) -> list[str]:
+    """Пошук додаткових фото вже знайденої моделі."""
+    system = [{"type": "text", "text": PHOTOS_PROMPT}]
+    result = await _converse(client, system, request_text, _web_tools(8, 12) + [PHOTOS_TOOL], "submit_photos")
+    urls = result.get("image_urls")
+    return urls if isinstance(urls, list) else []
+
+
+async def _url_ok(session, url: str) -> bool:
+    """Чи віддає посилання зображення. Відмову 403/429 (захист від хотлінку) не вважаємо поломкою."""
+    try:
+        async with session.get(url, headers={"Range": "bytes=0-0", "User-Agent": "Mozilla/5.0"}, allow_redirects=True) as r:
+            if r.status in (403, 429):
+                return True
+            if r.status >= 400:
+                return False
+            ctype = (r.headers.get("Content-Type") or "").lower()
+            return ctype.startswith("image/") or ctype.startswith("application/octet-stream")
+    except Exception:
+        return False
+
+
+async def verify_images(urls: list[str]) -> list[str]:
+    """Відкидає мертві посилання на фото (ШІ інколи вигадує URL); порядок зберігається."""
+    if not urls:
+        return []
+    import aiohttp
+
+    timeout = aiohttp.ClientTimeout(total=VERIFY_TIMEOUT)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        flags = await asyncio.gather(*(_url_ok(session, u) for u in urls))
+    return [u for u, ok in zip(urls, flags) if ok]
 
 
 async def generate(count: int, focus: str, client=None) -> int:
     """Один пошук: питає Claude, нормалізує й зберігає пропозиції. Повертає кількість доданих."""
+    await run_db(reject_blocked)
     brief = await run_db(_catalog_brief)
     known = await run_db(_known_names)
     existing = {p.get("name", "").strip().lower() for p in await run_db(get_admin_products)}
@@ -417,12 +569,94 @@ async def generate(count: int, focus: str, client=None) -> int:
         item = normalize_item(raw, category_ids)
         if item and item["name"].lower() not in seen:
             seen.add(item["name"].lower())
+            item["images"] = await verify_images(item["images"])
             items.append(item)
     return await run_db(save_items, items)
 
 
+# ── Додаткові фото для наявних пропозицій ───────────────────────────
+
+def get_suggestion(suggestion_id: int) -> dict | None:
+    conn = db_connect()
+    try:
+        row = conn.execute(_sql(f"SELECT {_COLUMNS} FROM ai_suggestions WHERE id = ?"), (int(suggestion_id),)).fetchone()
+    finally:
+        conn.close()
+    return _row_to_item(row) if row else None
+
+
+def set_images(suggestion_id: int, images: list[str]) -> None:
+    conn = db_connect()
+    try:
+        conn.execute(
+            _sql("UPDATE ai_suggestions SET images = ? WHERE id = ?"),
+            (json.dumps(images[:IMAGES_MAX]), int(suggestion_id)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def reject_blocked() -> int:
+    """Нові пропозиції із чорного списку тем (з минулих пошуків) переносить у «Відхилені»."""
+    bad = [
+        it["id"]
+        for it in list_suggestions()
+        if it["status"] == "new"
+        and blocked_match(
+            it["name"], it["product"].get("description"), it["product"].get("note"),
+            it["sourceTitle"], it["product"].get("mat"),
+        )
+    ]
+    if not bad:
+        return 0
+    conn = db_connect()
+    try:
+        for sid in bad:
+            conn.execute(_sql("UPDATE ai_suggestions SET status = 'rejected' WHERE id = ?"), (sid,))
+        conn.commit()
+    finally:
+        conn.close()
+    return len(bad)
+
+
+def photo_targets(ids=None) -> list[int]:
+    """Пропозиції, яким бракує фото: вказані id або всі нові з менш ніж IMAGES_MAX фото."""
+    wanted = {int(i) for i in ids or []}
+    return [
+        it["id"]
+        for it in list_suggestions()
+        if (it["id"] in wanted if wanted else it["status"] == "new") and len(it["images"]) < IMAGES_MAX
+    ]
+
+
+async def enrich_photos(suggestion_id: int, client=None) -> int:
+    """Шукає додаткові фото (галерея, відгуки) для однієї пропозиції. Повертає, скільки нових додано."""
+    item = await run_db(get_suggestion, suggestion_id)
+    if not item:
+        return 0
+    have = list(item["images"])
+    lines = [
+        f"Товар: {item['name']}",
+        f"Сторінка моделі: {item['sourceUrl'] or 'невідома, знайди модель за назвою'}",
+        f"Назва моделі на сайті: {item['sourceTitle']}" if item["sourceTitle"] else "",
+        f"Уже є {len(have)} фото (їх не повторюй), потрібно разом до {IMAGES_MAX}.",
+    ]
+    found = await ask_photos(client or _make_client(), "\n".join(line for line in lines if line))
+    fresh = [u for u in _clean_images(found) if u not in have][: IMAGES_MAX - len(have)]
+    fresh = await verify_images(fresh)
+    if fresh:
+        await run_db(set_images, suggestion_id, have + fresh)
+    return len(fresh)
+
+
 def job_state() -> dict:
     return dict(_job)
+
+
+def _finish_job() -> None:
+    _job["running"] = False
+    _job["finishedAt"] = _now_iso()
 
 
 async def _run_job(count: int, focus: str, client) -> None:
@@ -432,8 +666,36 @@ async def _run_job(count: int, focus: str, client) -> None:
         logger.exception("AI suggestions failed")
         _job["error"] = str(e) or e.__class__.__name__
     finally:
-        _job["running"] = False
-        _job["finishedAt"] = _now_iso()
+        _finish_job()
+
+
+async def _run_photo_job(ids: list[int], client) -> None:
+    failures = 0
+    try:
+        client = client or _make_client()
+        for sid in ids:
+            try:
+                _job["added"] += await enrich_photos(sid, client)
+            except Exception as e:  # одна невдача не зупиняє решту
+                failures += 1
+                logger.exception("AI photo search failed for %s", sid)
+                _job["error"] = str(e) or e.__class__.__name__
+        if failures < len(ids):
+            _job["error"] = ""
+    except Exception as e:
+        _job["error"] = str(e) or e.__class__.__name__
+    finally:
+        _finish_job()
+
+
+def _begin_job(kind: str) -> None:
+    _job.update(running=True, startedAt=_now_iso(), finishedAt="", added=0, error="", kind=kind)
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
 
 
 def start_generation(data: dict, client=None) -> dict:
@@ -448,8 +710,22 @@ def start_generation(data: dict, client=None) -> dict:
         count = COUNT_DEFAULT
     count = max(COUNT_MIN, min(COUNT_MAX, count))
     focus = _text(data.get("focus"), FOCUS_MAX)
-    _job.update(running=True, startedAt=_now_iso(), finishedAt="", added=0, error="")
-    task = asyncio.create_task(_run_job(count, focus, client))
-    _tasks.add(task)
-    task.add_done_callback(_tasks.discard)
+    _begin_job("products")
+    _spawn(_run_job(count, focus, client))
     return {"ok": True, "job": job_state()}
+
+
+def start_photo_search(data: dict, client=None) -> dict:
+    """Фоновий пошук додаткових фото: для `ids` або для всіх нових пропозицій з неповною галереєю."""
+    if client is None and not is_enabled():
+        return {"ok": False, "error": "Не задано ANTHROPIC_API_KEY на сервері"}
+    if _job["running"]:
+        return {"ok": False, "error": "Пошук уже йде"}
+    reject_blocked()
+    ids = data.get("ids")
+    targets = photo_targets(ids if isinstance(ids, list) else None)
+    if not targets:
+        return {"ok": False, "error": "Усі пропозиції вже мають повну галерею фото"}
+    _begin_job("photos")
+    _spawn(_run_photo_job(targets, client))
+    return {"ok": True, "job": job_state(), "count": len(targets)}

@@ -126,7 +126,9 @@ from types import SimpleNamespace as _NS
 _ai_sample = lambda n, cat, emo, price, lic, img: {"name": n, "cat": cat, "emoji": emo, "mat": "PLA · різні кольори", "price": price,
     "description": f"{n} — популярна модель, друкується без підтримок.\nГарний дрібний подарунок.", "note": "Розмір близько 8 см",
     "filament_choice": True, "gift": False, "source_url": "https://makerworld.com/en/models/1", "source_title": f"{n} by Designer",
-    "license": lic, "reason": "Багато завантажень і лайків, схоже на хіти магазину", "image_urls": [img]}
+    "license": lic, "reason": "Багато завантажень і лайків, схоже на хіти магазину",
+    "image_urls": [img] + [img.replace("/400/400", f"/{400 + k}/400") for k in range(1, 7)],
+    "variants": [{"name": "10 см", "price": price}, {"name": "15 см", "price": price + 70}] if n.startswith("Гнучкий") else []}
 _ai.save_items([_ai.normalize_item(_ai_sample(*a), ["toy", "anti", "gifts"]) for a in (
     ("Гнучкий восьминіг", "toy", "🐙", 180, "Standard Digital File License — продаж друку не дозволено, треба комерційна ліцензія", "https://picsum.photos/seed/ai1/400/400"),
     ("Кліккер-кубик", "anti", "🎲", 120, "CC BY 4.0 — продаж дозволено із зазначенням автора", "https://picsum.photos/seed/ai2/400/400"),

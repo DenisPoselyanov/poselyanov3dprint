@@ -2971,7 +2971,8 @@
         .ai-src a { color: var(--accent); }
         .ai-zoom { cursor: zoom-in; }
         .ai-gallery { display: flex; gap: 6px; flex-wrap: wrap; }
-        .ai-gallery img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-section); cursor: zoom-in; }
+        .ai-photo-count { font-size: 12px; color: var(--text-muted); }
+        .ai-gallery img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-section); cursor: zoom-in; }
         .ai-src-open { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--border-alt); background: var(--bg-card); color: var(--text-main) !important; font-weight: 600; text-decoration: none; }
         .ai-src-imgs { display: flex; gap: 8px; flex-wrap: wrap; }
         .ai-src-img { display: grid; gap: 4px; width: 84px; }
@@ -3331,6 +3332,7 @@
                 <div class="orders-toolbar">
                     <h2>✨ Пропозиції ШІ</h2>
                     <div class="orders-toolbar-right">
+                        <button class="btn btn-secondary" type="button" id="aiPhotosBtn" onclick="findAiPhotos()" title="ШІ шукає ще фото (галерея, відгуки) для нових пропозицій, де їх менше 10">🖼 Доповнити фото</button>
                         <button class="btn btn-secondary" type="button" onclick="loadAiSuggestions()">🔄 Оновити</button>
                     </div>
                 </div>
@@ -11000,6 +11002,7 @@
         ];
         let aiItems = [];
         let aiJob = null;
+        const AI_PHOTOS_MAX = 10; // стільки фото на пропозицію збирає ШІ (services/ai_suggestions.py: IMAGES_MAX)
         let aiEnabled = true;
         let aiLoaded = false;
         let aiTab = 'new';
@@ -11015,6 +11018,7 @@
                 aiLoaded = true;
                 if (wasRunning && aiJob && !aiJob.running) {
                     if (aiJob.error) showToast('Пошук не вдався: ' + aiJob.error, 'error');
+                    else if (aiJob.kind === 'photos') showToast(`Готово. Додано фото: ${aiJob.added}`, 'success');
                     else showToast(`Готово. Нових пропозицій: ${aiJob.added}`, 'success');
                 }
                 renderAiPage();
@@ -11035,6 +11039,8 @@
                 btn.disabled = !aiEnabled || !!aiJob?.running;
                 btn.textContent = aiJob?.running ? '⏳ Шукаю…' : '✨ Знайти нові';
             }
+            const photosBtn = document.getElementById('aiPhotosBtn');
+            if (photosBtn) photosBtn.disabled = !aiEnabled || !!aiJob?.running;
             const job = document.getElementById('aiJob');
             if (job) {
                 let text = '';
@@ -11043,13 +11049,17 @@
                     text = 'Пошук вимкнено: на сервері не задано ANTHROPIC_API_KEY (ключ Claude API з console.anthropic.com).';
                     cls += ' err';
                 } else if (aiJob?.running) {
-                    text = 'ШІ шукає товари — зазвичай це 2–5 хвилин. Сторінку можна закрити, пропозиції збережуться.';
+                    text = aiJob.kind === 'photos'
+                        ? 'ШІ шукає додаткові фото (галерея й відгуки) — по кілька хвилин на товар. Сторінку можна закрити, фото збережуться.'
+                        : 'ШІ шукає товари — зазвичай це 2–5 хвилин. Сторінку можна закрити, пропозиції збережуться.';
                     cls += ' run';
                 } else if (aiJob?.error) {
                     text = 'Останній пошук не вдався: ' + aiJob.error;
                     cls += ' err';
                 } else if (aiJob?.finishedAt) {
-                    text = `Нових пропозицій з останнього пошуку: ${aiJob.added}.`;
+                    text = aiJob.kind === 'photos'
+                        ? `Додано фото з останнього пошуку: ${aiJob.added}.`
+                        : `Нових пропозицій з останнього пошуку: ${aiJob.added}.`;
                 }
                 job.className = cls;
                 job.textContent = text;
@@ -11113,7 +11123,9 @@
                    <button class="btn btn-secondary" type="button" onclick="copyAiLink(${it.id})" title="Скопіювати посилання">📋</button>`
                 : '';
             if (it.status === 'new') {
-                actions = `${stlBtn}
+                const morePhotos = (it.images || []).length < AI_PHOTOS_MAX
+                    ? `<button class="btn btn-secondary" type="button" onclick="findAiPhotos(${it.id})" title="ШІ знайде ще фото: галерея, відгуки">🖼 Ще фото</button>` : '';
+                actions = `${stlBtn}${morePhotos}
                     <button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">Відхилити</button>
                     <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">✏️ Відкрити й додати</button>`;
             } else if (it.status === 'published') {
@@ -11139,7 +11151,8 @@
                     <span class="ai-price">${Number(p.price) || 0} ₴</span>
                 </div>
                 ${p.description ? `<div class="ai-desc">${escapeHtml(p.description)}</div>` : ''}
-                ${(it.images || []).length > 1 ? `<div class="ai-gallery">${it.images.map((url, i) => `<img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" class="ai-zoom" onclick="openAiPhoto(${it.id}, ${i})" title="Переглянути фото ${i + 1}">`).join('')}</div>` : ''}
+                ${(p.variants || []).length ? `<div class="ai-chips">${p.variants.map(v => `<span class="ai-chip">${escapeHtml(v.name)} · ${Number(v.price) || 0} ₴</span>`).join('')}</div>` : ''}
+                ${(it.images || []).length > 1 ? `<div class="ai-photo-count">🖼 Фото: ${it.images.length} з ${AI_PHOTOS_MAX}</div><div class="ai-gallery">${it.images.map((url, i) => `<img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" class="ai-zoom" onclick="openAiPhoto(${it.id}, ${i})" title="Переглянути фото ${i + 1}">`).join('')}</div>` : ''}
                 ${p.note ? `<div class="ai-row">ⓘ ${escapeHtml(p.note)}</div>` : ''}
                 ${it.reason ? `<div class="ai-row"><b>Чому:</b> ${escapeHtml(it.reason)}</div>` : ''}
                 ${it.license ? `<details class="ai-lic"><summary>⚖️ Ліцензія ${aiLicenseBadge(it.license)}</summary><div class="lic-text">${escapeHtml(it.license)}</div></details>` : ''}
@@ -11183,6 +11196,7 @@
             }
             updateCategoryFields();
             toggleFilamentChoiceFields();
+            if (Array.isArray(p.variants) && p.variants.length >= VARIANTS_MIN) loadVariantsDraft(p.variants);
             renderAiSourceBox(it);
             captureProductFormSnapshot();
             onProductFormChange();
@@ -11232,6 +11246,20 @@
                 showToast(e.message || 'Не вдалося видалити', 'error');
             }
             await loadAiSuggestions();
+        }
+
+        // Пошук додаткових фото: для однієї пропозиції (id) або для всіх нових із неповною галереєю
+        async function findAiPhotos(id) {
+            try {
+                const data = await productApi('/admin/ai-suggestions/photos', 'POST', id ? { ids: [id] } : {});
+                aiJob = data.job || { running: true, kind: 'photos' };
+                renderAiPage();
+                showToast(id ? 'Шукаю ще фото — кілька хвилин' : `Шукаю фото для пропозицій: ${data.count || ''}`, 'info');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося запустити пошук фото', 'error');
+            }
+            clearTimeout(aiPollTimer);
+            aiPollTimer = setTimeout(loadAiSuggestions, 6000);
         }
 
         async function generateAiSuggestions() {
