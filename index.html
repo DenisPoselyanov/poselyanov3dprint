@@ -3932,13 +3932,10 @@ let tgMainHandler = null;
 function updateMainButton() {
   if (!currentProduct || !isSheetOpen()) return;
   const b = sheetButton();
-  // Товар з варіантами: нативна кнопка Telegram на телефонах показує ціну попереднього варіанта,
-  // тому для нього завжди власна кнопка внизу картки
-  const own = !useTgMainButton() || hasVariants(currentProduct);
+  const own = !useTgMainButton();
   document.getElementById('m-main-bar').hidden = !own;
   document.body.classList.toggle('own-main', own);
   if (own) {
-    if (useTgMainButton()) releaseTgSheetMain();
     const btn = document.getElementById('m-add-btn');
     btn.innerHTML = `${ic(b.icon)}<span>${escapeHtml(b.text)}</span>`;
     btn.classList.toggle('done', !!b.done);
@@ -3963,10 +3960,13 @@ function pushTgMainButton(b) {
       tgMainHandler = onSheetMainButton;
       mb.onClick(tgMainHandler);
     }
-    mb.setParams({ text: b.text, color: b.done ? MAIN_GREEN : MAIN_BLUE, text_color: '#FFFFFF', is_active: true, is_visible: true });
-    mb.setText(b.text);
+    // telegram-web-app.js шле клієнту подію, лише коли стан кнопки змінився, тож повторний виклик з тим самим
+    // станом нічого не оновлює. Ледь помітна зміна кольору тексту гарантує, що клієнт отримає актуальний текст
+    tgMainFlip = !tgMainFlip;
+    mb.setParams({ text: b.text, color: b.done ? MAIN_GREEN : MAIN_BLUE, text_color: tgMainFlip ? '#FFFFFF' : '#FEFEFE', is_active: true, is_visible: true });
   } catch (_) {}
 }
+let tgMainFlip = false;
 function hideMainButton() {
   document.body.classList.remove('own-main');
   releaseTgSheetMain();
