@@ -240,3 +240,13 @@ def test_photo_search_job(env):
     state = ai.job_state()
     assert state["kind"] == "photos" and state["added"] == 1 and not state["error"]
     assert not ai.start_photo_search({"ids": [999]}, client=object())["ok"]  # такої пропозиції немає
+
+
+def test_url_check_rejects_non_public_hosts():
+    async def run():
+        for url in ("https://127.0.0.1/a.jpg", "https://169.254.169.254/latest", "https://10.0.0.5/x.png", "https://localhost/x.png"):
+            assert not await ai._is_public_host(url), url
+        assert not await ai._url_ok(object(), "https://192.168.1.1/a.jpg")  # до мережі навіть не доходить
+        assert await ai._is_public_host("https://8.8.8.8/a.jpg")
+
+    asyncio.run(run())

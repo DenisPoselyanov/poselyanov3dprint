@@ -12,10 +12,13 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import re
+import socket
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import config
 from catalog_store import (
@@ -529,11 +532,30 @@ async def ask_photos(client, request_text: str) -> list[str]:
     return urls if isinstance(urls, list) else []
 
 
-async def _url_ok(session, url: str) -> bool:
-    """Чи віддає посилання зображення. Відмову 403/429 (захист від хотлінку) не вважаємо поломкою."""
+async def _is_public_host(url: str) -> bool:
+    """SSRF-захист: URL приходять із веб-контенту, тож хост має резолвитися лише в публічні адреси."""
+    host = urlparse(url).hostname
+    if not host:
+        return False
     try:
-        async with session.get(url, headers={"Range": "bytes=0-0", "User-Agent": "Mozilla/5.0"}, allow_redirects=True) as r:
-            if r.status in (403, 429):
+        infos = await asyncio.get_running_loop().getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    addrs = {info[4][0].split("%")[0] for info in infos}
+    return bool(addrs) and all(ipaddress.ip_address(a).is_global for a in addrs)
+
+
+async def _url_ok(session, url: str) -> bool:
+    """Чи віддає посилання зображення. Відмову 403/429 (захист від хотлінку) не вважаємо поломкою.
+
+    Редіректи не відстежуємо (кожен крок довелося б перевіряти на SSRF): 3xx вважаємо живим посиланням,
+    а недоступне в браузері фото адмінка однаково прибере сама (onerror).
+    """
+    if not await _is_public_host(url):
+        return False
+    try:
+        async with session.get(url, headers={"Range": "bytes=0-0", "User-Agent": "Mozilla/5.0"}, allow_redirects=False) as r:
+            if r.status in (403, 429) or 300 <= r.status < 400:
                 return True
             if r.status >= 400:
                 return False
