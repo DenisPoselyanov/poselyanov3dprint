@@ -142,7 +142,9 @@
   .lightbox {
     display: none;
     position: fixed; inset: 0;
-    background: rgba(0,0,0,0.95);
+    background: var(--lb-scrim, rgba(5,8,11,.96));
+    -webkit-backdrop-filter: blur(18px) saturate(.8);
+    backdrop-filter: blur(18px) saturate(.8);
     z-index: 300;
     flex-direction: column;
     align-items: center;
@@ -150,6 +152,9 @@
     touch-action: none;
     transition: opacity .22s ease, transform .22s ease;
   }
+  /* світла тема: м'якше, синювате затемнення замість чорного */
+  :root[data-theme="light"] .lightbox { --lb-scrim: rgba(20,27,35,.94); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .lightbox { --lb-scrim: rgba(20,27,35,.94); } }
   .lightbox.open { display: flex; animation: lbIn .2s ease; }
   @keyframes lbIn {
     from { opacity: 0; }
@@ -5443,7 +5448,27 @@ function applyTheme(scheme) {
   try { t.setHeaderColor(bg); } catch (_) {}
   try { t.setBackgroundColor(bg); } catch (_) {}
   try { if (t.isVersionAtLeast?.('7.10')) t.setBottomBarColor(surface); } catch (_) {}
+  syncLightboxChrome();
 }
+
+// Поки відкритий лайтбокс — шапка й нижня панель Telegram зливаються із затемненням
+function syncLightboxChrome() {
+  if (!inTelegram()) return;
+  const lb = document.getElementById('lightbox');
+  if (!lb) return;
+  const open = lb.classList.contains('open');
+  const css = getComputedStyle(document.documentElement);
+  const t = tgApp();
+  const dim = document.body.classList.contains('dark') ? '#05080b' : '#141b23';
+  const head = open ? dim : css.getPropertyValue('--bg').trim();
+  const bar = open ? dim : css.getPropertyValue('--surface').trim();
+  try { t.setHeaderColor(head); } catch (_) {}
+  try { if (t.isVersionAtLeast?.('7.10')) t.setBottomBarColor(bar); } catch (_) {}
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const lb = document.getElementById('lightbox');
+  if (lb) new MutationObserver(syncLightboxChrome).observe(lb, { attributes: true, attributeFilter: ['class'] });
+});
 
 // ─── ТОСТИ (замість alert) ───────────────────────────────────
 let toastTimer = null;
