@@ -8,6 +8,7 @@ from catalog_store import (
     CUSTOM_PRODUCTS_CACHE,
     FILAMENTS_CACHE,
     PRODUCTS_CACHE,
+    get_product_variant,
     is_contract_product,
     is_glow_filament,
     reload_filaments_cache,
@@ -112,14 +113,28 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         if not product:
             return False, f"Невідомий товар (id {pid})"
 
-        if is_contract_product(product):
+        name = product["name"]
+        variant_id = ""
+        variant_name = ""
+        if product.get("variants"):
+            # Ціна — лише з обраного варіанта; без варіанта позицію не приймаємо
+            variant = get_product_variant(product, raw.get("variant_id") or raw.get("variantId"))
+            if not variant:
+                return False, f"Обери варіант товару «{name}» ще раз — його змінили"
+            variant_id = variant["id"]
+            variant_name = variant["name"]
+            if variant.get("contract"):
+                price = 0
+                is_contract = True
+            else:
+                price = int(variant["price"])
+        elif is_contract_product(product):
             price = 0
             is_contract = True
         else:
             price = int(product["price"])
-            if price <= 0:
-                return False, f"Невалідна ціна товару «{product.get('name', pid)}»"
-        name = product["name"]
+        if not is_contract and price <= 0:
+            return False, f"Невалідна ціна товару «{product.get('name', pid)}»"
 
         filament_id = str(raw.get("filament_id") or raw.get("filamentId") or "").strip()
         filament_name = ""
@@ -151,7 +166,7 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
 
         # Персоналізація з картки товару: текст + побажання (до 200) — з запасом на форматування
         custom_value = str(raw.get("customValue") or "").strip()[:CUSTOM_VALUE_MAX]
-        line_key = (pid, filament_id, custom_value)
+        line_key = (pid, variant_id, filament_id, custom_value)
         if line_key in seen_line_keys:
             return False, f"Дублікат товару в кошику (id {pid})"
         seen_line_keys.add(line_key)
@@ -166,7 +181,9 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
                 "product_id": pid,
                 "personalization": personalization,
                 "personalization_note": personalization_note,
-                "product_name": name,
+                "product_name": f"{name} · {variant_name}" if variant_name else name,
+                "variant_id": variant_id,
+                "variant": variant_name,
                 "price": price,
                 "quantity": qty,
                 "customValue": custom_value,

@@ -1476,6 +1476,15 @@
   .swatch.glow::before { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 10px 2px rgba(163,255,160,.55); }
   .swatch:active { transform: scale(.92); }
   .swatch-name { font-size: 13px; color: var(--ink-2); }
+  .var-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+  .var-opt { display: grid; gap: 2px; justify-items: start; text-align: left; padding: 10px 12px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; min-width: 0; }
+  .var-opt b { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+  .var-opt span { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+  .var-opt.contract span { color: var(--amber-ink); font-weight: 600; }
+  .var-opt[aria-checked="true"] { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  .var-opt[aria-checked="true"]:not(.contract) span { color: var(--blue-ink); }
+  .var-opt:active { transform: scale(.97); }
+  .price-from { font-size: 12px; font-weight: 600; color: var(--ink-3); margin-right: 3px; }
   .swatch-name b { color: var(--ink); }
 
   /* Опис і примітка — «Згорнутий»: плашка примітки завжди видна, опис довший за ~140 символів — 3 рядки */
@@ -1946,7 +1955,7 @@ let cart = [];
 // Позиція кошика = товар + колір + персоналізація (як на сервері: дублікат ключа відхиляється).
 // lid — стабільний ідентифікатор рядка для DOM і обробників; key — ключ злиття.
 let lineSeq = 0;
-function lineKeyOf(r) { return `${r.id}|${r.filamentId || ''}|${r.customValue || ''}`; }
+function lineKeyOf(r) { return `${r.id}|${r.variantId || ''}|${r.filamentId || ''}|${r.customValue || ''}`; }
 function stampLine(r) {
   if (!r.lid) r.lid = `l${++lineSeq}${Date.now().toString(36)}`;
   r.key = lineKeyOf(r);
@@ -2197,12 +2206,14 @@ function addToCartFromModal(asNew = false) {
     showToast({ msg: 'Обери колір філаменту', icon: 'alert' });
     return;
   }
+  const variant = sheetVariant(p);
 
   const prevGift = getGiftEligibleToyLineCount();
   let line = asNew ? null : sheetLine();
   if (line) {
     // Редагуємо рядок на місці; якщо ключ збігся з іншим рядком — зливаємо
     line.quantity = SHEET.qty;
+    applyVariantToLine(line, variant);
     if (filament) {
       line.filamentId = filament.id;
       line.filamentName = filament.name;
@@ -2223,7 +2234,7 @@ function addToCartFromModal(asNew = false) {
       line = dup;
     }
   } else {
-    const fresh = buildCartRow(p, SHEET.qty, filament);
+    const fresh = buildCartRow(p, SHEET.qty, filament, variant);
     if (isCustomProduct(p)) {
       fresh.fromCustom = true;
       fresh.addedFrom = 'custom';
@@ -2260,6 +2271,66 @@ function addToCartFromModal(asNew = false) {
 // ─── СПІЛЬНИЙ РЕНДЕР КАРТКИ ──────────────────────────────────
 function isContractProduct(p) {
   return !!(p && p.contractPrice);
+}
+// Варіанти (розміри) з власними цінами; p.price у такого товару — найнижча ціна варіанта
+function productVariants(p) {
+  return Array.isArray(p?.variants) && p.variants.length ? p.variants : null;
+}
+function hasVariants(p) { return !!productVariants(p); }
+function findVariant(p, id) { return productVariants(p)?.find(v => v.id === id) || null; }
+function sheetVariant(p) {
+  const vs = productVariants(p);
+  return vs ? (vs.find(v => v.id === SHEET.variantId) || vs[0]) : null;
+}
+// Ціна однієї штуки в картці: з обраного варіанта або товару
+function sheetUnit(p) {
+  const v = sheetVariant(p);
+  if (v) return { price: v.contract ? 0 : v.price, contract: !!v.contract };
+  return { price: isContractProduct(p) ? 0 : p.price, contract: isContractProduct(p) };
+}
+// Рядок кошика ↔ варіант: ціна й «узгодимо» завжди з варіанта
+function applyVariantToLine(line, v) {
+  if (v) {
+    line.variantId = v.id;
+    line.variantName = v.name;
+    line.price = v.contract ? 0 : v.price;
+    line.contractPrice = !!v.contract;
+  } else {
+    delete line.variantId;
+    delete line.variantName;
+  }
+}
+// Після завантаження каталогу: варіант змінили чи прибрали — оновлюємо ціну або прибираємо рядок
+function reconcileCartVariants() {
+  let changed = false;
+  const before = cart.length;
+  cart = cart.filter(line => {
+    const p = findAnyProduct(line.id);
+    if (!p || line.isGift) return true;
+    if (hasVariants(p)) {
+      const v = findVariant(p, line.variantId);
+      if (!v) return false;
+      if (line.price !== (v.contract ? 0 : v.price) || line.variantName !== v.name || !!line.contractPrice !== !!v.contract) {
+        applyVariantToLine(line, v);
+        changed = true;
+      }
+    } else if (line.variantId) {
+      applyVariantToLine(line, null);
+      line.price = isContractProduct(p) ? 0 : p.price;
+      line.contractPrice = isContractProduct(p);
+      changed = true;
+    }
+    return true;
+  });
+  if (cart.length !== before) {
+    changed = true;
+    showToast({ msg: 'Розміри товару змінились — обери варіант ще раз', icon: 'info' });
+  }
+  if (changed) {
+    normalizeCart();
+    saveCart();
+    updateCartBadge();
+  }
 }
 
 function getCartFixedTotal() {
@@ -2817,10 +2888,11 @@ function renderCart() {
             </svg>
           </button>
         </div>
+        ${item.variantName ? `<div class="cart-item-sub cart-item-variant">${escapeHtml(item.variantName)}</div>` : ''}
         <div class="cart-item-sub ${item.customValue ? 'is-accent' : ''}">
           ${item.customValue
             ? escapeHtml(item.customValue)
-            : (item.contractPrice && item.mat
+            : (item.contractPrice && item.mat && !item.variantName
               ? escapeHtml(item.mat)
               : (!item.fromCustom && item.filamentName ? `PLA · ${escapeHtml(item.filamentName).toUpperCase()}` : '&nbsp;'))}
         </div>
@@ -3066,6 +3138,7 @@ async function loadProducts() {
     const all = await apiGet('/api/products');
     PRODUCTS = all.filter(p => p.cat !== 'custom');
     CUSTOM_PRODUCTS = all.filter(p => p.cat === 'custom');
+    reconcileCartVariants();
   } catch (e) {
     console.error('Помилка завантаження товарів:', e);
     PRODUCTS_LOAD_FAILED = true;
@@ -3553,7 +3626,7 @@ function initLightboxSwipe() {
 // ─── КАРТКА ТОВАРУ (REDESIGN.md, розд. 3.4): повноекранний лист, MainButton Telegram ───
 // Стан відкритої картки. qty — скільки додати (або скільки вже в кошику, якщо товар там є);
 // dirty — у кошику є товар, а в картці змінили кількість/колір/персоналізацію → «Оновити кошик»
-const SHEET = { lid: null, qty: 1, dirty: false, infoOpen: false, pers: { main: '', note: '', err: false }, stack: [], reviews: [], token: 0 };
+const SHEET = { lid: null, qty: 1, variantId: null, dirty: false, infoOpen: false, pers: { main: '', note: '', err: false }, stack: [], reviews: [], token: 0 };
 const REVIEWS_CACHE = new Map();
 const RELATED_CACHE = new Map();
 const PERS_DEFAULT_MAX = 40;
@@ -3624,6 +3697,11 @@ function sheetMainHtml(p) {
   let price;
   if (modalGiftPreview) {
     price = `<div class="p-price"><span class="price free">0 ₴</span>${isContractProduct(p) ? '' : `<span class="price-old">${money(p.price)}</span>`}<span class="save-note">Подарунок — безкоштовно</span></div>`;
+  } else if (hasVariants(p)) {
+    const v = sheetVariant(p);
+    price = v.contract
+      ? '<div class="contract-tag">Ціну цього варіанта порахую після замовлення</div>'
+      : `<div class="p-price"><span class="price">${money(v.price)}</span></div>`;
   } else if (isContractProduct(p)) {
     price = '<div class="contract-tag">Ціна залежить від конфігурації — порахую після замовлення</div>';
   } else {
@@ -3653,6 +3731,17 @@ function persBlockHtml(p) {
       <label for="pers-note">Побажання <span class="opt">необовʼязково</span></label>
       <textarea class="inp" id="pers-note" rows="2" maxlength="200" placeholder="Шрифт, серденько поруч з текстом, другий рядок…">${escapeHtml(SHEET.pers.note)}</textarea>
     </div>
+  </div>`;
+}
+
+function variantsBlockHtml(p) {
+  const vs = productVariants(p);
+  if (!vs || modalGiftPreview) return '';
+  const cur = sheetVariant(p);
+  return `<div class="p-block">
+    <h5>Варіант</h5>
+    <div class="var-opts" role="radiogroup" aria-label="Варіант товару">${vs.map(v => `<button type="button" class="var-opt${v.contract ? ' contract' : ''}" role="radio" aria-checked="${v.id === cur.id}" data-act="variant" data-vid="${escapeAttr(v.id)}"><b>${escapeHtml(v.name)}</b><span class="tnum">${v.contract ? 'ціна після узгодження' : money(v.price)}</span></button>`).join('')}</div>
+    ${cur.contract ? `<div class="p-note">${ic('info')}<span>Для такого варіанта ціну рахую окремо: напишу тобі після замовлення.</span></div>` : ''}
   </div>`;
 }
 
@@ -3716,6 +3805,7 @@ function sheetSectionsHtml(p) {
     ? `<div class="p-block"><div class="p-note gift">${ic('gift')}<span>Це перегляд подарунка. ${colorsBlockHtml(p) ? 'Обери колір і натисни' : 'Натисни'} «Обрати подарунком» — товар не потрапить у кошик окремою позицією.</span></div></div>`
     : '';
   return `${giftNote}
+    <div id="m-variants">${variantsBlockHtml(p)}</div>
     <div id="m-pers">${persBlockHtml(p)}</div>
     <div id="m-colors">${colorsBlockHtml(p)}</div>
     <div id="m-info">${infoBlockHtml(p)}</div>
@@ -3819,7 +3909,8 @@ function sheetKeyChanged() {
   if (f && f.upper) main = main.toUpperCase();
   const note = SHEET.pers.note.trim();
   const value = f && main ? (note ? `${main} · побажання: ${note}` : main) : (line.customValue || '');
-  return (filament?.id || '') !== (line.filamentId || '') || (f ? value !== (line.customValue || '') : false);
+  return (sheetVariant(p)?.id || '') !== (line.variantId || '')
+    || (filament?.id || '') !== (line.filamentId || '') || (f ? value !== (line.customValue || '') : false);
 }
 function sheetButton() {
   const p = currentProduct;
@@ -3828,10 +3919,11 @@ function sheetButton() {
     return picked ? { text: 'Обрано подарунком', icon: 'check', done: true } : { text: 'Обрати подарунком', icon: 'gift' };
   }
   const line = sheetLine();
-  const sum = isContractProduct(p) ? '' : ` · ${money(p.price * SHEET.qty)}`;
+  const unit = sheetUnit(p);
+  const sum = unit.contract ? '' : ` · ${money(unit.price * SHEET.qty)}`;
   if (line && !SHEET.dirty) return { text: 'В кошику · перейти до оформлення', icon: 'check', done: true };
   if (line) return { text: `Оновити кошик${sum}`, icon: 'refresh' };
-  return { text: `${isContractProduct(p) ? 'Додати до замовлення' : 'Додати в кошик'}${sum}`, icon: 'cart' };
+  return { text: `${unit.contract ? 'Додати до замовлення' : 'Додати в кошик'}${sum}`, icon: 'cart' };
 }
 function useTgMainButton() {
   return inTelegram() && !!tgApp()?.MainButton;
@@ -3897,6 +3989,16 @@ function pickSheetColor(fid) {
   modalFilamentId = f.id;
   haptic('select');
   renderSheetPart('m-colors', colorsBlockHtml(currentProduct));
+  markSheetDirty();
+}
+function pickSheetVariant(vid) {
+  const p = currentProduct;
+  const v = findVariant(p, vid);
+  if (!v || v.id === sheetVariant(p)?.id) return;
+  SHEET.variantId = v.id;
+  haptic('select');
+  renderSheetPart('m-variants', variantsBlockHtml(p));
+  renderSheetPart('m-main', sheetMainHtml(p));
   markSheetDirty();
 }
 function changeSheetQty(delta) {
@@ -3973,6 +4075,7 @@ function openModal(id, source = 'products', options = {}) {
   SHEET.token += 1;
   SHEET.pers = { main: line ? (line.persMain ?? line.customValue ?? '') : '', note: line?.persNote || '', err: false };
   modalFilamentId = initialFilamentId(p, line);
+  SHEET.variantId = findVariant(p, line?.variantId)?.id || productVariants(p)?.[0]?.id || null;
 
   const photos = p.photos || [];
   const startIdx = options.photoIndex != null ? Math.min(Math.max(0, options.photoIndex), Math.max(0, photos.length - 1)) : 0;
@@ -4425,6 +4528,7 @@ async function submitOrderOnce() {
       product_id:   i.id,
       product_name: i.name,
       price:        i.contractPrice ? 0 : i.price,
+      variant_id:   i.variantId || '',
       quantity:     i.quantity,
       fromCustom:   i.fromCustom,
       customValue:  i.customValue || '',
@@ -5008,9 +5112,12 @@ function repeatOrder(id) {
     if (it.is_gift || !(it.product_id > 0)) continue;
     const p = findAnyProduct(it.product_id);
     if (!p) { skipped++; continue; }
+    // Розмір, якого вже немає, наосліп не підставляємо
+    const variant = findVariant(p, it.variant_id);
+    if (hasVariants(p) && !variant) { skipped++; continue; }
     const av = productWantsFilamentChoice(p) ? availableFilaments(p) : [];
     const filament = av.find(f => f.name === it.filament) || (av.length ? defaultFilamentFor(p) : null);
-    const row = buildCartRow(p, Math.max(1, it.quantity || 1), filament);
+    const row = buildCartRow(p, Math.max(1, it.quantity || 1), filament, variant);
     if (isCustomProduct(p)) { row.fromCustom = true; row.addedFrom = 'custom'; }
     if (it.personalization) {
       row.customValue = it.personalization_note ? `${it.personalization} · побажання: ${it.personalization_note}` : it.personalization;
@@ -5302,10 +5409,10 @@ function findProduct(id, custom = false) {
 }
 function findAnyProduct(id) { return findProduct(id) || findProduct(id, true); }
 function discountPct(p) {
-  return !isContractProduct(p) && p.oldPrice && p.price < p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
+  return !isContractProduct(p) && !hasVariants(p) && p.oldPrice && p.price < p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
 }
 // Договірний чи індивідуальний: «+» відкриває картку (конфігурація або імʼя), а не додає наосліп
-function opensCard(p) { return isContractProduct(p) || isCustomProduct(p); }
+function opensCard(p) { return isContractProduct(p) || isCustomProduct(p) || hasVariants(p); }
 function isGlowProduct(p) { return !!p.luminousFilamentChoice; }
 let NEW_DAYS = 30;
 function isNewProduct(p, days = NEW_DAYS) {
@@ -5333,6 +5440,7 @@ function thumbHtml(p, w = 400) {
 }
 function priceHtml(p) {
   if (isContractProduct(p)) return '<span class="contract-tag">Ціна після узгодження</span>';
+  if (hasVariants(p)) return `<div class="price-row"><span class="price-from">від</span><span class="price">${money(p.price)}</span></div>`;
   const d = discountPct(p);
   return `<div class="price-row">${d ? `<span class="price-old">${money(p.oldPrice)}</span>` : ''}<span class="price${d ? ' sale' : ''}">${money(p.price)}</span></div>`;
 }
@@ -5383,7 +5491,7 @@ function recRowHtml(p) {
 function miniHtml(p) {
   return `<div class="mini" data-act="open" data-id="${p.id}"${customAttr(p)}>
     <div class="thumb">${thumbHtml(p, 240)}</div><p>${escapeHtml(p.name)}</p>
-    ${isContractProduct(p) ? '<span class="contract-tag">Договірна</span>' : `<span class="price">${money(p.price)}</span>`}
+    ${isContractProduct(p) ? '<span class="contract-tag">Договірна</span>' : `<span class="price">${hasVariants(p) ? 'від ' : ''}${money(p.price)}</span>`}
   </div>`;
 }
 function gridHtml(items) {
@@ -5589,7 +5697,7 @@ function defaultFilamentFor(p) {
   return availableFilaments(p)[0] || null;
 }
 // Рядок кошика — той самий формат, що створює картка товару (addToCartFromModal)
-function buildCartRow(p, quantity, filament) {
+function buildCartRow(p, quantity, filament, variant = null) {
   const row = {
     id: p.id,
     name: p.name,
@@ -5608,6 +5716,7 @@ function buildCartRow(p, quantity, filament) {
     row.filamentId = filament.id;
     row.filamentName = filament.name;
   }
+  applyVariantToLine(row, variant);
   return row;
 }
 function updateCartBadge() {
@@ -6445,6 +6554,7 @@ function bindShopEvents() {
       case 'orders-reload': MY_ORDERS = null; renderOrders(); break;
       case 'contact-owner': openOwnerChat(); break;
       case 'color': pickSheetColor(el.dataset.fid); break;
+      case 'variant': pickSheetVariant(el.dataset.vid); break;
       case 'sq': changeSheetQty(Number(el.dataset.d)); break;
       case 'sheet-new': addToCartFromModal(true); break;
       case 'info-toggle': toggleSheetInfo(); break;

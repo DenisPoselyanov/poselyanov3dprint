@@ -94,8 +94,8 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
             _sql("""
                 INSERT INTO order_items
                 (order_id, product_id, product_name, price, quantity, filament, is_contract_price, comment,
-                 personalization, personalization_note, is_gift)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 personalization, personalization_note, is_gift, variant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """),
             (
                 order_id,
@@ -109,6 +109,7 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
                 personalization,
                 personalization_note,
                 1 if item.get("is_gift") else 0,
+                str(item.get("variant_id") or "")[:16],
             ),
         )
 
@@ -387,7 +388,7 @@ def list_user_orders(user_id: int, limit: int = 30) -> list[dict]:
         items = conn.execute(
             _sql(f"""
                 SELECT order_id, product_id, product_name, price, quantity, filament,
-                       is_contract_price, personalization, personalization_note, is_gift
+                       is_contract_price, personalization, personalization_note, is_gift, variant_id
                 FROM order_items
                 WHERE order_id IN ({placeholders})
                 ORDER BY id

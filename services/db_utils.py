@@ -71,6 +71,8 @@ ORDER_ITEM_EXTRA_COLUMNS = {
     "personalization_note": "TEXT DEFAULT ''",
     "is_gift": "INTEGER DEFAULT 0",
     "printed": "INTEGER DEFAULT 0",
+    # Обраний варіант товару (розмір): id — для «Повторити замовлення»; назва також є в product_name
+    "variant_id": "TEXT DEFAULT ''",
 }
 
 

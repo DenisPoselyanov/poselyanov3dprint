@@ -594,7 +594,7 @@ def expected_columns() -> dict[str, set[str]]:
         "products": {"id", "category_id", "name", "emoji", "mat", "price", "old_price", "photos", "custom_fields",
                      "hot", "gift", "filament_choice", "luminous_filament_choice", "pinned", "stl_link",
                      "contract_price", "is_custom", "active", "status", "created_at", "description", "note",
-                     "video"},
+                     "video", "variants"},
         "filaments": {"id", "name", "hex", "available", "sort_order", "glow"},
         "promotions": {*promo_cols, "created_at"},
         "app_settings": {"key", "value", "updated_at"},

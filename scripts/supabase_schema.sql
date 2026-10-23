@@ -53,6 +53,8 @@ ALTER TABLE filaments ALTER COLUMN glow SET DEFAULT false;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT;
 UPDATE products SET status = CASE WHEN active THEN 'active' ELSE 'archive' END WHERE status IS NULL;
 ALTER TABLE products ALTER COLUMN status SET DEFAULT 'active';
+-- Варіанти товару з власними цінами: [{id, name, price} | {id, name, contract: true}]
+ALTER TABLE products ADD COLUMN IF NOT EXISTS variants JSONB DEFAULT '[]';
 
 -- Transaction tables
 CREATE TABLE IF NOT EXISTS users (

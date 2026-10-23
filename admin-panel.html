@@ -1015,6 +1015,25 @@
         }
 
         .price-fields-group.hidden { display: none; }
+        .variants-editor.hidden { display: none; }
+        .variants-editor { display: grid; gap: 10px; margin-top: 4px; }
+        .variant-rows { display: grid; gap: 8px; }
+        .variant-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto 36px; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-section); }
+        .variant-row input[type="text"], .variant-row input[type="number"] {
+            width: 100%; min-width: 0; padding: 9px 10px; border: 2px solid var(--border-input); border-radius: 8px;
+            font: inherit; font-size: 14px; background: var(--bg-input); color: var(--text-main);
+        }
+        .variant-row input[type="text"]:focus, .variant-row input[type="number"]:focus { outline: none; border-color: var(--primary, #2AABEE); }
+        .variant-row input:disabled { opacity: .45; }
+        .variant-row .v-contract { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; color: var(--text-muted); cursor: pointer; }
+        .variant-row .v-del { width: 36px; height: 36px; border-radius: 10px; border: 0; background: transparent; color: var(--text-muted); font-size: 18px; cursor: pointer; }
+        .variant-row .v-del:hover { color: var(--sale); background: var(--bg-card); }
+        .variant-row.err { border-color: var(--sale); }
+        .variant-add { justify-self: start; }
+        @media (max-width: 560px) {
+            .variant-row { grid-template-columns: minmax(0, 1fr) 96px 36px; }
+            .variant-row .v-contract { grid-column: 1 / -1; grid-row: 2; }
+        }
 
         .contract-hint {
             font-size: 12px;
@@ -3499,6 +3518,15 @@
                                         <label><input type="checkbox" name="contractPrice" id="contractPriceToggle" onchange="toggleContractPriceFields()"> 💬 Договірна ціна</label>
                                     </label>
                                     <div class="contract-hint" id="contractPriceHint" style="display:none;">Ціна не показується покупцю. Встановлюється в замовленні після узгодження.</div>
+                                    <label class="checkbox-group" style="display:block;">
+                                        <label><input type="checkbox" name="hasVariants" id="variantsToggle" onchange="toggleVariantsFields()"> 📐 Кілька варіантів (розміри) зі своїми цінами</label>
+                                    </label>
+                                </div>
+
+                                <div id="variantsEditor" class="variants-editor hidden">
+                                    <div class="contract-hint">Покупець обирає варіант у картці товару й одразу бачить ціну. Великі чи нестандартні замовлення познач «Після узгодження» — ціну назвеш сам.</div>
+                                    <div id="variantRows" class="variant-rows"></div>
+                                    <button type="button" class="btn btn-secondary variant-add" id="variantAddBtn" onclick="addVariantRow()">＋ Додати варіант</button>
                                 </div>
 
                                 <div id="priceFieldsGroup" class="price-fields-group">
@@ -6400,13 +6428,16 @@
             const thumb = photo
                 ? `<span class="pt-thumb-wrap" title="Переглянути фото" onclick="openProductPhotos(${p.id})"><img class="pt-thumb" src="${escapeAttr(photo)}" alt="" loading="lazy">${photoTotal > 1 ? `<span class="pt-thumb-count">${photoTotal}</span>` : ''}</span>`
                 : `<span class="pt-thumb">${escapeHtml(p.emoji || '📦')}</span>`;
-            const giftBlocked = p.contractPrice || p.cat === 'custom';
+            const hasVariants = Array.isArray(p.variants) && p.variants.length > 0;
+            const giftBlocked = p.contractPrice || p.cat === 'custom' || hasVariants;
             const flagBtn = (flag, label, blocked) => `
                 <button type="button" class="pt-flag${p[flag] ? ' on' : ''}" data-f="${flag}" aria-pressed="${p[flag] ? 'true' : 'false'}"
-                    ${blocked ? 'disabled title="Недоступно для договірного й індивідуального товару"' : ''}
+                    ${blocked ? 'disabled title="Недоступно для договірного, індивідуального й товару з варіантами"' : ''}
                     onclick="toggleProductFlag(${p.id}, '${flag}', this)">${label}</button>`;
             const priceCell = p.contractPrice
                 ? '<span class="pt-contract">Договірна</span>'
+                : hasVariants
+                ? `<span class="pt-contract" title="${escapeAttr(p.variants.map(v => `${v.name}: ${v.contract ? 'після узгодження' : v.price + ' ₴'}`).join('\n'))}">від ${p.price} ₴ · ${p.variants.length} вар.</span>`
                 : `<div class="pt-price-wrap">
                         <span class="pt-price-line">
                             <input class="pt-price" type="text" inputmode="numeric" value="${p.price}" data-id="${p.id}" data-orig="${p.price}"
@@ -6606,7 +6637,9 @@
             if (desc) lines.push('', desc);
             let price;
             if (p.contractPrice) price = '💰 Ціна — договірна';
-            else if (p.oldPrice && p.oldPrice > p.price) price = `💰 ${p.price} ₴ замість ${p.oldPrice} ₴`;
+            else if (Array.isArray(p.variants) && p.variants.length) {
+                price = '💰 ' + p.variants.map(v => `${v.name} — ${v.contract ? 'ціна після узгодження' : v.price + ' ₴'}`).join('\n');
+            } else if (p.oldPrice && p.oldPrice > p.price) price = `💰 ${p.price} ₴ замість ${p.oldPrice} ₴`;
             else price = `💰 ${p.price} ₴`;
             lines.push('', price, '📦 Доставка Новою поштою');
             return lines.join('\n');
@@ -6898,16 +6931,138 @@
 
         function toggleContractPriceFields() {
             const checked = document.getElementById('contractPriceToggle').checked;
-            const group = document.getElementById('priceFieldsGroup');
             const hint = document.getElementById('contractPriceHint');
             const form = document.getElementById('productForm');
-            group.classList.toggle('hidden', checked);
             hint.style.display = checked ? '' : 'none';
-            form.price.required = !checked;
             if (checked) {
                 form.price.value = '0';
                 form.oldPrice.value = '';
+                form.hasVariants.checked = false;
             }
+            syncPriceModeUi();
+        }
+
+        // ── Варіанти товару (розміри): [{id, name, price} | {id, name, contract: true}] ──
+        const VARIANTS_MIN = 2;
+        const VARIANTS_MAX = 10;
+        let productVariantsDraft = [];
+
+        function toggleVariantsFields() {
+            const form = document.getElementById('productForm');
+            if (form.hasVariants.checked) {
+                form.contractPrice.checked = false;
+                document.getElementById('contractPriceHint').style.display = 'none';
+                // Перший рядок підхоплює звичайну ціну, щоб не набирати її двічі
+                const base = parseInt(form.price.value, 10);
+                while (productVariantsDraft.length < VARIANTS_MIN) {
+                    productVariantsDraft.push({ name: '', price: productVariantsDraft.length === 0 && base > 0 ? base : '' });
+                }
+                renderVariantRows();
+            }
+            syncPriceModeUi();
+        }
+
+        // Звичайна ціна / договірна / варіанти — показуємо лише потрібні поля
+        function syncPriceModeUi() {
+            const form = document.getElementById('productForm');
+            const variants = form.hasVariants.checked;
+            const plain = !variants && !form.contractPrice.checked;
+            document.getElementById('priceFieldsGroup').classList.toggle('hidden', !plain);
+            document.getElementById('variantsEditor').classList.toggle('hidden', !variants);
+            form.price.required = plain;
+            form.gift.disabled = !plain;
+            if (!plain) form.gift.checked = false;
+        }
+
+        function renderVariantRows() {
+            const host = document.getElementById('variantRows');
+            host.innerHTML = productVariantsDraft.map((v, i) => `
+                <div class="variant-row" data-i="${i}">
+                    <input type="text" maxlength="40" placeholder="Напр. 10 см" aria-label="Назва варіанта" value="${escapeAttr(v.name || '')}" oninput="setVariantField(${i}, 'name', this.value)">
+                    <input type="number" min="1" step="1" inputmode="numeric" placeholder="Ціна, ₴" aria-label="Ціна варіанта, ₴" value="${v.contract ? '' : escapeAttr(String(v.price ?? ''))}" ${v.contract ? 'disabled' : ''} oninput="setVariantField(${i}, 'price', this.value)">
+                    <label class="v-contract"><input type="checkbox" ${v.contract ? 'checked' : ''} onchange="setVariantField(${i}, 'contract', this.checked)"> 💬 Після узгодження</label>
+                    <button type="button" class="v-del" aria-label="Прибрати варіант" title="Прибрати" onclick="removeVariantRow(${i})">✕</button>
+                </div>`).join('');
+            document.getElementById('variantAddBtn').disabled = productVariantsDraft.length >= VARIANTS_MAX;
+        }
+
+        function setVariantField(i, key, value) {
+            const v = productVariantsDraft[i];
+            if (!v) return;
+            if (key === 'contract') {
+                v.contract = !!value;
+                if (v.contract) delete v.price;
+                renderVariantRows();
+            } else {
+                v[key] = value;
+            }
+            document.querySelector(`.variant-row[data-i="${i}"]`)?.classList.remove('err');
+            onProductFormChange();
+        }
+
+        function addVariantRow() {
+            if (productVariantsDraft.length >= VARIANTS_MAX) return;
+            productVariantsDraft.push({ name: '', price: '' });
+            renderVariantRows();
+            document.querySelector('#variantRows .variant-row:last-child input')?.focus();
+            onProductFormChange();
+        }
+
+        function removeVariantRow(i) {
+            productVariantsDraft.splice(i, 1);
+            renderVariantRows();
+            onProductFormChange();
+        }
+
+        function loadVariantsDraft(variants) {
+            productVariantsDraft = (Array.isArray(variants) ? variants : []).map(v => ({ ...v }));
+            document.getElementById('productForm').hasVariants.checked = productVariantsDraft.length > 0;
+            renderVariantRows();
+            syncPriceModeUi();
+        }
+
+        // Те, що піде на сервер; порожні рядки (без назви й ціни) пропускаємо
+        function cleanVariantsDraft() {
+            return productVariantsDraft
+                .filter(v => String(v.name || '').trim() || v.contract || String(v.price ?? '').trim())
+                .map(v => {
+                    const out = { name: String(v.name || '').trim() };
+                    if (v.id) out.id = v.id;
+                    if (v.contract) out.contract = true;
+                    else out.price = parseInt(v.price, 10);
+                    return out;
+                });
+        }
+
+        // null — усе гаразд, інакше текст помилки (рядки з помилкою підсвічуються)
+        function validateVariantsDraft() {
+            const rows = document.querySelectorAll('#variantRows .variant-row');
+            rows.forEach(r => r.classList.remove('err'));
+            const list = cleanVariantsDraft();
+            if (list.length < VARIANTS_MIN) return `Додайте щонайменше ${VARIANTS_MIN} варіанти`;
+            const names = new Set();
+            let error = null;
+            productVariantsDraft.forEach((v, i) => {
+                const name = String(v.name || '').trim();
+                const empty = !name && !v.contract && !String(v.price ?? '').trim();
+                if (empty) return;
+                let bad = null;
+                if (!name) bad = 'У кожного варіанта має бути назва';
+                else if (names.has(name.toLowerCase())) bad = `Варіант «${name}» повторюється`;
+                else if (!v.contract && !(parseInt(v.price, 10) > 0)) bad = `Вкажіть ціну варіанта «${name}»`;
+                names.add(name.toLowerCase());
+                if (bad) {
+                    rows[i]?.classList.add('err');
+                    error = error || bad;
+                }
+            });
+            if (!error && !list.some(v => !v.contract)) error = 'Хоча б один варіант має мати ціну. Якщо ціна завжди договірна, увімкніть «Договірна ціна»';
+            return error;
+        }
+
+        function variantsMinPrice(list) {
+            const prices = list.filter(v => !v.contract && v.price > 0).map(v => v.price);
+            return prices.length ? Math.min(...prices) : 0;
         }
 
         function toggleFilamentChoiceFields() {
@@ -6924,13 +7079,15 @@
             const form = document.getElementById('productForm');
             const contractPrice = form.contractPrice.checked;
             const oldPrice = !contractPrice && form.oldPrice.value ? parseInt(form.oldPrice.value, 10) : null;
+            const variants = !contractPrice && form.hasVariants.checked ? cleanVariantsDraft() : [];
             const state = {
                 name: form.name.value.trim(),
                 cat: form.cat.value,
                 emoji: form.emoji.value.trim(),
                 contractPrice,
-                price: contractPrice ? 0 : form.price.value,
-                oldPrice,
+                variants,
+                price: contractPrice ? 0 : (variants.length ? variantsMinPrice(variants) : form.price.value),
+                oldPrice: variants.length ? null : oldPrice,
                 mat: form.mat.value.trim(),
                 description: form.description.value.trim(),
                 note: form.note.value.trim(),
@@ -7036,6 +7193,8 @@
 
             const priceHtml = s.contractPrice
                 ? '<span class="pv-contract">Ціна після узгодження</span>'
+                : s.variants.length
+                ? `<div class="pv-price-row"><span class="pv-price">від ${Number.isFinite(price) ? price : 0} ₴</span></div>`
                 : `<div class="pv-price-row">${hasSale ? `<span class="pv-old">${s.oldPrice} ₴</span>` : ''}<span class="pv-price${hasSale ? ' sale' : ''}">${Number.isFinite(price) ? price : 0} ₴</span></div>`;
 
             host.innerHTML = `
@@ -7066,6 +7225,7 @@
                     if (s.pinned) chips.push('<span class="pv-chip">📌 Закріплений</span>');
                     if (s.gift) chips.push('<span class="pv-chip">🎁 Може бути подарунком</span>');
                 }
+                if (s.variants.length) chips.push(`<span class="pv-chip">📐 Варіантів: ${s.variants.length}</span>`);
                 if (s.video) chips.push('<span class="pv-chip">🎬 Є відео</span>');
                 meta.innerHTML = chips.join('');
             }
@@ -7100,6 +7260,7 @@
             updatePhotoPreview();
             updateCategoryFields();
             form.contractPrice.checked = false;
+            loadVariantsDraft([]);
             toggleContractPriceFields();
             toggleFilamentChoiceFields();
             hideProductUnsavedConfirm();
@@ -8133,6 +8294,7 @@
                 await loadProductCollectionState(id);
                 updatePhotoPreview();
                 updateCategoryFields();
+                loadVariantsDraft(product.variants);
                 toggleContractPriceFields();
                 toggleFilamentChoiceFields();
                 hideProductUnsavedConfirm();
@@ -8609,7 +8771,8 @@
             // Валідація всіх обов'язкових полів
             let isValid = true;
             const contractPrice = form.contractPrice.checked;
-            const requiredFields = contractPrice ? ['name', 'cat', 'emoji', 'mat'] : ['name', 'cat', 'emoji', 'price', 'mat'];
+            const withVariants = !contractPrice && form.hasVariants.checked;
+            const requiredFields = contractPrice || withVariants ? ['name', 'cat', 'emoji', 'mat'] : ['name', 'cat', 'emoji', 'price', 'mat'];
             
             requiredFields.forEach(fieldName => {
                 const field = form.querySelector(`[name="${fieldName}"]`);
@@ -8642,8 +8805,16 @@
                 return;
             }
 
-            const price = contractPrice ? 0 : parseInt(form.price.value, 10);
-            const oldPrice = !contractPrice && form.oldPrice.value ? parseInt(form.oldPrice.value, 10) : null;
+            if (withVariants) {
+                const variantError = validateVariantsDraft();
+                if (variantError) {
+                    showToast(variantError, 'error');
+                    return;
+                }
+            }
+            const variants = withVariants ? cleanVariantsDraft() : [];
+            const price = contractPrice ? 0 : (withVariants ? variantsMinPrice(variants) : parseInt(form.price.value, 10));
+            const oldPrice = !contractPrice && !withVariants && form.oldPrice.value ? parseInt(form.oldPrice.value, 10) : null;
             const oldPriceGroup = form.oldPrice.closest('.form-group');
 
             if (!contractPrice && oldPrice !== null && price >= oldPrice) {
@@ -8665,6 +8836,7 @@
                 cat: form.cat.value,
                 emoji: form.emoji.value.trim(),
                 contractPrice,
+                variants,
                 price,
                 oldPrice,
                 mat: form.mat.value.trim(),
@@ -8687,7 +8859,7 @@
             } else {
                 data.hot = form.hot.checked;
                 data.pinned = form.pinned.checked;
-                data.gift = form.gift.checked;
+                data.gift = form.gift.checked && !withVariants;
                 data.filamentChoice = form.filamentChoice.checked;
                 data.luminousFilamentChoice = form.filamentChoice.checked && form.luminousFilamentChoice.checked;
             }

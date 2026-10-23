@@ -165,6 +165,72 @@ def normalize_custom_fields(value):
     return out if len(out) > 1 else label
 
 
+VARIANTS_MIN = 2
+VARIANTS_MAX = 10
+VARIANT_NAME_MAX = 40
+_VARIANT_ID_RE = re.compile(r"^[a-z0-9]{1,16}$")
+
+
+def normalize_variants(raw) -> list[dict]:
+    """Варіанти товару (розмір / комплектація): [{id, name, price} | {id, name, contract: True}].
+
+    Порожнє значення — товар без варіантів. ValueError — зрозуміле повідомлення для адмінки.
+    """
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("Невірний формат варіантів")
+    if len(raw) < VARIANTS_MIN:
+        raise ValueError(f"Варіантів має бути щонайменше {VARIANTS_MIN}, інакше вистачить звичайної ціни")
+    if len(raw) > VARIANTS_MAX:
+        raise ValueError(f"Забагато варіантів (максимум {VARIANTS_MAX})")
+    out: list[dict] = []
+    seen_names: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("Невірний формат варіантів")
+        name = " ".join(clean_text(item.get("name"), VARIANT_NAME_MAX).split())
+        if not name:
+            raise ValueError("У кожного варіанта має бути назва")
+        if name.casefold() in seen_names:
+            raise ValueError(f"Варіант «{name}» повторюється")
+        seen_names.add(name.casefold())
+        variant: dict = {"id": str(item.get("id") or "").strip().lower(), "name": name}
+        if item.get("contract") in (True, 1, "1", "true", "on"):
+            variant["contract"] = True
+        else:
+            variant["price"] = _int_field(item.get("price"), f"ціна варіанта «{name}»", allow_zero=False)
+        out.append(variant)
+    if not any("price" in v for v in out):
+        raise ValueError("Хоча б один варіант має мати ціну. Якщо ціна завжди договірна, увімкніть «Договірна ціна»")
+    # id стабільний між редагуваннями (на нього посилаються кошики покупців); нові — v1, v2…
+    used = {v["id"] for v in out if _VARIANT_ID_RE.match(v["id"])}
+    taken: set[str] = set()
+    n = 0
+    for v in out:
+        if _VARIANT_ID_RE.match(v["id"]) and v["id"] not in taken:
+            taken.add(v["id"])
+            continue
+        n += 1
+        while f"v{n}" in used or f"v{n}" in taken:
+            n += 1
+        v["id"] = f"v{n}"
+        taken.add(v["id"])
+    return out
+
+
+def variants_min_price(variants: list[dict]) -> int:
+    """Найнижча фіксована ціна варіантів — для «від … ₴», сортування й добірок за ціною."""
+    return min((int(v["price"]) for v in variants if "price" in v), default=0)
+
+
+def get_product_variant(product: dict | None, variant_id) -> dict | None:
+    needle = str(variant_id or "").strip()
+    if not product or not needle:
+        return None
+    return next((v for v in product.get("variants") or [] if v.get("id") == needle), None)
+
+
 def _apply_product_texts(product: dict, data: dict) -> None:
     """Опис, примітка й відео: порожнє значення прибирає поле з товару."""
     for key, max_len in (("description", DESCRIPTION_MAX), ("note", NOTE_MAX)):
@@ -226,6 +292,14 @@ def _row_to_product(row: dict) -> dict:
         p["oldPrice"] = int(row.get("old_price") or row.get("oldPrice"))
     if row.get("contract_price") or row.get("contractPrice"):
         p["contractPrice"] = True
+    variants = row.get("variants")
+    if isinstance(variants, str):
+        try:
+            variants = json.loads(variants)
+        except json.JSONDecodeError:
+            variants = []
+    if isinstance(variants, list) and variants:
+        p["variants"] = variants
     if row.get("gift"):
         p["gift"] = bool(row.get("gift"))
     if row.get("filament_choice") is not None or row.get("filamentChoice") is not None:
@@ -355,6 +429,8 @@ def init_catalog_tables(conn) -> None:
     conn.execute("UPDATE products SET status = CASE WHEN active THEN 'active' ELSE 'archive' END WHERE status IS NULL")
     conn.execute("ALTER TABLE products ALTER COLUMN status SET DEFAULT 'active'")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_products_status ON products(status)")
+    # Варіанти товару з власними цінами (розміри); порожній список — одна ціна товару.
+    conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS variants JSONB DEFAULT '[]'")
     # Раніше порожнє поле зберігалося як json.dumps("") == '""' і показувалося в адмінці як ✍️ "".
     conn.execute("UPDATE products SET custom_fields = '' WHERE custom_fields IN ('\"\"', 'null')")
     sync_products_id_sequence(conn)
@@ -631,8 +707,8 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
         INSERT INTO products (
             category_id, name, emoji, mat, price, old_price, photos, custom_fields,
             hot, gift, filament_choice, luminous_filament_choice, pinned, stl_link, contract_price, is_custom, active,
-            status, description, note, video
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            status, description, note, video, variants
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
         RETURNING id
         """,
         (
@@ -657,6 +733,7 @@ def _insert_product_db(product: dict, is_custom: bool) -> int:
             product.get("description", ""),
             product.get("note", ""),
             product.get("video", ""),
+            json.dumps(product.get("variants") or [], ensure_ascii=False),
         ),
     )
     new_id = cur.fetchone()[0]
@@ -673,8 +750,12 @@ def add_product(data: dict):
             return {"ok": False, "error": "Невірна або неактивна категорія"}
 
         contract_price = bool(data.get("contractPrice"))
-        price = 0 if contract_price else int(data.get("price", 0))
-        old_price = None if contract_price else data.get("oldPrice")
+        variants = [] if contract_price else normalize_variants(data.get("variants"))
+        if variants:
+            price, old_price = variants_min_price(variants), None
+        else:
+            price = 0 if contract_price else int(data.get("price", 0))
+            old_price = None if contract_price else data.get("oldPrice")
         is_valid, error = validate_product_prices(price, old_price, contract_price=contract_price)
         if not is_valid:
             return {"ok": False, "error": error}
@@ -700,12 +781,14 @@ def add_product(data: dict):
         _apply_product_texts(product, data)
         if contract_price:
             product["contractPrice"] = True
+        elif variants:
+            product["variants"] = variants
         elif old_price:
             product["oldPrice"] = int(old_price)
         if is_custom:
             product["custom_fields"] = normalize_custom_fields(data.get("custom_fields", ""))
         else:
-            product["gift"] = False if contract_price else data.get("gift", False)
+            product["gift"] = False if contract_price or variants else data.get("gift", False)
             product["filamentChoice"] = data.get("filamentChoice", True)
             if product["filamentChoice"] and data.get("luminousFilamentChoice"):
                 product["luminousFilamentChoice"] = True
@@ -764,16 +847,31 @@ def update_product(product_id: int, data: dict):
 
         contract_price = bool(data.get("contractPrice"))
         if contract_price:
+            variants = []
+        elif "variants" in data:
+            variants = normalize_variants(data.get("variants"))
+        else:
+            variants = product.get("variants") or []
+        if contract_price:
             product["contractPrice"] = True
             product["price"] = 0
+            product.pop("oldPrice", None)
+        elif variants:
+            # Ціна товару = найнижча ціна варіанта; стара ціна в товару з варіантами не ведеться
+            product.pop("contractPrice", None)
+            product["price"] = variants_min_price(variants)
             product.pop("oldPrice", None)
         else:
             product.pop("contractPrice", None)
             if data.get("price") is not None:
                 product["price"] = int(data["price"])
+        if variants:
+            product["variants"] = variants
+        else:
+            product.pop("variants", None)
 
         next_price = product["price"]
-        if contract_price:
+        if contract_price or variants:
             next_old_price = None
         elif "oldPrice" in data:
             next_old_price = int(data["oldPrice"]) if data.get("oldPrice") else None
@@ -783,14 +881,14 @@ def update_product(product_id: int, data: dict):
         if not is_valid:
             return {"ok": False, "error": error}
 
-        if not contract_price:
+        if not contract_price and not variants:
             if data.get("oldPrice"):
                 product["oldPrice"] = int(data["oldPrice"])
             elif "oldPrice" in product and "oldPrice" in data and not data.get("oldPrice"):
                 del product["oldPrice"]
 
         if not is_next_custom:
-            product["gift"] = False if contract_price else data.get("gift", product.get("gift", False))
+            product["gift"] = False if contract_price or variants else data.get("gift", product.get("gift", False))
             if "filamentChoice" in data:
                 product["filamentChoice"] = data.get("filamentChoice")
                 if not product.get("filamentChoice"):
@@ -815,7 +913,7 @@ def update_product(product_id: int, data: dict):
                     category_id = %s, name = %s, emoji = %s, mat = %s, price = %s, old_price = %s,
                     photos = %s::jsonb, custom_fields = %s, hot = %s, gift = %s, filament_choice = %s,
                     luminous_filament_choice = %s, pinned = %s, stl_link = %s, contract_price = %s, is_custom = %s,
-                    description = %s, note = %s, video = %s
+                    description = %s, note = %s, video = %s, variants = %s::jsonb
                 WHERE id = %s
                 """,
                 (
@@ -833,6 +931,7 @@ def update_product(product_id: int, data: dict):
                     product.get("description", ""),
                     product.get("note", ""),
                     product.get("video", ""),
+                    json.dumps(product.get("variants") or [], ensure_ascii=False),
                     product_id,
                 ),
             )
@@ -958,18 +1057,21 @@ def _patch_changes(product: dict, fields: dict) -> dict:
     if unknown:
         raise ValueError("Недозволені поля: " + ", ".join(sorted(unknown)))
     is_contract = bool(product.get("contractPrice"))
+    has_variants = bool(product.get("variants"))
     is_custom = product.get("cat") == "custom"
     changes: dict = {}
     for flag in ("hot", "pinned", "gift"):
         if flag in fields:
             if not isinstance(fields[flag], bool):
                 raise ValueError(f"Невірне значення: {flag}")
-            if flag == "gift" and fields[flag] and (is_custom or is_contract):
-                raise ValueError("Подарунком не може бути договірний чи індивідуальний товар")
+            if flag == "gift" and fields[flag] and (is_custom or is_contract or has_variants):
+                raise ValueError("Подарунком не може бути договірний, індивідуальний чи товар з варіантами")
             changes[flag] = fields[flag]
     if "price" in fields or "oldPrice" in fields:
         if is_contract:
             raise ValueError("Договірна ціна: змініть її в редакторі товару")
+        if has_variants:
+            raise ValueError("Ціни варіантів змінюються в редакторі товару")
         price = _int_field(fields["price"], "ціна", allow_zero=False) if "price" in fields else int(product.get("price") or 0)
         if "oldPrice" in fields:
             old = fields["oldPrice"]
@@ -1075,6 +1177,8 @@ def bulk_update_products(ids, action: str, value=None):
                     changes = {"cat": category_id}
             elif product.get("contractPrice"):
                 reason = "договірна ціна"
+            elif product.get("variants"):
+                reason = "ціни варіантів"
             elif action == "discount":
                 base = int(product.get("oldPrice") or product.get("price") or 0)
                 new_price = round(base * (100 - percent) / 100)
