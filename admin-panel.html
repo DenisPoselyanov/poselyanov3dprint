@@ -2945,8 +2945,26 @@
         .ai-job:empty { display: none; }
         .ai-job.err { color: var(--sale); }
         .ai-job.run { color: var(--accent); font-weight: 600; }
-        .ai-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); align-items: start; }
-        .ai-card { align-content: start; }
+        .ai-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); align-items: stretch; }
+        .ai-card { display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, transform .15s; }
+        .ai-card:hover { border-color: var(--border-alt); }
+        .ai-card .ai-actions { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+        .ai-card .ai-chips { margin-top: 0; }
+        .ai-card .rv-top { align-items: flex-start; }
+        .ai-card .rv-pname { font-size: 15px; line-height: 1.3; margin-bottom: 4px; }
+        .ai-card .ai-reason { padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 9%, transparent); border-left: 3px solid var(--accent); font-size: 13px; line-height: 1.45; color: var(--text-secondary); overflow-wrap: anywhere; }
+        .ai-card .ai-reason b { color: var(--text-main); }
+        .ai-card .ai-gallery { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+        .ai-card .ai-gallery img, .ai-card .ai-more { width: 100%; height: auto; aspect-ratio: 1; }
+        .ai-more { display: grid; place-items: center; border-radius: 8px; border: 1px dashed var(--border-alt); background: var(--bg-section); color: var(--text-secondary); font-weight: 700; font-size: 14px; cursor: pointer; padding: 0; }
+        .ai-more:hover { color: var(--accent); border-color: var(--accent); }
+        .ai-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 14px; padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; }
+        .ai-filters .orders-search { width: auto; flex: 0 1 auto; }
+        .ai-filters .ai-f-search { flex: 1 1 200px; max-width: 320px; }
+        .ai-filters .ai-f-reset { padding: 7px 12px; font-size: 13px; min-height: 34px; }
+        .ai-filters .ai-f-reset[hidden] { display: none; }
+        .ai-f-count { margin-left: auto; font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+        @media (max-width: 640px) { .ai-filters .orders-search { flex: 1 1 45%; } .ai-filters .ai-f-search { flex-basis: 100%; max-width: none; } }
         .ai-card.is-done { opacity: .72; }
         .ai-card .rv-th { width: 56px; height: 56px; border-radius: 12px; font-size: 28px; }
         .ai-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
@@ -3339,6 +3357,26 @@
                     </div>
                 </div>
                 <div id="aiTabs" class="orders-tabs"></div>
+                <div class="ai-filters">
+                    <input type="search" class="orders-search ai-f-search" id="aiFSearch" placeholder="🔍 Назва, опис…" oninput="aiFilterChanged()">
+                    <select class="orders-search" id="aiFCat" onchange="aiFilterChanged()" title="Категорія"></select>
+                    <select class="orders-search" id="aiFSrc" onchange="aiFilterChanged()" title="Джерело"></select>
+                    <select class="orders-search" id="aiFLic" onchange="aiFilterChanged()" title="Ліцензія">
+                        <option value="">Ліцензія: будь-яка</option>
+                        <option value="ok">✅ Дозволено</option>
+                        <option value="check">⚠️ Перевірити</option>
+                    </select>
+                    <select class="orders-search" id="aiFSort" onchange="aiFilterChanged()" title="Сортування">
+                        <option value="new">Спочатку нові</option>
+                        <option value="downloads">Більше скачувань</option>
+                        <option value="likes">Більше лайків</option>
+                        <option value="priceAsc">Дешевші</option>
+                        <option value="priceDesc">Дорожчі</option>
+                        <option value="photos">Менше фото</option>
+                    </select>
+                    <button class="btn btn-secondary ai-f-reset" type="button" id="aiFReset" onclick="resetAiFilters()" hidden>✕ Скинути</button>
+                    <span class="ai-f-count" id="aiFCount"></span>
+                </div>
                 <div id="aiList" class="rv-list ai-list"></div>
             </section>
 
@@ -11099,15 +11137,94 @@
             const list = document.getElementById('aiList');
             if (!list) return;
             if (!aiLoaded) { list.innerHTML = '<div class="rv-empty">Завантаження…</div>'; return; }
-            const items = aiItems.filter(it => it.status === aiTab);
-            const empty = aiTab === 'new'
-                ? 'Нових пропозицій немає.'
-                : aiTab === 'published' ? 'Ще жодної пропозиції не додано в магазин.' : 'Відхилених пропозицій немає.';
+            aiFillFilterOptions();
+            const tabItems = aiItems.filter(it => it.status === aiTab);
+            const items = aiApplyFilters(tabItems);
+            const active = aiFiltersActive();
+            const cnt = document.getElementById('aiFCount');
+            if (cnt) cnt.textContent = tabItems.length ? (active ? `Показано ${items.length} з ${tabItems.length}` : `${tabItems.length} шт.`) : '';
+            const reset = document.getElementById('aiFReset');
+            if (reset) reset.hidden = !active;
+            const empty = !tabItems.length
+                ? (aiTab === 'new' ? 'Нових пропозицій немає.'
+                    : aiTab === 'published' ? 'Ще жодної пропозиції не додано в магазин.' : 'Відхилених пропозицій немає.')
+                : 'За цими фільтрами нічого не знайдено.';
             list.innerHTML = items.length ? items.map(aiCardHtml).join('') : `<div class="rv-empty">${escapeHtml(empty)}</div>`;
         }
 
         function setAiTab(key) {
             aiTab = key;
+            renderAiPage();
+        }
+
+        // ── Фільтри: пошук, категорія, джерело, ліцензія, сортування (діють у поточній вкладці)
+        function aiFilterVals() {
+            const v = id => (document.getElementById(id) || {}).value || '';
+            return { q: v('aiFSearch').trim().toLowerCase(), cat: v('aiFCat'), src: v('aiFSrc'), lic: v('aiFLic'), sort: v('aiFSort') || 'new' };
+        }
+
+        function aiFiltersActive() {
+            const f = aiFilterVals();
+            return !!(f.q || f.cat || f.src || f.lic);
+        }
+
+        function aiIsLicenseOk(it) {
+            return !!it.license && !/не перевір|не дозвол|комерційн|не вказан|не зрозум/i.test(it.license);
+        }
+
+        function aiApplyFilters(items) {
+            const f = aiFilterVals();
+            const num = v => (v == null ? -1 : Number(v));
+            let res = items.filter(it => {
+                const p = it.product || {};
+                if (f.q && !`${p.name || ''} ${it.name || ''} ${p.description || ''} ${it.reason || ''}`.toLowerCase().includes(f.q)) return false;
+                if (f.cat && p.cat !== f.cat) return false;
+                if (f.src && aiSourceName(aiStlUrl(it)) !== f.src) return false;
+                if (f.lic === 'ok' && !aiIsLicenseOk(it)) return false;
+                if (f.lic === 'check' && aiIsLicenseOk(it)) return false;
+                return true;
+            });
+            const stat = (it, k) => num(((it.product || {}).sourceStats || {})[k]);
+            const sorters = {
+                new: (a, b) => (b.id - a.id),
+                downloads: (a, b) => stat(b, 'downloads') - stat(a, 'downloads'),
+                likes: (a, b) => stat(b, 'likes') - stat(a, 'likes'),
+                priceAsc: (a, b) => (Number((a.product || {}).price) || 0) - (Number((b.product || {}).price) || 0),
+                priceDesc: (a, b) => (Number((b.product || {}).price) || 0) - (Number((a.product || {}).price) || 0),
+                photos: (a, b) => (a.images || []).length - (b.images || []).length,
+            };
+            return res.sort(sorters[f.sort] || sorters.new);
+        }
+
+        // Список категорій і джерел у селектах — тільки ті, що реально є в пропозиціях
+        let aiFilterSig = '';
+        function aiFillFilterOptions() {
+            const cats = new Map();
+            const srcs = new Set();
+            aiItems.forEach(it => {
+                const c = (it.product || {}).cat;
+                if (c && !cats.has(c)) cats.set(c, getCategoryMeta(c));
+                const s = aiSourceName(aiStlUrl(it));
+                if (s) srcs.add(s);
+            });
+            const sig = [...cats.keys()].join(',') + '|' + [...srcs].join(',');
+            if (sig === aiFilterSig) return;
+            aiFilterSig = sig;
+            const catSel = document.getElementById('aiFCat');
+            const srcSel = document.getElementById('aiFSrc');
+            if (!catSel || !srcSel) return;
+            const cv = catSel.value, sv = srcSel.value;
+            catSel.innerHTML = '<option value="">Категорія: усі</option>' + [...cats].map(([id, m]) => `<option value="${escapeAttr(id)}">${escapeHtml((m.emoji || '') + ' ' + m.name)}</option>`).join('');
+            srcSel.innerHTML = '<option value="">Джерело: усі</option>' + [...srcs].map(s => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`).join('');
+            catSel.value = cats.has(cv) ? cv : '';
+            srcSel.value = srcs.has(sv) ? sv : '';
+        }
+
+        function aiFilterChanged() { renderAiPage(); }
+
+        function resetAiFilters() {
+            ['aiFSearch', 'aiFCat', 'aiFSrc', 'aiFLic'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            const s = document.getElementById('aiFSort'); if (s) s.value = 'new';
             renderAiPage();
         }
 
@@ -11196,9 +11313,9 @@
                 ${p.description ? `<div class="ai-desc">${escapeHtml(p.description)}</div>` : ''}
                 ${aiStatsHtml(p.sourceStats)}
                 ${(p.variants || []).length ? `<div class="ai-chips">${p.variants.map(v => `<span class="ai-chip">${escapeHtml(v.name)} · ${Number(v.price) || 0} ₴</span>`).join('')}</div>` : ''}
-                ${(it.images || []).length > 1 ? `<div class="ai-photo-count">🖼 Фото: ${it.images.length} з ${AI_PHOTOS_MAX}</div><div class="ai-gallery">${it.images.map((url, i) => `<img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" class="ai-zoom" onclick="openAiPhoto(${it.id}, ${i})" title="Переглянути фото ${i + 1}">`).join('')}</div>` : ''}
+                ${(it.images || []).length > 1 ? `<div class="ai-photo-count">🖼 Фото: ${it.images.length} з ${AI_PHOTOS_MAX}</div><div class="ai-gallery">${it.images.slice(0, 6 - (it.images.length > 6 ? 1 : 0)).map((url, i) => `<img src="${escapeAttr(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" class="ai-zoom" onclick="openAiPhoto(${it.id}, ${i})" title="Переглянути фото ${i + 1}">`).join('')}${it.images.length > 6 ? `<button type="button" class="ai-more" onclick="openAiPhoto(${it.id}, 5)" title="Усі фото">+${it.images.length - 5}</button>` : ''}</div>` : ''}
                 ${p.note ? `<div class="ai-row">ⓘ ${escapeHtml(p.note)}</div>` : ''}
-                ${it.reason ? `<div class="ai-row"><b>Чому:</b> ${escapeHtml(it.reason)}</div>` : ''}
+                ${it.reason ? `<div class="ai-reason"><b>Чому:</b> ${escapeHtml(it.reason)}</div>` : ''}
                 ${it.license ? `<details class="ai-lic"><summary>⚖️ Ліцензія ${aiLicenseBadge(it.license)}</summary><div class="lic-text">${escapeHtml(it.license)}</div></details>` : ''}
                 <div class="ai-actions">${actions}</div>
             </article>`;
