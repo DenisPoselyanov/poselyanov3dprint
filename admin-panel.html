@@ -11207,7 +11207,8 @@
             });
             const stat = (it, k) => num(((it.product || {}).sourceStats || {})[k]);
             const sorters = {
-                new: (a, b) => (b.id - a.id),
+                // «Додані»: порядок за товаром у каталозі (останній доданий — перший), решта — за id пропозиції
+                new: (a, b) => ((b.productId || b.id) - (a.productId || a.id)),
                 downloads: (a, b) => stat(b, 'downloads') - stat(a, 'downloads'),
                 likes: (a, b) => stat(b, 'likes') - stat(a, 'likes'),
                 priceAsc: (a, b) => (Number((a.product || {}).price) || 0) - (Number((b.product || {}).price) || 0),
