@@ -2923,6 +2923,7 @@
         .rv-lb { position: fixed; inset: 0; z-index: 4000; background: rgba(8, 12, 18, .88); display: none; align-items: center; justify-content: center; padding: 16px; }
         .rv-lb.open { display: flex; }
         .rv-lb img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+        .rv-lb img, .pv-overlay .pv-main { -webkit-user-drag: none; user-select: none; will-change: transform; }
         .rv-lb button { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .16); color: #fff; font-size: 22px; cursor: pointer; display: grid; place-items: center; }
         .rv-lb .lb-close { top: 12px; right: 12px; }
         .rv-lb .lb-prev { left: 12px; top: 50%; transform: translateY(-50%); }
@@ -6713,6 +6714,7 @@
             q('.pv-edit').onclick = () => { close(); editProduct(id); };
             ov.querySelectorAll('.pv-strip img').forEach(el => { el.onclick = () => show(Number(el.dataset.n)); });
             ov.addEventListener('click', e => { if (e.target === ov) close(); });
+            attachPhotoSwipe(ov, () => q('.pv-main'), { prev: () => show(i - 1), next: () => show(i + 1), close });
             if (photos.length < 2) { q('.pv-prev').style.display = 'none'; q('.pv-next').style.display = 'none'; }
             show(0);
         }
@@ -11851,6 +11853,53 @@
             const it = aiItems.find(x => x.id === id);
             if (it) openPhotoViewer(it.images || [], index);
         }
+
+        // Свайпи в переглядачах фото: вліво/вправо — гортати, вгору/вниз — закрити
+        function attachPhotoSwipe(root, getImg, { prev, next, close }) {
+            let sx = 0, sy = 0, dx = 0, dy = 0, active = false, moved = false, axis = '';
+            const img = () => getImg();
+            const reset = (animate) => {
+                const el = img();
+                if (el) { el.style.transition = animate ? 'transform .2s' : 'none'; el.style.transform = ''; el.style.opacity = ''; }
+                root.style.background = '';
+            };
+            root.style.touchAction = 'none';
+            root.addEventListener('pointerdown', (e) => {
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                if (e.target.closest('button, .pv-strip, .pv-bar')) return;
+                active = true; moved = false; axis = ''; sx = e.clientX; sy = e.clientY; dx = dy = 0;
+            });
+            root.addEventListener('pointermove', (e) => {
+                if (!active) return;
+                dx = e.clientX - sx; dy = e.clientY - sy;
+                if (!axis && Math.max(Math.abs(dx), Math.abs(dy)) > 8) axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+                if (!axis) return;
+                moved = true;
+                const el = img();
+                if (!el) return;
+                el.style.transition = 'none';
+                if (axis === 'x') el.style.transform = `translateX(${dx}px)`;
+                else { el.style.transform = `translateY(${dy}px)`; el.style.opacity = String(Math.max(.3, 1 - Math.abs(dy) / 400)); }
+            });
+            const end = () => {
+                if (!active) return;
+                active = false;
+                if (axis === 'y' && Math.abs(dy) > 90) { reset(false); close(); }
+                else if (axis === 'x' && Math.abs(dx) > 50) { reset(false); dx < 0 ? next() : prev(); }
+                else reset(true);
+            };
+            root.addEventListener('pointerup', end);
+            root.addEventListener('pointercancel', () => { if (active) { active = false; reset(true); } });
+            // після перетягування не закриваємо клік по фону
+            root.addEventListener('click', (e) => { if (moved) { e.stopPropagation(); moved = false; } }, true);
+        }
+        (function initReviewLightboxSwipe() {
+            const box = document.getElementById('rvLightbox');
+            if (!box) return;
+            attachPhotoSwipe(box, () => box.querySelector('img'), {
+                prev: () => stepReviewLightbox(-1), next: () => stepReviewLightbox(1), close: closeReviewLightbox,
+            });
+        })();
 
         document.addEventListener('keydown', (e) => {
             const box = document.getElementById('rvLightbox');
