@@ -209,21 +209,21 @@ def test_reject_blocked_moves_old_suggestions(env):
     assert ai.reject_blocked() == 0
 
 
-def test_images_capped_at_ten():
-    urls = [f"https://example.com/{i}.jpg" for i in range(14)]
-    assert len(ai.normalize_item(_item(image_urls=urls), ["toy"])["images"]) == ai.IMAGES_MAX == 10
+def test_images_capped_at_fifteen():
+    urls = [f"https://example.com/{i}.jpg" for i in range(20)]
+    assert len(ai.normalize_item(_item(image_urls=urls), ["toy"])["images"]) == ai.IMAGES_MAX == 15
 
 
 def test_enrich_photos_merges_and_caps(env):
     ai.save_items([ai.normalize_item(_item(image_urls=["https://example.com/a.jpg"]), ["toy"])])
     sid = ai.list_suggestions()[0]["id"]
-    more = [f"https://example.com/{i}.jpg" for i in range(14)] + ["javascript:x"]
+    more = [f"https://example.com/{i}.jpg" for i in range(19)] + ["javascript:x"]
     photos = SimpleNamespace(type="tool_use", name="submit_photos", input={"image_urls": more})
     client = FakeClient([_resp([photos], "tool_use")])
     added = asyncio.run(ai.enrich_photos(sid, client))
     images = ai.get_suggestion(sid)["images"]
-    assert added == 9 and len(images) == 10
-    assert images[0] == "https://example.com/a.jpg" and len(set(images)) == 10
+    assert added == 14 and len(images) == 15
+    assert images[0] == "https://example.com/a.jpg" and len(set(images)) == 15
     assert "https://makerworld.com/en/models/1" in client.calls[0]["messages"][0]["content"]
     assert ai.photo_targets() == []  # галерея повна
 
