@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from telegram import BotCommandScopeAllPrivateChats, BotCommandScopeChat, Update
+import logging
+
+from telegram import (
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeChat,
+    MenuButtonWebApp,
+    Update,
+    WebAppInfo,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -15,6 +23,8 @@ from telegram.ext import (
 from handlers.errors import telegram_error_handler
 
 TELEGRAM_ALLOWED_UPDATES = ["message", "callback_query"]
+
+logger = logging.getLogger(__name__)
 
 
 def register_telegram_handlers(app: Application, handlers) -> None:
@@ -46,6 +56,27 @@ def register_telegram_handlers(app: Application, handlers) -> None:
     app.add_handler(CallbackQueryHandler(handlers.review_action, pattern=r"^rev_(pub|hide)_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.giveaway_join_action, pattern=r"^gw_join_\d+_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.giveaway_owner_action, pattern=r"^gw_(rr|ext)_\d+$"))
+
+
+async def configure_editor_menus(app: Application, *, editor_ids, admin_url: str | None) -> None:
+    """Меню редакторів: команда /admin і кнопка меню чату з адмінкою. Без bypass-токена: лише Telegram initData."""
+    for chat_id in editor_ids:
+        try:
+            await app.bot.set_my_commands(
+                commands=[
+                    ("admin", "📊 Адмін панель"),
+                    ("catalog", "🛍️ Відкрити каталог"),
+                    ("myid", "🪪 Мій ID"),
+                ],
+                scope=BotCommandScopeChat(chat_id=chat_id),
+            )
+            if admin_url and admin_url.lower().startswith("https://"):
+                await app.bot.set_chat_menu_button(
+                    chat_id=chat_id,
+                    menu_button=MenuButtonWebApp(text="Адмінка", web_app=WebAppInfo(url=admin_url)),
+                )
+        except Exception as exc:  # чат ще не відкривали (немає /start) або Telegram відмовив
+            logger.warning("Меню редактора %s не налаштовано: %s", chat_id, exc)
 
 
 async def configure_bot_commands(app: Application, *, owner_id: int, user_commands: list[tuple[str, str]]) -> None:

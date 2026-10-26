@@ -254,6 +254,7 @@ from services.notifications import notify_coupon_created
 from handlers.register import (
     TELEGRAM_ALLOWED_UPDATES,
     configure_bot_commands,
+    configure_editor_menus,
     register_telegram_handlers,
 )
 from handlers.rate_limit import allow_coupon_check, allow_delivery_lookup, allow_event, allow_review_upload, command_cooldown
@@ -5666,7 +5667,8 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Команда для відкриття адмін панелі
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != OWNER_ID:
+    is_owner = update.message.from_user.id == OWNER_ID
+    if not is_owner and update.message.from_user.id not in config.EDITOR_IDS:
         await send_rich_message(context.bot, update.message.chat_id, build_error_notice(
             "У тебе немає доступу до адмін-панелі", title="Немає доступу"))
         return
@@ -5693,7 +5695,8 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Для dev-режиму на ngrok додаємо bypass з токеном.
-    if "ngrok" in admin_url and "bypass=admin" not in admin_url:
+    # Bypass-токен дає повний доступ — лише власнику; редактор входить через Telegram initData.
+    if is_owner and "ngrok" in admin_url and "bypass=admin" not in admin_url:
         sep = "&" if "?" in admin_url else "?"
         admin_url = f"{admin_url}{sep}bypass=admin&token={config.ADMIN_BYPASS_TOKEN}"
 
@@ -5798,6 +5801,11 @@ def main():
                 ("contact", "📬 Контакти"),
             ]
             await configure_bot_commands(bot_app, owner_id=OWNER_ID, user_commands=user_commands)
+            await configure_editor_menus(
+                bot_app,
+                editor_ids=sorted(config.EDITOR_IDS),
+                admin_url=(os.environ.get("ADMIN_WEBAPP_URL") or "").strip(),
+            )
             review_task = asyncio.create_task(_review_request_loop())
             broadcast_task = asyncio.create_task(_broadcast_scheduler_loop())
             giveaway_task = asyncio.create_task(_giveaway_loop())
