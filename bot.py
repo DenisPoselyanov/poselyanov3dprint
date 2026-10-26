@@ -4281,6 +4281,29 @@ def _card_photo_url(url: str) -> str:
     return url
 
 
+class _PublicOnlyResolver(aiohttp.abc.AbstractResolver):
+    """DNS-резолвер, що віддає лише публічні IP: перевірка й з'єднання йдуть з одного й того ж резолву (без DNS rebinding)."""
+
+    def __init__(self):
+        self._inner = aiohttp.ThreadedResolver()
+
+    async def resolve(self, host, port=0, family=0):
+        import ipaddress
+
+        infos = await self._inner.resolve(host, port, family)
+        ok = []
+        for info in infos:
+            ip = ipaddress.ip_address(info["host"])
+            if not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+                ok.append(info)
+        if not ok:
+            raise OSError(f"Хост {host} вказує на непублічну адресу")
+        return ok
+
+    async def close(self):
+        await self._inner.close()
+
+
 async def _download_card_photo(url: str) -> bytes | None:
     """Завантажує фото товару для картки (лише http/https, до 15 МБ, таймаут 10 с). Помилка → None.
     Хост перевіряється на приватні/loopback/link-local адреси (SSRF), редиректи — вручну, до 3, з перевіркою кожного."""
@@ -4288,7 +4311,7 @@ async def _download_card_photo(url: str) -> bytes | None:
         return None
     try:
         timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession(timeout=timeout, connector=aiohttp.TCPConnector(resolver=_PublicOnlyResolver())) as session:
             target = _card_photo_url(url)
             for _ in range(4):
                 if not await asyncio.to_thread(is_safe_http_url, target):
