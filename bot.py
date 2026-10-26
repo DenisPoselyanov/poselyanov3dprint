@@ -232,6 +232,7 @@ from services.stats import get_stats
 from services.status_messages import list_status_messages, mark_status_message_deleted, record_status_message
 import services.broadcasts as broadcasts_svc
 import services.channel_posts as channel_posts_svc
+import services.post_cards as post_cards_svc
 import services.ai_suggestions as ai_suggestions_svc
 import services.giveaways as giveaways_svc
 from services.users import (
@@ -4270,6 +4271,79 @@ async def handle_get_channel_posts(request: web.Request):
     )
 
 
+CARD_PHOTO_MAX_BYTES = 15 * 1024 * 1024
+
+
+def _card_photo_url(url: str) -> str:
+    """Більша JPEG-версія фото для картки 1080×1080; не-Cloudinary URL лишається як є."""
+    if "res.cloudinary.com" in url and "/upload/" in url:
+        return url.replace("/upload/", "/upload/f_jpg,w_1400,c_limit/", 1)
+    return url
+
+
+async def _download_card_photo(url: str) -> bytes | None:
+    """Завантажує фото товару для картки (лише http/https, до 15 МБ, таймаут 10 с). Помилка → None."""
+    if not isinstance(url, str) or not url.lower().startswith(("http://", "https://")):
+        return None
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(_card_photo_url(url)) as resp:
+                if resp.status != 200:
+                    return None
+                if (resp.content_length or 0) > CARD_PHOTO_MAX_BYTES:
+                    return None
+                buf = bytearray()
+                async for chunk in resp.content.iter_chunked(64 * 1024):
+                    buf.extend(chunk)
+                    if len(buf) > CARD_PHOTO_MAX_BYTES:
+                        return None
+                return bytes(buf)
+    except Exception as e:
+        logger.warning("Фото для картки не завантажилось: %s", e)
+        return None
+
+
+async def _render_product_card(product: dict, params: dict) -> bytes:
+    """PNG-картка товару: фото береться на сервері з product['photos'] (URL від клієнта не приймаємо)."""
+    photos = [u for u in (product.get("photos") or []) if u]
+    photo_bytes = None
+    if photos:
+        idx = params["photo_index"] if 0 <= params["photo_index"] < len(photos) else 0
+        photo_bytes = await _download_card_photo(photos[idx])
+    title = params["title"] or str(product.get("name") or "")
+    return await asyncio.to_thread(
+        post_cards_svc.render_card, photo_bytes,
+        template=params["template"], title=title, price=params["price"],
+        old_price=params["old_price"], badge=params["badge"], tag=params["tag"],
+        subtitle=params["subtitle"],
+    )
+
+
+async def handle_channel_card(request: web.Request):
+    """PNG-превʼю картки товару (те саме зображення піде в канал)."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        data = None
+    params, err = post_cards_svc.normalize_card_params(data)
+    if err:
+        return web.json_response({"ok": False, "error": err}, status=400, headers=cors_headers(request))
+    product = await run_db(get_product_by_id, _channel_product_id(request))
+    if not product:
+        return web.json_response({"ok": False, "error": "Товар не знайдено"}, status=404, headers=cors_headers(request))
+    try:
+        png = await _render_product_card(product, params)
+    except Exception:
+        logger.exception("Не вдалось намалювати картку товару %s", product.get("id"))
+        return web.json_response({"ok": False, "error": "Не вдалось створити картку"}, status=500, headers=cors_headers(request))
+    headers = {**cors_headers(request), "Cache-Control": "no-store"}
+    return web.Response(body=png, content_type="image/png", headers=headers)
+
+
 def _redact_token(e: Exception) -> str:
     """Текст помилки для логу без токена бота (мережеві помилки можуть містити URL з ним)."""
     text = str(e)
@@ -4318,6 +4392,19 @@ async def handle_publish_channel_post(request: web.Request):
         photos = [photos[idx] if 0 <= idx < len(photos) else photos[0]]
     album = [_share_photo_url(u) for u in photos[: channel_posts_svc.MAX_ALBUM_PHOTOS]]
     photo = album[0] if album else ""
+    card_png = None
+    if isinstance(data.get("card"), dict):
+        # Режим картки: єдине фото — згенерована PNG-картка (альбом і photos_mode ігноруються)
+        card_params, card_err = post_cards_svc.normalize_card_params(data.get("card"))
+        if card_err:
+            return web.json_response({"ok": False, "error": card_err}, status=400, headers=cors_headers(request))
+        try:
+            card_png = await _render_product_card(product, card_params)
+        except Exception:
+            logger.exception("Не вдалось намалювати картку товару %s", product_id)
+            return web.json_response({"ok": False, "error": "Не вдалось створити картку"}, status=500, headers=cors_headers(request))
+        album = []
+        photo = "card"
     links_mode = data.get("buttons_mode") == "links"
     text, text_err = channel_posts_svc.validate_text(
         data.get("text"), bool(photo), channel_posts_svc.LINKS_TEXT_LEN if links_mode else 0
@@ -4362,9 +4449,13 @@ async def handle_publish_channel_post(request: web.Request):
                     label="channel post buttons",
                 )
         elif photo:
+            from telegram import InputFile
+
             message = await _telegram_retry(
                 lambda: tg_bot.send_photo(
-                    chat_id=channel, photo=photo, caption=body, parse_mode="HTML",
+                    chat_id=channel,
+                    photo=InputFile(io.BytesIO(card_png), filename="card.png") if card_png else photo,
+                    caption=body, parse_mode="HTML",
                     reply_markup=markup, disable_notification=silent,
                 ),
                 label="channel post photo",

@@ -6871,6 +6871,23 @@
             show(0);
         }
 
+        // Значення «Ціна» для картинки поста: договірна → порожньо, варіанти → «від N ₴», інакше «N ₴»
+        function channelCardPrice(p) {
+            if (p.contractPrice) return '';
+            if (Array.isArray(p.variants) && p.variants.length) {
+                const nums = p.variants.filter(v => !v.contract && Number(v.price) > 0).map(v => Number(v.price));
+                return nums.length ? `від ${Math.min(...nums)} ₴` : '';
+            }
+            return p.price ? `${p.price} ₴` : '';
+        }
+
+        // Підзаголовок картки: перше речення опису, до 70 символів
+        function channelCardSubtitle(p) {
+            const first = String(p.description || '').trim().split(/\n/)[0].trim();
+            if (!first) return '';
+            return first.length > 70 ? first.slice(0, 69).trimEnd() + '…' : first;
+        }
+
         async function openChannelPostDialog(id) {
             const p = adminProducts.find(x => x.id === id);
             if (!p) return;
@@ -6892,8 +6909,45 @@
             const overlay = document.createElement('div');
             overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
             overlay.innerHTML = `
-                <div style="background:var(--bg-card);color:var(--text-main);border-radius:16px;padding:20px;width:100%;max-width:460px;max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+                <div style="background:var(--bg-card);color:var(--text-main);border-radius:16px;padding:20px;width:100%;max-width:520px;max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+                    <style>@keyframes chp-pulse{0%,100%{opacity:.55}50%{opacity:1}}</style>
                     <div style="font-size:17px;font-weight:700;margin-bottom:4px;">📣 Пост у канал</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:13px;font-weight:600;">Картинка поста</label>
+                        <label style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:14px;min-height:40px;"><input type="radio" name="chp-img" value="card" checked><span><b>Картка в стилі бренду</b> (рекомендовано)</span></label>
+                        <label style="display:flex;gap:8px;align-items:center;font-size:14px;min-height:40px;"><input type="radio" name="chp-img" value="photo"><span><b>Фото товару як є</b></span></label>
+                        <div id="chp-card" style="margin-top:6px;">
+                            <div style="display:flex;justify-content:center;margin-bottom:10px;">
+                                <div style="position:relative;width:min(100%,340px);aspect-ratio:1/1;border-radius:14px;overflow:hidden;background:var(--bg-input);border:1px solid var(--border-input);">
+                                    <img id="chp-prev" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;">
+                                    <div id="chp-prev-state" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;box-sizing:border-box;font-size:13px;color:var(--text-muted);animation:chp-pulse 1.2s ease-in-out infinite;">Малюю прев'ю…</div>
+                                </div>
+                            </div>
+                            <div id="chp-tpls" style="display:flex;gap:6px;margin-bottom:10px;">
+                                <button type="button" class="btn btn-secondary" data-t="new" style="flex:1;min-height:40px;font-size:13px;">Новинка</button>
+                                <button type="button" class="btn btn-secondary" data-t="sale" style="flex:1;min-height:40px;font-size:13px;">Акція</button>
+                                <button type="button" class="btn btn-secondary" data-t="custom" style="flex:1;min-height:40px;font-size:13px;">За запитом</button>
+                            </div>
+                            <label style="font-size:13px;font-weight:600;">Заголовок на картинці</label>
+                            <input id="chp-ctitle" type="text" autocomplete="off" value="${escapeAttr(p.name || '')}" style="${field}margin:4px 0 8px;">
+                            <label style="font-size:13px;font-weight:600;">Підзаголовок <span style="font-weight:400;color:var(--text-muted);">(характеристики, необов'язково)</span></label>
+                            <input id="chp-csub" type="text" autocomplete="off" maxlength="90" placeholder="напр. PLA · 15 см · тепле світло" value="${escapeAttr(channelCardSubtitle(product))}" style="${field}margin:4px 0 8px;">
+                            <div style="display:flex;gap:8px;">
+                                <div style="flex:1;min-width:0;">
+                                    <label style="font-size:13px;font-weight:600;">Ціна</label>
+                                    <input id="chp-cprice" type="text" autocomplete="off" placeholder="напр. 450 ₴" value="${escapeAttr(channelCardPrice(p))}" style="${field}margin-top:4px;">
+                                </div>
+                                <div id="chp-oldwrap" style="flex:1;min-width:0;display:none;">
+                                    <label style="font-size:13px;font-weight:600;">Стара ціна</label>
+                                    <input id="chp-coldprice" type="text" autocomplete="off" placeholder="напр. 600 ₴" value="${escapeAttr(p.oldPrice && p.oldPrice > p.price ? p.oldPrice + ' ₴' : '')}" style="${field}margin-top:4px;">
+                                </div>
+                            </div>
+                            <div id="chp-ccovers" style="display:${photoCount > 1 ? 'flex' : 'none'};gap:6px;margin-top:10px;overflow-x:auto;">
+                                ${(p.photos || []).filter(Boolean).slice(0, 10).map((u, n) => `<img data-n="${n}" src="${escapeAttr(u)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid ${n === 0 ? 'var(--accent)' : 'transparent'};flex:none;">`).join('')}
+                            </div>
+                            <div id="chp-prev-err" style="color:#e53935;font-size:13px;margin-top:6px;display:none;"></div>
+                        </div>
+                    </div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:13px;font-weight:600;">Як показати «Замовити» і «Усі товари»</label>
                         <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:14px;"><input type="radio" name="chp-btn" value="links" checked style="margin-top:3px;"><span><b>Посилання в тексті</b> — рядок унизу поста<br><span style="font-size:12px;color:var(--text-muted);">Усе в одному повідомленні, навіть якщо це альбом. Займає ~30 символів ліміту.</span></span></label>
@@ -6902,6 +6956,7 @@
                     <label style="font-size:13px;font-weight:600;">Канал</label>
                     <input id="chp-channel" type="text" autocomplete="off" placeholder="@username або -100…" value="${escapeAttr(info.channel || '')}" style="${field}margin:4px 0 4px;">
                     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Бот має бути адміном каналу з правом публікації.</div>
+                    <div id="chp-photo-mode" style="display:none;">
                     ${photoCount > 1 ? `
                     <div style="margin-bottom:10px;">
                         <label style="font-size:13px;font-weight:600;">Фото в пості</label>
@@ -6911,11 +6966,12 @@
                             ${(p.photos || []).filter(Boolean).slice(0, 10).map((u, n) => `<img data-n="${n}" src="${escapeAttr(u)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid ${n === 0 ? 'var(--accent)' : 'transparent'};flex:none;">`).join('')}
                         </div>
                     </div>` : ''}
+                    </div>
                     <div id="chp-rubrics" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
                         ${CHANNEL_RUBRICS.map(r => `<button type="button" class="btn btn-secondary" data-r="${r.key}" style="padding:6px 10px;font-size:13px;">${escapeHtml(r.label)}</button>`).join('')}
                     </div>
                     <div style="display:flex;gap:10px;align-items:flex-start;">
-                        ${photo ? `<div style="position:relative;flex:none;"><img class="chp-main-img" src="${escapeAttr(photo)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;display:block;">${photoCount > 1 ? `<span class="chp-badge" style="position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;padding:1px 6px;border-radius:8px;">${photoCount} фото</span>` : ''}</div>` : ''}
+                        ${photo ? `<div id="chp-thumbwrap" style="position:relative;flex:none;display:none;"><img class="chp-main-img" src="${escapeAttr(photo)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;display:block;">${photoCount > 1 ? `<span class="chp-badge" style="position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;padding:1px 6px;border-radius:8px;">${photoCount} фото</span>` : ''}</div>` : ''}
                         <textarea id="chp-text" rows="9" style="${field}resize:vertical;font-family:inherit;"></textarea>
                     </div>
                     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:4px;">
@@ -6933,14 +6989,24 @@
             document.body.appendChild(overlay);
             const $ = sel => overlay.querySelector(sel);
             const textEl = $('#chp-text');
+            const isCard = () => (overlay.querySelector('input[name="chp-img"]:checked') || {}).value !== 'photo';
             const baseLimit = photo ? 1024 : 4096;
             const btnMode = () => (overlay.querySelector('input[name="chp-btn"]:checked') || {}).value || 'links';
-            const curLimit = () => baseLimit - (btnMode() === 'links' ? 30 : 0);
+            const curLimit = () => (isCard() ? 1024 : baseLimit) - (btnMode() === 'links' ? 30 : 0);
             const updateCount = () => {
                 const limit = curLimit();
                 const n = textEl.value.trim().length;
                 $('#chp-count').textContent = `${n} / ${limit}`;
                 $('#chp-count').style.color = n > limit ? '#e53935' : '';
+            };
+            let cardTpl = 'new';
+            const setTpl = key => {
+                if (key === 'new' || key === 'sale' || key === 'custom') cardTpl = key;
+                overlay.querySelectorAll('#chp-tpls [data-t]').forEach(b => {
+                    b.className = 'btn ' + (b.dataset.t === cardTpl ? 'btn-primary' : 'btn-secondary');
+                });
+                $('#chp-oldwrap').style.display = cardTpl === 'sale' ? '' : 'none';
+                schedulePreview();
             };
             const setRubric = key => {
                 overlay.querySelectorAll('#chp-rubrics [data-r]').forEach(b => {
@@ -6948,6 +7014,7 @@
                 });
                 textEl.value = channelPostText(product, key);
                 updateCount();
+                setTpl(key);
             };
             overlay.querySelectorAll('#chp-rubrics [data-r]').forEach(b => {
                 b.onclick = () => {
@@ -6956,10 +7023,90 @@
                     setRubric(b.dataset.r);
                 };
             });
+            overlay.querySelectorAll('#chp-tpls [data-t]').forEach(b => {
+                b.onclick = () => {
+                    if (b.dataset.t === cardTpl) return;
+                    if (textEl.dataset.edited && !confirm('Замінити ваш текст шаблоном рубрики? («Скасувати» — змінити лише картинку)')) { setTpl(b.dataset.t); return; }
+                    delete textEl.dataset.edited;
+                    setRubric(b.dataset.t);
+                };
+            });
             textEl.addEventListener('input', () => { textEl.dataset.edited = '1'; updateCount(); $('#chp-err').textContent = ''; });
+            // ── Прев'ю картки ──
+            let cardIdx = 0, prevTimer = null, prevCtl = null, prevUrl = '';
+            const cardPayload = () => ({
+                template: cardTpl,
+                title: $('#chp-ctitle').value.trim(),
+                subtitle: $('#chp-csub').value.trim(),
+                price: $('#chp-cprice').value.trim(),
+                old_price: cardTpl === 'sale' ? $('#chp-coldprice').value.trim() : '',
+                photo_index: cardIdx,
+            });
+            const showPrevState = (msg, errText) => {
+                const img = $('#chp-prev'), st = $('#chp-prev-state'), pe = $('#chp-prev-err');
+                if (msg) { st.textContent = msg; st.style.display = 'flex'; st.style.animation = errText ? 'none' : ''; img.style.display = 'none'; }
+                pe.style.display = errText ? '' : 'none';
+                pe.textContent = errText ? "Прев'ю недоступне: " + errText : '';
+            };
+            const renderPreview = async () => {
+                if (!isCard()) return;
+                if (prevCtl) prevCtl.abort();
+                const ctl = prevCtl = new AbortController();
+                const img = $('#chp-prev');
+                if (img.style.display === 'none') showPrevState("Малюю прев'ю…");
+                else { img.style.opacity = '.5'; $('#chp-prev-err').style.display = 'none'; }
+                try {
+                    const res = await fetch(API_BASE + `/admin/products/${id}/channel-card`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(cardPayload()), signal: ctl.signal,
+                    });
+                    if (!res.ok || !(res.headers.get('content-type') || '').startsWith('image/')) {
+                        let msg = `Помилка (${res.status})`;
+                        try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (_) { /* не JSON */ }
+                        throw new Error(msg);
+                    }
+                    const blob = await res.blob();
+                    if (ctl.signal.aborted) return;
+                    if (prevUrl) URL.revokeObjectURL(prevUrl);
+                    prevUrl = URL.createObjectURL(blob);
+                    img.src = prevUrl;
+                    img.style.opacity = '';
+                    img.style.display = 'block';
+                    $('#chp-prev-state').style.display = 'none';
+                    $('#chp-prev-err').style.display = 'none';
+                } catch (e) {
+                    if (ctl.signal.aborted || e.name === 'AbortError') return;
+                    img.style.opacity = '';
+                    showPrevState('Не вдалося намалювати', e.message || 'невідома помилка');
+                }
+            };
+            function schedulePreview() {
+                if (!isCard()) return;
+                clearTimeout(prevTimer);
+                prevTimer = setTimeout(renderPreview, 400);
+            }
+            ['#chp-ctitle', '#chp-csub', '#chp-cprice', '#chp-coldprice'].forEach(sel => $(sel).addEventListener('input', () => { $('#chp-err').textContent = ''; schedulePreview(); }));
+            overlay.querySelectorAll('#chp-ccovers img').forEach(img => {
+                img.onclick = () => {
+                    cardIdx = Number(img.dataset.n);
+                    overlay.querySelectorAll('#chp-ccovers img').forEach(x => { x.style.borderColor = x === img ? 'var(--accent)' : 'transparent'; });
+                    schedulePreview();
+                };
+            });
+            const applyImgMode = () => {
+                const card = isCard();
+                $('#chp-card').style.display = card ? '' : 'none';
+                $('#chp-photo-mode').style.display = card ? 'none' : '';
+                const tw = $('#chp-thumbwrap');
+                if (tw) tw.style.display = card ? 'none' : '';
+                if (card) schedulePreview(); else { clearTimeout(prevTimer); if (prevCtl) prevCtl.abort(); }
+                updateCount();
+            };
+            overlay.querySelectorAll('input[name="chp-img"]').forEach(r => { r.onchange = applyImgMode; });
             setRubric('new');
+            applyImgMode();
             overlay.querySelectorAll('input[name="chp-btn"]').forEach(r => { r.onchange = updateCount; });
-            let coverIdx = 0;
+            let coverIdx = 0;  // обкладинка у режимі «фото як є»
             const modeEl = () => (overlay.querySelector('input[name="chp-mode"]:checked') || {}).value || 'all';
             overlay.querySelectorAll('input[name="chp-mode"]').forEach(r => {
                 r.onchange = () => {
@@ -6977,7 +7124,12 @@
                     if (main) main.src = img.src;
                 };
             });
-            const close = () => overlay.remove();
+            const close = () => {
+                clearTimeout(prevTimer);
+                if (prevCtl) prevCtl.abort();
+                if (prevUrl) URL.revokeObjectURL(prevUrl);
+                overlay.remove();
+            };
             $('#chp-cancel').onclick = close;
             overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
             $('#chp-ok').onclick = async () => {
@@ -6986,6 +7138,8 @@
                 const err = $('#chp-err');
                 if (!channel) { err.textContent = 'Вкажіть канал'; $('#chp-channel').focus(); return; }
                 if (!text) { err.textContent = 'Текст поста порожній'; textEl.focus(); return; }
+                const card = isCard();
+                if (card && !$('#chp-ctitle').value.trim()) { err.textContent = 'Вкажіть заголовок для картинки'; $('#chp-ctitle').focus(); return; }
                 const limit = curLimit();
                 if (text.length > limit) { err.textContent = `Задовгий текст: ${text.length} із ${limit}`; return; }
                 const ok = $('#chp-ok');
@@ -6995,6 +7149,7 @@
                     const res = await productApi(`/admin/products/${id}/channel-posts`, 'POST', {
                         channel, text, silent: $('#chp-silent').checked, pin: $('#chp-pin').checked,
                         photos_mode: modeEl(), photo_index: coverIdx, buttons_mode: btnMode(),
+                        ...(card ? { card: cardPayload() } : {}),
                     });
                     close();
                     showToast(res.pinned ? 'Опубліковано й закріплено в каналі ✅' : 'Опубліковано в каналі ✅', 'success');
