@@ -19,7 +19,8 @@
   - `routes/setup.py` — реєстрація HTTP-маршрутів
   - `services/` — бізнес-логіка: `orders`, `pricing`, `promotions`, `coupons`, `users`, `settings`, `notifications`, `stats`, `validation`, `db_utils` (схема й міграції),
     `collections` (добірки на головній), `hits` (топ продажів, «З цим купують»), `events` (події вітрини, популярні пошуки),
-    `reviews` (відгуки, рейтинг і «N продано» для картки товару)
+    `reviews` (відгуки, рейтинг і «N продано» для картки товару),
+    `giveaways` (розіграші за підписку на канал — механіка в [GIVEAWAYS.md](GIVEAWAYS.md))
   - `handlers/` — реєстрація команд бота, rate limit, обробка помилок
   - `admin-panel.html` — адмінка
   - `config.py` — централізована конфігурація з ENV

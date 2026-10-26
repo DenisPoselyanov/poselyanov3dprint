@@ -172,7 +172,10 @@ def save_order(
     promotion_discount=0,
     extra=None,
     merge=True,
+    prize=None,
 ):
+    """prize — {"winner_id", "variant_id", "note"}: приз розіграшу прив'язується до замовлення в тій самій
+    транзакції; якщо його вже забрали чи строк минув — CouponConsumptionError і відкат."""
     conn = db_connect()
     uid = int(user_id or 0)
     extra_fields = _clean_extra(extra)
@@ -211,6 +214,7 @@ def save_order(
             )
 
         _apply_order_fields(conn, order_id, extra_fields)
+        _claim_prize(conn, prize, uid, order_id)
         conn.commit()
         conn.close()
         return order_id, False
@@ -281,9 +285,31 @@ def save_order(
             conn.rollback()
             conn.close()
             raise
+    _claim_prize(conn, prize, uid, order_id)
     conn.commit()
     conn.close()
     return order_id, True
+
+
+def _claim_prize(conn, prize: dict | None, user_id: int, order_id: int) -> None:
+    if not prize:
+        return
+    from services.giveaways import claim_in_tx
+
+    if not claim_in_tx(conn, prize["winner_id"], user_id, order_id, prize.get("variant_id") or ""):
+        conn.rollback()
+        conn.close()
+        raise CouponConsumptionError("Приз уже оформлено або його строк минув — онови магазин")
+    note = str(prize.get("note") or "").strip()
+    if note:
+        conn.execute(
+            _sql("""
+                UPDATE orders SET internal_note = CASE WHEN COALESCE(internal_note, '') = '' THEN ?
+                    ELSE internal_note || ? END
+                WHERE id = ?
+            """),
+            (note, "\n" + note, int(order_id)),
+        )
 
 
 def user_order_lock(user_id: int) -> asyncio.Lock:

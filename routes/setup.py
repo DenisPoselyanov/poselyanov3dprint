@@ -70,6 +70,9 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_get("/my/reviews/pending", handlers.handle_get_pending_reviews)
     http_app.router.add_post("/my/review-photo", handlers.handle_upload_review_photo)
     http_app.router.add_post("/my/share-product", handlers.handle_prepare_share)
+    http_app.router.add_get("/my/prizes", handlers.handle_get_my_prizes)
+    http_app.router.add_post("/my/prize-card", handlers.handle_upload_prize_card)
+    http_app.router.add_post("/my/share-prize", handlers.handle_prepare_prize_share)
     http_app.router.add_post("/reviews", handlers.handle_post_review)
     http_app.router.add_route("OPTIONS", "/my/{tail:.*}", handlers.handle_options)
     http_app.router.add_route("OPTIONS", "/reviews", handlers.handle_options)
@@ -131,6 +134,17 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     # Статичний шлях раніше за /{id}
     http_app.router.add_post("/api/admin/broadcasts/preview", handlers.handle_preview_broadcast)
     http_app.router.add_delete("/api/admin/broadcasts/{id}", handlers.handle_delete_broadcast)
+    http_app.router.add_get("/api/admin/giveaways", handlers.handle_get_giveaways)
+    http_app.router.add_post("/api/admin/giveaways", handlers.handle_create_giveaway)
+    http_app.router.add_post("/api/admin/giveaways/{id}/draw", handlers.handle_draw_giveaway)
+    http_app.router.add_post("/api/admin/giveaways/{id}/publish", handlers.handle_publish_giveaway)
+    http_app.router.add_post("/api/admin/giveaways/{id}/cancel", handlers.handle_cancel_giveaway)
+    http_app.router.add_post(
+        "/api/admin/giveaways/{id}/winners/{winner_id}/reroll", handlers.handle_reroll_giveaway_winner
+    )
+    http_app.router.add_post(
+        "/api/admin/giveaways/{id}/winners/{winner_id}/extend", handlers.handle_extend_giveaway_winner
+    )
     http_app.router.add_get("/api/admin/ai-suggestions", handlers.handle_get_ai_suggestions)
     # Статичний шлях раніше за /{id}
     http_app.router.add_post("/api/admin/ai-suggestions/generate", handlers.handle_generate_ai_suggestions)

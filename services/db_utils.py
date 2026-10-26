@@ -168,6 +168,7 @@ def init_db() -> None:
     from services.channel_posts import init_channel_posts_table
     from services.collections import init_collections_table
     from services.events import init_events_table
+    from services.giveaways import init_giveaways_table
     from services.promotions import init_promotions_table
     from services.reviews import init_reviews_table
     from services.settings import init_settings_table
@@ -281,6 +282,7 @@ def init_db() -> None:
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS stackable INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS require_channel_sub INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS sub_channel_id TEXT")
+        conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS product_id BIGINT")
         conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS promotion_discount INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS filament TEXT DEFAULT ''")
         conn.execute("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_contract_price INTEGER DEFAULT 0")
@@ -312,6 +314,7 @@ def init_db() -> None:
         init_broadcasts_table(conn)
         init_channel_posts_table(conn)
         init_ai_suggestions_table(conn)
+        init_giveaways_table(conn)
     else:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -378,6 +381,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE coupons ADD COLUMN require_channel_sub INTEGER DEFAULT 0")
         if "sub_channel_id" not in c_cols:
             conn.execute("ALTER TABLE coupons ADD COLUMN sub_channel_id TEXT")
+        if "product_id" not in c_cols:
+            conn.execute("ALTER TABLE coupons ADD COLUMN product_id INTEGER")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS coupon_uses (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -457,6 +462,7 @@ def init_db() -> None:
         init_broadcasts_table(conn)
         init_channel_posts_table(conn)
         init_ai_suggestions_table(conn)
+        init_giveaways_table(conn)
 
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)

@@ -138,7 +138,7 @@ def test_validate_order_payload_success_with_promotion(catalog, monkeypatch):
 def test_validate_order_payload_with_coupon(catalog, monkeypatch):
     monkeypatch.setattr(
         "services.validation.check_coupon",
-        lambda code, user_id, subtotal: {
+        lambda code, user_id, subtotal, *_: {
             "valid": True,
             "discount": 20,
             "message": "ok",
@@ -155,7 +155,7 @@ def test_validate_order_payload_with_coupon(catalog, monkeypatch):
 def test_validate_order_payload_coupon_rounds_final_price_up(catalog, monkeypatch):
     monkeypatch.setattr(
         "services.validation.check_coupon",
-        lambda code, user_id, subtotal: {
+        lambda code, user_id, subtotal, *_: {
             "valid": True,
             "discount": 17,
             "message": "ok",
@@ -191,7 +191,7 @@ def test_validate_order_payload_rejects_unrounded_client_total(catalog, monkeypa
 def test_validate_order_payload_invalid_coupon(catalog, monkeypatch):
     monkeypatch.setattr(
         "services.validation.check_coupon",
-        lambda code, user_id, subtotal: {"valid": False, "message": "Купон не знайдено ❌"},
+        lambda code, user_id, subtotal, *_: {"valid": False, "message": "Купон не знайдено ❌"},
     )
     items = [{"product_id": 1, "quantity": 1}]
     ok, result = validate_order_payload(items, "BAD", 1, 100)
@@ -261,7 +261,7 @@ def test_build_sales_list_real_promotions():
 
 
 def _fake_coupon(raw, *, stacks):
-    return lambda code, user_id, subtotal: {
+    return lambda code, user_id, subtotal, *_: {
         "valid": True,
         "discount": raw,
         "raw_discount": raw,

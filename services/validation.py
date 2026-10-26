@@ -85,12 +85,48 @@ def validate_checkout_fields(data: dict) -> tuple[bool, dict | str]:
     return True, fields
 
 
-def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int):
-    """Перерахунок суми на сервері. Повертає (ok, result_dict|error_message)."""
+def _prize_line(prize: dict, products_by_id: dict) -> tuple[dict | None, str | None]:
+    """Рядок товару-призу за 0 ₴. Варіант — зафіксований у розіграші, інакше обраний переможцем."""
+    product = products_by_id.get(int(prize.get("product_id") or 0))
+    if not product:
+        return None, "Товар-приз зараз недоступний — напишіть нам, і ми все владнаємо"
+    variant_id = variant_name = ""
+    if product.get("variants"):
+        variant = get_product_variant(product, prize.get("product_variant") or prize.get("variant_id"))
+        if not variant or variant.get("contract"):
+            return None, "Обери розмір чи варіант призу"
+        variant_id, variant_name = variant["id"], variant["name"]
+    name = product["name"]
+    return {
+        "product_id": int(product["id"]),
+        "personalization": "",
+        "personalization_note": "",
+        "product_name": f"🎁 Приз розіграшу: {name}" + (f" · {variant_name}" if variant_name else ""),
+        "variant_id": variant_id,
+        "variant": variant_name,
+        "price": 0,
+        "quantity": 1,
+        "customValue": "",
+        "fromCustom": False,
+        "filament_id": "",
+        "filament_name": "",
+        "is_contract_price": False,
+        "is_prize": True,
+        "comment": "",
+    }, None
+
+
+def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int,
+                           prize: dict | None = None):
+    """Перерахунок суми на сервері. Повертає (ok, result_dict|error_message).
+
+    prize — активний приз розіграшу (services.giveaways.get_active_prize + обраний variant_id):
+    товар додається рядком за 0 ₴, сертифікат віднімається від підсумку після всіх знижок."""
     reload_products_cache()
     reload_filaments_cache()
     products_by_id = {p["id"]: p for p in PRODUCTS_CACHE + CUSTOM_PRODUCTS_CACHE}
-    if not items:
+    items = items or []
+    if not items and not (prize and prize.get("prize_type") == "product"):
         return False, "Порожній кошик"
 
     subtotal = 0
@@ -195,10 +231,22 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
             }
         )
 
+    if prize and prize.get("prize_type") == "product":
+        line, err = _prize_line(prize, products_by_id)
+        if err:
+            return False, err
+        normalized.insert(0, line)
+
     raw_coupon = 0
     stack = False
     if coupon_code:
-        coupon_result = check_coupon(coupon_code, user_id, subtotal)
+        # Ціна однієї штуки кожного товару (для купона на конкретний товар — найдорожча позиція)
+        product_prices: dict[int, int] = {}
+        for it in normalized:
+            if not it["is_contract_price"] and not it.get("is_prize"):
+                pid_ = int(it["product_id"])
+                product_prices[pid_] = max(product_prices.get(pid_, 0), int(it["price"]))
+        coupon_result = check_coupon(coupon_code, user_id, subtotal, product_prices)
         if not coupon_result.get("valid"):
             return False, coupon_result.get("message", "Невалідний купон")
         raw_coupon = int(coupon_result.get("raw_discount", coupon_result.get("discount", 0)))
@@ -210,6 +258,12 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         subtotal, raw_coupon, raw_promotion, stack=stack
     )
     server_total = max(0, subtotal - discount - promotion_discount)
+    prize_discount = 0
+    if prize and prize.get("prize_type") == "amount":
+        prize_discount = min(int(prize.get("prize_value") or 0), server_total)
+        if prize_discount <= 0:
+            return False, "Додай товари в кошик — сертифікат діє на замовлення"
+        server_total -= prize_discount
     free_ship = free_shipping_promotion(subtotal)
 
     if server_total != int(client_total):
@@ -220,6 +274,8 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
         "subtotal": subtotal,
         "coupon_discount": discount,
         "promotion_discount": promotion_discount,
+        "prize_discount": prize_discount,
+        "prize_variant_id": normalized[0]["variant_id"] if normalized and normalized[0].get("is_prize") else "",
         "total_price": server_total,
         # Акція, що дала знижку (для orders.promotion_id і статистики акцій) та акція безкоштовної доставки
         "promotion_id": best_promo["id"] if best_promo and promotion_discount > 0 else "",

@@ -366,9 +366,15 @@ def consume_coupon(conn, code: str, user_id: int, order_id: int) -> None:
     reserve_coupon(conn, code, user_id, order_id)
 
 
-def coupon_raw_discount(coupon: dict, subtotal: int) -> int:
-    """Знижка купона до округлення підсумку — рахується від суми кошика."""
+def coupon_raw_discount(coupon: dict, subtotal: int, product_prices: dict[int, int] | None = None) -> int:
+    """Знижка купона до округлення підсумку — рахується від суми кошика.
+
+    Купон на товар (product_id) рахується від ціни ОДНІЄЇ штуки цього товару в кошику
+    (найдорожчої позиції, якщо їх кілька — напр. різні розміри); без товару в кошику — 0.
+    Дзеркало в index.html: couponRawDiscount."""
     subtotal = max(0, int(subtotal or 0))
+    if coupon.get("product_id"):
+        subtotal = max(0, int((product_prices or {}).get(int(coupon["product_id"]), 0)))
     value = int(coupon.get("value") or 0)
     if coupon.get("type") == "fixed":
         return min(value, subtotal)
@@ -383,13 +389,24 @@ def coupon_stacks_with_promotion(coupon: dict) -> bool:
     return bool(coupon.get("stackable")) and coupon_stacking_enabled()
 
 
-def check_coupon(code: str, user_id: int, cart_total: int):
+def _product_name(product_id: int) -> str:
+    try:
+        from catalog_store import get_product_by_id
+
+        return str((get_product_by_id(int(product_id)) or {}).get("name") or "")
+    except Exception:
+        return ""
+
+
+def check_coupon(code: str, user_id: int, cart_total: int, product_prices: dict[int, int] | None = None):
+    """product_prices — {товар: ціна однієї штуки} з кошика; потрібен для купонів на конкретний товар.
+    None — кошик невідомий (старий клієнт): купон на товар тоді не відхиляємо, знижку рахуємо як фіксовану."""
     conn = db_connect(dict_rows=True)
     code = code.upper()
     row = conn.execute(
         _sql(
             "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, "
-            "active, expires_at, personal_user_id, stackable FROM coupons WHERE code = ?"
+            "active, expires_at, personal_user_id, stackable, product_id FROM coupons WHERE code = ?"
         ),
         (code,),
     ).fetchone()
@@ -429,13 +446,23 @@ def check_coupon(code: str, user_id: int, cart_total: int):
 
     conn.close()
 
-    raw_discount = coupon_raw_discount(c, cart_total)
+    product_id = int(c.get("product_id") or 0)
+    if product_id and product_prices is not None and product_id not in product_prices:
+        name = _product_name(product_id)
+        what = f"«{name}»" if name else "товар-приз"
+        return {"valid": False, "product_id": product_id,
+                "message": f"Цей купон діє лише на {what} — додай його в кошик 🎁"}
+
+    raw_discount = coupon_raw_discount(c, cart_total, product_prices) if product_id and product_prices is not None         else coupon_raw_discount({**c, "product_id": None}, cart_total)
     discount = actual_discount_after_rounding(cart_total, raw_discount)
     stacks = coupon_stacks_with_promotion(c)
 
     label = f"-{c['value']}%" if c["type"] == "percent" else f"-{c['value']} ₴"
     message = f"Купон застосовано! Знижка {label} ✅"
-    if stacks:
+    if product_id:
+        name = _product_name(product_id)
+        message = f"Купон застосовано: {('«' + name + '»') if name else 'товар-приз'} безкоштовно 🎁"
+    elif stacks:
         message = f"Купон застосовано! Знижка {label} — сумується з акцією 🔥"
     return {
         "valid": True,
@@ -445,6 +472,7 @@ def check_coupon(code: str, user_id: int, cart_total: int):
         "raw_discount": raw_discount,
         "stackable": bool(c.get("stackable")),
         "stacks_with_promotion": stacks,
+        "product_id": product_id or None,
         "message": message,
     }
 
@@ -553,6 +581,12 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
     elif personal_user_id:
         allowed_user_ids = [personal_user_id]
 
+    product_id = data.get("product_id")
+    try:
+        product_id = int(product_id) if product_id not in ("", None, 0, "0") else None
+    except (TypeError, ValueError):
+        return None, "product_id має бути числом"
+
     return {
         "code": code,
         "type": ctype,
@@ -567,6 +601,7 @@ def _normalize_coupon_payload(data: dict, *, code_override: str | None = None) -
         "require_channel_sub": require_channel_sub,
         "sub_channel_id": sub_channel_id,
         "allowed_user_ids": allowed_user_ids,
+        "product_id": product_id,
     }, None
 
 
@@ -575,7 +610,7 @@ def get_coupon(code: str) -> dict | None:
     row = conn.execute(
         _sql(
             "SELECT code, type, value, min_order, uses_max, uses_count, one_per_user, active, "
-            "expires_at, personal_user_id, stackable, require_channel_sub, sub_channel_id "
+            "expires_at, personal_user_id, stackable, require_channel_sub, sub_channel_id, product_id "
             "FROM coupons WHERE code = ?"
         ),
         (code.upper(),),
@@ -665,8 +700,8 @@ def create_coupon(data: dict) -> dict:
         conn.execute(
             _sql("""
                 INSERT INTO coupons
-                (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id, stackable, require_channel_sub, sub_channel_id)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+                (code, type, value, min_order, uses_max, uses_count, one_per_user, active, expires_at, personal_user_id, stackable, require_channel_sub, sub_channel_id, product_id)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
             """),
             (
                 payload["code"],
@@ -681,6 +716,7 @@ def create_coupon(data: dict) -> dict:
                 payload["stackable"],
                 payload["require_channel_sub"],
                 payload["sub_channel_id"],
+                payload["product_id"],
             ),
         )
         _sync_allowed_users(conn, payload["code"], allowed_user_ids)

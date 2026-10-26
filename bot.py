@@ -115,6 +115,7 @@ from catalog_store import (
     get_category_by_id,
     get_filament_by_id,
     get_product_by_id,
+    get_product_variant,
     init_catalog_tables,
     is_contract_product,
     is_valid_category_id,
@@ -230,6 +231,7 @@ from services.status_messages import list_status_messages, mark_status_message_d
 import services.broadcasts as broadcasts_svc
 import services.channel_posts as channel_posts_svc
 import services.ai_suggestions as ai_suggestions_svc
+import services.giveaways as giveaways_svc
 from services.users import (
     export_users,
     get_user,
@@ -629,6 +631,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user and not user.is_bot:
         await run_db(record_start, user.id, user.first_name or "", (user.username or "").lstrip("@"))
+
+    # Розіграш: /start gw_<id>[_r<хто запросив>] — замість привітання
+    gw = giveaways_svc.parse_start_param(context.args[0]) if context.args else None
+    if gw and user:
+        await giveaway_entry_flow(context.bot, update.message.chat_id, user.id, gw[0], gw[1])
+        return
 
     # Видаляємо стару нижню клавіатуру, якщо вона була
     tmp = await update.message.reply_text("⏳", reply_markup=ReplyKeyboardRemove())
@@ -2061,9 +2069,32 @@ async def handle_order(request):
                 headers=cors_headers(request),
             )
 
-    ok, result = await run_db(validate_order_payload, items, coupon_code, user_id, client_total)
+    prize = None
+    raw_prize = data.get("prize") if isinstance(data.get("prize"), dict) else None
+    if raw_prize and _safe_int(raw_prize.get("winner_id")) > 0:
+        prize = await run_db(giveaways_svc.get_active_prize, _safe_int(user_id), _safe_int(raw_prize.get("winner_id")))
+        if not prize:
+            return web.json_response(
+                {"ok": False, "error": "Приз уже оформлено або його строк минув — онови магазин", "prize_gone": True},
+                status=400,
+                headers=cors_headers(request),
+            )
+        prize["variant_id"] = str(raw_prize.get("variant_id") or "").strip().lower()[:16]
+
+    ok, result = await run_db(validate_order_payload, items, coupon_code, user_id, client_total, prize)
     if not ok:
         return web.json_response({"ok": False, "error": result}, status=400, headers=cors_headers(request))
+    prize_claim = None
+    if prize:
+        title = prize["title"] or f"№{prize['giveaway_id']}"
+        if prize["prize_type"] == "amount":
+            note = f"🎁 Сертифікат розіграшу «{title}»: −{result['prize_discount']} ₴."
+        else:
+            note = f"🎁 Приз розіграшу «{title}»."
+        note += (" 🚚 Доставку всієї посилки оплачує магазин." if prize["shipping_payer"] == "shop"
+                 else " Доставку оплачує покупець.")
+        prize_claim = {"winner_id": prize["winner_id"], "variant_id": result.get("prize_variant_id") or "",
+                       "note": note}
 
     ok, checkout = validate_checkout_fields(data)
     if not ok:
@@ -2086,7 +2117,7 @@ async def handle_order(request):
     total_price = result["total_price"]
     coupon_discount = result.get("coupon_discount", 0)
     promotion_discount = result.get("promotion_discount", 0)
-    total_discount = coupon_discount + promotion_discount
+    total_discount = coupon_discount + promotion_discount + result.get("prize_discount", 0)
     coupon_code = coupon_code if coupon_discount else None
     price_pending = result.get("price_pending", 0)
 
@@ -2130,7 +2161,7 @@ async def handle_order(request):
                 save_order,
                 user_id or 0, username, first_name, items, total_price, comment,
                 gift, coupon_code, total_discount, price_pending, promotion_discount,
-                checkout,
+                checkout, prize=prize_claim,
             )
         except CouponConsumptionError as e:
             return web.json_response(
@@ -4349,6 +4380,729 @@ async def handle_publish_channel_post(request: web.Request):
     )
 
 
+# ─── РОЗІГРАШІ (GIVEAWAYS.md) ───────────────────────────────────
+
+async def _channel_member_state(chat_id, user_id: int) -> bool | None:
+    """Підписаний / ні / None — Telegram не відповів (бот не адмін каналу тощо)."""
+    tg_bot = getattr(app_state.bot_app, "bot", None)
+    if tg_bot is None or not chat_id:
+        return None
+    try:
+        member = await tg_bot.get_chat_member(chat_id, int(user_id))
+    except Exception as e:
+        logger.warning("giveaway get_chat_member(%s, %s) failed: %s", chat_id, user_id, _redact_token(e))
+        return None
+    status = getattr(member, "status", "")
+    return status in _CHANNEL_SUBSCRIBED_STATUSES or (status == "restricted" and getattr(member, "is_member", False))
+
+
+def _giveaway_entered_text(g: dict, number: int, tickets: int, user_id: int) -> str:
+    title = html.escape(g["title"])
+    lines = [
+        f"🎁 Ви берете участь у розіграші «{title}»!",
+        f"Ваш номер: <b>№{number}</b>",
+        f"Підсумки: {giveaways_svc.format_kyiv(g['ends_at'])} (за Києвом).",
+        "",
+        "Не відписуйтесь від каналу до кінця розіграшу — інакше участь анулюється.",
+    ]
+    if g["referral_bonus"]:
+        link = giveaways_svc.join_link(config.BOT_USERNAME, g["id"], user_id)
+        lines += [
+            "",
+            f"👥 Запрошуйте друзів: +1 шанс за кожного нового друга, що підпишеться й візьме участь "
+            f"(до +{g['referral_limit']}).",
+            f"Ваше посилання: {html.escape(link)}",
+            f"Зараз шансів: <b>{tickets}</b>",
+        ]
+    return "\n".join(lines)
+
+
+def _giveaway_entered_markup(g: dict, user_id: int) -> InlineKeyboardMarkup:
+    from urllib.parse import quote
+
+    rows = []
+    if g["referral_bonus"]:
+        link = giveaways_svc.join_link(config.BOT_USERNAME, g["id"], user_id)
+        share = (f"https://t.me/share/url?url={quote(link, safe='')}"
+                 f"&text={quote('Беру участь у розіграші — приєднуйся 🎁', safe='')}")
+        rows.append([InlineKeyboardButton("📨 Запросити друзів", url=share)])
+    rows.append([InlineKeyboardButton("🛍️ Відкрити магазин", web_app=WebAppInfo(url=WEBAPP_URL))])
+    return InlineKeyboardMarkup(rows)
+
+
+async def giveaway_entry_flow(tg_bot, chat_id: int, user_id: int, giveaway_id: int, referrer_id: int = 0,
+                              *, recheck: bool = False) -> str:
+    """Участь у розіграші з бота. Повертає 'entered' | 'already' | 'not_subscribed' | 'closed' | 'error'."""
+    from rich_messages import _telegram_retry
+
+    async def say(text: str, markup=None):
+        await _telegram_retry(
+            lambda: tg_bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML", reply_markup=markup,
+                                        link_preview_options=LinkPreviewOptions(is_disabled=True)),
+            label="giveaway reply",
+        )
+
+    g = await run_db(giveaways_svc.get_giveaway, giveaway_id)
+    if not g or g["status"] == "cancelled":
+        await say("Цей розіграш не знайдено або його скасовано.")
+        return "closed"
+    entry = await run_db(giveaways_svc.get_entry, g["id"], user_id)
+    if entry:
+        tickets = await run_db(giveaways_svc.tickets_preview, g, user_id)
+        await say(_giveaway_entered_text(g, int(entry["number"]), tickets, user_id), _giveaway_entered_markup(g, user_id))
+        return "already"
+    if not giveaways_svc.is_open(g):
+        await say(f"Розіграш «{html.escape(g['title'])}» уже завершено. Слідкуйте за каналом — будуть нові 🎁")
+        return "closed"
+
+    chat = config.normalize_channel_id(g["channel"])
+    subscribed = await _channel_member_state(chat, user_id)
+    if subscribed is None:
+        await say("Не вдалося перевірити підписку. Спробуйте трохи пізніше 🙏")
+        return "error"
+    if not subscribed:
+        if recheck:
+            return "not_subscribed"
+        rows = []
+        link = config.channel_link_for(g["channel"])
+        if link:
+            rows.append([InlineKeyboardButton("📢 Підписатися на канал", url=link)])
+        rows.append([InlineKeyboardButton("✅ Я підписався", callback_data=f"gw_join_{g['id']}_{int(referrer_id or 0)}")])
+        await say(
+            f"🎁 Розіграш «{html.escape(g['title'])}»\n\nЩоб узяти участь, підпишіться на канал і натисніть «Я підписався».",
+            InlineKeyboardMarkup(rows),
+        )
+        return "not_subscribed"
+
+    res = await run_db(giveaways_svc.join, g["id"], user_id, referrer_id)
+    if not res.get("ok"):
+        if res.get("error") == "closed":
+            await say(f"Розіграш «{html.escape(g['title'])}» уже завершено.")
+            return "closed"
+        await say("Не вдалося записати участь, спробуйте ще раз.")
+        return "error"
+    tickets = await run_db(giveaways_svc.tickets_preview, g, user_id)
+    await say(_giveaway_entered_text(g, int(res["number"]), tickets, user_id), _giveaway_entered_markup(g, user_id))
+    return "already" if res.get("already") else "entered"
+
+
+async def giveaway_join_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопка «✅ Я підписався» під повідомленням про розіграш."""
+    query = update.callback_query
+    m = re.match(r"^gw_join_(\d+)_(\d+)$", query.data or "")
+    if not m or not query.from_user:
+        await query.answer()
+        return
+    outcome = await giveaway_entry_flow(
+        context.bot, query.message.chat_id, query.from_user.id, int(m.group(1)), int(m.group(2)), recheck=True
+    )
+    if outcome == "not_subscribed":
+        await query.answer("Підписку ще не видно. Підпишіться на канал і натисніть ще раз.", show_alert=True)
+        return
+    await query.answer()
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+
+def _giveaway_user_html(w: dict) -> str:
+    name = html.escape((w.get("name") or "").strip() or "Учасник")
+    return f'<a href="tg://user?id={int(w["user_id"])}">{name}</a>'
+
+
+async def _notify_owner(text: str) -> None:
+    tg_bot = getattr(app_state.bot_app, "bot", None)
+    if tg_bot is None or not OWNER_ID:
+        return
+    admin_url = get_admin_webapp_url()
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton("📊 Відкрити адмінку", web_app=WebAppInfo(url=admin_url))]]) \
+        if admin_url else None
+    try:
+        await tg_bot.send_message(chat_id=OWNER_ID, text=text, parse_mode="HTML", reply_markup=markup,
+                                  link_preview_options=LinkPreviewOptions(is_disabled=True))
+    except Exception as e:
+        logger.warning("Не вдалось написати власнику про розіграш: %s", _redact_token(e))
+
+
+async def run_giveaway_draw(giveaway_id: int, *, notify_owner: bool = True) -> dict:
+    """Жеребкування: повторна перевірка підписки → вибір з вагами → чернетка результатів."""
+    if not await run_db(giveaways_svc.claim_for_draw, giveaway_id):
+        return {"ok": False, "error": "Розіграш уже завершено або скасовано"}
+    try:
+        g = await run_db(giveaways_svc.get_giveaway, giveaway_id)
+        candidates = await run_db(giveaways_svc.draw_candidates, giveaway_id, (OWNER_ID,))
+        chat = config.normalize_channel_id(g["channel"])
+        eligible: set[int] = set()
+        errors = 0
+        for c in candidates:
+            state = await _channel_member_state(chat, int(c["user_id"]))
+            if state is None:
+                errors += 1
+            elif state:
+                eligible.add(int(c["user_id"]))
+            await asyncio.sleep(0.05)
+        if candidates and errors * 2 > len(candidates):
+            await run_db(giveaways_svc.release_draw, giveaway_id)
+            msg = "Telegram не дав перевірити підписку учасників. Бот має бути адміном каналу."
+            if notify_owner:
+                await _notify_owner(f"⚠️ Розіграш «{html.escape(g['title'])}»: {msg} Спробую ще раз за хвилину.")
+            return {"ok": False, "error": msg}
+        result = await run_db(giveaways_svc.draw, giveaway_id, eligible, candidates)
+    except Exception:
+        logger.exception("giveaway %s draw failed", giveaway_id)
+        await run_db(giveaways_svc.release_draw, giveaway_id)
+        return {"ok": False, "error": "Жеребкування не вдалося, спробуйте ще раз"}
+
+    if notify_owner:
+        winners = (await run_db(giveaways_svc.list_winners, [giveaway_id])).get(giveaway_id, [])
+        names = [f"{w['position']}. {_giveaway_user_html(w)} (№{w['number']})" for w in winners if w["role"] == "winner"]
+        await _notify_owner(
+            f"🎲 Розіграш «{html.escape(g['title'])}» завершено.\n"
+            f"Учасників: {len(candidates)}, допущено: {result['eligible']}.\n\n"
+            + ("🏆 Переможці:\n" + "\n".join(names) if names else "Переможців немає — ніхто не виконав умови.")
+            + "\n\nПеревірте й опублікуйте результати в адмінці → «Розіграші»."
+        )
+    return {"ok": True, **result}
+
+
+async def _giveaway_loop() -> None:
+    """Раз на хвилину: жеребкування, час яких настав; нагадування переможцям; минулі строки — адміну."""
+    while True:
+        try:
+            for gid in await run_db(giveaways_svc.due_giveaway_ids):
+                await run_giveaway_draw(gid)
+            await _giveaway_prize_tick()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("giveaway loop failed")
+        await asyncio.sleep(60)
+
+
+def _prize_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton(
+        "🎁 Забрати приз", url=giveaways_svc.prize_link(config.BOT_USERNAME))]])
+
+
+async def _send_to_winner(user_id: int, text: str, label: str) -> bool:
+    from rich_messages import _telegram_retry
+
+    try:
+        await _telegram_retry(
+            lambda: bot_app.bot.send_message(chat_id=int(user_id), text=text, parse_mode="HTML",
+                                             reply_markup=_prize_markup()),
+            label=label,
+        )
+        return True
+    except Exception as e:
+        logger.warning("Переможцю %s не дійшло повідомлення (%s): %s", user_id, label, _redact_token(e))
+        return False
+
+
+async def _giveaway_prize_tick() -> None:
+    for r in await run_db(giveaways_svc.due_reminders):
+        if not await run_db(giveaways_svc.mark_reminded, r["winner_id"], r["flag"]):
+            continue
+        name = html.escape(await _prize_name(r))
+        await _send_to_winner(
+            r["user_id"],
+            f"⏳ Нагадуємо: ваш приз <b>{name}</b> чекає в кошику ще менше {r['hours']} год — "
+            f"до {giveaways_svc.format_kyiv(r['claim_deadline'])} (за Києвом).\n\n"
+            "Натисніть кнопку, вкажіть доставку й оформіть замовлення 🎁",
+            "giveaway reminder",
+        )
+    for r in await run_db(giveaways_svc.expired_unnotified):
+        if not await run_db(giveaways_svc.mark_expired_notified, r["id"]):
+            continue
+        await _notify_owner_expired(r)
+
+
+async def _notify_owner_expired(r: dict) -> None:
+    tg_bot = getattr(app_state.bot_app, "bot", None)
+    if tg_bot is None or not OWNER_ID:
+        return
+    text = (f"⌛ Розіграш «{html.escape(r['title'])}»: переможець №{r['position']} — "
+            f"{_giveaway_user_html(r)} — не забрав приз вчасно.\n\nПерекинути приз першому з резерву "
+            f"чи дати ще {giveaways_svc.EXTEND_HOURS} год?")
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🔄 Перекинути", callback_data=f"gw_rr_{int(r['id'])}"),
+        InlineKeyboardButton(f"⏳ +{giveaways_svc.EXTEND_HOURS} год", callback_data=f"gw_ext_{int(r['id'])}"),
+    ]])
+    try:
+        await tg_bot.send_message(chat_id=OWNER_ID, text=text, parse_mode="HTML", reply_markup=markup)
+    except Exception as e:
+        logger.warning("Не вдалось написати власнику про минулий строк призу: %s", _redact_token(e))
+
+
+async def _reroll_and_notify(winner_id: int) -> dict:
+    """Перекинути приз першому з резерву; якщо результати вже опубліковано — одразу повідомити нового."""
+    res = await run_db(giveaways_svc.reroll, winner_id)
+    if not res.get("ok"):
+        return res
+    res["delivered"] = None
+    if res.get("published"):
+        w = await run_db(giveaways_svc.get_winner, res["winner_id"])
+        g = await run_db(giveaways_svc.get_giveaway, w["giveaway_id"])
+        sent = await _send_giveaway_prize(g, res["winner_id"])
+        res["delivered"] = bool(sent.get("delivered"))
+    return res
+
+
+async def _extend_and_notify(winner_id: int) -> dict:
+    res = await run_db(giveaways_svc.extend_prize, winner_id)
+    if res.get("ok"):
+        g = await run_db(giveaways_svc.get_giveaway, res["giveaway_id"])
+        res["delivered"] = await _send_to_winner(
+            res["user_id"],
+            f"⏳ Гарні новини: строк вашого призу з розіграшу «{html.escape(g['title'] if g else '')}» подовжено "
+            f"до {giveaways_svc.format_kyiv(res['deadline'])} (за Києвом). Приз чекає в кошику 🎁",
+            "giveaway extend",
+        )
+    return res
+
+
+async def giveaway_owner_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопки власника в повідомленні про минулий строк: gw_rr_<winner> / gw_ext_<winner>."""
+    query = update.callback_query
+    if not query:
+        return
+    if not update.effective_user or update.effective_user.id != OWNER_ID:
+        await query.answer("Недоступно", show_alert=True)
+        return
+    _, action, wid = query.data.split("_")
+    if action == "rr":
+        res = await _reroll_and_notify(int(wid))
+        done = "🔄 Приз перекинуто першому з резерву." + (
+            " ⚠️ Повідомлення новому переможцю не дійшло." if res.get("delivered") is False else "")
+    else:
+        res = await _extend_and_notify(int(wid))
+        done = f"⏳ Строк подовжено до {giveaways_svc.format_kyiv(res['deadline'])}." if res.get("ok") else ""
+    if not res.get("ok"):
+        await query.answer(res.get("error") or "Не вдалось", show_alert=True)
+        return
+    await query.answer()
+    try:
+        await query.edit_message_text(f"{query.message.text_html}\n\n{done}", parse_mode="HTML")
+    except Exception:
+        pass
+
+
+def _giveaway_product_price(product: dict | None) -> int:
+    """Повна ціна товару-призу: найдорожчий варіант (переможець може обрати будь-який розмір)."""
+    if not product or is_contract_product(product):
+        return 0
+    variants = [v for v in (product.get("variants") or []) if not v.get("contract")]
+    if variants:
+        return max(int(v.get("price") or 0) for v in variants)
+    return max(0, int(product.get("price") or 0))
+
+
+async def _prize_name(p: dict) -> str:
+    """Назва призу для повідомлень: товар (+ зафіксований варіант) або «Сертифікат на N ₴»."""
+    if p.get("prize_type", "product") != "product":
+        return f"Сертифікат на {int(p['prize_value'])} ₴"
+    product = await run_db(get_product_by_id, p["product_id"]) if p.get("product_id") else None
+    if not product:
+        return p.get("title") or "Приз"
+    variant = get_product_variant(product, p.get("product_variant"))
+    return product["name"] + (f" · {variant['name']}" if variant else "")
+
+
+async def _send_giveaway_prize(g: dict, winner_id: int) -> dict:
+    """Приз стає активним у магазині переможця + повідомлення йому. {'ok', 'delivered'}."""
+    issued = await run_db(giveaways_svc.issue_prize, winner_id)
+    if not issued.get("ok"):
+        return {"ok": False, "error": issued.get("error"), "delivered": False}
+    name = html.escape(await _prize_name(g))
+    deadline = giveaways_svc.format_kyiv(issued["deadline"])
+    shipping = ("🚚 Доставку всієї посилки оплачуємо ми." if g["shipping_payer"] == "shop"
+                else "🚚 Доставка Новою Поштою — за тарифами перевізника.")
+    if g.get("prize_type", "product") == "product":
+        prize_line = f"Ваш приз: <b>{name}</b> — безкоштовно."
+        how = ("Приз уже чекає у вашому кошику — натисніть кнопку нижче"
+               + (", оберіть варіант" if not g.get("product_variant") else "")
+               + ", вкажіть доставку й оформіть замовлення. Можна докупити й інші товари.")
+    else:
+        prize_line = f"Ваш приз: <b>{name}</b> на будь-яке замовлення."
+        how = ("Сертифікат уже застосовано у вашому кошику — натисніть кнопку нижче, оберіть товари й оформіть "
+               "замовлення. Якщо замовлення дешевше, різниця згорає.")
+    text = (
+        f"🎉 Вітаємо! Ви виграли в розіграші «{html.escape(g['title'])}»!\n\n"
+        f"{prize_line}\n{shipping}\n\n{how}\n\n"
+        f"⏳ Забрати приз можна до {deadline} (за Києвом)."
+    )
+    delivered = await _send_to_winner(issued["user_id"], text, "giveaway prize")
+    return {"ok": True, "delivered": delivered}
+
+
+def _giveaway_results_html(g: dict, winners: list[dict], entries: int) -> str:
+    lines = [f"🎉 Підсумки розіграшу «{html.escape(g['title'])}»", "",
+             f"Учасників: {entries} · виконали умови: {g['eligible_count']}", ""]
+    win = [w for w in winners if w["role"] == "winner" and w["status"] != "replaced"]
+    if win:
+        lines.append("🏆 Переможці:")
+        lines += [f"{w['position']}. {_giveaway_user_html(w)} — №{w['number']}" for w in win]
+        lines += ["", "Вітаємо! Переможцям ми написали в боті 💬"]
+    else:
+        lines.append("Цього разу учасників, що виконали умови, не було.")
+    return "\n".join(lines)
+
+
+async def _giveaway_item(giveaway_id: int) -> dict | None:
+    items = await run_db(giveaways_svc.list_giveaways, 200)
+    return next((g for g in items if g["id"] == int(giveaway_id)), None)
+
+
+def _giveaway_id(request: web.Request, key: str = "id") -> int:
+    try:
+        return int(request.match_info.get(key, 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def handle_get_giveaways(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    items = await run_db(giveaways_svc.list_giveaways)
+    channel = await run_db(channel_posts_svc.get_channel)
+    return web.json_response(
+        {"giveaways": items, "channel": channel, "reserve_count": giveaways_svc.RESERVE_COUNT,
+         "claim_hours": giveaways_svc.CLAIM_HOURS},
+        headers=cors_headers(request),
+    )
+
+
+async def handle_create_giveaway(request: web.Request):
+    """Створює розіграш і одразу публікує пост з кнопкою «Взяти участь» у канал."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    payload, err = giveaways_svc.validate_giveaway(data)
+    if err:
+        return web.json_response({"ok": False, "error": err}, status=400, headers=cors_headers(request))
+    product = await run_db(get_product_by_id, payload["product_id"]) if payload["product_id"] else None
+    if payload["product_id"] and not product:
+        return web.json_response({"ok": False, "error": "Приз має бути товаром, що є в магазині"},
+                                 status=404, headers=cors_headers(request))
+    variant = None
+    if payload["prize_type"] == "product":
+        if payload["product_variant"]:
+            variant = get_product_variant(product, payload["product_variant"])
+            if not variant or variant.get("contract"):
+                return web.json_response({"ok": False, "error": "Обери варіант товару зі списку"},
+                                         status=400, headers=cors_headers(request))
+            payload["prize_value"] = int(variant["price"])
+        else:
+            payload["prize_value"] = _giveaway_product_price(product)
+        if payload["prize_value"] <= 0:
+            return web.json_response({"ok": False, "error": "У товару немає фіксованої ціни — обери інший"},
+                                     status=400, headers=cors_headers(request))
+    payload["title"] = payload["title"] or (
+        str(product.get("name") or "") + (f" · {variant['name']}" if variant else "")
+        if product else f"Сертифікат на {payload['prize_value']} ₴"
+    )[: giveaways_svc.TITLE_MAX]
+    product = product or {}
+    channel = channel_posts_svc.normalize_channel(data.get("channel")) or await run_db(channel_posts_svc.get_channel)
+    if not channel:
+        return web.json_response({"ok": False, "error": "Вкажіть канал: @username або ID на кшталт -100…"},
+                                 status=400, headers=cors_headers(request))
+    tg_bot = getattr(bot_app, "bot", None)
+    if tg_bot is None:
+        return web.json_response({"ok": False, "error": "Бот не запущено"}, status=502, headers=cors_headers(request))
+
+    photo = payload["photo"] or next((_share_photo_url(u) for u in (product.get("photos") or []) if u), "")
+    gid = await run_db(giveaways_svc.create_giveaway, payload, channel)
+    body = (html.escape(payload["text"])
+            + f"\n\n🗓 Підсумки: {giveaways_svc.format_kyiv(payload['ends_at'])} (за Києвом)")
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        "🎁 Взяти участь", url=giveaways_svc.join_link(config.BOT_USERNAME, gid),
+    )]])
+    from rich_messages import _telegram_retry
+
+    try:
+        if photo:
+            message = await _telegram_retry(
+                lambda: tg_bot.send_photo(chat_id=channel, photo=photo, caption=body, parse_mode="HTML",
+                                          reply_markup=markup),
+                label="giveaway post photo",
+            )
+        else:
+            message = await _telegram_retry(
+                lambda: tg_bot.send_message(chat_id=channel, text=body, parse_mode="HTML", reply_markup=markup,
+                                            link_preview_options=LinkPreviewOptions(is_disabled=True)),
+                label="giveaway post",
+            )
+    except Exception as e:
+        await run_db(giveaways_svc.delete_giveaway, gid)
+        logger.warning("Пост розіграшу %s у %s не вдався: %s", gid, channel, _redact_token(e))
+        return web.json_response({"ok": False, "error": _channel_error_text(e)}, status=502, headers=cors_headers(request))
+
+    await run_db(giveaways_svc.set_message_id, gid, message.message_id)
+    if data.get("pin"):
+        try:
+            await tg_bot.pin_chat_message(chat_id=channel, message_id=message.message_id, disable_notification=True)
+        except Exception as e:
+            logger.warning("Не вдалось закріпити пост розіграшу %s: %s", gid, _redact_token(e))
+    return web.json_response(
+        {"ok": True, "giveaway": await _giveaway_item(gid),
+         "url": channel_posts_svc.post_url(channel, message.message_id)},
+        headers=cors_headers(request),
+    )
+
+
+async def handle_draw_giveaway(request: web.Request):
+    """«Завершити зараз» — жеребкування не чекаючи дати."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    gid = _giveaway_id(request)
+    result = await run_giveaway_draw(gid, notify_owner=False)
+    if not result.get("ok"):
+        return web.json_response(result, status=409, headers=cors_headers(request))
+    return web.json_response({"ok": True, "giveaway": await _giveaway_item(gid)}, headers=cors_headers(request))
+
+
+async def handle_publish_giveaway(request: web.Request):
+    """Пост з результатами в канал + купони й повідомлення переможцям."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    gid = _giveaway_id(request)
+    item = await _giveaway_item(gid)
+    if not item:
+        return web.json_response({"ok": False, "error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    if not await run_db(giveaways_svc.claim_publish, gid):
+        return web.json_response({"ok": False, "error": "Результати вже опубліковано або жеребкування ще не було"},
+                                 status=409, headers=cors_headers(request))
+    from rich_messages import _telegram_retry
+    from telegram import ReplyParameters
+
+    text = _giveaway_results_html(item, item["winners"], item["stats"].get("entries", 0))
+    reply = ReplyParameters(message_id=item["message_id"], allow_sending_without_reply=True) \
+        if item.get("message_id") else None
+    try:
+        message = await _telegram_retry(
+            lambda: bot_app.bot.send_message(chat_id=item["channel"], text=text, parse_mode="HTML",
+                                             reply_parameters=reply,
+                                             link_preview_options=LinkPreviewOptions(is_disabled=True)),
+            label="giveaway results",
+        )
+    except Exception as e:
+        await run_db(giveaways_svc.unpublish, gid)
+        logger.warning("Результати розіграшу %s не опубліковано: %s", gid, _redact_token(e))
+        return web.json_response({"ok": False, "error": _channel_error_text(e)}, status=502, headers=cors_headers(request))
+    await run_db(giveaways_svc.set_result_message_id, gid, message.message_id)
+    if item.get("message_id"):
+        try:
+            await bot_app.bot.edit_message_reply_markup(chat_id=item["channel"], message_id=item["message_id"],
+                                                        reply_markup=None)
+        except Exception:
+            pass
+
+    g = await run_db(giveaways_svc.get_giveaway, gid)
+    delivered = undelivered = 0
+    for w in await run_db(giveaways_svc.pending_winners, gid):
+        res = await _send_giveaway_prize(g, int(w["id"]))
+        if res.get("delivered"):
+            delivered += 1
+        else:
+            undelivered += 1
+    return web.json_response(
+        {"ok": True, "giveaway": await _giveaway_item(gid), "delivered": delivered, "undelivered": undelivered,
+         "url": channel_posts_svc.post_url(item["channel"], message.message_id)},
+        headers=cors_headers(request),
+    )
+
+
+async def handle_reroll_giveaway_winner(request: web.Request):
+    """«Перекинути»: переможця замінює перший з резерву; після публікації — одразу купон і повідомлення."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    gid = _giveaway_id(request)
+    wid = _giveaway_id(request, "winner_id")
+    w = await run_db(giveaways_svc.get_winner, wid)
+    if not w or int(w["giveaway_id"]) != gid:
+        return web.json_response({"ok": False, "error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    res = await _reroll_and_notify(wid)
+    if not res.get("ok"):
+        return web.json_response(res, status=409, headers=cors_headers(request))
+    return web.json_response({"ok": True, "giveaway": await _giveaway_item(gid), "delivered": res["delivered"]},
+                             headers=cors_headers(request))
+
+
+async def handle_extend_giveaway_winner(request: web.Request):
+    """«Подовжити на 24 год» строк призу переможця."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    gid = _giveaway_id(request)
+    wid = _giveaway_id(request, "winner_id")
+    w = await run_db(giveaways_svc.get_winner, wid)
+    if not w or int(w["giveaway_id"]) != gid:
+        return web.json_response({"ok": False, "error": "Не знайдено"}, status=404, headers=cors_headers(request))
+    res = await _extend_and_notify(wid)
+    if not res.get("ok"):
+        return web.json_response(res, status=409, headers=cors_headers(request))
+    return web.json_response({"ok": True, "giveaway": await _giveaway_item(gid), "delivered": res["delivered"]},
+                             headers=cors_headers(request))
+
+
+PRIZE_CARD_MAX_BYTES = 3 * 1024 * 1024
+
+
+def _prize_payload(p: dict, product: dict | None) -> dict:
+    """Активний приз для Mini App: усе, щоб показати вікно перемоги й блок у кошику."""
+    is_product = p["prize_type"] == "product"
+    fixed = get_product_variant(product, p["product_variant"]) if product and p["product_variant"] else None
+    choices = [] if fixed or not product else [
+        {"id": v["id"], "name": v["name"], "price": int(v["price"])}
+        for v in (product.get("variants") or []) if not v.get("contract")
+    ]
+    photos = (product or {}).get("photos") or []
+    value = int(fixed["price"]) if fixed else int(p["prize_value"])
+    return {
+        "winner_id": p["winner_id"],
+        "giveaway_id": p["giveaway_id"],
+        "giveaway_title": p["title"],
+        "type": p["prize_type"],
+        "product_id": p["product_id"] if is_product else 0,
+        "product_name": (product or {}).get("name") or p["title"],
+        "photo": photos[0] if photos else "",
+        "variant": {"id": fixed["id"], "name": fixed["name"]} if fixed else None,
+        "variants": choices,
+        "value": value,
+        "deadline": p["claim_deadline"],
+        "shipping_payer": p["shipping_payer"],
+        "card_url": p["card_url"],
+        "channel_url": giveaways_svc.channel_url(p["channel"]),
+    }
+
+
+def _prize_user(request: web.Request):
+    """(user_id, None) або (0, відповідь-помилка) для /my/prize*."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return 0, err
+    try:
+        user_id = int(auth.get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    if user_id <= 0:
+        return 0, web.json_response({"ok": False, "error": "invalid_init_data"}, status=403,
+                                    headers=cors_headers(request))
+    return user_id, None
+
+
+async def handle_get_my_prizes(request: web.Request):
+    """Активні призи покупця: Mini App показує вікно перемоги й закріплений блок у кошику."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    user_id = _safe_int(auth.get("user_id"))
+    if user_id <= 0:
+        return web.json_response({"prizes": []}, headers=cors_headers(request))
+    prizes = []
+    for p in await run_db(giveaways_svc.active_prizes, user_id):
+        product = await run_db(get_product_by_id, p["product_id"]) if p["product_id"] else None
+        prizes.append(_prize_payload(p, product))
+    return web.json_response({"prizes": prizes}, headers=cors_headers(request))
+
+
+async def handle_upload_prize_card(request: web.Request):
+    """Листівка «Мій приз» (малює Mini App) — на Cloudinary, для сторіс і збереження в галерею."""
+    user_id, err = _prize_user(request)
+    if err is not None:
+        return err
+    if not allow_review_upload(user_id):
+        return web.json_response({"ok": False, "error": "Забагато спроб, спробуй пізніше"}, status=429,
+                                 headers=cors_headers(request))
+    try:
+        form = await request.post()
+        winner_id = _safe_int(form.get("winner_id"))
+        file_field = form.get("file")
+        if not isinstance(file_field, web.FileField):
+            raise ValueError
+        file_data = file_field.file.read(PRIZE_CARD_MAX_BYTES + 1)
+    except Exception:
+        return web.json_response({"ok": False, "error": "bad_request"}, status=400, headers=cors_headers(request))
+    if len(file_data) > PRIZE_CARD_MAX_BYTES or (file_field.content_type or "") not in ("image/png", "image/jpeg"):
+        return web.json_response({"ok": False, "error": "bad_file"}, status=400, headers=cors_headers(request))
+    w = await run_db(giveaways_svc.get_winner, winner_id)
+    if not w or int(w["user_id"]) != user_id or w["role"] != "winner" or w["status"] != "notified":
+        return web.json_response({"ok": False, "error": "not_found"}, status=404, headers=cors_headers(request))
+    if w.get("card_url"):
+        return web.json_response({"ok": True, "url": w["card_url"]}, headers=cors_headers(request))
+    result = await upload_photo_to_cloudinary(file_data, f"prize_{winner_id}", file_field.content_type)
+    url = (result.get("url") or "") if result.get("ok") else ""
+    if not url or not await run_db(giveaways_svc.set_card_url, winner_id, user_id, url):
+        return web.json_response({"ok": False, "error": "upload_failed"}, status=502, headers=cors_headers(request))
+    return web.json_response({"ok": True, "url": url}, headers=cors_headers(request))
+
+
+async def handle_prepare_prize_share(request: web.Request):
+    """Повідомлення «Мій приз» для Telegram.WebApp.shareMessage: листівка + кнопка на канал."""
+    user_id, err = _prize_user(request)
+    if err is not None:
+        return err
+    try:
+        winner_id = int((await request.json()).get("winner_id"))
+    except Exception:
+        return web.json_response({"ok": False, "error": "bad_request"}, status=400, headers=cors_headers(request))
+    w = await run_db(giveaways_svc.get_winner, winner_id)
+    g = await run_db(giveaways_svc.get_giveaway, w["giveaway_id"]) if w else None
+    if not g or int(w["user_id"]) != user_id or w["role"] != "winner" or not w.get("card_url"):
+        return web.json_response({"ok": False, "error": "not_found"}, status=404, headers=cors_headers(request))
+    name = await _prize_name(g)
+    url = giveaways_svc.channel_url(g["channel"]) or f"https://t.me/{config.BOT_USERNAME}"
+    result = {
+        "type": "photo",
+        "id": f"gw{winner_id}",
+        "photo_url": w["card_url"],
+        "thumbnail_url": w["card_url"],
+        "caption": f"🎉 Я виграв(-ла) «{name}» у розіграші Poselyanov 3D Print! Бери участь і ти 🎁",
+        "reply_markup": {"inline_keyboard": [[{"text": "🎁 Розіграші Poselyanov 3D", "url": url}]]},
+    }
+    payload = {"user_id": user_id, "result": result, "allow_user_chats": True, "allow_bot_chats": True,
+               "allow_group_chats": True, "allow_channel_chats": True}
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/savePreparedInlineMessage", json=payload
+            ) as resp:
+                body = await resp.json(content_type=None)
+        if not isinstance(body, dict) or not body.get("ok"):
+            raise RuntimeError((body or {}).get("description") if isinstance(body, dict) else "bad_response")
+        return web.json_response({"ok": True, "id": body["result"]["id"]}, headers=cors_headers(request))
+    except Exception as e:
+        logger.warning("savePreparedInlineMessage для призу %s не вдалось: %s", winner_id,
+                       str(e).replace(BOT_TOKEN, "***"))
+        return web.json_response({"ok": False, "error": "prepare_failed"}, status=502, headers=cors_headers(request))
+
+
+async def handle_cancel_giveaway(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    gid = _giveaway_id(request)
+    if not await run_db(giveaways_svc.cancel_giveaway, gid):
+        return web.json_response({"ok": False, "error": "Скасувати можна лише активний розіграш"},
+                                 status=409, headers=cors_headers(request))
+    g = await run_db(giveaways_svc.get_giveaway, gid)
+    if g and g.get("message_id"):
+        try:
+            await bot_app.bot.edit_message_reply_markup(chat_id=g["channel"], message_id=g["message_id"],
+                                                        reply_markup=None)
+        except Exception:
+            pass
+    return web.json_response({"ok": True, "giveaway": await _giveaway_item(gid)}, headers=cors_headers(request))
+
+
 async def handle_get_ai_suggestions(request: web.Request):
     denied = await _admin_guard(request)
     if denied is not None:
@@ -4686,7 +5440,17 @@ async def handle_check_coupon(request):
     elif channel_block:
         result = {"valid": False, "message": channel_sub_required_message(coupon_channel)}
     else:
-        result = await run_db(check_coupon, code, user_id, cart_total)
+        # Позиції кошика (для купона на конкретний товар). Ціни клієнтські — лише для показу знижки;
+        # при оформленні validate_order_payload перераховує все з каталогу.
+        product_prices = None
+        if isinstance(data.get("items"), list):
+            product_prices = {}
+            for it in data["items"][:100]:
+                if isinstance(it, dict):
+                    pid = _safe_int(it.get("product_id"))
+                    if pid > 0:
+                        product_prices[pid] = max(product_prices.get(pid, 0), max(0, _safe_int(it.get("price"))))
+        result = await run_db(check_coupon, code, user_id, cart_total, product_prices)
 
     return web.json_response(result, headers=cors_headers(request))
 
@@ -4931,6 +5695,12 @@ def main():
             logger.warning("Розсилок, перерваних рестартом, позначено failed: %s", interrupted)
     except Exception:
         logger.exception("broadcast recovery failed")
+    try:
+        stuck = giveaways_svc.recover_interrupted()
+        if stuck:
+            logger.warning("Розіграшів, перерваних посеред жеребкування: %s", stuck)
+    except Exception:
+        logger.exception("giveaway recovery failed")
     bootstrap_json_catalog(force=True)
     logger.info(
         "🔧 Режим: VALIDATE_INIT_DATA=%s | товарів: %s + %s custom | філаментів: %s | категорій: %s",
@@ -4998,9 +5768,11 @@ def main():
             await configure_bot_commands(bot_app, owner_id=OWNER_ID, user_commands=user_commands)
             review_task = asyncio.create_task(_review_request_loop())
             broadcast_task = asyncio.create_task(_broadcast_scheduler_loop())
+            giveaway_task = asyncio.create_task(_giveaway_loop())
             await stop_event.wait()
             review_task.cancel()
             broadcast_task.cancel()
+            giveaway_task.cancel()
 
             logger.info("Зупиняю Telegram polling...")
             await bot_app.updater.stop()

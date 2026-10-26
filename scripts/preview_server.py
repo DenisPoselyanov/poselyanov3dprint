@@ -142,6 +142,61 @@ async def _fake_ai_create(**kwargs):
         _ai_sample(f"Дракончик-брелок {_ai_n[0]}", "gifts", "🐲", 90, "Ліцензія не вказана — треба уточнити в автора", "https://picsum.photos/seed/ai3/400/400")]})])
 _ai._make_client = lambda: _NS(beta=_NS(messages=_NS(create=_fake_ai_create)))
 _ai.is_enabled = lambda: True
+# Розіграші: один триває (з друзями), один чекає публікації, один опубліковано з виданим призом
+import services.giveaways as _gw
+_gw_pid = (bot.PRODUCTS_CACHE or [{"id": 1}])[0]["id"]
+def _mk_gw(**over):
+    data = {"product_id": _gw_pid, "prize_value": 350, "winners_count": 1, "ends_at": _iso(3), "shipping_payer": "shop",
+            "referral_bonus": True, "referral_limit": 5, "text": "🎁 РОЗІГРАШ!\n\nПідпишіться на канал і натисніть «Взяти участь»."}
+    data.update(over)
+    payload, err = _gw.validate_giveaway(data)
+    payload["title"] = over.get("title") or "Дракон"
+    gid = _gw.create_giveaway(payload, "@poselyanov3dprint")
+    _gw.set_message_id(gid, 120 + gid)
+    return gid
+for _uid in range(301, 313):
+    _users.record_start(_uid, f"Учасник {_uid - 300}", f"fan{_uid}")
+_g1 = _mk_gw(title="Гнучкий дракон")
+for _uid in range(301, 309):
+    _gw.join(_g1, _uid, 301 if _uid > 305 else 0)
+_g2 = _mk_gw(title="Сертифікат на 300 ₴", prize_type="amount", prize_value=300, winners_count=2,
+             shipping_payer="winner", referral_bonus=False)
+_g3 = _mk_gw(title="Органайзер", referral_bonus=False)
+for _g in (_g2, _g3):
+    for _uid in range(301, 313):
+        _gw.join(_g, _uid)
+    _gw.claim_for_draw(_g)
+    _cands = _gw.draw_candidates(_g)
+    _gw.draw(_g, {int(c["user_id"]) for c in _cands if int(c["user_id"]) != 304}, _cands)
+_gw.claim_publish(_g3)
+_g3row = _gw.get_giveaway(_g3)
+for _w in _gw.pending_winners(_g3):
+    _gw.issue_prize(int(_w["id"]))
+# Власник (у перегляді всі запити — від нього) виграв два призи: товар із вибором розміру і сертифікат —
+# Mini App покаже вікно перемоги двічі й блок «Ваш приз» у кошику
+_users.record_start(777, "Денис", "denis")
+_gw_var_pid = (bot.PRODUCTS_CACHE or [{"id": 1}, {"id": 2}, {"id": 3}])[min(2, len(bot.PRODUCTS_CACHE or [1]) - 1)]["id"]
+_orig_get_product = bot.get_product_by_id
+def _preview_get_product(pid):
+    p = _orig_get_product(pid)
+    if p and int(pid) == int(_gw_var_pid):
+        p = {**p, "variants": [{"id": "s", "name": "S · 10 см", "price": 150}, {"id": "m", "name": "M · 15 см", "price": 200},
+                               {"id": "l", "name": "L · 22 см", "price": 290}]}
+    return p
+bot.get_product_by_id = _preview_get_product
+_g4 = _mk_gw(title="Великий розіграш", product_id=_gw_var_pid, prize_value=290, referral_bonus=False)
+_g5 = _mk_gw(title="Сертифікат на 250 ₴", prize_type="amount", prize_value=250, referral_bonus=False)
+for _g in (_g4, _g5):
+    _gw.join(_g, 777)
+    _gw.claim_for_draw(_g)
+    _gw.draw(_g, {777}, _gw.draw_candidates(_g))
+    _gw.claim_publish(_g)
+    for _w in _gw.pending_winners(_g):
+        _gw.issue_prize(int(_w["id"]), hours=41 if _g == _g4 else 30)
+_c = db_connect()
+_c.execute("UPDATE giveaways SET ends_at = datetime('now','-1 day'), result_message_id = 200 WHERE id IN (?, ?, ?, ?)",
+           (_g2, _g3, _g4, _g5))
+_c.commit(); _c.close()
 app = web.Application(client_max_size=30 * 1024 * 1024)
 
 

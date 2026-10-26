@@ -1615,6 +1615,169 @@
   @media (prefers-reduced-motion: reduce) {
     .s-nav .badge.bump, .toast, .hero-prog i, .fly, .sk, .psheet, .gal-track, .progress-card .bar i { animation: none !important; transition: none !important; }
   }
+
+  /* ===== ПРИЗ РОЗІГРАШУ (GIVEAWAYS.md, «Видача призу») ===== */
+  .prize-card {
+    position: relative; overflow: hidden; isolation: isolate;
+    border-radius: 20px; padding: 14px; margin-bottom: 12px; color: #fff;
+    background: linear-gradient(135deg, #FF7A1A 0%, #E0459B 55%, #7C5CFF 100%);
+    box-shadow: 0 10px 28px rgba(224, 69, 155, .28);
+  }
+  .prize-card::before, .prize-card::after {
+    content: ''; position: absolute; z-index: -1; border-radius: 50%;
+    background: rgba(255,255,255,.14);
+  }
+  .prize-card::before { width: 160px; height: 160px; right: -50px; top: -70px; }
+  .prize-card::after { width: 90px; height: 90px; left: -30px; bottom: -40px; }
+  .prize-card.off { filter: saturate(.35); opacity: .85; }
+  .pc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .pc-tag { font-size: 12px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
+  .pc-timer {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 99px;
+    background: rgba(0,0,0,.18); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .pc-body { display: flex; gap: 12px; align-items: flex-start; }
+  .pc-th {
+    inline-size: 76px; block-size: 76px; flex: none; border-radius: 14px; overflow: hidden; padding: 0; border: 0;
+    background: #fff; display: grid; place-items: center; font-size: 32px; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  }
+  .pc-th img { inline-size: 100%; block-size: 100%; object-fit: cover; pointer-events: none; }
+  .pc-th.cert { background: rgba(255,255,255,.2); color: #fff; font-size: 13px; font-weight: 900; line-height: 1.1; text-align: center; }
+  .pc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .pc-info b { font-size: 16px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .pc-price { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+  .pc-price s { opacity: .75; }
+  .pc-price .free { font-size: 18px; font-weight: 900; }
+  .pc-note { font-size: 12.5px; line-height: 1.35; opacity: .92; }
+  .pc-variants { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pc-variants button {
+    border: 0; border-radius: 99px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    background: rgba(255,255,255,.2); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+  }
+  .pc-variants button.on { background: #fff; color: var(--pink-ink); box-shadow: none; }
+  .pc-variants.need button { animation: pcPulse 1s ease 2; }
+  @keyframes pcPulse { 50% { transform: scale(1.06); } }
+  .pc-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px;
+    padding-top: 10px; border-top: 1px solid rgba(255,255,255,.25); font-size: 13px; font-weight: 600; }
+  .pc-switch { position: relative; flex: none; width: 46px; height: 28px; cursor: pointer; }
+  .pc-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+  .pc-switch span { position: absolute; inset: 0; border-radius: 99px; background: rgba(0,0,0,.25); transition: background .2s; pointer-events: none; }
+  .pc-switch span::after {
+    content: ''; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s;
+  }
+  .pc-switch input:checked + span { background: rgba(255,255,255,.45); }
+  .pc-switch input:checked + span::after { transform: translateX(18px); }
+  .pc-switch input:focus-visible + span { outline: 2px solid #fff; outline-offset: 2px; }
+  .pc-more { margin-top: 8px; font-size: 12px; opacity: .85; }
+
+  .prize-win {
+    display: none; position: fixed; inset: 0; z-index: 260; align-items: center; justify-content: center;
+    padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+    background: radial-gradient(circle at 50% 32%, rgba(124,92,255,.6), rgba(14,20,27,0) 62%), rgba(14,20,27,.93);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  }
+  #cart-badge .i { width: 11px; height: 11px; vertical-align: -1px; }
+  .prize-win.open { display: flex; animation: pwFade .3s ease; }
+  @keyframes pwFade { from { opacity: 0; } }
+  .pw-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .pw-card {
+    position: relative; z-index: 2; width: 100%; max-width: 380px; text-align: center; color: #fff;
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+  }
+  .pw-stage { position: relative; width: 240px; height: 250px; }
+  .pw-glow {
+    position: absolute; left: 50%; top: 42%; width: 340px; height: 340px; margin: -170px 0 0 -170px; opacity: 0;
+    background: repeating-conic-gradient(from 0deg, rgba(255,214,102,.28) 0 12deg, transparent 12deg 30deg);
+    border-radius: 50%; -webkit-mask: radial-gradient(circle, #000 25%, transparent 68%); mask: radial-gradient(circle, #000 25%, transparent 68%);
+  }
+  .pw-photo {
+    position: absolute; left: 50%; top: 4px; width: 176px; height: 176px; margin-left: -88px; border-radius: 26px;
+    overflow: hidden; background: #fff; border: 4px solid #fff; box-shadow: 0 18px 40px rgba(0,0,0,.35);
+    display: grid; place-items: center; font-size: 72px; opacity: 0; transform: translateY(80px) scale(.3);
+  }
+  .pw-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .pw-photo.cert {
+    background: linear-gradient(135deg, #FF7A1A, #E0459B 60%, #7C5CFF); color: #fff;
+    flex-direction: column; display: flex; justify-content: center; gap: 2px;
+  }
+  .pw-photo.cert small { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+  .pw-photo.cert b { font-size: 40px; font-weight: 900; line-height: 1; }
+  .pw-box { position: absolute; left: 50%; bottom: 0; width: 150px; margin-left: -75px; }
+  .pw-body {
+    position: relative; height: 104px; border-radius: 10px 10px 14px 14px;
+    background: linear-gradient(160deg, #FF8F3A, #E0459B); box-shadow: inset 0 -10px 0 rgba(0,0,0,.12);
+  }
+  .pw-lid {
+    position: absolute; left: -9px; right: -9px; top: -30px; height: 34px; border-radius: 9px; z-index: 2;
+    background: linear-gradient(160deg, #FFA45E, #F0559F); box-shadow: 0 4px 0 rgba(0,0,0,.12);
+  }
+  .pw-body i, .pw-lid i { position: absolute; left: 50%; top: 0; bottom: 0; width: 24px; margin-left: -12px; background: #FFD666; }
+  .pw-lid::before, .pw-lid::after {
+    content: ''; position: absolute; top: -26px; width: 42px; height: 30px; border: 8px solid #FFD666; border-radius: 50% 50% 8px 50%;
+  }
+  .pw-lid::before { left: 50%; margin-left: -44px; transform: rotate(-18deg); }
+  .pw-lid::after { left: 50%; margin-left: 2px; transform: scaleX(-1) rotate(-18deg); }
+  .prize-win.play .pw-box { animation: pwShake .9s ease-in-out, pwBoxOut .5s ease 1.5s forwards; }
+  .prize-win.play .pw-lid { animation: pwLid .65s cubic-bezier(.3,.7,.4,1) .9s forwards; }
+  .prize-win.play .pw-photo { animation: pwRise .8s cubic-bezier(.34,1.56,.64,1) .95s forwards; }
+  .prize-win.play .pw-glow { animation: pwGlowIn .6s ease 1.1s forwards, pwSpin 14s linear 1.1s infinite; }
+  .prize-win.play .pw-text, .prize-win.play .pw-actions { opacity: 0; animation: pwUp .45s ease 1.35s forwards; }
+  @keyframes pwShake {
+    0%, 100% { transform: rotate(0); } 15% { transform: rotate(-7deg) translateY(-2px); } 30% { transform: rotate(6deg); }
+    45% { transform: rotate(-6deg) translateY(-4px); } 60% { transform: rotate(5deg); } 75% { transform: rotate(-3deg); } 90% { transform: rotate(2deg); }
+  }
+  @keyframes pwLid { to { transform: translate(40px, -150px) rotate(38deg); opacity: 0; } }
+  @keyframes pwRise { to { opacity: 1; transform: translateY(0) scale(1); } }
+  @keyframes pwBoxOut { to { transform: translateY(30px) scale(.85); opacity: 0; } }
+  @keyframes pwGlowIn { to { opacity: 1; } }
+  @keyframes pwSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  @keyframes pwUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .prize-win.still .pw-photo { opacity: 1; transform: none; }
+  .prize-win.still .pw-box { display: none; }
+  .prize-win.still .pw-glow { opacity: 1; }
+  .pw-text { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .pw-kicker { font-size: 15px; font-weight: 800; color: #FFD666; }
+  .pw-text h2 { font-size: 24px; font-weight: 900; line-height: 1.2; }
+  .pw-sub { font-size: 14px; opacity: .85; }
+  .pw-timer {
+    display: inline-flex; align-items: baseline; gap: 6px; margin-top: 4px; padding: 6px 12px; border-radius: 99px;
+    background: rgba(255,255,255,.14); font-size: 13px;
+  }
+  .pw-timer b { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .pw-ship { font-size: 13px; opacity: .85; }
+  .pw-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pw-actions button { border: 0; border-radius: 14px; font: inherit; font-weight: 800; cursor: pointer; }
+  .pw-claim {
+    grid-column: 1 / -1; padding: 15px; font-size: 16px; color: #fff;
+    background: linear-gradient(135deg, #FF7A1A, #E0459B); box-shadow: 0 10px 24px rgba(224,69,155,.45);
+  }
+  .pw-share { padding: 13px; font-size: 14px; background: rgba(255,255,255,.16); color: #fff; }
+  .pw-later { padding: 13px; font-size: 14px; background: none; color: rgba(255,255,255,.75); }
+  .pw-share .i { width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
+
+  #prize-share-backdrop { z-index: 270; }
+  .ps-preview { display: grid; place-items: center; padding: 4px 16px 12px; }
+  .ps-preview img, .ps-preview .ps-wait {
+    width: 150px; aspect-ratio: 9 / 16; border-radius: 14px; object-fit: cover; background: var(--surface-2);
+    box-shadow: var(--shadow);
+  }
+  .ps-preview .ps-wait { display: grid; place-items: center; font-size: 13px; color: var(--ink-3); }
+  .ps-list { display: grid; gap: 8px; padding: 0 16px calc(16px + env(safe-area-inset-bottom)); }
+  .ps-list button {
+    display: flex; align-items: center; gap: 12px; padding: 13px 14px; border: 0; border-radius: 14px; cursor: pointer;
+    background: var(--surface-2); color: var(--ink); font: inherit; font-size: 15px; font-weight: 700; text-align: left;
+  }
+  .ps-list button:disabled { opacity: .5; cursor: default; }
+  .ps-list .ps-ic { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; flex: none; background: var(--surface); }
+  .ps-list small { display: block; font-size: 12px; font-weight: 500; color: var(--ink-3); margin-top: 1px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .prize-win.play .pw-box, .prize-win.play .pw-lid, .prize-win.play .pw-photo, .prize-win.play .pw-glow,
+    .prize-win.play .pw-text, .prize-win.play .pw-actions, .pc-variants.need button { animation: none !important; }
+    .prize-win.play .pw-text, .prize-win.play .pw-actions { opacity: 1; }
+  }
 </style>
 </head>
 <body>
@@ -1754,6 +1917,42 @@
   <div class="success-actions">
     <button class="success-back" onclick="openOrdersFromSuccess()">Мої замовлення</button>
     <button class="success-back ghost" onclick="backToCatalog()">Продовжити покупки</button>
+  </div>
+</div>
+
+<!-- ПРИЗ РОЗІГРАШУ: вікно перемоги й «Поділитися» (GIVEAWAYS.md, «Видача призу») -->
+<div class="prize-win" id="prize-win" role="dialog" aria-modal="true" aria-labelledby="pw-title">
+  <canvas class="pw-confetti" id="pw-confetti" aria-hidden="true"></canvas>
+  <div class="pw-card">
+    <div class="pw-stage" aria-hidden="true">
+      <div class="pw-glow"></div>
+      <div class="pw-photo" id="pw-photo"></div>
+      <div class="pw-box"><div class="pw-lid"><i></i></div><div class="pw-body"><i></i></div></div>
+    </div>
+    <div class="pw-text">
+      <div class="pw-kicker">🎉 Ви виграли!</div>
+      <h2 id="pw-title"></h2>
+      <p class="pw-sub" id="pw-sub"></p>
+      <div class="pw-timer"><span>Залишилось</span><b data-prize-timer id="pw-timer"></b></div>
+      <p class="pw-ship" id="pw-ship"></p>
+    </div>
+    <div class="pw-actions">
+      <button type="button" class="pw-claim" onclick="claimPrizeFromWin()">🎁 Забрати приз</button>
+      <button type="button" class="pw-share" onclick="openPrizeShare()"><span data-icon="share"></span>Поділитися</button>
+      <button type="button" class="pw-later" onclick="closePrizeWin()">Пізніше</button>
+    </div>
+  </div>
+</div>
+
+<div class="gift-modal-backdrop" id="prize-share-backdrop" onclick="if (event.target === this) closePrizeShare()">
+  <div class="gift-modal" role="dialog" aria-label="Поділитися виграшем">
+    <div class="modal-handle"></div>
+    <div class="gift-modal-title">
+      <div><h3>Поділитися виграшем</h3><p>Листівка з вашим призом</p></div>
+      <button class="gift-modal-close" onclick="closePrizeShare()" aria-label="Закрити">✕</button>
+    </div>
+    <div class="ps-preview" id="ps-preview"></div>
+    <div class="ps-list" id="ps-list"></div>
   </div>
 </div>
 
@@ -2434,9 +2633,16 @@ function getLowestPromotionThreshold() {
 
 // Знижка купона до округлення — рахуємо щоразу від актуальної суми кошика,
 // щоб відсотковий купон не «застигав» на сумі, яка була в момент застосування.
+// Ціна однієї штуки товару в кошику (найдорожча позиція) — для купона на конкретний товар
+function cartProductUnitPrice(productId) {
+  return cart.reduce((m, i) => (i.id === productId && !i.contractPrice ? Math.max(m, Number(i.price) || 0) : m), 0);
+}
+
+// Дзеркало services/coupons.py:coupon_raw_discount
 function couponRawDiscount(coupon, rawTotal) {
   if (!coupon) return 0;
   const value = Number(coupon.value) || 0;
+  if (coupon.productId) rawTotal = cartProductUnitPrice(coupon.productId);
   if (coupon.type === 'fixed') return Math.min(value, rawTotal);
   return Math.floor(rawTotal * value / 100);
 }
@@ -2467,11 +2673,15 @@ function getCartPricing() {
     getBestPromotion(rawTotal)?.raw || 0,
     stack,
   );
-  const discount = couponDiscount + promotionDiscount;
+  const prize = activePrize();
+  const prizeDiscount = prize && !prizeExcluded[prize.winner_id]
+    ? prizeCertDiscount(prize, rawTotal - couponDiscount - promotionDiscount) : 0;
+  const discount = couponDiscount + promotionDiscount + prizeDiscount;
   return {
     rawTotal,
     couponDiscount,
     promotionDiscount,
+    prizeDiscount,
     stacked: stack && couponDiscount > 0 && promotionDiscount > 0,
     discount,
     finalTotal: Math.max(0, rawTotal - discount),
@@ -2713,7 +2923,7 @@ function toggleCartPromos() {
 }
 
 function cartTopHtml() {
-  const count = cart.reduce((n, i) => n + i.quantity, 0);
+  const count = cart.reduce((n, i) => n + i.quantity, 0) + (prizeInOrder()?.type === 'product' ? 1 : 0);
   const progress = cartProgressHtml();
   return `<div class="cart-head"><h2>Кошик <small>${count}</small></h2>
       <button type="button" class="link-btn danger" data-act="cart-clear">Очистити</button></div>
@@ -2737,11 +2947,15 @@ function cartSummaryHtml() {
   const pricing = getCartPricing();
   const qty = cart.reduce((n, i) => n + i.quantity, 0);
   const promo = pricing.promotionDiscount > 0 ? getBestPromotion(pricing.rawTotal)?.promo : null;
-  const rows = [`<div class="sum-row"><span>Товари (${qty})</span><b>${cartHasContractItems() ? (pricing.rawTotal ? `${money(pricing.rawTotal)} + узгодимо` : 'за домовленістю') : money(pricing.rawTotal)}</b></div>`];
+  const rows = cart.length ? [`<div class="sum-row"><span>Товари (${qty})</span><b>${cartHasContractItems() ? (pricing.rawTotal ? `${money(pricing.rawTotal)} + узгодимо` : 'за домовленістю') : money(pricing.rawTotal)}</b></div>`] : [];
   if (pricing.promotionDiscount > 0) rows.push(`<div class="sum-row g"><span>Акція${promo?.title ? ` «${escapeHtml(promo.title)}»` : ''}</span><b>−${money(pricing.promotionDiscount)}</b></div>`);
   if (appliedCoupon && pricing.couponDiscount > 0) rows.push(`<div class="sum-row g"><span>Промокод ${escapeHtml(appliedCoupon.code)}</span><b>−${money(pricing.couponDiscount)}</b></div>`);
   if (shouldShowGift() && selectedGift) rows.push(`<div class="sum-row g"><span>Подарунок: ${escapeHtml(selectedGift.name)}</span><b>0 ₴</b></div>`);
-  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'Самовивіз' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : 'За тарифами перевізника'}</b></div>`);
+  const prize = prizeInOrder();
+  if (prize?.type === 'product') rows.push(`<div class="sum-row g"><span>🎁 Приз: ${escapeHtml(prizeName(prize))}</span><b>0 ₴</b></div>`);
+  if (pricing.prizeDiscount > 0) rows.push(`<div class="sum-row g"><span>🎁 Сертифікат розіграшу</span><b>−${money(pricing.prizeDiscount)}</b></div>`);
+  const shipFree = prize?.shipping_payer === 'shop' ? 'безкоштовно · приз' : getFreeShipPromo(pricing.rawTotal) ? 'безкоштовно · акція' : '';
+  rows.push(`<div class="sum-row"><span>Доставка</span><b>${CHK.method === 'self' ? 'Самовивіз' : shipFree || 'За тарифами перевізника'}</b></div>`);
   // Рядок «Разом» живе в підвалі, тож тут лише розбивка
   return `<div class="sum-list"><div class="sum-inner">${rows.join('')}</div></div>`;
 }
@@ -2772,6 +2986,8 @@ function refreshCartExtras() {
   if (!top) return;
   top.innerHTML = cartTopHtml();
   document.getElementById('cart-gift-slot').innerHTML = giftRowHtml();
+  const prizeSlot = document.getElementById('cart-prize-slot');
+  if (prizeSlot) prizeSlot.innerHTML = prizeCardHtml();
 }
 
 function clearCart() {
@@ -2798,8 +3014,9 @@ function renderCart() {
   const totalEl = document.getElementById('cart-total');
 
   // Якщо в кошику немає товарів і немає товарів що очікують видалення — показуємо заглушку "кошик порожній"
-  if (!cart.length && !Object.keys(pendingRemovals).length) {
-    list.innerHTML = `
+  // (приз-сертифікат чи вимкнений приз лишається над нею; товар-приз сам по собі вже замовлення)
+  if (!cart.length && !Object.keys(pendingRemovals).length && !cartHasOrderable()) {
+    list.innerHTML = `${activePrize() ? `<div id="cart-prize-slot">${prizeCardHtml()}</div>` : ''}
       <div class="cart-empty">
         <div class="cart-empty-ico">🛒</div>
         <div class="cart-empty-title">Кошик порожній</div>
@@ -2832,9 +3049,11 @@ function renderCart() {
 
   const submitBtn = document.getElementById('cart-submit-btn');
   if (submitBtn && !isSubmitting) {
-    const defaultText = hasContract && getCartFixedTotal() === 0
-      ? '✓ Надіслати заявку'
-      : '✓ Оформити замовлення';
+    const defaultText = !cart.length && prizeInOrder()
+      ? '🎁 Оформити приз'
+      : hasContract && getCartFixedTotal() === 0
+        ? '✓ Надіслати заявку'
+        : '✓ Оформити замовлення';
     submitBtn.dataset.defaultText = defaultText;
     submitBtn.textContent = defaultText;
   }
@@ -2842,7 +3061,7 @@ function renderCart() {
   // Показуємо стару ціну з анімацією, якщо є знижка
   const oldPriceEl = document.getElementById('cartOldPrice');
   if (oldPriceEl) {
-    if (discount > 0) {
+    if (discount > 0 && rawTotal > 0) {
       oldPriceEl.querySelector('span').textContent = `${rawTotal} ₴`;
       oldPriceEl.classList.add('visible');
     } else {
@@ -2936,7 +3155,7 @@ function renderCart() {
     </div>
   `).join('');
 
-  list.innerHTML = `<div id="cart-top"></div><div id="cart-items">${itemsHtml}</div><div id="cart-gift-slot"></div>
+  list.innerHTML = `<div id="cart-top"></div><div id="cart-prize-slot"></div><div id="cart-items">${itemsHtml}</div><div id="cart-gift-slot"></div>
     <div id="cart-upsell">${cartUpsellHtml()}</div>`;
   refreshCartExtras();
   enhanceScrollers(document.getElementById('cart-upsell'));
@@ -4573,7 +4792,7 @@ function releaseCartMain() {
   cartMainHandler = null;
 }
 function syncCartMainButton() {
-  const want = useTgMainButton() && isCartPageActive() && cart.length > 0 && !isSheetOpen()
+  const want = useTgMainButton() && isCartPageActive() && cartHasOrderable() && !isSheetOpen()
     && !document.getElementById('success-screen').classList.contains('open');
   document.body.classList.toggle('cart-tg-main', !!want);
   if (!useTgMainButton() || isSheetOpen()) return;   // у картці товару кнопкою керує updateMainButton
@@ -4583,14 +4802,22 @@ function syncCartMainButton() {
     if (!cartMainHandler) { cartMainHandler = () => submitOrder(); mb.onClick(cartMainHandler); }
     const pricing = getCartPricing();
     const onlyContract = cartHasContractItems() && getCartFixedTotal() === 0;
-    const text = onlyContract ? 'Надіслати заявку' : `Оформити замовлення · ${money(pricing.finalTotal)}`;
+    const text = !cart.length ? '🎁 Оформити приз'
+      : onlyContract ? 'Надіслати заявку' : `Оформити замовлення · ${money(pricing.finalTotal)}`;
     mb.setParams({ text, color: MAIN_BLUE, text_color: '#FFFFFF', is_active: !isSubmitting, is_visible: true });
   } catch (_) {}
 }
 
 async function submitOrder() {
-  if (!cart.length || isSubmitting) return;
+  if (!cartHasOrderable() || isSubmitting) return;
   if (submitOrderPromise) return submitOrderPromise;
+  if (prizeNeedsVariant(prizeInOrder())) {
+    haptic('error');
+    showToast({ msg: 'Оберіть варіант призу', icon: 'alert', duration: 3200 });
+    renderCart();
+    document.getElementById('cart-prize-block')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
   const invalid = validateCheckout();
   if (invalid) { failCheckout(invalid); return; }
   const submitBtn = document.getElementById('cart-submit-btn');
@@ -4604,7 +4831,7 @@ async function submitOrder() {
 }
 
 async function submitOrderOnce() {
-  if (!cart.length || isSubmitting) return;
+  if (!cartHasOrderable() || isSubmitting) return;
   isSubmitting = true;
   if (!pendingIdempotencyKey) {
     pendingIdempotencyKey = (crypto.randomUUID && crypto.randomUUID())
@@ -4642,6 +4869,7 @@ async function submitOrderOnce() {
     comment:      comment,
     gift:         (shouldShowGift() && selectedGift) ? formatGiftForOrder() : null,
     gift_product_id: (shouldShowGift() && selectedGift) ? selectedGift.id : null,
+    prize:        prizeInOrder() ? { winner_id: prizeInOrder().winner_id, variant_id: prizeVariantId(prizeInOrder()) } : null,
     delivery_method: CHK.method,
     city:         ship ? CHK.city.trim() : '',
     city_ref:     ship ? CHK.cityRef : '',
@@ -4662,6 +4890,8 @@ async function submitOrderOnce() {
       delay(MIN_LOADING_MS),
     ]);
     const orderedIds = [...new Set(cart.map(i => i.id))];
+    const claimed = prizeInOrder();
+    if (claimed) PRIZES = PRIZES.filter(x => x.winner_id !== claimed.winner_id);
     pendingIdempotencyKey = null;
     cart = [];
     appliedCoupon = null;
@@ -4680,6 +4910,7 @@ async function submitOrderOnce() {
     // Текст помилки сервера (сума не збіглась, немає телефону…) корисніший за загальне «перевір зʼєднання»
     const msg = e instanceof TypeError ? "Не вдалось надіслати замовлення. Перевір з'єднання і спробуй ще раз." : (e.message || 'Не вдалось надіслати замовлення');
     showToast({ msg, icon: 'alert', duration: 4500 });
+    if (/приз/i.test(msg)) loadPrizes();
   } finally {
     isSubmitting = false;
     setOrderSubmitting(false);
@@ -5844,8 +6075,10 @@ function updateCartBadge() {
   const total = cart.reduce((s, i) => s + i.quantity, 0);
   const badge = document.getElementById('cart-badge');
   if (!badge) return;
-  badge.textContent = total;
-  badge.hidden = total <= 0;
+  const prize = activePrize();
+  if (total || !prize) badge.textContent = total;
+  else badge.innerHTML = ic('gift');
+  badge.hidden = total <= 0 && !prize;
 }
 function bumpCartBadge() {
   const badge = document.getElementById('cart-badge');
@@ -6535,6 +6768,8 @@ function renderSales() {
 // Що закриє «Назад» зараз: лайтбокс → картка товару (або попередній товар) → вибір подарунка → екран успіху → підекран каталогу
 function isOpenEl(id) { return !!document.getElementById(id)?.classList.contains('open'); }
 function backAction() {
+  if (isOpenEl('prize-share-backdrop')) return closePrizeShare;
+  if (isOpenEl('prize-win')) return closePrizeWin;
   if (isOpenEl('lightbox')) return closeLightbox;
   if (isSheetOpen()) return sheetBack;
   if (isOpenEl('review-backdrop')) return closeReviewForm;
@@ -6787,6 +7022,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     pendingCouponCode = couponLink[1].toUpperCase();
     showToast({ msg: `Промокод ${pendingCouponCode} застосую в кошику`, icon: 'tag' });
   }
+  // Приз розіграшу: вікно перемоги показується при кожному запуску, доки приз не оформлено;
+  // startapp=prize (кнопка в боті) — якщо приз уже недоступний, пояснюємо
+  const prizeStart = startParam === 'prize';
+  loadPrizes().then(prizes => {
+    if (prizes.length) showPrizeWins();
+    else if (prizeStart) showToast({ msg: 'Приз уже оформлено або його строк минув', icon: 'alert', duration: 4000 });
+  });
   const reviewLink = /^review_(\d+)(?:_([1-5]))?$/.exec(startParam || '');
   if (reviewLink) {
     REVIEW_DEEP = Number(reviewLink[1]);
@@ -6822,6 +7064,455 @@ document.addEventListener('keydown', e => {
 });
 });
 
+
+// ─── ПРИЗ РОЗІГРАШУ (GIVEAWAYS.md, «Видача призу») ───
+// Активні призи приходять з /my/prizes; кошик показує перший (найближчий дедлайн), замовлення
+// передає prize = {winner_id, variant_id}. Ціну призу сервер рахує сам.
+let PRIZES = [];
+const prizeVariant = {};    // winner_id -> обраний варіант (якщо розіграш його не зафіксував)
+const prizeExcluded = {};   // winner_id -> true: перемикач «Додати до цього замовлення» вимкнено
+let prizeWinQueue = [];
+let prizeShareFor = null;
+
+async function loadPrizes() {
+  try {
+    const data = await apiGet('/my/prizes');
+    PRIZES = Array.isArray(data?.prizes) ? data.prizes : [];
+  } catch (_) {
+    PRIZES = [];
+  }
+  updateCartBadge();
+  if (activePage === 'cart') renderCart();
+  return PRIZES;
+}
+
+function activePrize() {
+  const now = Date.now();
+  return PRIZES.find(p => !p.deadline || new Date(p.deadline).getTime() > now) || null;
+}
+// Приз, що піде в це замовлення (сертифікат — лише якщо є що оплачувати)
+function prizeInOrder() {
+  const p = activePrize();
+  if (!p || prizeExcluded[p.winner_id]) return null;
+  if (p.type === 'amount') return getCartPricing().prizeDiscount > 0 ? p : null;
+  return p;
+}
+function prizeVariantId(p) {
+  return p.variant ? p.variant.id : (prizeVariant[p.winner_id] || '');
+}
+function prizeNeedsVariant(p) {
+  return p && p.type === 'product' && !p.variant && p.variants.length > 0 && !prizeVariant[p.winner_id];
+}
+// Чи є що оформлювати: товари в кошику або товар-приз
+function cartHasOrderable() {
+  const p = prizeInOrder();
+  return cart.length > 0 || !!(p && p.type === 'product');
+}
+// Сертифікат: від суми після всіх знижок, різниця згорає (дзеркало services/validation.py)
+function prizeCertDiscount(p, afterDiscounts) {
+  return p && p.type === 'amount' ? Math.min(Number(p.value) || 0, Math.max(0, afterDiscounts)) : 0;
+}
+function prizeDisplayValue(p) {
+  if (p.type !== 'product') return p.value;
+  const v = p.variants.find(x => x.id === prizeVariant[p.winner_id]);
+  return v ? v.price : p.value;
+}
+function prizeName(p) {
+  if (p.type !== 'product') return `Сертифікат на ${money(p.value)}`;
+  const v = p.variant || p.variants.find(x => x.id === prizeVariant[p.winner_id]);
+  return p.product_name + (v ? ` · ${v.name}` : '');
+}
+function prizeShipText(p, short = false) {
+  if (p.shipping_payer === 'shop') return short ? 'Доставку оплачуємо ми' : '🚚 Доставку всієї посилки оплачуємо ми';
+  return short ? 'Доставка за тарифами перевізника' : '🚚 Доставка — за тарифами перевізника';
+}
+function prizeTimeLeft(p) {
+  const ms = new Date(p.deadline).getTime() - Date.now();
+  if (!(ms > 0)) return '00:00:00';
+  const s = Math.floor(ms / 1000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+}
+function prizeThumbHtml(p, w = 160) {
+  return p.photo
+    ? `<img src="${escapeAttr(photo(p.photo, { w }))}" alt="" decoding="async" crossorigin="anonymous">`
+    : '🎁';
+}
+
+// Закріплений блок у кошику: прибрати не можна, лише вимкнути для цього замовлення
+function prizeCardHtml() {
+  const p = activePrize();
+  if (!p) return '';
+  const id = p.winner_id;
+  const off = !!prizeExcluded[id];
+  const more = PRIZES.length - 1;
+  const timer = `<span class="pc-timer">⏳ <span data-prize-timer>${prizeTimeLeft(p)}</span></span>`;
+  let body;
+  if (p.type === 'product') {
+    const chosen = prizeVariant[id];
+    const variants = !p.variant && p.variants.length
+      ? `<div class="pc-variants${prizeNeedsVariant(p) ? ' need' : ''}" role="radiogroup" aria-label="Варіант призу">${p.variants.map(v =>
+        `<button type="button" role="radio" aria-checked="${chosen === v.id}" class="${chosen === v.id ? 'on' : ''}"
+          onclick="selectPrizeVariant(${id}, '${escapeAttr(v.id)}')">${escapeHtml(v.name)}</button>`).join('')}</div>` : '';
+    body = `<div class="pc-body">
+        <button type="button" class="pc-th" onclick="openModal(${p.product_id}, 'products')" aria-label="Переглянути ${escapeAttr(p.product_name)}">${prizeThumbHtml(p)}</button>
+        <div class="pc-info"><b>${escapeHtml(prizeName(p))}</b>
+          <div class="pc-price"><s>${money(prizeDisplayValue(p))}</s><span class="free">0 ₴</span></div>
+          <div class="pc-note">${prizeNeedsVariant(p) ? 'Оберіть варіант 👇' : escapeHtml(prizeShipText(p, true))}</div></div>
+      </div>${variants}`;
+  } else {
+    body = `<div class="pc-body">
+        <div class="pc-th cert">Серти-<br>фікат</div>
+        <div class="pc-info"><b>Сертифікат −${money(p.value)}</b>
+          <div class="pc-note">${cart.length ? 'Застосовано до замовлення автоматично.' : 'Додайте товари — сертифікат застосується сам.'}
+            Якщо замовлення дешевше, різниця згорає. ${escapeHtml(prizeShipText(p, true))}.</div></div>
+      </div>`;
+  }
+  return `<div class="prize-card${off ? ' off' : ''}" id="cart-prize-block">
+    <div class="pc-head"><span class="pc-tag">🎁 Ваш приз</span>${timer}</div>
+    ${body}
+    <label class="pc-foot"><span>Додати до цього замовлення</span>
+      <span class="pc-switch"><input type="checkbox" ${off ? '' : 'checked'} onchange="togglePrizeInOrder(${id}, this.checked)"
+        aria-label="Додати приз до цього замовлення"><span></span></span></label>
+    ${more > 0 ? `<div class="pc-more">Ще ${more} ${plural(more, 'приз чекає', 'призи чекають', 'призів чекають')} — оформіть наступним замовленням</div>` : ''}
+  </div>`;
+}
+
+function selectPrizeVariant(winnerId, variantId) {
+  prizeVariant[winnerId] = variantId;
+  haptic('select');
+  renderCart();
+}
+function togglePrizeInOrder(winnerId, on) {
+  prizeExcluded[winnerId] = !on;
+  haptic('select');
+  renderCart();
+}
+
+// Таймери призу: раз на секунду; приз, строк якого минув, зникає
+setInterval(() => {
+  const els = document.querySelectorAll('[data-prize-timer]');
+  if (!els.length) return;
+  const p = activePrize() || prizeWinQueue[0];
+  if (!p) return;
+  els.forEach(el => { el.textContent = prizeTimeLeft(el.closest('#prize-win') ? prizeWinQueue[0] || p : p); });
+  if (PRIZES.some(x => new Date(x.deadline).getTime() <= Date.now())) {
+    PRIZES = PRIZES.filter(x => new Date(x.deadline).getTime() > Date.now());
+    updateCartBadge();
+    if (activePage === 'cart') renderCart();
+  }
+}, 1000);
+
+// ── Вікно перемоги: при кожному запуску, доки приз не оформлено ──
+function showPrizeWins() {
+  prizeWinQueue = PRIZES.slice();
+  if (prizeWinQueue.length) openPrizeWin(prizeWinQueue[0]);
+}
+function openPrizeWin(p) {
+  const win = document.getElementById('prize-win');
+  const ph = document.getElementById('pw-photo');
+  if (p.type === 'product') {
+    ph.className = 'pw-photo';
+    ph.innerHTML = prizeThumbHtml(p, 400);
+  } else {
+    ph.className = 'pw-photo cert';
+    ph.innerHTML = `<small>Сертифікат</small><b>${money(p.value)}</b>`;
+  }
+  document.getElementById('pw-title').textContent = prizeName(p);
+  // Назва розіграшу — лише якщо вона не повторює назву призу
+  const same = (p.giveaway_title || '').trim().toLowerCase() === prizeName(p).trim().toLowerCase();
+  document.getElementById('pw-sub').textContent = p.giveaway_title && !same ? `Розіграш «${p.giveaway_title}»` : 'у розіграші Poselyanov 3D Print';
+  document.getElementById('pw-timer').textContent = prizeTimeLeft(p);
+  document.getElementById('pw-ship').textContent = prizeShipText(p);
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  win.classList.remove('play', 'still');
+  void win.offsetWidth;
+  win.classList.add('open', still ? 'still' : 'play');
+  hydrateIcons(win);
+  updateBackButton();
+  if (!still) {
+    setTimeout(() => haptic('medium'), 300);
+    setTimeout(() => { haptic('success'); prizeConfetti(); }, 1000);
+  }
+}
+function closePrizeWin() {
+  const win = document.getElementById('prize-win');
+  win.classList.remove('open', 'play', 'still');
+  prizeWinQueue.shift();
+  updateBackButton();
+  if (prizeWinQueue.length) setTimeout(() => openPrizeWin(prizeWinQueue[0]), 250);
+}
+function claimPrizeFromWin() {
+  const p = prizeWinQueue[0];
+  prizeWinQueue = [];
+  document.getElementById('prize-win').classList.remove('open', 'play', 'still');
+  if (p) {
+    // Обраний у вікні приз — перший у кошику
+    PRIZES = [p, ...PRIZES.filter(x => x.winner_id !== p.winner_id)];
+    prizeExcluded[p.winner_id] = false;
+  }
+  haptic('light');
+  switchPage('cart');
+  updateBackButton();
+  requestAnimationFrame(() => document.getElementById('cart-prize-block')?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+}
+
+// Конфеті без бібліотек: один вибух з центру, ~2.5 с
+function prizeConfetti() {
+  const cv = document.getElementById('pw-confetti');
+  if (!cv || !cv.getContext) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const colors = ['#FFD666', '#FF7A1A', '#E0459B', '#7C5CFF', '#2AABEE', '#1F9D55', '#FFFFFF'];
+  const parts = Array.from({ length: 150 }, () => {
+    const a = Math.random() * Math.PI * 2;
+    const v = 6 + Math.random() * 9;
+    return {
+      x: W / 2, y: H * 0.36, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 6,
+      w: 6 + Math.random() * 6, h: 4 + Math.random() * 6, r: Math.random() * 6, vr: (Math.random() - .5) * .4,
+      c: colors[(Math.random() * colors.length) | 0],
+    };
+  });
+  const t0 = performance.now();
+  const step = now => {
+    const t = now - t0;
+    ctx.clearRect(0, 0, W, H);
+    parts.forEach(q => {
+      q.vy += 0.32; q.vx *= 0.985; q.vy *= 0.985;
+      q.x += q.vx; q.y += q.vy; q.r += q.vr;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - t / 2600);
+      ctx.translate(q.x, q.y); ctx.rotate(q.r);
+      ctx.fillStyle = q.c;
+      ctx.fillRect(-q.w / 2, -q.h / 2, q.w, q.h * Math.abs(Math.cos(q.r * 1.7)));
+      ctx.restore();
+    });
+    if (t < 2600 && document.getElementById('prize-win').classList.contains('open')) requestAnimationFrame(step);
+    else ctx.clearRect(0, 0, W, H);
+  };
+  requestAnimationFrame(step);
+}
+
+// ── Поділитися: листівка 1080×1920 (сторіс, повідомлення, галерея) ──
+function loadImageCors(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function wrapLines(ctx, text, maxW, maxLines) {
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxW && line) {
+      lines.push(line);
+      line = w;
+    } else line = test;
+  }
+  if (line) lines.push(line);
+  if (lines.length > maxLines) {
+    lines.length = maxLines;
+    lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, '') + '…';
+  }
+  return lines;
+}
+async function drawPrizeCard(p) {
+  const W = 1080, H = 1920;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  try { await document.fonts?.ready; } catch (_) {}
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#FF7A1A'); bg.addColorStop(.55, '#E0459B'); bg.addColorStop(1, '#7C5CFF');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,.12)';
+  [[900, 220, 260], [120, 1700, 220], [980, 1500, 120], [160, 420, 90]].forEach(([x, y, r]) => {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  });
+  // Конфеті-крапки
+  const dots = ['#FFD666', '#FFFFFF', '#2AABEE', '#7C5CFF'];
+  for (let i = 0; i < 46; i++) {
+    ctx.fillStyle = dots[i % dots.length];
+    ctx.globalAlpha = .55;
+    ctx.save();
+    ctx.translate((i * 397) % W, 120 + ((i * 613) % 360) + (i % 2 ? 1380 : 0));
+    ctx.rotate(i);
+    ctx.fillRect(-9, -5, 18, 10);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '700 44px Inter, system-ui, sans-serif';
+  ctx.fillText('POSELYANOV 3D PRINT', W / 2, 190);
+  ctx.font = '900 104px Inter, system-ui, sans-serif';
+  ctx.fillText('Я виграв(-ла)! 🎉', W / 2, 330);
+
+  const S = 760, X = (W - S) / 2, Y = 430;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24;
+  roundRectPath(ctx, X - 16, Y - 16, S + 32, S + 32, 64);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  roundRectPath(ctx, X, Y, S, S, 50);
+  ctx.clip();
+  let drawn = false;
+  if (p.type === 'product' && p.photo) {
+    try {
+      const img = await loadImageCors(photo(p.photo, { w: 900 }));
+      const k = Math.max(S / img.width, S / img.height);
+      ctx.drawImage(img, X + (S - img.width * k) / 2, Y + (S - img.height * k) / 2, img.width * k, img.height * k);
+      drawn = true;
+    } catch (_) { /* фото без CORS — малюємо заставку */ }
+  }
+  if (!drawn) {
+    const g = ctx.createLinearGradient(X, Y, X + S, Y + S);
+    g.addColorStop(0, '#FFF0E3'); g.addColorStop(1, '#EEEAFF');
+    ctx.fillStyle = g;
+    ctx.fillRect(X, Y, S, S);
+    ctx.fillStyle = '#C02E80';
+    if (p.type === 'product') {
+      ctx.font = '300px system-ui, sans-serif';
+      ctx.fillText('🎁', W / 2, Y + S / 2 + 105);
+    } else {
+      ctx.font = '800 64px Inter, system-ui, sans-serif';
+      ctx.fillText('СЕРТИФІКАТ', W / 2, Y + S / 2 - 50);
+      ctx.font = '900 170px Inter, system-ui, sans-serif';
+      ctx.fillText(money(p.value), W / 2, Y + S / 2 + 120);
+    }
+  }
+  ctx.restore();
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '900 72px Inter, system-ui, sans-serif';
+  const lines = wrapLines(ctx, prizeName(p), W - 160, 2);
+  lines.forEach((l, i) => ctx.fillText(l, W / 2, 1340 + i * 86));
+  ctx.font = '600 42px Inter, system-ui, sans-serif';
+  ctx.globalAlpha = .9;
+  const sub = p.giveaway_title ? `у розіграші «${p.giveaway_title}»` : 'у розіграші';
+  wrapLines(ctx, sub, W - 200, 2).forEach((l, i) => ctx.fillText(l, W / 2, 1340 + lines.length * 86 + 20 + i * 54));
+  ctx.globalAlpha = 1;
+
+  const tag = (p.channel_url || '').replace(/^https:\/\//, '') || 'Розіграші щомісяця';
+  ctx.font = '800 46px Inter, system-ui, sans-serif';
+  const tw = ctx.measureText(tag).width + 100;
+  roundRectPath(ctx, (W - tw) / 2, 1700, tw, 96, 48);
+  ctx.fillStyle = 'rgba(255,255,255,.95)';
+  ctx.fill();
+  ctx.fillStyle = '#C02E80';
+  ctx.fillText(tag, W / 2, 1764);
+  return new Promise(resolve => cv.toBlob(resolve, 'image/jpeg', 0.9));
+}
+
+async function uploadPrizeCard(p, blob) {
+  const fd = new FormData();
+  fd.append('winner_id', String(p.winner_id));
+  fd.append('file', blob, `prize_${p.winner_id}.jpg`);
+  const headers = { 'ngrok-skip-browser-warning': '1' };
+  const initData = window.Telegram?.WebApp?.initData;
+  if (initData) headers['X-Telegram-Init-Data'] = initData;
+  const res = await fetch(API_BASE + '/my/prize-card', { method: 'POST', headers, body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.url) throw new Error(data.error || 'upload_failed');
+  return data.url;
+}
+
+function tgAtLeast(v) {
+  const t = tgApp();
+  return inTelegram() && !!t?.isVersionAtLeast?.(v);
+}
+function prizeShareActions(p) {
+  const t = tgApp();
+  const out = [];
+  if (t?.shareToStory && tgAtLeast('7.8')) out.push({ act: 'story', ic: '📸', label: 'В історію Telegram', sub: 'Листівка з посиланням на канал' });
+  if (t?.shareMessage && tgAtLeast('8.0')) out.push({ act: 'message', ic: '💬', label: 'Надіслати друзям', sub: 'Повідомлення з листівкою' });
+  out.push({ act: 'save', ic: '⬇️', label: 'Зберегти картинку', sub: 'У галерею телефону' });
+  return out;
+}
+async function openPrizeShare() {
+  const p = prizeWinQueue[0] || activePrize();
+  if (!p) return;
+  prizeShareFor = { p, blob: null, localUrl: '', ready: null };
+  const prev = document.getElementById('ps-preview');
+  prev.innerHTML = '<div class="ps-wait">Готуємо листівку…</div>';
+  document.getElementById('ps-list').innerHTML = prizeShareActions(p).map(a =>
+    `<button type="button" disabled data-ps="${a.act}" onclick="prizeShareDo('${a.act}')"><span class="ps-ic">${a.ic}</span>
+      <span>${a.label}<small>${a.sub}</small></span></button>`).join('');
+  document.getElementById('prize-share-backdrop').classList.add('open');
+  updateBackButton();
+  const state = prizeShareFor;
+  state.ready = (async () => {
+    state.blob = await drawPrizeCard(p);
+    state.localUrl = URL.createObjectURL(state.blob);
+    if (prizeShareFor === state) prev.innerHTML = `<img src="${state.localUrl}" alt="Листівка з призом">`;
+    if (!p.card_url && tgApp()?.initData) {
+      try { p.card_url = await uploadPrizeCard(p, state.blob); } catch (_) { /* лишається «Зберегти» локально */ }
+    }
+  })();
+  try { await state.ready; } catch (_) {}
+  if (prizeShareFor !== state) return;
+  document.querySelectorAll('#ps-list [data-ps]').forEach(b => {
+    b.disabled = b.dataset.ps !== 'save' && !p.card_url;
+  });
+}
+function closePrizeShare() {
+  document.getElementById('prize-share-backdrop').classList.remove('open');
+  if (prizeShareFor?.localUrl) setTimeout(() => URL.revokeObjectURL(prizeShareFor?.localUrl || ''), 1000);
+  prizeShareFor = null;
+  updateBackButton();
+}
+async function prizeShareDo(act) {
+  const st = prizeShareFor;
+  if (!st) return;
+  const { p } = st;
+  const t = tgApp();
+  haptic('light');
+  try {
+    if (act === 'story' && p.card_url) {
+      const text = `Мій приз з розіграшу Poselyanov 3D Print 🎁${p.channel_url ? ' ' + p.channel_url : ''}`;
+      const params = { text: text.slice(0, 200) };
+      if (p.channel_url && t?.initDataUnsafe?.user?.is_premium) params.widget_link = { url: p.channel_url, name: 'Розіграші' };
+      t.shareToStory(p.card_url, params);
+    } else if (act === 'message' && p.card_url) {
+      const r = await apiPost('/my/share-prize', { winner_id: p.winner_id });
+      if (r?.ok && r.id) t.shareMessage(r.id);
+    } else if (act === 'save') {
+      if (p.card_url && t?.downloadFile && tgAtLeast('8.0')) {
+        t.downloadFile({ url: p.card_url, file_name: 'my-prize.jpg' });
+      } else if (st.blob) {
+        const a = document.createElement('a');
+        a.href = st.localUrl;
+        a.download = 'my-prize.jpg';
+        document.body.append(a);
+        a.click();
+        a.remove();
+      }
+    }
+  } catch (_) {
+    showToast({ msg: 'Не вдалось поділитися — спробуй ще раз', icon: 'alert' });
+  }
+}
+
 /// ─── КУПОНИ ───────────────────────────────────────────────
 let appliedCoupon = null; // { code, type, value, discount, stackable }
 
@@ -6851,6 +7542,10 @@ function updateCouponHint() {
   if (!hintEl) return;
   if (!appliedCoupon) {
     hintEl.textContent = '';
+    return;
+  }
+  if (appliedCoupon.productId && !cartProductUnitPrice(appliedCoupon.productId)) {
+    hintEl.textContent = '🎁 Купон діє лише на товар-приз — поверніть його в кошик.';
     return;
   }
   const rawTotal = getCartFixedTotal();
@@ -6912,7 +7607,8 @@ async function applyCoupon() {
   const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0;
 
   try {
-    const data = await apiPost('/check_coupon', { code, user_id: userId, cart_total: cartTotal });
+    const items = cart.map(i => ({ product_id: i.id, price: i.contractPrice ? 0 : i.price }));
+    const data = await apiPost('/check_coupon', { code, user_id: userId, cart_total: cartTotal, items });
 
     if (data.valid) {
       appliedCoupon = {
@@ -6921,6 +7617,7 @@ async function applyCoupon() {
         value: data.value,
         discount: data.discount,
         stackable: !!data.stacks_with_promotion,
+        productId: Number(data.product_id) || 0,
       };
       statusEl.textContent = data.message;
       statusEl.className = 'coupon-status success';

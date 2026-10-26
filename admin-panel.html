@@ -2540,6 +2540,23 @@
         .bc-btn-line { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
         .bc-actions { display: flex; justify-content: flex-end; }
         .bc-empty { text-align: center; padding: 40px 16px; color: var(--text-muted); background: var(--bg-card); border: 1px dashed var(--border-alt); border-radius: 14px; grid-column: 1 / -1; }
+        .bc-chip.drawn { background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--amber); }
+        .bc-chip.published { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
+        .gw-title { font-size: 15px; font-weight: 800; overflow-wrap: anywhere; }
+        .gw-meta { font-size: 12px; color: var(--text-secondary); display: grid; gap: 2px; }
+        .gw-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .gw-winners { display: grid; gap: 6px; }
+        .gw-winners h4 { font-size: 12px; font-weight: 800; color: var(--text-muted); margin: 0; }
+        .gw-win { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--bg-section); border-radius: 10px; padding: 8px 10px; font-size: 13px; min-width: 0; }
+        .gw-win.replaced { opacity: .55; text-decoration: line-through; }
+        .gw-win .who { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+        .gw-win .who small { color: var(--text-muted); }
+        .gw-win .st { font-size: 11px; font-weight: 800; white-space: nowrap; }
+        .gw-win .st.ok { color: var(--green); }
+        .gw-win .st.warn { color: var(--sale); }
+        .gw-win .btn { padding: 5px 10px; font-size: 12px; }
+        .bc-actions.gw-actions { flex-wrap: wrap; gap: 8px; }
+        @media (max-width: 480px) { .gw-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         .tg-bubble { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px 14px 14px 4px; overflow: hidden; max-width: 300px; }
         .tg-bubble img { width: 100%; display: block; max-height: 220px; object-fit: cover; }
         .tg-bubble .tg-t { padding: 8px 12px 10px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -3096,6 +3113,7 @@
                 <button class="page-tab sb-item" type="button" data-page="coupons" onclick="switchPage('coupons'); toggleSidebar(false)"><span class="sb-ico" data-icon="coupons" style="display:contents"></span>Купони</button>
                 <button class="page-tab sb-item" type="button" data-page="users" onclick="switchPage('users'); toggleSidebar(false)"><span class="sb-ico" data-icon="users" style="display:contents"></span>Клієнти</button>
                 <button class="page-tab sb-item" type="button" data-page="broadcasts" onclick="switchPage('broadcasts'); toggleSidebar(false)"><span class="sb-ico" data-icon="broadcasts" style="display:contents"></span>Розсилки</button>
+                <button class="page-tab sb-item" type="button" data-page="giveaways" onclick="switchPage('giveaways'); toggleSidebar(false)"><span class="sb-ico" data-icon="giveaways" style="display:contents"></span>Розіграші<span class="sb-count" id="navCountGiveaways"></span></button>
                 <button class="page-tab sb-item" type="button" data-page="reviews" onclick="switchPage('reviews'); toggleSidebar(false)"><span class="sb-ico" data-icon="reviews" style="display:contents"></span>Відгуки<span class="sb-count" id="navCountReviews"></span></button>
             </nav>
             <div class="sb-foot">
@@ -3321,6 +3339,17 @@
                 </div>
                 <div class="form-hint" style="margin-bottom:12px;">«Перейшли» — клієнти, що відкрили магазин кнопкою розсилки. «Замовлень» — їхні замовлення (підтверджено…доставлено) протягом 7 днів після переходу.</div>
                 <div id="bcList" class="bc-list"></div>
+            </section>
+
+            <section id="giveawaysPage" class="page-section">
+                <div class="orders-toolbar">
+                    <h2>🎁 Розіграші <span id="gwCountTotal" class="orders-count"></span></h2>
+                    <div class="orders-toolbar-right">
+                        <button class="btn btn-secondary" type="button" onclick="loadGiveaways()">🔄 Оновити</button>
+                    </div>
+                </div>
+                <div class="form-hint" style="margin-bottom:12px;">Участь — кнопкою під постом у каналі, бот перевіряє підписку. У призначений час бот сам проводить жеребкування (повторно перевіряє підписку) і пише вам; результати йдуть у канал після «Опублікувати». Приз сам з'являється в кошику переможця (без кодів) на 48 годин; бот нагадує за 24 і за 3 години, а коли строк мине — запитає вас, перекинути приз чи подовжити.</div>
+                <div id="gwList" class="bc-list"></div>
             </section>
 
             <section id="categoriesPage" class="page-section">
@@ -4145,6 +4174,119 @@
         </div>
     </div>
 
+    <div id="giveawayModal" class="modal">
+        <div class="modal-content dr dr-wide">
+            <div class="dr-head">
+                <span>🎁 Новий розіграш</span>
+                <button class="btn btn-secondary dr-close" type="button" onclick="closeGiveawayModal()" aria-label="Закрити">✕</button>
+            </div>
+            <form id="giveawayForm" class="dr-form" novalidate>
+                <div class="dr-body">
+                    <div class="dr-grid">
+                        <div class="dr-main">
+                            <section class="dr-sec">
+                                <h3>Приз</h3>
+                                <div id="gwTypeSeg" class="col-seg">
+                                    <button type="button" data-v="product" onclick="gwSetSeg('gwTypeSeg', 'product')">🎁 Товар безкоштовно</button>
+                                    <button type="button" data-v="amount" onclick="gwSetSeg('gwTypeSeg', 'amount')">💸 Сума на замовлення</button>
+                                </div>
+                                <div class="form-group required" id="gwProductWrap">
+                                    <label for="gwProduct" id="gwProductLabel">Товар</label>
+                                    <select id="gwProduct" onchange="gwProductChanged()"></select>
+                                    <div class="form-error">Обери товар-приз</div>
+                                    <div class="form-hint" id="gwProductHint"></div>
+                                </div>
+                                <div class="form-group" id="gwVariantWrap" style="display:none;">
+                                    <label for="gwVariant">Варіант призу</label>
+                                    <select id="gwVariant" onchange="gwProductChanged()"></select>
+                                    <div class="form-hint">«Обирає переможець» — будь-який варіант з ціною; або зафіксуйте конкретний розмір чи колір.</div>
+                                </div>
+                                <div class="form-group required" id="gwTitleWrap" style="display:none;">
+                                    <label for="gwTitle">Назва призу</label>
+                                    <input type="text" id="gwTitle" maxlength="100" placeholder="Напр.: Сертифікат на 300 ₴" autocomplete="off" oninput="this.closest('.form-group').classList.remove('has-error'); gwField()">
+                                    <div class="form-error">Вкажи назву призу</div>
+                                </div>
+                                <div class="dr-row keep-2">
+                                    <div class="form-group required" id="gwValueWrap">
+                                        <label for="gwValue">Сума, ₴</label>
+                                        <input type="number" id="gwValue" min="1" step="1" inputmode="numeric" oninput="this.closest('.form-group').classList.remove('has-error'); gwField()">
+                                        <div class="form-error">Вкажи суму</div>
+                                    </div>
+                                    <div class="form-group required">
+                                        <label for="gwWinners">Переможців</label>
+                                        <input type="number" id="gwWinners" min="1" max="20" step="1" value="1" inputmode="numeric" oninput="this.closest('.form-group').classList.remove('has-error'); gwField()">
+                                        <div class="form-error">Від 1 до 20</div>
+                                    </div>
+                                </div>
+                                <div class="form-hint" id="gwPrizeHint"></div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Умови</h3>
+                                <div class="form-group required">
+                                    <label for="gwEnds">Завершення (ваш часовий пояс)</label>
+                                    <input type="datetime-local" id="gwEnds" oninput="this.closest('.form-group').classList.remove('has-error'); gwField()">
+                                    <div class="form-error">Щонайменше через 5 хвилин і не далі ніж за 90 днів</div>
+                                </div>
+                                <div class="form-group required">
+                                    <label for="gwChannel">Канал, на який треба підписатися</label>
+                                    <input type="text" id="gwChannel" placeholder="@channel" autocomplete="off" oninput="this.closest('.form-group').classList.remove('has-error'); gwField()">
+                                    <div class="form-error">Вкажи канал</div>
+                                    <div class="form-hint">Сюди ж піде пост. Бот має бути адміном каналу.</div>
+                                </div>
+                                <label>Доставку оплачує</label>
+                                <div id="gwPayerSeg" class="col-seg">
+                                    <button type="button" data-v="winner" onclick="gwSetSeg('gwPayerSeg', 'winner')">Переможець</button>
+                                    <button type="button" data-v="shop" onclick="gwSetSeg('gwPayerSeg', 'shop')">Магазин</button>
+                                </div>
+                                <label>Бонус за друзів</label>
+                                <div id="gwBonusSeg" class="col-seg">
+                                    <button type="button" data-v="off" onclick="gwSetSeg('gwBonusSeg', 'off')">Без бонусів</button>
+                                    <button type="button" data-v="on" onclick="gwSetSeg('gwBonusSeg', 'on')">+1 шанс за друга</button>
+                                </div>
+                                <div class="form-group" id="gwLimitWrap" style="display:none;">
+                                    <label for="gwLimit">Максимум бонусних шансів</label>
+                                    <input type="number" id="gwLimit" min="1" max="50" step="1" value="5" inputmode="numeric" oninput="this.closest('.form-group').classList.remove('has-error'); gwField()">
+                                    <div class="form-error">Від 1 до 50</div>
+                                    <div class="form-hint">Друг зараховується, якщо він новий у боті, сам узяв участь і підписаний на момент жеребкування.</div>
+                                </div>
+                            </section>
+
+                            <section class="dr-sec">
+                                <h3>Пост у канал</h3>
+                                <div class="form-group required">
+                                    <textarea id="gwText" rows="7" maxlength="900" placeholder="Текст поста" oninput="this.closest('.form-group').classList.remove('has-error'); gwTextTouched = true; gwField()"></textarea>
+                                    <div class="form-error">Напиши текст поста</div>
+                                    <div class="form-hint" id="gwTextCount">0 / 900 · рядок з датою підсумків бот додасть сам</div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Фото <span class="dr-badge">за бажанням</span></label>
+                                    <div class="cp-add-row">
+                                        <input type="file" id="gwPhotoFile" accept="image/*" style="display:none;" onchange="gwUploadPhoto(this)">
+                                        <button type="button" class="btn btn-secondary" id="gwPhotoBtn" onclick="document.getElementById('gwPhotoFile').click()">📷 Завантажити</button>
+                                        <input type="url" id="gwPhoto" placeholder="або https-посилання на фото" autocomplete="off" oninput="gwField()">
+                                    </div>
+                                    <div class="form-hint">Без фото — перше фото товару.</div>
+                                </div>
+                                <label class="ap-check" style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="gwPin"> Закріпити пост у каналі</label>
+                            </section>
+                        </div>
+
+                        <aside class="dr-preview" aria-label="Так виглядає в Telegram">
+                            <div class="dr-prev-title">Так виглядає в каналі</div>
+                            <div id="gwPreview"></div>
+                        </aside>
+                    </div>
+                </div>
+                <div class="dr-foot">
+                    <span id="gwDirty" class="dr-dirty" role="status">Без змін</span>
+                    <button type="button" class="btn btn-secondary" onclick="closeGiveawayModal()">Скасувати</button>
+                    <button type="submit" class="btn btn-primary" id="gwSubmitBtn">🎁 Опублікувати розіграш</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="broadcastModal" class="modal">
         <div class="modal-content dr dr-wide">
             <div class="dr-head">
@@ -4693,6 +4835,10 @@
                 btn.textContent = '➕ Нова розсилка';
                 btn.onclick = openBroadcastModal;
                 btn.style.display = 'inline-flex';
+            } else if (currentPage === 'giveaways') {
+                btn.textContent = '➕ Новий розіграш';
+                btn.onclick = openGiveawayModal;
+                btn.style.display = 'inline-flex';
             } else if (currentPage === 'orders') {
                 btn.textContent = '➕ Замовлення вручну';
                 btn.onclick = openManualOrderModal;
@@ -4779,6 +4925,7 @@
             if (page === 'collections') loadCollections();
             if (page === 'reviews') loadReviews();
             if (page === 'broadcasts') loadBroadcasts();
+            if (page === 'giveaways') loadGiveaways();
             if (page === 'ai') loadAiSuggestions();
         }
 
@@ -5473,7 +5620,7 @@
         const PAGE_TITLES = {
             overview: 'Огляд', orders: 'Замовлення', queue: 'Черга друку', products: 'Товари', categories: 'Категорії', collections: 'Добірки',
             filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', reviews: 'Відгуки', users: 'Клієнти', broadcasts: 'Розсилки',
-            ai: 'Пропозиції ШІ',
+            giveaways: 'Розіграші', ai: 'Пропозиції ШІ',
         };
 
         const NAV_ICON_PATHS = {
@@ -5489,6 +5636,7 @@
             reviews: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/>',
             users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 3.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-4-6.3"/>',
             broadcasts: '<path d="m3 11 18-8v18l-18-8Z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+            giveaways: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
             ai: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/>',
             fullscreen: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
             search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -12165,6 +12313,382 @@
             }
         }
         document.getElementById('broadcastForm').addEventListener('submit', submitBroadcast);
+
+        // ═══════════════════════════════════════════════════════════
+        // Розіграші (GIVEAWAYS.md)
+        // ═══════════════════════════════════════════════════════════
+        let allGiveaways = [];
+        let gwDefaultChannel = '';
+        let gwSnapshot = null;
+        let gwTextTouched = false;
+        const GW_STATUS = { active: 'Триває', drawing: 'Жеребкування…', drawn: 'Чекає публікації', published: 'Опубліковано', cancelled: 'Скасовано' };
+
+        function gwChannelUrl(channel, messageId) {
+            if (!channel || !messageId) return '';
+            if (/^-100\d+$/.test(channel)) return `https://t.me/c/${channel.slice(4)}/${messageId}`;
+            return `https://t.me/${channel.replace(/^@/, '')}/${messageId}`;
+        }
+
+        async function loadGiveaways() {
+            try {
+                const res = await fetch(API_BASE + '/admin/giveaways');
+                if (!res.ok) throw new Error('Не вдалося завантажити розіграші');
+                const data = await res.json();
+                allGiveaways = data.giveaways || [];
+                gwDefaultChannel = data.channel || '';
+                renderGiveaways();
+            } catch (e) {
+                showToast(e.message || 'Помилка завантаження', 'error');
+            }
+        }
+
+        function gwWinnerRow(g, w) {
+            const who = `${escapeHtml(w.name || 'Учасник')}${w.username ? ` <small>${escapeHtml(w.username)}</small>` : ''} <small>№${w.number} · id ${w.user_id}</small>`;
+            let st = '';
+            if (w.status === 'replaced') st = '<span class="st">Замінено</span>';
+            else if (w.claimed) st = `<span class="st ok">✅ Оформлено${w.order_id ? ` · №${w.order_id}` : ''}</span>`;
+            else if (w.expired) st = '<span class="st warn">⏰ Час минув</span>';
+            else if (w.status === 'notified') st = `<span class="st">🎁 Чекає в кошику · до ${escapeHtml(bcDateLabel(w.claim_deadline))}</span>`;
+            else if (w.role === 'reserve') st = '<span class="st">Резерв</span>';
+            else st = '<span class="st">Ще не сповіщено</span>';
+            const canReroll = w.role === 'winner' && !w.claimed && (w.status === 'pending' || w.status === 'notified')
+                && (g.status === 'drawn' || g.status === 'published');
+            const canExtend = w.role === 'winner' && !w.claimed && w.status === 'notified';
+            const btn = (canExtend ? `<button class="btn btn-secondary" type="button" onclick="extendGiveawayWinner(${g.id}, ${w.id})">⏳ +24 год</button>` : '')
+                + (canReroll ? `<button class="btn ${w.expired ? 'btn-primary' : 'btn-secondary'}" type="button" onclick="rerollGiveawayWinner(${g.id}, ${w.id})">🔄 Перекинути</button>` : '');
+            return `<div class="gw-win ${w.status === 'replaced' ? 'replaced' : ''}"><span class="who">${w.role === 'winner' ? `🏆 ${w.position}. ` : ''}${who}</span>${st}${btn}</div>`;
+        }
+
+        function renderGiveaways() {
+            const el = document.getElementById('gwList');
+            const total = document.getElementById('gwCountTotal');
+            if (total) total.textContent = allGiveaways.length ? `(${allGiveaways.length})` : '';
+            const waiting = allGiveaways.filter(g => g.status === 'drawn').length;
+            const nav = document.getElementById('navCountGiveaways');
+            if (nav) nav.textContent = waiting ? String(waiting) : '';
+            if (!allGiveaways.length) {
+                el.innerHTML = '<div class="bc-empty">Розіграшів ще не було. Натисни «Новий розіграш».</div>';
+                return;
+            }
+            el.innerHTML = allGiveaways.map(g => {
+                const s = g.stats || {};
+                const winners = (g.winners || []).filter(w => w.role === 'winner');
+                const reserve = (g.winners || []).filter(w => w.role === 'reserve' && w.status === 'reserve');
+                const postUrl = gwChannelUrl(g.channel, g.message_id);
+                const resultUrl = gwChannelUrl(g.channel, g.result_message_id);
+                const actions = [];
+                if (g.status === 'active') {
+                    actions.push(`<button class="btn btn-danger" type="button" onclick="cancelGiveaway(${g.id})">Скасувати</button>`);
+                    actions.push(`<button class="btn btn-primary" type="button" onclick="drawGiveaway(${g.id})">🎲 Завершити зараз</button>`);
+                }
+                if (g.status === 'drawn') {
+                    actions.push(`<button class="btn btn-primary" type="button" onclick="publishGiveaway(${g.id})">📣 Опублікувати результати</button>`);
+                }
+                return `
+                <article class="bc-card">
+                    <div class="bc-top"><span class="bc-chip ${escapeAttr(g.status === 'active' ? 'scheduled' : g.status)}">${escapeHtml(GW_STATUS[g.status] || g.status)}</span><span>${escapeHtml(g.channel)}</span><span style="margin-left:auto;">${g.status === 'active' ? 'до' : 'завершено'} ${escapeHtml(bcDateLabel(g.status === 'active' ? g.ends_at : (g.drawn_at || g.ends_at)))}</span></div>
+                    <div class="gw-title">${escapeHtml(g.title)}</div>
+                    <div class="gw-meta">
+                        <span>🎁 ${g.prize_type === 'amount'
+                            ? `Приз — ${g.prize_value.toLocaleString('uk-UA')} ₴ на будь-яке замовлення`
+                            : `Приз — ${escapeHtml(((adminProducts || []).find(p => p.id === g.product_id) || {}).name || g.title || `товар №${g.product_id}`)} безкоштовно (${g.product_variant ? '' : 'будь-який варіант, до '}${g.prize_value.toLocaleString('uk-UA')} ₴)`} · переможців: ${g.winners_count}</span>
+                        <span>🚚 Доставку оплачує ${g.shipping_payer === 'shop' ? 'магазин' : 'переможець'} · ${g.referral_bonus ? `+1 шанс за друга (до +${g.referral_limit})` : 'без бонусів'}</span>
+                        ${postUrl ? `<span><a href="${escapeAttr(postUrl)}" target="_blank" rel="noopener">Пост розіграшу ↗</a>${resultUrl ? ` · <a href="${escapeAttr(resultUrl)}" target="_blank" rel="noopener">Підсумки ↗</a>` : ''}</span>` : ''}
+                    </div>
+                    <div class="bc-stats gw-stats">
+                        <div class="bc-stat"><div class="l">Учасники</div><div class="v">${s.entries || 0}</div><div class="s">${g.drawn_at ? `умови: ${g.eligible_count}` : ''}</div></div>
+                        <div class="bc-stat"><div class="l">Нові в боті</div><div class="v">${s.new_users || 0}</div></div>
+                        <div class="bc-stat"><div class="l">Від друзів</div><div class="v">${g.referral_bonus ? (s.referrals || 0) : '—'}</div></div>
+                        <div class="bc-stat"><div class="l">Купили</div><div class="v">${s.buyers || 0}</div><div class="s">після участі</div></div>
+                    </div>
+                    ${winners.length ? `<div class="gw-winners"><h4>Переможці</h4>${winners.map(w => gwWinnerRow(g, w)).join('')}</div>` : (g.drawn_at ? '<div class="gw-meta">Переможців немає — ніхто не виконав умови.</div>' : '')}
+                    ${reserve.length ? `<div class="gw-winners"><h4>Резерв</h4>${reserve.map(w => gwWinnerRow(g, w)).join('')}</div>` : ''}
+                    ${actions.length ? `<div class="bc-actions gw-actions">${actions.join('')}</div>` : ''}
+                </article>`;
+            }).join('');
+        }
+
+        async function gwPost(url, okMsg) {
+            try {
+                const res = await fetch(API_BASE + url, { method: 'POST' });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) throw new Error(data.error || 'Не вдалося');
+                showToast(okMsg(data), 'success');
+                loadGiveaways();
+                return data;
+            } catch (e) {
+                showToast(e.message || 'Помилка', 'error');
+                return null;
+            }
+        }
+
+        async function drawGiveaway(id) {
+            if (!(await askConfirm('Завершити розіграш зараз і провести жеребкування? Нові учасники вже не зможуть приєднатися.'))) return;
+            showToast('Перевіряю підписки й проводжу жеребкування…', 'success');
+            gwPost(`/admin/giveaways/${id}/draw`, () => 'Жеребкування проведено — перевір і опублікуй');
+        }
+
+        async function publishGiveaway(id) {
+            if (!(await askConfirm('Опублікувати підсумки в каналі? Переможцям бот напише, а приз з\'явиться в їхньому кошику. Скасувати не можна.'))) return;
+            gwPost(`/admin/giveaways/${id}/publish`, d => d.undelivered
+                ? `Опубліковано. ${d.undelivered} переможцям повідомлення не дійшло (заблокували бота?)`
+                : 'Опубліковано, переможцям написали');
+        }
+
+        async function rerollGiveawayWinner(id, winnerId) {
+            const g = allGiveaways.find(x => x.id === id);
+            const note = g && g.status === 'published' ? ' Приз зникне з його кошика, а новому переможцю бот одразу напише.' : '';
+            if (!(await askConfirm(`Замінити цього переможця першим із резерву?${note}`))) return;
+            gwPost(`/admin/giveaways/${id}/winners/${winnerId}/reroll`, d => d.delivered === false
+                ? 'Замінено, але новому переможцю повідомлення не дійшло'
+                : 'Переможця замінено');
+        }
+
+        async function extendGiveawayWinner(id, winnerId) {
+            if (!(await askConfirm('Подовжити строк призу на 24 години? Переможцю бот напише про це.'))) return;
+            gwPost(`/admin/giveaways/${id}/winners/${winnerId}/extend`, d => d.delivered === false
+                ? 'Подовжено, але повідомлення переможцю не дійшло'
+                : 'Строк подовжено на 24 години');
+        }
+
+        async function cancelGiveaway(id) {
+            if (!(await askConfirm('Скасувати розіграш? Кнопка участі зникне з поста, жеребкування не буде.'))) return;
+            gwPost(`/admin/giveaways/${id}/cancel`, () => 'Розіграш скасовано');
+        }
+
+        function gwSegValue(id) {
+            return document.querySelector(`#${id} button.on`)?.dataset.v || '';
+        }
+
+        function gwSetSeg(id, v) {
+            document.querySelectorAll(`#${id} button`).forEach(b => b.classList.toggle('on', b.dataset.v === v));
+            if (id === 'gwBonusSeg') document.getElementById('gwLimitWrap').style.display = v === 'on' ? '' : 'none';
+            if (id === 'gwTypeSeg') gwTypeChanged();
+            gwField();
+        }
+
+        // Повна ціна товару-призу: найдорожчий варіант (як _giveaway_product_price у bot.py)
+        function gwProductPrice(p) {
+            if (!p || p.contractPrice) return 0;
+            const vs = (p.variants || []).filter(v => !v.contract);
+            return vs.length ? Math.max(...vs.map(v => Number(v.price) || 0)) : (Number(p.price) || 0);
+        }
+
+        function gwTypeChanged() {
+            const isProduct = gwSegValue('gwTypeSeg') !== 'amount';
+            const sel = document.getElementById('gwProduct');
+            const first = sel.querySelector('option[value=""]');
+            if (first) first.textContent = isProduct ? '— обери товар —' : '— без товару (лише сума) —';
+            document.getElementById('gwProductWrap').classList.toggle('required', isProduct);
+            document.getElementById('gwProductLabel').textContent = isProduct ? 'Товар' : 'Товар для фото поста';
+            document.getElementById('gwValueWrap').style.display = isProduct ? 'none' : '';
+            document.getElementById('gwTitleWrap').style.display = isProduct ? 'none' : '';
+            document.getElementById('gwPrizeHint').textContent = isProduct
+                ? 'Приз сам з\'явиться в кошику переможця за 0 ₴ — без кодів; 48 годин на оформлення. Резерв — 3 учасники.'
+                : 'Сертифікат сам застосується в кошику переможця до будь-якого замовлення — 48 годин на оформлення. Резерв — 3 учасники.';
+            gwProductChanged();
+        }
+
+        function gwProduct() {
+            const id = Number(document.getElementById('gwProduct').value);
+            return (allProducts || []).find(p => p.id === id) || null;
+        }
+
+        function gwDefaultText() {
+            const p = gwProduct();
+            const winners = Number(document.getElementById('gwWinners').value) || 1;
+            const bonus = gwSegValue('gwBonusSeg') === 'on';
+            const amount = Number(document.getElementById('gwValue').value) || 0;
+            const prize = gwSegValue('gwTypeSeg') === 'amount'
+                ? (document.getElementById('gwTitle').value.trim() || (amount ? `${amount} ₴ на замовлення` : ''))
+                : (p ? p.name + (gwSyncVariants() ? ` (${gwSyncVariants().name})` : '') : '');
+            return [
+                `🎁 РОЗІГРАШ${prize ? `: ${prize}` : ''}!`,
+                '',
+                'Умови:',
+                '1️⃣ Підпишіться на наш канал',
+                '2️⃣ Натисніть «Взяти участь» під цим постом',
+                bonus ? '3️⃣ Запрошуйте друзів — +1 шанс за кожного' : '',
+                '',
+                winners > 1 ? `Переможців: ${winners}. Обираємо випадково.` : 'Переможця обираємо випадково.',
+            ].filter((l, i, arr) => l !== '' || arr[i - 1] !== '').join('\n');
+        }
+
+        // Варіанти товару-призу: «обирає переможець» або конкретний (лише з ціною)
+        function gwSyncVariants() {
+            const p = gwProduct();
+            const sel = document.getElementById('gwVariant');
+            const vs = gwSegValue('gwTypeSeg') !== 'amount' && p ? (p.variants || []).filter(v => !v.contract) : [];
+            const key = p ? `${p.id}:${vs.map(v => v.id).join(',')}` : '';
+            if (sel.dataset.key !== key) {
+                const keep = sel.value;
+                sel.innerHTML = '<option value="">Обирає переможець</option>'
+                    + vs.map(v => `<option value="${escapeAttr(v.id)}">${escapeHtml(v.name)} · ${Number(v.price).toLocaleString('uk-UA')} ₴</option>`).join('');
+                sel.value = vs.some(v => v.id === keep) ? keep : '';
+                sel.dataset.key = key;
+            }
+            document.getElementById('gwVariantWrap').style.display = vs.length ? '' : 'none';
+            return vs.find(v => v.id === sel.value) || null;
+        }
+
+        function gwProductChanged() {
+            const p = gwProduct();
+            const variant = gwSyncVariants();
+            const price = variant ? Number(variant.price) : gwProductPrice(p);
+            const hint = document.getElementById('gwProductHint');
+            hint.textContent = p && gwSegValue('gwTypeSeg') !== 'amount'
+                ? (price ? `Вартість призу: ${variant ? '' : 'до '}${price} ₴ — для переможця безкоштовно.` : 'У товару немає фіксованої ціни — обери інший.')
+                : '';
+            hint.style.color = p && !price && gwSegValue('gwTypeSeg') !== 'amount' ? 'var(--sale)' : '';
+            document.getElementById('gwProduct').closest('.form-group').classList.remove('has-error');
+            gwField();
+        }
+
+        function gwState() {
+            return {
+                prize_type: gwSegValue('gwTypeSeg') || 'product',
+                title: document.getElementById('gwTitle').value.trim(),
+                product_id: Number(document.getElementById('gwProduct').value) || 0,
+                product_variant: document.getElementById('gwVariantWrap').style.display === 'none' ? '' : document.getElementById('gwVariant').value,
+                prize_value: Number(document.getElementById('gwValue').value) || 0,
+                winners_count: Number(document.getElementById('gwWinners').value) || 0,
+                ends: document.getElementById('gwEnds').value,
+                channel: document.getElementById('gwChannel').value.trim(),
+                shipping_payer: gwSegValue('gwPayerSeg'),
+                referral_bonus: gwSegValue('gwBonusSeg') === 'on',
+                referral_limit: Number(document.getElementById('gwLimit').value) || 0,
+                text: document.getElementById('gwText').value.trim(),
+                photo: document.getElementById('gwPhoto').value.trim(),
+                pin: document.getElementById('gwPin').checked,
+            };
+        }
+
+        function gwField() {
+            if (!gwTextTouched) document.getElementById('gwText').value = gwDefaultText();
+            const st = gwState();
+            const cnt = document.getElementById('gwTextCount');
+            cnt.textContent = `${document.getElementById('gwText').value.length} / 900 · рядок з датою підсумків бот додасть сам`;
+            const p = gwProduct();
+            const photo = /^https:\/\//.test(st.photo) ? st.photo : ((p && (p.photos || [])[0]) || '');
+            const ends = st.ends ? new Date(st.ends) : null;
+            const endsLine = ends && !Number.isNaN(ends.getTime()) ? `\n\n🗓 Підсумки: ${bcDateLabel(ends.toISOString())}` : '';
+            document.getElementById('gwPreview').innerHTML = `
+                <div class="tg-bubble">
+                    ${photo ? `<img src="${escapeAttr(photo)}" alt="">` : ''}
+                    <div class="tg-t ${st.text ? '' : 'ph'}">${st.text ? escapeHtml(st.text + endsLine) : 'Текст поста…'}</div>
+                </div>
+                <div class="tg-btn">🎁 Взяти участь</div>`;
+            setDirtyUi('gwDirty', gwSnapshot !== null && JSON.stringify(st) !== gwSnapshot);
+        }
+
+        async function gwUploadPhoto(input) {
+            const file = input.files && input.files[0];
+            input.value = '';
+            if (!file) return;
+            const btn = document.getElementById('gwPhotoBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Завантаження…';
+            try {
+                const fd = new FormData();
+                fd.append('file', file, file.name);
+                const res = await fetch(API_BASE + '/upload-photo', { method: 'POST', headers: { 'X-Telegram-Init-Data': tgInitData }, body: fd });
+                const data = await res.json().catch(() => ({}));
+                if (!data.ok) throw new Error(data.error || 'Не вдалося завантажити фото');
+                document.getElementById('gwPhoto').value = data.url;
+                gwField();
+            } catch (e) {
+                showToast(e.message || 'Помилка завантаження фото', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📷 Завантажити';
+            }
+        }
+
+        function gwLocalInput(d) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        async function openGiveawayModal() {
+            document.getElementById('giveawayForm').reset();
+            document.querySelectorAll('#giveawayForm .form-group.has-error').forEach(g => g.classList.remove('has-error'));
+            const products = (allProducts || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'uk'));
+            document.getElementById('gwVariant').dataset.key = '';
+            document.getElementById('gwProduct').innerHTML = '<option value="">— обери товар —</option>'
+                + products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} · №${p.id}${p.price ? ` · ${p.price} ₴` : ''}</option>`).join('');
+            if (!gwDefaultChannel) await loadGiveaways();
+            document.getElementById('gwChannel').value = gwDefaultChannel;
+            const end = new Date(Date.now() + 3 * 86400000);
+            end.setHours(20, 0, 0, 0);
+            document.getElementById('gwEnds').value = gwLocalInput(end);
+            gwTextTouched = false;
+            gwSetSeg('gwTypeSeg', 'product');
+            gwSetSeg('gwPayerSeg', 'winner');
+            gwSetSeg('gwBonusSeg', 'off');
+            gwSnapshot = null;
+            gwField();
+            gwSnapshot = JSON.stringify(gwState());
+            setDirtyUi('gwDirty', false);
+            document.getElementById('giveawayModal').classList.add('active');
+            document.querySelector('#giveawayModal .dr-body').scrollTop = 0;
+        }
+
+        function closeGiveawayModal(force = false) {
+            const modal = document.getElementById('giveawayModal');
+            if (!force && modal.classList.contains('active') && gwSnapshot !== null && JSON.stringify(gwState()) !== gwSnapshot) {
+                askConfirm('Є незбережені зміни. Закрити без публікації?').then(ok => { if (ok) closeGiveawayModal(true); });
+                return;
+            }
+            modal.classList.remove('active');
+            gwSnapshot = null;
+        }
+
+        async function submitGiveaway(e) {
+            e.preventDefault();
+            const st = gwState();
+            const bad = (id) => { const el = document.getElementById(id); el.closest('.form-group')?.classList.add('has-error'); el.focus(); };
+            if (st.prize_type === 'product') {
+                if (!st.product_id) { bad('gwProduct'); return; }
+                if (!gwProductPrice(gwProduct())) { bad('gwProduct'); showToast('У товару немає фіксованої ціни', 'error'); return; }
+            } else {
+                if (!st.product_id && !st.title) { bad('gwTitle'); return; }
+                if (st.prize_value <= 0) { bad('gwValue'); return; }
+            }
+            if (st.winners_count < 1 || st.winners_count > 20) { bad('gwWinners'); return; }
+            const ends = new Date(st.ends);
+            if (!st.ends || Number.isNaN(ends.getTime()) || ends.getTime() < Date.now() + 5 * 60000 || ends.getTime() > Date.now() + 90 * 86400000) { bad('gwEnds'); return; }
+            if (!st.channel) { bad('gwChannel'); return; }
+            if (st.referral_bonus && (st.referral_limit < 1 || st.referral_limit > 50)) { bad('gwLimit'); return; }
+            if (!st.text) { bad('gwText'); return; }
+            if (st.photo && !/^https:\/\//.test(st.photo)) { showToast('Фото має бути https-посиланням', 'error'); return; }
+            if (!(await askConfirm(`Опублікувати розіграш у ${st.channel}? Підсумки — ${bcDateLabel(ends.toISOString())}.`))) return;
+            const btn = document.getElementById('gwSubmitBtn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(API_BASE + '/admin/giveaways', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prize_type: st.prize_type, title: st.prize_type === 'amount' ? st.title : '',
+                        product_id: st.product_id, product_variant: st.prize_type === 'amount' ? '' : st.product_variant,
+                        prize_value: st.prize_type === 'amount' ? st.prize_value : 0,
+                        winners_count: st.winners_count,
+                        ends_at: ends.toISOString(), channel: st.channel, shipping_payer: st.shipping_payer,
+                        referral_bonus: st.referral_bonus, referral_limit: st.referral_limit,
+                        text: st.text, photo: st.photo, pin: st.pin,
+                    }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) throw new Error(data.error || 'Не вдалося створити розіграш');
+                showToast('Розіграш опубліковано в каналі 🎁', 'success');
+                closeGiveawayModal(true);
+                loadGiveaways();
+            } catch (err) {
+                showToast(err.message || 'Помилка', 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        document.getElementById('giveawayForm').addEventListener('submit', submitGiveaway);
 
         function showToast(msg, type = 'success') {
             const toast = document.createElement('div');
