@@ -248,3 +248,12 @@ def test_http_publish_card_caption_limit(env, monkeypatch, fake_download):
         return r.status
 
     assert _http(env, monkeypatch, steps, FakeBot()) == 400
+
+
+def test_download_card_photo_rejects_private_hosts():
+    """SSRF: приватні/loopback адреси не завантажуються навіть для http(s) URL."""
+    import asyncio
+    import bot
+
+    for url in ("http://127.0.0.1/x.jpg", "http://localhost/x.jpg", "http://169.254.169.254/latest/meta-data", "ftp://example.com/x.jpg"):
+        assert asyncio.run(bot._download_card_photo(url)) is None

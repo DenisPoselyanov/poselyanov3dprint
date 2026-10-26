@@ -4282,23 +4282,36 @@ def _card_photo_url(url: str) -> str:
 
 
 async def _download_card_photo(url: str) -> bytes | None:
-    """Завантажує фото товару для картки (лише http/https, до 15 МБ, таймаут 10 с). Помилка → None."""
+    """Завантажує фото товару для картки (лише http/https, до 15 МБ, таймаут 10 с). Помилка → None.
+    Хост перевіряється на приватні/loopback/link-local адреси (SSRF), редиректи — вручну, до 3, з перевіркою кожного."""
     if not isinstance(url, str) or not url.lower().startswith(("http://", "https://")):
         return None
     try:
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(_card_photo_url(url)) as resp:
-                if resp.status != 200:
+            target = _card_photo_url(url)
+            for _ in range(4):
+                if not await asyncio.to_thread(is_safe_http_url, target):
+                    logger.warning("Фото для картки: небезпечний URL відхилено")
                     return None
-                if (resp.content_length or 0) > CARD_PHOTO_MAX_BYTES:
-                    return None
-                buf = bytearray()
-                async for chunk in resp.content.iter_chunked(64 * 1024):
-                    buf.extend(chunk)
-                    if len(buf) > CARD_PHOTO_MAX_BYTES:
+                async with session.get(target, allow_redirects=False) as resp:
+                    if resp.status in (301, 302, 303, 307, 308):
+                        location = resp.headers.get("Location") or ""
+                        target = str(resp.url.join(resp.url.__class__(location))) if location else ""
+                        if not target:
+                            return None
+                        continue
+                    if resp.status != 200:
                         return None
-                return bytes(buf)
+                    if (resp.content_length or 0) > CARD_PHOTO_MAX_BYTES:
+                        return None
+                    buf = bytearray()
+                    async for chunk in resp.content.iter_chunked(64 * 1024):
+                        buf.extend(chunk)
+                        if len(buf) > CARD_PHOTO_MAX_BYTES:
+                            return None
+                    return bytes(buf)
+            return None
     except Exception as e:
         logger.warning("Фото для картки не завантажилось: %s", e)
         return None
