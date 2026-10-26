@@ -5311,6 +5311,12 @@ async def handle_update_ai_suggestion(request: web.Request):
         return web.json_response(result, status=status, headers=cors_headers(request))
     denied = await _admin_guard(request)
     if denied is not None:
+        # Редактор може лише відхилити відкриту пропозицію (без productId, без інших змін).
+        # Явна перевірка ролі: адмін сюди не потрапляє, а решта отримує 403 як раніше.
+        editor_auth, _ = resolve_request_user(request, {})
+        if is_editor_user(editor_auth) and set(data) == {"status"} and data.get("status") == "rejected":
+            result = await run_db(ai_suggestions_svc.reject_open, sid)
+            return web.json_response(result, status=200 if result.get("ok") else 400, headers=cors_headers(request))
         return denied
     if any(k in data for k in ("images", "license", "sourceStats")):
         result = await ai_suggestions_svc.update_suggestion(sid, data)

@@ -181,8 +181,8 @@ def test_editor_cannot_change_status_or_publish(env, monkeypatch):
             (await client.delete(f"/api/admin/ai-suggestions/{sid}", headers=h)).status,
         ]
 
-    assert _http(monkeypatch, steps) == [403, 403, 403, 403]
-    assert _suggestion_row(sid)[0] == "new"
+    assert _http(monkeypatch, steps) == [403, 403, 200, 403]
+    assert _suggestion_row(sid)[0] == "rejected"  # редактор може відхилити відкриту пропозицію
 
 
 def test_owner_can_set_status_after_review(env, monkeypatch):
@@ -261,3 +261,29 @@ def test_editor_draft_values_are_validated(env, monkeypatch):
     assert data["photos"] == ["https://ok.test/a.jpg"]
     assert "price" not in data and "hot" not in data and "status" not in data
     assert data["name"] == "<img src=x onerror=alert(1)>"  # зберігається як текст; у UI екранується
+
+
+def test_editor_can_reject_open_suggestion_only(env, monkeypatch):
+    from db_core import db_connect
+
+    conn = db_connect()
+    pub = conn.execute("INSERT INTO ai_suggestions (status, name, data, product_id) VALUES ('published', 'Опублікований', '{}', 7)").lastrowid
+    conn.commit()
+    conn.close()
+    sid = _insert_suggestion("Відкритий")
+    review = _insert_suggestion("На перевірці")
+
+    async def steps(client):
+        h = _as("editor")
+        await client.put(f"/api/admin/ai-suggestions/{review}", headers=h, json={"product": {"name": "Чернетка"}})
+        return [
+            (await client.put(f"/api/admin/ai-suggestions/{sid}", headers=h, json={"status": "rejected"})).status,
+            (await client.put(f"/api/admin/ai-suggestions/{review}", headers=h, json={"status": "rejected"})).status,
+            (await client.put(f"/api/admin/ai-suggestions/{pub}", headers=h, json={"status": "rejected"})).status,
+            (await client.put(f"/api/admin/ai-suggestions/{sid}", headers=h, json={"status": "rejected", "productId": 1})).status,
+        ]
+
+    assert _http(monkeypatch, steps) == [200, 200, 400, 403]
+    assert _suggestion_row(sid)[0] == "rejected"
+    assert _suggestion_row(review)[0] == "rejected"
+    assert _suggestion_row(pub)[0] == "published"

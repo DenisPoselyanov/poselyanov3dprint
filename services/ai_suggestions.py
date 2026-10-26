@@ -256,6 +256,22 @@ def save_review_draft(suggestion_id: int, product: dict) -> dict:
     return {"ok": True}
 
 
+def reject_open(suggestion_id: int) -> dict:
+    """Редактор відхиляє пропозицію, що ще відкрита (нова або на перевірці)."""
+    conn = db_connect()
+    try:
+        cur = conn.execute(
+            _sql("UPDATE ai_suggestions SET status = 'rejected' WHERE id = ? AND status IN ('new', 'review')"),
+            (int(suggestion_id),),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            return {"ok": False, "error": "Пропозицію вже опрацьовано або її немає"}
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
 def delete_suggestion(suggestion_id: int) -> bool:
     conn = db_connect()
     try:

@@ -11679,8 +11679,8 @@
                     <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">${aiLoadDraft(it.id) ? '📝 Продовжити правки' : '✏️ Відкрити й додати'}</button>`;
             } else if (it.status === 'review') {
                 const admin = !document.body.classList.contains('editor-mode');
-                actions = `${stlBtn}${admin ? `
-                    <button class="btn btn-reject" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">✕ Відхилити</button>
+                actions = `${stlBtn}
+                    <button class="btn btn-reject" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">✕ Відхилити</button>${admin ? `
                     <button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'new')">Повернути в нові</button>` : ''}
                     <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">${admin ? '✏️ Відкрити й опублікувати' : '📝 Змінити'}</button>`;
             } else if (it.status === 'published') {
