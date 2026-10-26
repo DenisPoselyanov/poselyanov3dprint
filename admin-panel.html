@@ -7787,6 +7787,8 @@
         }
 
         async function loadCollections() {
+            // Редактору добірки недоступні (сервер віддає 403): не запитуємо й не показуємо помилку
+            if (document.body.classList.contains('editor-mode')) return;
             try {
                 const res = await fetch(API_BASE + '/admin/collections');
                 if (!res.ok) throw new Error(`Помилка завантаження (${res.status})`);
