@@ -185,14 +185,50 @@ DRAFT_FIELDS = frozenset({
     "luminousFilamentChoice", "custom_fields",
 })
 DRAFT_OPEN_STATUSES = ("new", "review")
+DRAFT_TEXT_LIMITS = {"name": 200, "cat": 60, "emoji": 16, "mat": 200, "description": 4000, "note": 2000}
+DRAFT_FLAGS = ("contractPrice", "hot", "pinned", "gift", "filamentChoice", "luminousFilamentChoice")
+DRAFT_STATUSES = ("active", "hidden", "archive")
+DRAFT_JSON_MAX = 20_000
+
+
+def _clean_draft(raw: dict) -> dict:
+    """Перевіряє поля чернетки за типом і довжиною; посилання — лише https, як для пропозицій ШІ."""
+    out = {}
+    for key, limit in DRAFT_TEXT_LIMITS.items():
+        if key in raw:
+            out[key] = _text(raw.get(key), limit)
+    for key in ("stlLink", "video"):
+        if key in raw:
+            out[key] = _https(raw.get(key))
+    if "photos" in raw:
+        out["photos"] = _clean_images(raw["photos"] if isinstance(raw["photos"], list) else [])[:IMAGES_MAX]
+    if "variants" in raw:
+        out["variants"] = _variants(raw["variants"])
+    for key in ("price", "oldPrice"):
+        if key in raw and raw[key] is not None:
+            try:
+                out[key] = max(0, min(PRICE_MAX, int(round(float(raw[key])))))
+            except (TypeError, ValueError):
+                pass
+        elif key in raw:
+            out[key] = None
+    for key in DRAFT_FLAGS:
+        if isinstance(raw.get(key), bool):
+            out[key] = raw[key]
+    if raw.get("status") in DRAFT_STATUSES:
+        out["status"] = raw["status"]
+    if "custom_fields" in raw and isinstance(raw["custom_fields"], (list, dict)):
+        if len(json.dumps(raw["custom_fields"], ensure_ascii=False)) <= DRAFT_JSON_MAX:
+            out["custom_fields"] = raw["custom_fields"]
+    return out
 
 
 def save_review_draft(suggestion_id: int, product: dict) -> dict:
     """Чернетка товару від редактора: йде в окремий слот «На перевірці», у каталог не потрапляє.
-    Лише для пропозицій, що ще не опубліковані й не відхилені; записуються тільки поля з DRAFT_FIELDS."""
+    Лише для пропозицій, що ще не опубліковані й не відхилені; записуються тільки перевірені поля з DRAFT_FIELDS."""
     if len(json.dumps(product, ensure_ascii=False)) > MAX_DRAFT_CHARS:
         return {"ok": False, "error": "Чернетка завелика"}
-    fields = {k: v for k, v in product.items() if k in DRAFT_FIELDS}
+    fields = _clean_draft({k: v for k, v in product.items() if k in DRAFT_FIELDS})
     conn = db_connect()
     try:
         row = conn.execute(_sql("SELECT name, data, status FROM ai_suggestions WHERE id = ?"), (int(suggestion_id),)).fetchone()

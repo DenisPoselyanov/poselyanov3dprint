@@ -233,3 +233,31 @@ def test_editor_draft_ignores_admin_only_fields(env, monkeypatch):
     conn.close()
     assert data["price"] == 150
     assert "productId" not in data and "_admin" not in data and "sourceStats" not in data
+
+
+def test_editor_draft_values_are_validated(env, monkeypatch):
+    import json
+    from db_core import db_connect
+
+    sid = _insert_suggestion("Кролик")
+    draft = {
+        "name": "<img src=x onerror=alert(1)>",
+        "stlLink": "javascript:alert(1)",
+        "video": "http://insecure.test/v",
+        "photos": ["javascript:alert(1)", "https://ok.test/a.jpg", "data:image/png;base64,AAAA"],
+        "price": "abc",
+        "hot": "yes",
+        "status": "published",
+    }
+
+    async def steps(client):
+        return (await client.put(f"/api/admin/ai-suggestions/{sid}", headers=_as("editor"), json={"product": draft})).status
+
+    assert _http(monkeypatch, steps) == 200
+    conn = db_connect()
+    data = json.loads(conn.execute("SELECT data FROM ai_suggestions WHERE id = ?", (sid,)).fetchone()[0])
+    conn.close()
+    assert data["stlLink"] == "" and data["video"] == ""
+    assert data["photos"] == ["https://ok.test/a.jpg"]
+    assert "price" not in data and "hot" not in data and "status" not in data
+    assert data["name"] == "<img src=x onerror=alert(1)>"  # зберігається як текст; у UI екранується
