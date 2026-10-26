@@ -179,9 +179,10 @@ def normalize_card_params(raw) -> tuple[dict, str]:
         "badge": "",
         "photo_index": photo_index,
     }
-    if template == "sale":
+    if template in ("new", "sale"):
+        # Знижку показуємо і на «Новинці», якщо товар уже зі старою ціною
         params["badge"] = discount_badge(params["price"], params["old_price"])
-    elif template != "sale":
+    else:
         params["old_price"] = ""
     return params, ""
 
@@ -322,8 +323,8 @@ def render_card(photo: bytes | None, *, template: str, title: str, price: str = 
     template = template if template in TEMPLATES else "new"
     title = _clean(title, TITLE_MAX) or "Без назви"
     price = _clean(price, PRICE_MAX)
-    old_price = _clean(old_price, PRICE_MAX) if template == "sale" else ""
-    badge = _clean(badge, BADGE_MAX) if template == "sale" else ""
+    old_price = _clean(old_price, PRICE_MAX) if template in ("new", "sale") else ""
+    badge = _clean(badge, BADGE_MAX) if template in ("new", "sale") else ""
     tag = _clean(tag, TAG_MAX).upper() or DEFAULT_TAGS[template]
     subtitle = _clean(subtitle, SUBTITLE_MAX)
     if template == "custom":
@@ -371,7 +372,7 @@ def render_card(photo: bytes | None, *, template: str, title: str, price: str = 
     img.alpha_composite(border, (x0, y0))
 
     # Бейдж знижки: на лівому верхньому куті фото
-    if template == "sale" and badge:
+    if template in ("new", "sale") and badge:
         r = 84 * S
         cx, cy = x0 + 36 * S + r, y0 + 36 * S + r
         _paste_shadowed_circle(img, cx, cy, r)

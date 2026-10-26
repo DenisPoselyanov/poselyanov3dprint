@@ -128,7 +128,7 @@ def test_normalize_params():
     assert pc.normalize_card_params("x")[1]
     assert pc.normalize_card_params({"template": "evil"})[1]
     p, err = pc.normalize_card_params({
-        "template": "new", "title": "A\x00B\n" + "x" * 300, "price": "9" * 100, "old_price": "5", "photo_index": "abc",
+        "template": "custom", "title": "A\x00B\n" + "x" * 300, "price": "9" * 100, "old_price": "5", "photo_index": "abc",
     })
     assert not err
     assert "\x00" not in p["title"] and len(p["title"]) <= 120
@@ -257,3 +257,13 @@ def test_download_card_photo_rejects_private_hosts():
 
     for url in ("http://127.0.0.1/x.jpg", "http://localhost/x.jpg", "http://169.254.169.254/latest/meta-data", "ftp://example.com/x.jpg"):
         assert asyncio.run(bot._download_card_photo(url)) is None
+
+
+def test_new_template_keeps_discount_when_old_price_given():
+    """Товар зі знижкою, що публікується як «Новинка»: стара ціна й бейдж лишаються на картинці."""
+    params, err = pc.normalize_card_params({"template": "new", "title": "Лампа", "price": "390 ₴", "old_price": "490 ₴"})
+    assert not err and params["old_price"] == "490 ₴" and params["badge"] == "−20%"
+    png = pc.render_card(None, template="new", title="Лампа", price="390 ₴", old_price="490 ₴", badge=params["badge"])
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    params, _ = pc.normalize_card_params({"template": "new", "title": "Лампа", "price": "490 ₴", "old_price": ""})
+    assert params["badge"] == "" and params["old_price"] == ""

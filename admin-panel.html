@@ -6812,6 +6812,18 @@
             { key: 'none', label: 'Без рубрики' },
         ];
 
+        // Хештеги каналу (рубрикатор): вибираються в діалозі й дописуються в кінець підпису
+        const CHANNEL_HASHTAGS = [
+            { tag: '#новинка', hint: 'нові моделі в каталозі' },
+            { tag: '#акція', hint: 'знижки та промокоди' },
+            { tag: '#розіграш', hint: 'подарунки підписникам' },
+            { tag: '#процес', hint: 'закулісся друку' },
+            { tag: '#відгуки', hint: 'що кажуть клієнти' },
+            { tag: '#матеріали', hint: 'PLA, PETG, TPU' },
+            { tag: '#лайфхаки', hint: 'поради з догляду' },
+            { tag: '#подарунки', hint: 'добірки за бюджетом' },
+        ];
+
         function channelPostText(p, rubric) {
             const lines = [];
             const r = CHANNEL_RUBRICS.find(x => x.key === rubric);
@@ -6970,6 +6982,12 @@
                     <div id="chp-rubrics" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
                         ${CHANNEL_RUBRICS.map(r => `<button type="button" class="btn btn-secondary" data-r="${r.key}" style="padding:6px 10px;font-size:13px;">${escapeHtml(r.label)}</button>`).join('')}
                     </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:13px;font-weight:600;">Хештеги <span style="font-weight:400;color:var(--text-muted);">(допишуться в кінці поста)</span></label>
+                        <div id="chp-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+                            ${CHANNEL_HASHTAGS.map(h => `<button type="button" class="btn btn-secondary" data-h="${escapeAttr(h.tag)}" title="${escapeAttr(h.hint)}" style="padding:6px 10px;font-size:13px;min-height:36px;">${escapeHtml(h.tag)}</button>`).join('')}
+                        </div>
+                    </div>
                     <div style="display:flex;gap:10px;align-items:flex-start;">
                         ${photo ? `<div id="chp-thumbwrap" style="position:relative;flex:none;display:none;"><img class="chp-main-img" src="${escapeAttr(photo)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;display:block;">${photoCount > 1 ? `<span class="chp-badge" style="position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;padding:1px 6px;border-radius:8px;">${photoCount} фото</span>` : ''}</div>` : ''}
                         <textarea id="chp-text" rows="9" style="${field}resize:vertical;font-family:inherit;"></textarea>
@@ -6993,9 +7011,22 @@
             const baseLimit = photo ? 1024 : 4096;
             const btnMode = () => (overlay.querySelector('input[name="chp-btn"]:checked') || {}).value || 'links';
             const curLimit = () => (isCard() ? 1024 : baseLimit) - (btnMode() === 'links' ? 30 : 0);
+            const selTags = new Set();
+            let tagsTouched = false;
+            const tagsLine = () => CHANNEL_HASHTAGS.map(h => h.tag).filter(t => selTags.has(t)).join(' ');
+            const fullText = () => {
+                const t = textEl.value.trim();
+                const tl = tagsLine();
+                return tl ? `${t}\n\n${tl}` : t;
+            };
+            const refreshTags = () => {
+                overlay.querySelectorAll('#chp-tags [data-h]').forEach(b => {
+                    b.className = 'btn ' + (selTags.has(b.dataset.h) ? 'btn-primary' : 'btn-secondary');
+                });
+            };
             const updateCount = () => {
                 const limit = curLimit();
-                const n = textEl.value.trim().length;
+                const n = fullText().length;
                 $('#chp-count').textContent = `${n} / ${limit}`;
                 $('#chp-count').style.color = n > limit ? '#e53935' : '';
             };
@@ -7005,7 +7036,7 @@
                 overlay.querySelectorAll('#chp-tpls [data-t]').forEach(b => {
                     b.className = 'btn ' + (b.dataset.t === cardTpl ? 'btn-primary' : 'btn-secondary');
                 });
-                $('#chp-oldwrap').style.display = cardTpl === 'sale' ? '' : 'none';
+                $('#chp-oldwrap').style.display = cardTpl === 'custom' ? 'none' : '';
                 schedulePreview();
             };
             const setRubric = key => {
@@ -7013,9 +7044,23 @@
                     b.className = 'btn ' + (b.dataset.r === key ? 'btn-primary' : 'btn-secondary');
                 });
                 textEl.value = channelPostText(product, key);
+                if (!tagsTouched) {
+                    selTags.clear();
+                    if (key === 'new') selTags.add('#новинка');
+                    if (key === 'sale' || (key === 'new' && product.oldPrice && product.oldPrice > product.price)) selTags.add('#акція');
+                    refreshTags();
+                }
                 updateCount();
                 setTpl(key);
             };
+            overlay.querySelectorAll('#chp-tags [data-h]').forEach(b => {
+                b.onclick = () => {
+                    tagsTouched = true;
+                    if (selTags.has(b.dataset.h)) selTags.delete(b.dataset.h); else selTags.add(b.dataset.h);
+                    refreshTags();
+                    updateCount();
+                };
+            });
             overlay.querySelectorAll('#chp-rubrics [data-r]').forEach(b => {
                 b.onclick = () => {
                     if (textEl.dataset.edited && !confirm('Замінити ваш текст шаблоном рубрики?')) return;
@@ -7039,7 +7084,7 @@
                 title: $('#chp-ctitle').value.trim(),
                 subtitle: $('#chp-csub').value.trim(),
                 price: $('#chp-cprice').value.trim(),
-                old_price: cardTpl === 'sale' ? $('#chp-coldprice').value.trim() : '',
+                old_price: cardTpl === 'custom' ? '' : $('#chp-coldprice').value.trim(),
                 photo_index: cardIdx,
             });
             const showPrevState = (msg, errText) => {
@@ -7134,10 +7179,11 @@
             overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
             $('#chp-ok').onclick = async () => {
                 const channel = $('#chp-channel').value.trim();
-                const text = textEl.value.trim();
+                const body = textEl.value.trim();
+                const text = fullText();
                 const err = $('#chp-err');
                 if (!channel) { err.textContent = 'Вкажіть канал'; $('#chp-channel').focus(); return; }
-                if (!text) { err.textContent = 'Текст поста порожній'; textEl.focus(); return; }
+                if (!body) { err.textContent = 'Текст поста порожній'; textEl.focus(); return; }
                 const card = isCard();
                 if (card && !$('#chp-ctitle').value.trim()) { err.textContent = 'Вкажіть заголовок для картинки'; $('#chp-ctitle').focus(); return; }
                 const limit = curLimit();
