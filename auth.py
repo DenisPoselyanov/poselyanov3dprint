@@ -196,6 +196,21 @@ def require_admin(request: web.Request, auth: dict | None) -> web.Response | Non
     return None
 
 
+def is_editor_user(auth: dict | None) -> bool:
+    """Telegram-користувач зі списку ADMIN_EDITOR_IDS (звужені права: пропозиції ШІ та додавання товару)."""
+    try:
+        return bool(auth) and int(auth.get("user_id") or 0) in config.EDITOR_IDS
+    except (TypeError, ValueError):
+        return False
+
+
+def require_editor(request: web.Request, auth: dict | None) -> web.Response | None:
+    """Пускає адміна та редактора."""
+    if is_admin_authorized(request, auth) or is_editor_user(auth):
+        return None
+    return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+
+
 def extract_init_data(request: web.Request) -> str:
     return (
         request.query.get("initData")

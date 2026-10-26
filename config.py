@@ -9,6 +9,12 @@ BASE_DIR = Path(__file__).resolve().parent
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 _owner_id_raw = os.environ.get("OWNER_ID", "").strip()
 OWNER_ID = int(_owner_id_raw) if _owner_id_raw else 0
+def _parse_id_list(raw: str) -> frozenset[int]:
+    return frozenset(int(p) for p in raw.replace(";", ",").split(",") if p.strip().lstrip("-").isdigit())
+
+
+# Редактори (напр. дружина): бачать лише «Пропозиції ШІ» і можуть додавати товари з них у каталог.
+EDITOR_IDS: frozenset[int] = _parse_id_list(os.environ.get("ADMIN_EDITOR_IDS", ""))
 ORDERS_CHAT_ID = int(os.environ.get("ORDERS_CHAT_ID", str(OWNER_ID)))
 WEBAPP_URL = os.environ.get(
     "WEBAPP_URL", "https://denisposelyanov.github.io/poselyanov3dprint/"

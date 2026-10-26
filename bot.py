@@ -85,7 +85,9 @@ from auth import (
     cors_headers,
     extract_init_data,
     is_admin_authorized,
+    is_editor_user,
     require_admin,
+    require_editor,
     resolve_request_user,
     validate_telegram_init_data,
 )
@@ -2315,7 +2317,7 @@ async def handle_get_categories(request: web.Request):
         auth, err = resolve_request_user(request, {})
         if err is not None:
             return err
-        denied = require_admin(request, auth)
+        denied = require_editor(request, auth)
         if denied is not None:
             return denied
     categories = get_all_categories(active_only=not include_inactive)
@@ -2512,7 +2514,7 @@ async def handle_create_product(request: web.Request):
     if err is not None:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    denied = require_admin(request, auth)
+    denied = require_editor(request, auth)
     if denied is not None:
         return denied
 
@@ -2570,6 +2572,28 @@ async def _admin_guard(request: web.Request):
     if err is not None:
         return err
     return require_admin(request, auth)
+
+
+async def _editor_guard(request: web.Request):
+    """None, якщо запит від адміна або редактора (ADMIN_EDITOR_IDS)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    return require_editor(request, auth)
+
+
+async def handle_admin_whoami(request: web.Request):
+    """Роль користувача в адмінці: admin (повний доступ) або editor (лише пропозиції ШІ)."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    if is_admin_authorized(request, auth):
+        role = "admin"
+    elif is_editor_user(auth):
+        role = "editor"
+    else:
+        return web.json_response({"error": "Forbidden"}, status=403, headers=cors_headers(request))
+    return web.json_response({"ok": True, "role": role}, headers=cors_headers(request))
 
 
 async def _json_body(request: web.Request):
@@ -5104,7 +5128,7 @@ async def handle_cancel_giveaway(request: web.Request):
 
 
 async def handle_get_ai_suggestions(request: web.Request):
-    denied = await _admin_guard(request)
+    denied = await _editor_guard(request)
     if denied is not None:
         return denied
     items = await run_db(ai_suggestions_svc.list_suggestions)
@@ -5115,7 +5139,7 @@ async def handle_get_ai_suggestions(request: web.Request):
 
 
 async def handle_generate_ai_suggestions(request: web.Request):
-    denied = await _admin_guard(request)
+    denied = await _editor_guard(request)
     if denied is not None:
         return denied
     try:
@@ -5129,7 +5153,7 @@ async def handle_generate_ai_suggestions(request: web.Request):
 
 async def handle_ai_suggestion_photos(request: web.Request):
     """Фоновий пошук додаткових фото: `{"ids": [..]}` або порожнє тіло — для всіх нових з неповною галереєю."""
-    denied = await _admin_guard(request)
+    denied = await _editor_guard(request)
     if denied is not None:
         return denied
     try:
@@ -5142,7 +5166,7 @@ async def handle_ai_suggestion_photos(request: web.Request):
 
 
 async def handle_update_ai_suggestion(request: web.Request):
-    denied = await _admin_guard(request)
+    denied = await _editor_guard(request)
     if denied is not None:
         return denied
     try:
@@ -5165,7 +5189,7 @@ async def handle_update_ai_suggestion(request: web.Request):
 
 async def handle_add_ai_suggestion(request: web.Request):
     """Додати пропозицію вручну (без ключа Claude): JSON у форматі пропозицій ШІ."""
-    denied = await _admin_guard(request)
+    denied = await _editor_guard(request)
     if denied is not None:
         return denied
     try:
@@ -5178,7 +5202,7 @@ async def handle_add_ai_suggestion(request: web.Request):
 
 
 async def handle_delete_ai_suggestion(request: web.Request):
-    denied = await _admin_guard(request)
+    denied = await _editor_guard(request)
     if denied is not None:
         return denied
     try:
@@ -5285,7 +5309,7 @@ async def handle_upload_photo(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err is not None:
         return err
-    denied = require_admin(request, auth)
+    denied = require_editor(request, auth)
     if denied is not None:
         return denied
 
@@ -5344,7 +5368,7 @@ async def handle_upload_video(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err is not None:
         return err
-    denied = require_admin(request, auth)
+    denied = require_editor(request, auth)
     if denied is not None:
         return denied
     try:
@@ -5374,7 +5398,7 @@ async def handle_upload_photo_url(request: web.Request):
     auth, err = resolve_request_user(request, {})
     if err is not None:
         return err
-    denied = require_admin(request, auth)
+    denied = require_editor(request, auth)
     if denied is not None:
         return denied
 
