@@ -28,7 +28,7 @@ from db_core import db_connect, is_postgres, run_db, sql as _sql
 
 logger = logging.getLogger(__name__)
 
-STATUSES = ("new", "published", "rejected")
+STATUSES = ("new", "review", "published", "rejected")
 COUNT_MIN, COUNT_MAX, COUNT_DEFAULT = 1, 10, 5
 FOCUS_MAX = 300
 PRICE_MIN, PRICE_MAX = 20, 20000
@@ -175,6 +175,49 @@ def set_status(suggestion_id: int, status: str, product_id=None) -> dict:
     finally:
         conn.close()
     return {"ok": True} if found else {"ok": False, "error": "Не знайдено"}
+
+
+MAX_DRAFT_CHARS = 200_000
+# Поля товару, які може надіслати форма редактора; решта (sourceStats, productId тощо) — лише адмін
+DRAFT_FIELDS = frozenset({
+    "name", "cat", "emoji", "contractPrice", "variants", "price", "oldPrice", "mat", "description",
+    "note", "video", "stlLink", "photos", "status", "hot", "pinned", "gift", "filamentChoice",
+    "luminousFilamentChoice", "custom_fields",
+})
+DRAFT_OPEN_STATUSES = ("new", "review")
+
+
+def save_review_draft(suggestion_id: int, product: dict) -> dict:
+    """Чернетка товару від редактора: йде в окремий слот «На перевірці», у каталог не потрапляє.
+    Лише для пропозицій, що ще не опубліковані й не відхилені; записуються тільки поля з DRAFT_FIELDS."""
+    if len(json.dumps(product, ensure_ascii=False)) > MAX_DRAFT_CHARS:
+        return {"ok": False, "error": "Чернетка завелика"}
+    fields = {k: v for k, v in product.items() if k in DRAFT_FIELDS}
+    conn = db_connect()
+    try:
+        row = conn.execute(_sql("SELECT name, data, status FROM ai_suggestions WHERE id = ?"), (int(suggestion_id),)).fetchone()
+        if not row:
+            return {"ok": False, "error": "Не знайдено"}
+        if row[2] not in DRAFT_OPEN_STATUSES:
+            return {"ok": False, "error": "Пропозицію вже опрацьовано"}
+        try:
+            current = json.loads(row[1] or "{}")
+        except json.JSONDecodeError:
+            current = {}
+        if not isinstance(current, dict):
+            current = {}
+        current.update(fields)
+        name = _text(fields.get("name"), 200) or row[0]
+        cur = conn.execute(
+            _sql("UPDATE ai_suggestions SET status = 'review', name = ?, data = ? WHERE id = ? AND status IN ('new', 'review')"),
+            (name, json.dumps(current, ensure_ascii=False), int(suggestion_id)),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            return {"ok": False, "error": "Пропозицію вже опрацьовано"}
+    finally:
+        conn.close()
+    return {"ok": True}
 
 
 def delete_suggestion(suggestion_id: int) -> bool:

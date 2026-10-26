@@ -120,7 +120,7 @@ def test_stranger_and_anonymous_denied_everywhere(env, monkeypatch):
         assert status == 403, (method, url, status)
 
 
-def test_editor_can_create_product(env, monkeypatch):
+def test_editor_cannot_create_product_directly(env, monkeypatch):
     async def steps(client):
         resp = await client.post(
             "/api/products", headers=_as("editor"),
@@ -128,5 +128,108 @@ def test_editor_can_create_product(env, monkeypatch):
         )
         return resp.status
 
-    # 201 — створено, 400 — валідація даних; головне, що не 403
-    assert _http(monkeypatch, steps) in (201, 400)
+    assert _http(monkeypatch, steps) == 403
+
+
+def _insert_suggestion(name="Тест"):
+    from db_core import db_connect
+
+    conn = db_connect()
+    cur = conn.execute("INSERT INTO ai_suggestions (status, name, data) VALUES ('new', ?, '{}')", (name,))
+    conn.commit()
+    sid = cur.lastrowid
+    conn.close()
+    return sid
+
+
+def _suggestion_row(sid):
+    from db_core import db_connect
+
+    conn = db_connect()
+    row = conn.execute("SELECT status, name FROM ai_suggestions WHERE id = ?", (sid,)).fetchone()
+    conn.close()
+    return tuple(row)
+
+
+def test_editor_draft_goes_to_review_slot_not_catalog(env, monkeypatch):
+    sid = _insert_suggestion("Кролик")
+    draft = {"name": "Кролик v2", "price": 150, "cat": "decor", "emoji": "🐰", "mat": "PLA", "photos": ["https://x.test/a.jpg"]}
+
+    async def steps(client):
+        resp = await client.put(f"/api/admin/ai-suggestions/{sid}", headers=_as("editor"), json={"product": draft})
+        listing = await (await client.get("/api/admin/ai-suggestions", headers=_as("editor"))).json()
+        products = await (await client.get("/api/admin/products", headers=_as("owner"))).json()
+        return resp.status, listing["items"], products
+
+    status, items, products = _http(monkeypatch, steps)
+    assert status == 200
+    assert _suggestion_row(sid) == ("review", "Кролик v2")
+    item = next(i for i in items if i["id"] == sid)
+    assert item["status"] == "review" and item["product"]["photos"] == ["https://x.test/a.jpg"]
+    assert "Кролик v2" not in [p.get("name") for p in (products if isinstance(products, list) else products.get("products", []))]
+
+
+def test_editor_cannot_change_status_or_publish(env, monkeypatch):
+    sid = _insert_suggestion()
+
+    async def steps(client):
+        h = _as("editor")
+        return [
+            (await client.put(f"/api/admin/ai-suggestions/{sid}", headers=h, json={"status": "published", "productId": 1})).status,
+            (await client.put(f"/api/admin/ai-suggestions/{sid}", headers=h, json={"status": "new"})).status,
+            (await client.put(f"/api/admin/ai-suggestions/{sid}", headers=h, json={"status": "rejected"})).status,
+            (await client.delete(f"/api/admin/ai-suggestions/{sid}", headers=h)).status,
+        ]
+
+    assert _http(monkeypatch, steps) == [403, 403, 403, 403]
+    assert _suggestion_row(sid)[0] == "new"
+
+
+def test_owner_can_set_status_after_review(env, monkeypatch):
+    sid = _insert_suggestion()
+
+    async def steps(client):
+        await client.put(f"/api/admin/ai-suggestions/{sid}", headers=_as("editor"), json={"product": {"name": "Тест"}})
+        return (await client.put(f"/api/admin/ai-suggestions/{sid}", headers=_as("owner"), json={"status": "rejected"})).status
+
+    assert _http(monkeypatch, steps) == 200
+    assert _suggestion_row(sid)[0] == "rejected"
+
+
+def test_editor_cannot_touch_published_or_rejected(env, monkeypatch):
+    from db_core import db_connect
+
+    conn = db_connect()
+    pub = conn.execute("INSERT INTO ai_suggestions (status, name, data, product_id) VALUES ('published', 'Опублікований', '{}', 7)").lastrowid
+    rej = conn.execute("INSERT INTO ai_suggestions (status, name, data) VALUES ('rejected', 'Відхилений', '{}')").lastrowid
+    conn.commit()
+    conn.close()
+
+    async def steps(client):
+        h = _as("editor")
+        return [
+            (await client.put(f"/api/admin/ai-suggestions/{pub}", headers=h, json={"product": {"name": "Зміна"}})).status,
+            (await client.put(f"/api/admin/ai-suggestions/{rej}", headers=h, json={"product": {"name": "Зміна"}})).status,
+        ]
+
+    assert _http(monkeypatch, steps) == [400, 400]
+    assert _suggestion_row(pub) == ("published", "Опублікований")
+    assert _suggestion_row(rej) == ("rejected", "Відхилений")
+
+
+def test_editor_draft_ignores_admin_only_fields(env, monkeypatch):
+    import json
+    from db_core import db_connect
+
+    sid = _insert_suggestion("Кролик")
+
+    async def steps(client):
+        draft = {"name": "Кролик", "price": 150, "sourceStats": {"downloads": 999}, "productId": 7, "_admin": True}
+        return (await client.put(f"/api/admin/ai-suggestions/{sid}", headers=_as("editor"), json={"product": draft})).status
+
+    assert _http(monkeypatch, steps) == 200
+    conn = db_connect()
+    data = json.loads(conn.execute("SELECT data FROM ai_suggestions WHERE id = ?", (sid,)).fetchone()[0])
+    conn.close()
+    assert data["price"] == 150
+    assert "productId" not in data and "_admin" not in data and "sourceStats" not in data

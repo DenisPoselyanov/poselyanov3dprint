@@ -9107,6 +9107,16 @@
                 submitBtn.disabled = true;
                 submitBtn.textContent = '⏳ Збереження...';
 
+                if (document.body.classList.contains('editor-mode') && currentAiSuggestionId && !currentProductId) {
+                    await productApi(`/admin/ai-suggestions/${currentAiSuggestionId}`, 'PUT', { product: data });
+                    aiClearDraft(currentAiSuggestionId);
+                    aiTab = 'review';
+                    showToast('Надіслано на перевірку ✅', 'success');
+                    closeModal(true);
+                    loadAiSuggestions();
+                    return;
+                }
+
                 const method = currentProductId ? 'PUT' : 'POST';
                 const url = currentProductId ? API_BASE + `/products/${currentProductId}` : API_BASE + '/products';
 
@@ -11234,6 +11244,7 @@
 
         const AI_TABS = [
             { key: 'new', label: 'Нові' },
+            { key: 'review', label: 'На перевірці' },
             { key: 'published', label: 'Додані' },
             { key: 'rejected', label: 'Відхилені' },
         ];
@@ -11267,9 +11278,9 @@
         }
 
         function renderAiPage() {
-            const counts = { new: 0, published: 0, rejected: 0 };
+            const counts = { new: 0, review: 0, published: 0, rejected: 0 };
             aiItems.forEach(it => { counts[it.status] = (counts[it.status] || 0) + 1; });
-            setNavCount('navCountAi', counts.new);
+            setNavCount('navCountAi', counts.new + counts.review);
 
             const btn = document.getElementById('aiGenerateBtn');
             if (btn) {
@@ -11320,6 +11331,7 @@
             if (reset) reset.hidden = !active;
             const empty = !tabItems.length
                 ? (aiTab === 'new' ? 'Нових пропозицій немає.'
+                    : aiTab === 'review' ? 'Нічого не чекає на перевірку.'
                     : aiTab === 'published' ? 'Ще жодної пропозиції не додано в магазин.' : 'Відхилених пропозицій немає.')
                 : 'За цими фільтрами нічого не знайдено.';
             list.innerHTML = items.length ? items.map(aiCardHtml).join('') : `<div class="rv-empty">${escapeHtml(empty)}</div>`;
@@ -11462,14 +11474,20 @@
                 actions = `${stlBtn}${morePhotos}
                     <button class="btn btn-reject" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">✕ Відхилити</button>
                     <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">${aiLoadDraft(it.id) ? '📝 Продовжити правки' : '✏️ Відкрити й додати'}</button>`;
+            } else if (it.status === 'review') {
+                const admin = !document.body.classList.contains('editor-mode');
+                actions = `${stlBtn}${admin ? `
+                    <button class="btn btn-reject" type="button" onclick="setAiSuggestionStatus(${it.id}, 'rejected')">✕ Відхилити</button>
+                    <button class="btn btn-secondary" type="button" onclick="setAiSuggestionStatus(${it.id}, 'new')">Повернути в нові</button>` : ''}
+                    <button class="btn btn-primary ai-main" type="button" onclick="openAiSuggestion(${it.id})">${admin ? '✏️ Відкрити й опублікувати' : '📝 Змінити'}</button>`;
             } else if (it.status === 'published') {
                 actions = `${stlBtn}${it.productId ? `<button class="btn btn-secondary ai-main" type="button" onclick="editProduct(${it.productId})">✏️ Редагувати товар #${it.productId} · додати фото</button>` : ''}`;
             } else {
                 actions = `${stlBtn}
-                    <button class="btn btn-secondary" type="button" onclick="deleteAiSuggestion(${it.id})">Видалити</button>
-                    <button class="btn btn-secondary ai-main" type="button" onclick="setAiSuggestionStatus(${it.id}, 'new')">Повернути в нові</button>`;
+                    ${document.body.classList.contains('editor-mode') ? '' : `<button class="btn btn-secondary" type="button" onclick="deleteAiSuggestion(${it.id})">Видалити</button>`}
+                    ${document.body.classList.contains('editor-mode') ? '' : `<button class="btn btn-secondary ai-main" type="button" onclick="setAiSuggestionStatus(${it.id}, 'new')">Повернути в нові</button>`}`;
             }
-            return `<article class="rv-card ai-card${it.status === 'new' ? '' : ' is-done'}">
+            return `<article class="rv-card ai-card${it.status === 'new' || it.status === 'review' ? '' : ' is-done'}">
                 <div class="rv-top">
                     <div class="rv-prod">
                         <div class="rv-th">${cover ? `<img src="${escapeAttr(cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" class="ai-zoom" onclick="openAiPhoto(${it.id}, 0)" title="Переглянути фото">` : escapeHtml(p.emoji || '📦')}</div>
@@ -11514,6 +11532,8 @@
             const p = it.product || {};
             openAddModal();
             currentAiSuggestionId = id;
+            uploadedPhotos = [...(p.photos || [])];
+            updatePhotoPreview();
             aiOriginalState = null; // поки форму не заповнено, чернетку не пишемо
             document.getElementById('modalTitle').textContent = '✨ Новий товар з пропозиції ШІ';
             const form = document.getElementById('productForm');

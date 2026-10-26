@@ -2514,7 +2514,7 @@ async def handle_create_product(request: web.Request):
     if err is not None:
         return err
     # Локально без валідації дозволяємо без перевірки OWNER_ID
-    denied = require_editor(request, auth)
+    denied = require_admin(request, auth)
     if denied is not None:
         return denied
 
@@ -5176,6 +5176,14 @@ async def handle_update_ai_suggestion(request: web.Request):
         return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
     if not isinstance(data, dict):
         data = {}
+    # Редактор лише надсилає чернетку товару в слот «На перевірці»; решта змін — тільки адміну
+    if isinstance(data.get("product"), dict):
+        result = await run_db(ai_suggestions_svc.save_review_draft, sid, data["product"])
+        status = 404 if result.get("error") == "Не знайдено" else 400 if not result.get("ok") else 200
+        return web.json_response(result, status=status, headers=cors_headers(request))
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
     if any(k in data for k in ("images", "license", "sourceStats")):
         result = await ai_suggestions_svc.update_suggestion(sid, data)
         status = 404 if result.get("error") == "Не знайдено" else 400 if not result.get("ok") else 200
@@ -5202,7 +5210,7 @@ async def handle_add_ai_suggestion(request: web.Request):
 
 
 async def handle_delete_ai_suggestion(request: web.Request):
-    denied = await _editor_guard(request)
+    denied = await _admin_guard(request)
     if denied is not None:
         return denied
     try:
