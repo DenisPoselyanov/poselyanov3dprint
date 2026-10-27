@@ -173,6 +173,7 @@ from services.promotions import (
     delete_promotion,
     get_active_promotions,
     get_gift_rule,
+    get_promotion,
     list_promotions_admin,
     public_promotions,
     set_promotion_active,
@@ -233,6 +234,7 @@ from services.status_messages import list_status_messages, mark_status_message_d
 import services.broadcasts as broadcasts_svc
 import services.channel_posts as channel_posts_svc
 import services.post_cards as post_cards_svc
+import services.promo_cards as promo_cards_svc
 import services.ai_suggestions as ai_suggestions_svc
 import services.giveaways as giveaways_svc
 from services.users import (
@@ -4528,6 +4530,130 @@ async def handle_publish_channel_post(request: web.Request):
             "pinned": pinned,
             "channel": channel,
         },
+        headers=cors_headers(request),
+    )
+
+
+# ─── АКЦІЇ → ПОСТ У КАНАЛ ────────────────────────────────────────
+
+async def _promo_card_context(request: web.Request):
+    """(акція, {id категорії: назва}, відповідь-помилка) для адмін-ендпоінтів поста акції."""
+    promo = await run_db(get_promotion, str(request.match_info.get("id", "")))
+    if not promo:
+        return None, None, web.json_response({"ok": False, "error": "Акцію не знайдено"}, status=404, headers=cors_headers(request))
+    cats = await run_db(get_all_categories, False)
+    return promo, {str(c.get("id")): c.get("name") or str(c.get("id")) for c in cats}, None
+
+
+async def handle_get_promo_channel_post(request: web.Request):
+    """Типові параметри картинки й текст поста з налаштувань акції + канал і довідники для форми."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    promo, cats, err_resp = await _promo_card_context(request)
+    if err_resp is not None:
+        return err_resp
+    params, _ = promo_cards_svc.normalize_promo_params({}, promo, cats)
+    return web.json_response(
+        {
+            "ok": True,
+            "channel": await run_db(channel_posts_svc.get_channel),
+            "params": params,
+            "text": promo_cards_svc.default_post_text(promo, params),
+            "motifs": [{"key": k, "label": v[0], "tag": v[1]} for k, v in promo_cards_svc.MOTIFS.items()],
+            "accents": list(promo_cards_svc.ACCENTS),
+        },
+        headers=cors_headers(request),
+    )
+
+
+async def handle_promo_channel_card(request: web.Request):
+    """PNG-превʼю картинки акції (те саме зображення піде в канал)."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        data = None
+    if not isinstance(data, dict):
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    promo, cats, err_resp = await _promo_card_context(request)
+    if err_resp is not None:
+        return err_resp
+    params, err = promo_cards_svc.normalize_promo_params(data, promo, cats)
+    if err:
+        return web.json_response({"ok": False, "error": err}, status=400, headers=cors_headers(request))
+    try:
+        png = await asyncio.to_thread(promo_cards_svc.render_promo_card, **params)
+    except Exception:
+        logger.exception("Не вдалось намалювати картинку акції %s", promo.get("id"))
+        return web.json_response({"ok": False, "error": "Не вдалось створити картинку"}, status=500, headers=cors_headers(request))
+    return web.Response(body=png, content_type="image/png", headers={**cors_headers(request), "Cache-Control": "no-store"})
+
+
+async def handle_publish_promo_post(request: web.Request):
+    """Пост акції в канал: картинка з налаштувань акції + підпис + кнопка «Відкрити магазин»."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    try:
+        data = await request.json()
+    except Exception:
+        data = None
+    if not isinstance(data, dict):
+        return web.json_response({"ok": False, "error": "Bad JSON"}, status=400, headers=cors_headers(request))
+    promo, cats, err_resp = await _promo_card_context(request)
+    if err_resp is not None:
+        return err_resp
+    channel = channel_posts_svc.normalize_channel(data.get("channel"))
+    if not channel:
+        return web.json_response(
+            {"ok": False, "error": "Вкажіть канал: @username або ID на кшталт -100…"}, status=400, headers=cors_headers(request)
+        )
+    params, err = promo_cards_svc.normalize_promo_params(data.get("card"), promo, cats)
+    if err:
+        return web.json_response({"ok": False, "error": err}, status=400, headers=cors_headers(request))
+    text, text_err = channel_posts_svc.validate_text(data.get("text"), True, 0)
+    if text_err:
+        return web.json_response({"ok": False, "error": text_err}, status=400, headers=cors_headers(request))
+    try:
+        png = await asyncio.to_thread(promo_cards_svc.render_promo_card, **params)
+    except Exception:
+        logger.exception("Не вдалось намалювати картинку акції %s", promo.get("id"))
+        return web.json_response({"ok": False, "error": "Не вдалось створити картинку"}, status=500, headers=cors_headers(request))
+    tg_bot = getattr(bot_app, "bot", None)
+    if tg_bot is None:
+        return web.json_response({"ok": False, "error": "Бот не запущено"}, status=502, headers=cors_headers(request))
+
+    from rich_messages import _telegram_retry
+    from telegram import InputFile
+
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛍 Відкрити магазин", url=promo_cards_svc.shop_link())]])
+    silent = bool(data.get("silent"))
+    try:
+        message = await _telegram_retry(
+            lambda: tg_bot.send_photo(
+                chat_id=channel, photo=InputFile(io.BytesIO(png), filename="promo.png"),
+                caption=channel_posts_svc.caption_html(text), parse_mode="HTML",
+                reply_markup=markup, disable_notification=silent,
+            ),
+            label="channel promo post",
+        )
+    except Exception as e:
+        logger.warning("Пост акції %s у канал %s не вдався: %s", promo.get("id"), channel, _redact_token(e))
+        return web.json_response({"ok": False, "error": _channel_error_text(e)}, status=502, headers=cors_headers(request))
+    if channel != await run_db(channel_posts_svc.get_channel):
+        await run_db(channel_posts_svc.set_channel, channel)
+    pinned = False
+    if data.get("pin"):
+        try:
+            await tg_bot.pin_chat_message(chat_id=channel, message_id=message.message_id, disable_notification=True)
+            pinned = True
+        except Exception as e:
+            logger.warning("Не вдалось закріпити пост акції у %s: %s", channel, _redact_token(e))
+    return web.json_response(
+        {"ok": True, "url": channel_posts_svc.post_url(channel, message.message_id), "pinned": pinned, "channel": channel},
         headers=cors_headers(request),
     )
 

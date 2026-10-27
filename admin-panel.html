@@ -7207,6 +7207,201 @@
             };
         }
 
+        // ── Акція → пост у канал: картинка й текст беруться з налаштувань акції, усе можна підправити ──
+        const PROMO_CARD_ACCENT_LABELS = {
+            blue: 'Синій', orange: 'Помаранчевий', violet: 'Фіолетовий', green: 'Зелений',
+            teal: 'Бірюзовий', pink: 'Рожевий', red: 'Червоний', amber: 'Бурштиновий',
+        };
+
+        async function openPromoChannelDialog(promoId) {
+            let info;
+            try {
+                info = await productApi(`/admin/promotions/${encodeURIComponent(promoId)}/channel-post`, 'GET');
+            } catch (e) {
+                showToast(e.message || 'Не вдалося завантажити дані акції', 'error');
+                return;
+            }
+            const params = info.params || {};
+            const field = 'width:100%;box-sizing:border-box;padding:10px 12px;font-size:15px;border:2px solid var(--border-input);border-radius:10px;background:var(--bg-input);color:var(--text-main);';
+            const label = 'font-size:13px;font-weight:600;';
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+            overlay.innerHTML = `
+                <div style="background:var(--bg-card);color:var(--text-main);border-radius:16px;padding:20px;width:100%;max-width:520px;max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+                    <style>@keyframes pcd-pulse{0%,100%{opacity:.55}50%{opacity:1}}</style>
+                    <div style="font-size:17px;font-weight:700;margin-bottom:2px;">📣 Акція в канал</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Картинка й текст зібрані з налаштувань акції. Змініть, що потрібно: прев'ю оновлюється саме.</div>
+                    <div style="display:flex;justify-content:center;margin-bottom:10px;">
+                        <div style="position:relative;width:min(100%,340px);aspect-ratio:1/1;border-radius:14px;overflow:hidden;background:var(--bg-input);border:1px solid var(--border-input);">
+                            <img id="pcd-prev" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;">
+                            <div id="pcd-state" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;box-sizing:border-box;font-size:13px;color:var(--text-muted);animation:pcd-pulse 1.2s ease-in-out infinite;">Малюю прев'ю…</div>
+                        </div>
+                    </div>
+                    <div id="pcd-prev-err" style="color:#e53935;font-size:13px;margin-bottom:8px;display:none;"></div>
+                    <label style="${label}">Заголовок на картинці</label>
+                    <input id="pcd-title" type="text" autocomplete="off" maxlength="70" style="${field}margin:4px 0 8px;">
+                    <label style="${label}">Опис <span style="font-weight:400;color:var(--text-muted);">(під заголовком)</span></label>
+                    <input id="pcd-sub" type="text" autocomplete="off" maxlength="120" style="${field}margin:4px 0 8px;">
+                    <div style="display:flex;gap:8px;margin-bottom:8px;">
+                        <div style="flex:1;min-width:0;">
+                            <label style="${label}">Значення в колі</label>
+                            <input id="pcd-big" type="text" autocomplete="off" maxlength="8" style="${field}margin-top:4px;">
+                        </div>
+                        <div style="flex:2;min-width:0;">
+                            <label style="${label}">Підпис у колі</label>
+                            <input id="pcd-cap" type="text" autocomplete="off" maxlength="30" style="${field}margin-top:4px;">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-bottom:8px;">
+                        <div style="flex:2;min-width:0;">
+                            <label style="${label}">Умова <span style="font-weight:400;color:var(--text-muted);">(плашка знизу)</span></label>
+                            <input id="pcd-cond" type="text" autocomplete="off" maxlength="44" style="${field}margin-top:4px;">
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <label style="${label}">Тег у кутку</label>
+                            <input id="pcd-tag" type="text" autocomplete="off" maxlength="24" style="${field}margin-top:4px;">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-bottom:10px;">
+                        <div style="flex:1;min-width:0;">
+                            <label style="${label}">Ілюстрація</label>
+                            <select id="pcd-motif" style="${field}margin-top:4px;">${(info.motifs || []).map(m => `<option value="${escapeAttr(m.key)}">${escapeHtml(m.label)}</option>`).join('')}</select>
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <label style="${label}">Колір</label>
+                            <select id="pcd-accent" style="${field}margin-top:4px;">${(info.accents || []).map(a => `<option value="${escapeAttr(a)}">${escapeHtml(PROMO_CARD_ACCENT_LABELS[a] || a)}</option>`).join('')}</select>
+                        </div>
+                    </div>
+                    <button type="button" id="pcd-reset" class="btn btn-secondary" style="min-height:36px;font-size:13px;margin-bottom:12px;">↺ Повернути значення з акції</button>
+                    <label style="${label}">Канал</label>
+                    <input id="pcd-channel" type="text" autocomplete="off" placeholder="@username або -100…" value="${escapeAttr(info.channel || '')}" style="${field}margin:4px 0 4px;">
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Бот має бути адміном каналу з правом публікації.</div>
+                    <div style="margin-bottom:10px;">
+                        <label style="${label}">Хештеги <span style="font-weight:400;color:var(--text-muted);">(допишуться в кінці поста)</span></label>
+                        <div id="pcd-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+                            ${CHANNEL_HASHTAGS.map(h => `<button type="button" class="btn btn-secondary" data-h="${escapeAttr(h.tag)}" title="${escapeAttr(h.hint)}" style="padding:6px 10px;font-size:13px;min-height:36px;">${escapeHtml(h.tag)}</button>`).join('')}
+                        </div>
+                    </div>
+                    <label style="${label}">Текст поста</label>
+                    <textarea id="pcd-text" rows="8" style="${field}resize:vertical;font-family:inherit;margin-top:4px;"></textarea>
+                    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:4px;">
+                        <span>Перший рядок буде жирним · під постом кнопка «Відкрити магазин»</span><span id="pcd-count"></span>
+                    </div>
+                    <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px;"><input id="pcd-silent" type="checkbox"> Без звуку для підписників</label>
+                    <label style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:14px;"><input id="pcd-pin" type="checkbox"> Закріпити в каналі</label>
+                    <div id="pcd-err" style="color:#e53935;font-size:13px;min-height:18px;margin-top:8px;"></div>
+                    <div style="display:flex;gap:8px;margin-top:6px;">
+                        <button type="button" id="pcd-cancel" class="btn btn-secondary" style="flex:1;">Скасувати</button>
+                        <button type="button" id="pcd-ok" class="btn btn-primary" style="flex:2;">Опублікувати</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            const $ = sel => overlay.querySelector(sel);
+            const textEl = $('#pcd-text');
+            const ids = { title: '#pcd-title', subtitle: '#pcd-sub', big: '#pcd-big', caption: '#pcd-cap', condition: '#pcd-cond', tag: '#pcd-tag', motif: '#pcd-motif', accent: '#pcd-accent' };
+            const fillParams = p => { Object.entries(ids).forEach(([k, sel]) => { $(sel).value = p[k] || ''; }); };
+            const readParams = () => Object.fromEntries(Object.entries(ids).map(([k, sel]) => [k, $(sel).value.trim()]));
+            const selTags = new Set(['#акція']);
+            const tagsLine = () => CHANNEL_HASHTAGS.map(h => h.tag).filter(t => selTags.has(t)).join(' ');
+            const fullText = () => {
+                const t = textEl.value.trim();
+                const tl = tagsLine();
+                return tl ? `${t}\n\n${tl}` : t;
+            };
+            const updateCount = () => {
+                const n = fullText().length;
+                const c = $('#pcd-count');
+                c.textContent = `${n} / 1024`;
+                c.style.color = n > 1024 ? '#e53935' : '';
+            };
+            const refreshTags = () => {
+                overlay.querySelectorAll('#pcd-tags [data-h]').forEach(b => { b.className = 'btn ' + (selTags.has(b.dataset.h) ? 'btn-primary' : 'btn-secondary'); });
+                updateCount();
+            };
+            overlay.querySelectorAll('#pcd-tags [data-h]').forEach(b => {
+                b.onclick = () => { if (selTags.has(b.dataset.h)) selTags.delete(b.dataset.h); else selTags.add(b.dataset.h); refreshTags(); };
+            });
+            textEl.addEventListener('input', updateCount);
+            fillParams(params);
+            textEl.value = info.text || '';
+            refreshTags();
+
+            let prevTimer = null, prevCtl = null, prevUrl = '';
+            const showState = (msg, errText) => {
+                const img = $('#pcd-prev'), st = $('#pcd-state'), pe = $('#pcd-prev-err');
+                if (msg) { st.textContent = msg; st.style.display = 'flex'; st.style.animation = errText ? 'none' : ''; img.style.display = 'none'; }
+                pe.style.display = errText ? '' : 'none';
+                pe.textContent = errText ? "Прев'ю недоступне: " + errText : '';
+            };
+            const renderPreview = async () => {
+                if (prevCtl) prevCtl.abort();
+                const ctl = prevCtl = new AbortController();
+                const img = $('#pcd-prev');
+                if (img.style.display === 'none') showState("Малюю прев'ю…");
+                else { img.style.opacity = '.5'; $('#pcd-prev-err').style.display = 'none'; }
+                try {
+                    const res = await fetch(API_BASE + `/admin/promotions/${encodeURIComponent(promoId)}/channel-card`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(readParams()), signal: ctl.signal,
+                    });
+                    if (!res.ok || !(res.headers.get('content-type') || '').startsWith('image/')) {
+                        let msg = `Помилка (${res.status})`;
+                        try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (_) { /* не JSON */ }
+                        throw new Error(msg);
+                    }
+                    const blob = await res.blob();
+                    if (ctl.signal.aborted) return;
+                    if (prevUrl) URL.revokeObjectURL(prevUrl);
+                    prevUrl = URL.createObjectURL(blob);
+                    img.src = prevUrl;
+                    img.style.opacity = '';
+                    img.style.display = 'block';
+                    $('#pcd-state').style.display = 'none';
+                    $('#pcd-prev-err').style.display = 'none';
+                } catch (e) {
+                    if (ctl.signal.aborted || e.name === 'AbortError') return;
+                    img.style.opacity = '';
+                    showState('Не вдалося намалювати', e.message || 'невідома помилка');
+                }
+            };
+            const schedulePreview = () => { $('#pcd-err').textContent = ''; clearTimeout(prevTimer); prevTimer = setTimeout(renderPreview, 400); };
+            Object.values(ids).forEach(sel => { $(sel).addEventListener('input', schedulePreview); $(sel).addEventListener('change', schedulePreview); });
+            $('#pcd-reset').onclick = () => { fillParams(params); textEl.value = info.text || ''; updateCount(); schedulePreview(); };
+            renderPreview();
+
+            const close = () => {
+                clearTimeout(prevTimer);
+                if (prevCtl) prevCtl.abort();
+                if (prevUrl) URL.revokeObjectURL(prevUrl);
+                overlay.remove();
+            };
+            $('#pcd-cancel').onclick = close;
+            overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+            $('#pcd-ok').onclick = async () => {
+                const channel = $('#pcd-channel').value.trim();
+                const err = $('#pcd-err');
+                if (!channel) { err.textContent = 'Вкажіть канал'; $('#pcd-channel').focus(); return; }
+                if (!textEl.value.trim()) { err.textContent = 'Текст поста порожній'; textEl.focus(); return; }
+                if (!$('#pcd-title').value.trim()) { err.textContent = 'Вкажіть заголовок для картинки'; $('#pcd-title').focus(); return; }
+                const text = fullText();
+                if (text.length > 1024) { err.textContent = `Задовгий текст: ${text.length} із 1024`; return; }
+                const ok = $('#pcd-ok');
+                ok.disabled = true;
+                ok.textContent = 'Публікую…';
+                try {
+                    const res = await productApi(`/admin/promotions/${encodeURIComponent(promoId)}/channel-post`, 'POST', {
+                        channel, text, card: readParams(), silent: $('#pcd-silent').checked, pin: $('#pcd-pin').checked,
+                    });
+                    close();
+                    showToast(res.pinned ? 'Акцію опубліковано й закріплено в каналі ✅' : 'Акцію опубліковано в каналі ✅', 'success');
+                } catch (e) {
+                    err.textContent = e.message || 'Не вдалося опублікувати';
+                    ok.disabled = false;
+                    ok.textContent = 'Опублікувати';
+                }
+            };
+        }
+
         // Старе «видалення» тепер переносить в архів
         function deleteProduct(id) {
             return setProductStatus(id, 'archive');
@@ -9549,7 +9744,7 @@
             { key: 'summer', group: 'season', label: '☀️ Літня −10% від 400 ₴', accent: 'amber', data: { id: 'summer_10', type: 'order_percent', title: '☀️ Літня знижка −10%', subtitle: 'Спекотні ціни: −10% на замовлення від 400 ₴', emoji: '☀️', badge: '−10%', value: 10, min_order: 400, priority: 8 } },
             { key: 'weekend', group: 'season', label: '🎉 Знижка вихідного дня −10%', accent: 'violet', data: { id: 'weekend_10', type: 'order_percent', title: '🎉 Знижка вихідного дня', subtitle: 'Вмикай на вихідні: −10% на замовлення від 300 ₴', emoji: '🎉', badge: '−10%', value: 10, min_order: 300, priority: 12 } },
             { key: 'review', group: 'info', label: '⭐ Відгук = купон', data: { id: 'review_bonus', type: 'info', title: '⭐ Відгук — і купон твій', subtitle: 'Надішли фото товару у відгуку і отримай персональний купон −50 ₴', emoji: '⭐', badge: '', priority: 35 } },
-            { key: 'birthday', group: 'info', label: '🎂 Подарунок на день народження', data: { id: 'birthday_gift', type: 'info', title: '🎂 Твій день народження', subtitle: 'Напиши нам у місяць свого дня народження — надішлемо персональний купон', emoji: '🎂', badge: '', priority: 35 } },
+            { key: 'birthday', group: 'info', label: '🎂 Подарунок на день народження', data: { id: 'birthday_gift', type: 'info', title: '🎂 Твій день народження', subtitle: 'Напиши нам у тиждень свого дня народження — надішлемо персональний купон', emoji: '🎂', badge: '', priority: 35 } },
         ];
 
         // Дата з API: «2026-10-03 04:06:59», ISO або «2026-10-03»; без часового поясу — UTC (як у магазині)
@@ -9694,6 +9889,7 @@
                             <span class="switch"><input type="checkbox" ${p.active ? 'checked' : ''} onchange="togglePromotionActive(this.closest('[data-promotion-id]').dataset.promotionId, this.checked)"><span class="switch-slider"></span></span>
                             ${p.active ? 'Увімкнена' : 'Вимкнена'}
                         </label>
+                        <button class="btn btn-secondary" type="button" title="Опублікувати акцію в канал" onclick="openPromoChannelDialog(this.closest('[data-promotion-id]').dataset.promotionId)">📣 У канал</button>
                         <button class="btn btn-secondary" type="button" onclick="openPromotionModal(this.closest('[data-promotion-id]').dataset.promotionId)">✏️ Редагувати</button>
                     </div>
                 </div>
