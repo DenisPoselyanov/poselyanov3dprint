@@ -35,13 +35,8 @@ def is_safe_http_url(url: str) -> bool:
 
         for info in addr_infos:
             ip = ipaddress.ip_address(info[4][0])
-            if (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_reserved
-                or ip.is_multicast
-            ):
+            # is_global відсікає й CGNAT 100.64/10 (наприклад 100.100.100.200), якого немає в is_private
+            if not ip.is_global or ip.is_multicast:
                 return False
         return True
     except Exception:

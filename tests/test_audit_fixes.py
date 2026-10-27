@@ -168,6 +168,25 @@ def test_public_only_resolver_blocks_cgnat_and_metadata():
     assert asyncio.run(resolve("93.184.216.34"))
 
 
+@pytest.mark.parametrize("url", [
+    "http://100.100.100.200/x.jpg",
+    "http://100.64.0.1/x.jpg",
+    "http://169.254.169.254/latest/meta-data",
+    "http://10.0.0.5/x.jpg",
+    "http://[::1]/x.jpg",
+])
+def test_is_safe_http_url_rejects_non_public_literals(url):
+    from security_utils import is_safe_http_url
+
+    assert not is_safe_http_url(url)
+
+
+def test_is_safe_http_url_allows_public_literal():
+    from security_utils import is_safe_http_url
+
+    assert is_safe_http_url("http://93.184.216.34/x.jpg")
+
+
 def test_fetch_image_rejects_loopback_host(monkeypatch):
     import bot
 
