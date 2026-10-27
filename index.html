@@ -5008,7 +5008,7 @@ function orderCardHtml(o) {
   }).join('');
   const ttn = o.ttn ? `<div class="ord-ttn"><span>ТТН <code>${escapeHtml(o.ttn)}</code></span>
       <button type="button" class="link-btn" data-act="order-copy" data-ttn="${escapeAttr(o.ttn)}">${ic('copy')}Копіювати</button></div>` : '';
-  const canRepeat = o.items.some(it => !it.is_gift && it.product_id > 0);
+  const canRepeat = o.items.some(isRepeatableOrderItem);
   const actions = canRepeat && (o.status === 'delivered' || o.status === 'cancelled')
     ? `<div class="ord-actions"><button type="button" class="btn" data-act="order-repeat" data-id="${o.id}">${ic('refresh')}Повторити</button>${orderReviewButton(o)}</div>` : orderReviewButton(o) ? `<div class="ord-actions">${orderReviewButton(o)}</div>` : '';
   return `<article class="ord-card" id="order-${o.id}">
@@ -5433,6 +5433,12 @@ async function copyTtn(ttn) {
   haptic(ok ? 'success' : 'error');
   showToast({ msg: ok ? `ТТН ${ttn} скопійовано` : 'Не вдалось скопіювати — виділи номер вручну', icon: ok ? 'check' : 'alert' });
 }
+// Подарунок і приз розіграшу (0 ₴) не повторюємо; старі призи без is_prize впізнаємо за назвою
+function isRepeatableOrderItem(it) {
+  if (it.is_gift || it.is_prize || !(it.product_id > 0)) return false;
+  return !String(it.product_name || '').startsWith('🎁 Приз розіграшу');
+}
+
 // «Повторити»: ті самі товари в кошик (кольори й імена беремо з замовлення; недоступні пропускаємо)
 function repeatOrder(id) {
   const o = (MY_ORDERS || []).find(x => x.id === id);
@@ -5440,7 +5446,7 @@ function repeatOrder(id) {
   const prevGift = getGiftEligibleToyLineCount();
   let added = 0, skipped = 0;
   for (const it of o.items) {
-    if (it.is_gift || !(it.product_id > 0)) continue;
+    if (!isRepeatableOrderItem(it)) continue;
     const p = findAnyProduct(it.product_id);
     if (!p) { skipped++; continue; }
     // Розмір, якого вже немає, наосліп не підставляємо

@@ -312,3 +312,51 @@ def test_update_suggestion_sets_license_and_stats(env):
         assert not (await ai.update_suggestion(999, {"license": "x"}))["ok"]
 
     asyncio.run(run())
+
+
+def _draft_data(env, product):
+    import json
+    from db_core import db_connect
+
+    conn = db_connect()
+    sid = conn.execute("INSERT INTO ai_suggestions (status, name, data) VALUES ('new', 'Тест', '{}')").lastrowid
+    conn.commit()
+    conn.close()
+    res = ai.save_review_draft(sid, product)
+    conn = db_connect()
+    data = json.loads(conn.execute("SELECT data FROM ai_suggestions WHERE id = ?", (sid,)).fetchone()[0])
+    conn.close()
+    return res, data
+
+
+def test_editor_draft_keeps_variants_ids_and_contract(env):
+    res, data = _draft_data(env, {"name": "Х", "variants": [
+        {"id": "v1", "name": "10 см", "price": 10},
+        {"id": "v2", "name": "20 см", "price": 30000},
+        {"id": "v3", "name": "Під замовлення", "contract": True},
+    ]})
+    assert res["ok"]
+    assert data["variants"] == [
+        {"id": "v1", "name": "10 см", "price": 10},
+        {"id": "v2", "name": "20 см", "price": 30000},
+        {"id": "v3", "name": "Під замовлення", "contract": True},
+    ]
+    assert data["price"] == 10 and data["oldPrice"] is None  # як у каталозі: мінімальна ціна варіантів
+
+
+def test_editor_draft_two_variants_one_contract_stay_variants(env):
+    _, data = _draft_data(env, {"variants": [{"id": "a", "name": "S", "price": 100}, {"id": "b", "name": "M", "contract": True}]})
+    assert [v["name"] for v in data["variants"]] == ["S", "M"] and data["variants"][1]["contract"] is True
+
+
+def test_editor_draft_invalid_variants_rejected_and_price_not_clamped(env):
+    res, _ = _draft_data(env, {"variants": [{"name": "S", "price": 100}, {"name": "S", "price": 200}]})
+    assert not res["ok"] and "повторюється" in res["error"]
+    _, data = _draft_data(env, {"price": 50000, "oldPrice": -5})
+    assert data["price"] == 50000 and "oldPrice" not in data
+
+
+def test_ai_variants_path_unchanged():
+    assert ai._variants([{"name": "A", "price": 10}, {"name": "B", "price": 30000}]) == [
+        {"name": "A", "price": 20}, {"name": "B", "price": 20000}]
+    assert ai._variants([{"name": "A", "price": 100}, {"name": "B", "contract": True}]) == []

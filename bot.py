@@ -252,7 +252,7 @@ from services.users import (
     save_user_id,
     set_blocked,
 )
-from services.validation import validate_checkout_fields, validate_order_payload
+from services.validation import resolve_order_gift, validate_checkout_fields, validate_order_payload
 from services.notifications import notify_coupon_created
 from handlers.register import (
     TELEGRAM_ALLOWED_UPDATES,
@@ -485,29 +485,40 @@ def get_admin_webapp_url(order_id: int | None = None) -> str | None:
     return admin_url
 
 
-def fetch_image_bytes_from_url(url: str, max_bytes: int = MAX_UPLOAD_BYTES) -> tuple[bytes, str]:
-    import urllib.request
-
-    if not is_safe_http_url(url):
-        raise ValueError("URL не дозволений для завантаження")
-
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "poselyanov3dprint-admin/1.0"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        content_type = resp.headers.get("Content-Type", "")
-        chunks = []
-        total = 0
-        while True:
-            chunk = resp.read(1024 * 1024)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > max_bytes:
-                raise ValueError(f"Файл занадто великий (>{max_bytes // 1024 // 1024}MB)")
-            chunks.append(chunk)
-        return b"".join(chunks), content_type
+async def fetch_image_bytes_from_url(url: str, max_bytes: int = MAX_UPLOAD_BYTES) -> tuple[bytes, str]:
+    """Завантаження фото за URL для адмінки (SSRF): з'єднання лише з публічними IP через _PublicOnlyResolver,
+    редиректи — вручну, до 3, з перевіркою кожного; розмір обмежується під час читання."""
+    too_big = f"Файл занадто великий (>{max_bytes // 1024 // 1024}MB)"
+    timeout = aiohttp.ClientTimeout(total=60)
+    connector = aiohttp.TCPConnector(resolver=_PublicOnlyResolver())
+    async with aiohttp.ClientSession(
+        timeout=timeout, connector=connector, headers={"User-Agent": "poselyanov3dprint-admin/1.0"}
+    ) as session:
+        target = url
+        for _ in range(4):
+            if not await asyncio.to_thread(is_safe_http_url, target):
+                raise ValueError("URL не дозволений для завантаження")
+            try:
+                async with session.get(target, allow_redirects=False) as resp:
+                    if resp.status in (301, 302, 303, 307, 308):
+                        location = resp.headers.get("Location") or ""
+                        if not location:
+                            raise ValueError("Сервер повернув редирект без адреси")
+                        target = str(resp.url.join(resp.url.__class__(location)))
+                        continue
+                    if resp.status != 200:
+                        raise ValueError(f"Сервер з фото відповів {resp.status}")
+                    if (resp.content_length or 0) > max_bytes:
+                        raise ValueError(too_big)
+                    buf = bytearray()
+                    async for chunk in resp.content.iter_chunked(1024 * 1024):
+                        buf.extend(chunk)
+                        if len(buf) > max_bytes:
+                            raise ValueError(too_big)
+                    return bytes(buf), resp.headers.get("Content-Type", "")
+            except (aiohttp.ClientError, OSError) as e:
+                raise ValueError(f"Не вдалося завантажити фото: {e}") from e
+        raise ValueError("Забагато редиректів")
 
 
 def _cloudinary_upload_with_timeout(file_data: bytes, upload_opts: dict):
@@ -2055,7 +2066,6 @@ async def handle_order(request):
     items = data.get("items", [])
     client_total = _safe_int(data.get("total_price"))
     comment = (data.get("comment") or "").strip()
-    gift = data.get("gift")
     coupon_code = (data.get("coupon_code") or "").strip() or None
 
     if coupon_code:
@@ -2105,6 +2115,12 @@ async def handle_order(request):
     ok, checkout = validate_checkout_fields(data)
     if not ok:
         return web.json_response({"ok": False, "error": checkout}, status=400, headers=cors_headers(request))
+
+    # Подарунок вирішує сервер: клієнт лише просить товар, поріг акції й сам товар перевіряємо тут
+    resolved_gift = await run_db(resolve_order_gift, result["items"], checkout.pop("gift_product_id", None))
+    gift = None
+    if resolved_gift:
+        checkout["gift_product_id"], gift = resolved_gift
 
     # Акцію для статистики визначає сервер, а не клієнт: знижка > подарунок > безкоштовна доставка
     gift_rule = get_gift_rule() if checkout.get("gift_product_id") else None
@@ -4296,7 +4312,8 @@ class _PublicOnlyResolver(aiohttp.abc.AbstractResolver):
         ok = []
         for info in infos:
             ip = ipaddress.ip_address(info["host"])
-            if not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            # is_global відсікає й те, чого немає в is_private: CGNAT 100.64/10 (зокрема 100.100.100.200)
+            if ip.is_global and not ip.is_multicast:
                 ok.append(info)
         if not ok:
             raise OSError(f"Хост {host} вказує на непублічну адресу")
@@ -5470,9 +5487,15 @@ async def handle_delete_giveaway(request: web.Request):
         return denied
     gid = _giveaway_id(request)
     g = await run_db(giveaways_svc.get_giveaway, gid)
-    if not await run_db(giveaways_svc.purge_giveaway, gid):
-        return web.json_response({"ok": False, "error": "Активний розіграш спершу скасуйте"},
-                                 status=409, headers=cors_headers(request))
+    res = await run_db(giveaways_svc.purge_result, gid)
+    if res != "ok":
+        msgs = {
+            "busy": "Активний розіграш (або жеребкування ще триває) — спершу скасуйте або дочекайтесь результату",
+            "prize": "Переможці ще не забрали приз — дочекайтесь, поки вони його заберуть або мине строк",
+            "missing": "Розіграш не знайдено",
+        }
+        return web.json_response({"ok": False, "error": msgs.get(res, "Не вдалося видалити розіграш")},
+                                 status=404 if res == "missing" else 409, headers=cors_headers(request))
     if g and g.get("message_id") and g.get("status") != "cancelled":
         try:
             await bot_app.bot.edit_message_reply_markup(chat_id=g["channel"], message_id=g["message_id"],
@@ -5783,7 +5806,7 @@ async def handle_upload_photo_url(request: web.Request):
             return web.json_response({"ok": False, "error": "❌ Небезпечне посилання"}, status=400, headers=cors_headers(request))
 
         try:
-            file_data, content_type = await asyncio.to_thread(fetch_image_bytes_from_url, url)
+            file_data, content_type = await fetch_image_bytes_from_url(url)
         except ValueError as e:
             return web.json_response({"ok": False, "error": str(e)}, status=400, headers=cors_headers(request))
 

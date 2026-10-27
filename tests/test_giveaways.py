@@ -877,3 +877,55 @@ def test_referral_scope_new_only_counts_new_users(env):
 def test_referral_scope_validated(env):
     assert gw.validate_giveaway(_payload(referral_scope="x"))[1]
     assert gw.validate_giveaway(_payload())[0]["referral_scope"] == "any"
+
+
+def test_purge_refused_while_drawing(env):
+    gid = _create()
+    gw.join(gid, 1)
+    assert gw.claim_for_draw(gid)
+    assert gw.purge_result(gid) == "busy" and gw.purge_giveaway(gid) is False
+    assert gw.get_giveaway(gid) is not None and gw.get_entry(gid, 1) is not None
+    assert gw.purge_result(999999) == "missing"
+
+
+def test_purge_refused_with_live_unclaimed_prize(env):
+    gid, wid, uid = _published_winner()
+    assert gw.issue_prize(wid)["ok"]
+    assert gw.purge_result(gid) == "prize" and gw.purge_giveaway(gid) is False
+    assert gw.get_giveaway(gid) is not None and gw.list_winners([gid])[gid]
+    assert [p["winner_id"] for p in gw.active_prizes(uid)] == [wid]
+
+    # приз забрано (замовлення не скасоване) — видалення дозволене
+    _order(88, uid)
+    assert _claim(wid, uid, 88)
+    assert gw.purge_result(gid) == "ok"
+    assert gw.get_giveaway(gid) is None and gw.list_winners([gid]).get(gid, []) == []
+
+
+def test_purge_allowed_after_prize_expired(env):
+    gid, wid, uid = _published_winner()
+    assert gw.issue_prize(wid)["ok"]
+    assert gw.purge_result(gid) == "prize"
+    _sql("UPDATE giveaway_winners SET claim_deadline = '2020-01-01 00:00:00' WHERE id = ?", (wid,))
+    assert gw.purge_result(gid) == "ok"
+    assert gw.get_giveaway(gid) is None
+
+
+def test_save_draw_noop_when_not_drawing(env):
+    gid = _create()
+    for uid in (1, 2, 3):
+        gw.join(gid, uid)
+    # активний (не drawing)
+    assert gw.save_draw(gid, [1], [2], 3) is False
+    assert gw.list_winners([gid]).get(gid, []) == [] and gw.get_giveaway(gid)["status"] == "active"
+    # видалений під час жеребкування
+    assert gw.claim_for_draw(gid)
+    _sql("DELETE FROM giveaways WHERE id = ?", (gid,))
+    assert gw.save_draw(gid, [1], [2], 3) is False
+    assert gw.list_winners([gid]).get(gid, []) == []
+    # звичайний шлях
+    gid2 = _create()
+    gw.join(gid2, 1)
+    assert gw.claim_for_draw(gid2)
+    assert gw.save_draw(gid2, [1], [], 1) is True
+    assert gw.get_giveaway(gid2)["status"] == "drawn"

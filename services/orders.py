@@ -94,8 +94,8 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
             _sql("""
                 INSERT INTO order_items
                 (order_id, product_id, product_name, price, quantity, filament, is_contract_price, comment,
-                 personalization, personalization_note, is_gift, variant_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 personalization, personalization_note, is_gift, variant_id, is_prize)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """),
             (
                 order_id,
@@ -110,6 +110,7 @@ def _insert_order_items(conn, order_id: int, items: list) -> None:
                 personalization_note,
                 1 if item.get("is_gift") else 0,
                 str(item.get("variant_id") or "")[:16],
+                1 if item.get("is_prize") else 0,
             ),
         )
 
@@ -179,7 +180,9 @@ def save_order(
     conn = db_connect()
     uid = int(user_id or 0)
     extra_fields = _clean_extra(extra)
-    active = _find_active_order(uid) if uid > 0 and merge else None
+    # Замовлення з купоном не зливаємо: купон резервується лише за окремим замовленням,
+    # інакше одноразовий код діяв би на кожну дозамову без використання
+    active = _find_active_order(uid) if uid > 0 and merge and not coupon_code else None
 
     if active:
         order_id = int(active["id"])
@@ -196,10 +199,13 @@ def save_order(
         conn.execute(
             _sql("""
                 UPDATE orders
-                SET total_price = ?, price_pending = ?, gift_product_name = ?
+                SET total_price = ?, price_pending = ?, gift_product_name = ?,
+                    discount_amount = COALESCE(discount_amount, 0) + ?,
+                    promotion_discount = COALESCE(promotion_discount, 0) + ?
                 WHERE id = ?
             """),
-            (new_total, new_price_pending, merged_gift, order_id),
+            (new_total, new_price_pending, merged_gift, int(discount_amount or 0),
+             int(promotion_discount or 0), order_id),
         )
 
         _insert_order_items(conn, order_id, items)
@@ -414,7 +420,7 @@ def list_user_orders(user_id: int, limit: int = 30) -> list[dict]:
         items = conn.execute(
             _sql(f"""
                 SELECT order_id, product_id, product_name, price, quantity, filament,
-                       is_contract_price, personalization, personalization_note, is_gift, variant_id
+                       is_contract_price, personalization, personalization_note, is_gift, variant_id, is_prize
                 FROM order_items
                 WHERE order_id IN ({placeholders})
                 ORDER BY id

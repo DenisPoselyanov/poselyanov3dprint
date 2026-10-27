@@ -368,21 +368,41 @@ def delete_giveaway(giveaway_id: int) -> None:
         conn.close()
 
 
-def purge_giveaway(giveaway_id: int) -> bool:
-    """Видалити розіграш разом з учасниками й переможцями (не активний). Замовлення з призом лишаються."""
+def purge_result(giveaway_id: int) -> str:
+    """Видалити розіграш разом з учасниками й переможцями. Замовлення з призом лишаються.
+
+    Повертає: "ok" | "missing" | "busy" (активний або триває жеребкування) |
+    "prize" (хтось із переможців ще може забрати приз). Одна транзакція: спершу умовний DELETE
+    рядка розіграшу (статус і живі призи перевіряються в самому запиті), і лише потім діти."""
     gid = int(giveaway_id)
     conn = db_connect()
     try:
-        row = conn.execute(_sql("SELECT status FROM giveaways WHERE id = ?"), (gid,)).fetchone()
-        if not row or row[0] == "active":
-            return False
+        cur = conn.execute(
+            _sql("DELETE FROM giveaways WHERE id = ? AND status NOT IN ('active', 'drawing') "
+                 "AND NOT EXISTS (SELECT 1 FROM giveaway_winners w WHERE w.giveaway_id = giveaways.id "
+                 f"AND w.role = 'winner' AND w.status = 'notified' AND w.claim_deadline > {_now_sql()} "
+                 f"AND NOT {CLAIMED_W})"),
+            (gid,),
+        )
+        if cur.rowcount != 1:
+            row = conn.execute(_sql("SELECT status FROM giveaways WHERE id = ?"), (gid,)).fetchone()
+            conn.rollback()
+            if not row:
+                return "missing"
+            return "busy" if row[0] in ("active", "drawing") else "prize"
         conn.execute(_sql("DELETE FROM giveaway_winners WHERE giveaway_id = ?"), (gid,))
         conn.execute(_sql("DELETE FROM giveaway_entries WHERE giveaway_id = ?"), (gid,))
-        conn.execute(_sql("DELETE FROM giveaways WHERE id = ?"), (gid,))
         conn.commit()
-        return True
+        return "ok"
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
+
+
+def purge_giveaway(giveaway_id: int) -> bool:
+    return purge_result(giveaway_id) == "ok"
 
 
 _GW_COLS = ("id", "title", "prize_type", "product_id", "product_variant", "prize_value", "winners_count", "ends_at", "channel", "shipping_payer",
@@ -617,28 +637,37 @@ def weighted_sample(weights: dict[int, int], k: int, rng=None) -> list[int]:
     return [uid for _, uid in keyed[: max(0, int(k))]]
 
 
-def save_draw(giveaway_id: int, winners: list[int], reserves: list[int], eligible_count: int) -> None:
+def save_draw(giveaway_id: int, winners: list[int], reserves: list[int], eligible_count: int) -> bool:
+    """Зберегти результат. False (і нічого не записано), якщо розіграш уже не у статусі 'drawing' (напр. видалений)."""
+    gid = int(giveaway_id)
     conn = db_connect()
     try:
-        conn.execute(_sql("DELETE FROM giveaway_winners WHERE giveaway_id = ?"), (int(giveaway_id),))
+        cur = conn.execute(
+            _sql(f"UPDATE giveaways SET status = 'drawn', drawn_at = {_now_sql()}, eligible_count = ? "
+                 "WHERE id = ? AND status = 'drawing'"),
+            (int(eligible_count), gid),
+        )
+        if cur.rowcount != 1:
+            conn.rollback()
+            return False
+        conn.execute(_sql("DELETE FROM giveaway_winners WHERE giveaway_id = ?"), (gid,))
         for pos, uid in enumerate(winners, 1):
             conn.execute(
                 _sql("INSERT INTO giveaway_winners (giveaway_id, user_id, role, position, status) "
                      "VALUES (?, ?, 'winner', ?, 'pending')"),
-                (int(giveaway_id), int(uid), pos),
+                (gid, int(uid), pos),
             )
         for pos, uid in enumerate(reserves, 1):
             conn.execute(
                 _sql("INSERT INTO giveaway_winners (giveaway_id, user_id, role, position, status) "
                      "VALUES (?, ?, 'reserve', ?, 'reserve')"),
-                (int(giveaway_id), int(uid), pos),
+                (gid, int(uid), pos),
             )
-        conn.execute(
-            _sql(f"UPDATE giveaways SET status = 'drawn', drawn_at = {_now_sql()}, eligible_count = ? "
-                 "WHERE id = ? AND status = 'drawing'"),
-            (int(eligible_count), int(giveaway_id)),
-        )
         conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -651,7 +680,8 @@ def draw(giveaway_id: int, eligible_user_ids: set[int], entries: list[dict], rng
     weights = compute_weights(entries, eligible_user_ids, g["referral_bonus"], g["referral_limit"])
     picked = weighted_sample(weights, g["winners_count"] + RESERVE_COUNT, rng)
     winners, reserves = picked[: g["winners_count"]], picked[g["winners_count"]:]
-    save_draw(g["id"], winners, reserves, len(weights))
+    if not save_draw(g["id"], winners, reserves, len(weights)):
+        return {"ok": False, "error": "Розіграш більше не в стані жеребкування"}
     return {"ok": True, "winners": winners, "reserves": reserves, "eligible": len(weights)}
 
 

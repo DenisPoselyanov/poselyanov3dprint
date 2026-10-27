@@ -16,7 +16,13 @@ from catalog_store import (
 )
 from services.coupons import check_coupon
 from services.pricing import split_discounts
-from services.promotions import best_order_promotion, compute_order_raw_discount, free_shipping_promotion
+from services.promotions import (
+    best_order_promotion,
+    compute_order_raw_discount,
+    free_shipping_promotion,
+    get_gift_rule,
+    promo_categories,
+)
 
 CUSTOM_VALUE_MAX = 300
 _NOTE_SEPARATOR = " · побажання:"
@@ -116,6 +122,38 @@ def _prize_line(prize: dict, products_by_id: dict) -> tuple[dict | None, str | N
     }, None
 
 
+def resolve_order_gift(items: list, gift_product_id) -> tuple[int, str] | None:
+    """Подарунок за акцією gift_threshold — лише якщо кошик справді проходить поріг.
+
+    items — позиції після validate_order_payload. Повертає (id, назва для замовлення) або None:
+    клієнт може лише попросити конкретний подарунок, а право на нього й сам товар перевіряє сервер."""
+    try:
+        gift_id = int(gift_product_id or 0)
+    except (TypeError, ValueError):
+        return None
+    rule = get_gift_rule()
+    if gift_id <= 0 or not rule:
+        return None
+    products_by_id = {p["id"]: p for p in PRODUCTS_CACHE}
+    categories = promo_categories(rule)
+    eligible = set()
+    for it in items:
+        if it.get("is_prize") or it.get("is_contract_price") or it.get("fromCustom"):
+            continue
+        product = products_by_id.get(int(it.get("product_id") or 0))
+        if product and (not categories or str(product.get("cat") or "") in categories):
+            eligible.add(int(product["id"]))
+    if len(eligible) < int(rule.get("min_items") or 0):
+        return None
+    gift = products_by_id.get(gift_id)
+    max_price = int(rule.get("max_gift_price") or 0)
+    if not gift or not gift.get("gift"):
+        return None
+    if max_price and int(gift.get("price") or 0) > max_price:
+        return None
+    return gift_id, str(gift.get("name") or "").strip()[:200]
+
+
 def validate_order_payload(items: list, coupon_code: str | None, user_id: int, client_total: int,
                            prize: dict | None = None):
     """Перерахунок суми на сервері. Повертає (ok, result_dict|error_message).
@@ -135,8 +173,10 @@ def validate_order_payload(items: list, coupon_code: str | None, user_id: int, c
     seen_line_keys: set[tuple] = set()
 
     for raw in items:
-        pid = int(raw.get("product_id") or raw.get("id") or 0)
+        if not isinstance(raw, dict):
+            return False, "Невірний формат кошика"
         try:
+            pid = int(raw.get("product_id") or raw.get("id") or 0)
             qty = int(raw.get("quantity", 1))
         except (TypeError, ValueError):
             return False, "Невірна кількість товару"

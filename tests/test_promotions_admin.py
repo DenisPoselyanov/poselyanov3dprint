@@ -380,14 +380,28 @@ def test_order_handler_attributes_free_ship_when_no_discount(api, monkeypatch):
 
 
 def test_order_handler_attributes_gift_and_ignores_forged_id(api, monkeypatch):
-    key = _add("Брелок", 100, "key")
-    gift = _add("Подарунок", 50, "key")
+    keys = [_add(f"Брелок {i}", 100, "key") for i in range(3)]
+    gift = cs.add_product({"cat": "key", "name": "Подарунок", "price": 50, "mat": "PLA",
+                           "filamentChoice": False, "gift": True})["id"]
     assert promos.delete_promotion("order_10_percent")["ok"]  # лишається лише подарункова акція за замовчуванням
     row = _post_order(api, monkeypatch, {
-        "idempotency_key": "k-3", "items": [{"product_id": key, "quantity": 1}], "total_price": 100,
+        "idempotency_key": "k-3", "items": [{"product_id": k, "quantity": 1} for k in keys], "total_price": 300,
         "gift_product_id": gift, "promotion_id": "forged", "user_id": 1,
     })
     assert row["promotion_id"] == "gift_3_toys"
+
+
+def test_order_handler_ignores_gift_below_threshold(api, monkeypatch):
+    """Поріг акції не досягнуто — подарунок, який просить клієнт, не додається й акція не зараховується."""
+    key = _add("Брелок", 100, "key")
+    gift = cs.add_product({"cat": "key", "name": "Подарунок", "price": 50, "mat": "PLA",
+                           "filamentChoice": False, "gift": True})["id"]
+    assert promos.delete_promotion("order_10_percent")["ok"]
+    row = _post_order(api, monkeypatch, {
+        "idempotency_key": "k-3b", "items": [{"product_id": key, "quantity": 1}], "total_price": 100,
+        "gift_product_id": gift, "gift": "Дорогий товар", "user_id": 1,
+    })
+    assert not row["promotion_id"]
 
 
 def test_order_handler_clears_forged_promotion_id(api, monkeypatch):

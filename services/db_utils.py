@@ -73,6 +73,8 @@ ORDER_ITEM_EXTRA_COLUMNS = {
     "printed": "INTEGER DEFAULT 0",
     # Обраний варіант товару (розмір): id — для «Повторити замовлення»; назва також є в product_name
     "variant_id": "TEXT DEFAULT ''",
+    # Товар-приз розіграшу за 0 ₴: «Повторити замовлення» його не додає в кошик
+    "is_prize": "INTEGER DEFAULT 0",
 }
 
 
