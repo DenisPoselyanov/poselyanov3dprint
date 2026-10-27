@@ -357,6 +357,23 @@ def delete_giveaway(giveaway_id: int) -> None:
         conn.close()
 
 
+def purge_giveaway(giveaway_id: int) -> bool:
+    """Видалити розіграш разом з учасниками й переможцями (не активний). Замовлення з призом лишаються."""
+    gid = int(giveaway_id)
+    conn = db_connect()
+    try:
+        row = conn.execute(_sql("SELECT status FROM giveaways WHERE id = ?"), (gid,)).fetchone()
+        if not row or row[0] == "active":
+            return False
+        conn.execute(_sql("DELETE FROM giveaway_winners WHERE giveaway_id = ?"), (gid,))
+        conn.execute(_sql("DELETE FROM giveaway_entries WHERE giveaway_id = ?"), (gid,))
+        conn.execute(_sql("DELETE FROM giveaways WHERE id = ?"), (gid,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 _GW_COLS = ("id", "title", "prize_type", "product_id", "product_variant", "prize_value", "winners_count", "ends_at", "channel", "shipping_payer",
             "referral_bonus", "referral_limit", "text", "photo", "status", "message_id", "result_message_id",
             "eligible_count", "created_at", "drawn_at", "published_at")

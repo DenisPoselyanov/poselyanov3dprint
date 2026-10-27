@@ -12813,6 +12813,9 @@
                     actions.push(`<button class="btn btn-danger" type="button" onclick="cancelGiveaway(${g.id})">Скасувати</button>`);
                     actions.push(`<button class="btn btn-primary" type="button" onclick="drawGiveaway(${g.id})">🎲 Завершити зараз</button>`);
                 }
+                if (g.status !== 'active') {
+                    actions.push(`<button class="btn btn-danger" type="button" onclick="deleteGiveaway(${g.id})">🗑 Видалити</button>`);
+                }
                 if (g.status === 'drawn') {
                     actions.push(`<button class="btn btn-primary" type="button" onclick="publishGiveaway(${g.id})">📣 Опублікувати результати</button>`);
                 }
@@ -12886,6 +12889,11 @@
         async function cancelGiveaway(id) {
             if (!(await askConfirm('Скасувати розіграш? Кнопка участі зникне з поста, жеребкування не буде.'))) return;
             gwPost(`/admin/giveaways/${id}/cancel`, () => 'Розіграш скасовано');
+        }
+
+        async function deleteGiveaway(id) {
+            if (!(await askConfirm('Видалити розіграш разом з учасниками й переможцями? Замовлення з призом лишаться. Дію не скасувати.'))) return;
+            gwPost(`/admin/giveaways/${id}/delete`, () => 'Розіграш видалено');
         }
 
         function gwSegValue(id) {

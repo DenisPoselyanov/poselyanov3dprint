@@ -849,3 +849,13 @@ def test_render_results_card_sizes():
     for names in (["Julia 🌸"], ["@a", "Б", "В"], ["Дуже довге ім'я " * 5] * 9, []):
         png = pc.render_results_card(names, prize="Приз " * 30)
         assert Image.open(io.BytesIO(png)).size == (1080, 1080)
+
+
+def test_purge_giveaway_removes_non_active(env):
+    gid = _create()
+    gw.join(gid, 1)
+    assert gw.purge_giveaway(gid) is False  # активний — спершу скасувати
+    assert gw.cancel_giveaway(gid)
+    assert gw.purge_giveaway(gid) is True
+    assert gw.get_giveaway(gid) is None and gw.get_entry(gid, 1) is None
+    assert gw.purge_giveaway(gid) is False

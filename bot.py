@@ -5457,6 +5457,24 @@ async def handle_cancel_giveaway(request: web.Request):
     return web.json_response({"ok": True, "giveaway": await _giveaway_item(gid)}, headers=cors_headers(request))
 
 
+async def handle_delete_giveaway(request: web.Request):
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    gid = _giveaway_id(request)
+    g = await run_db(giveaways_svc.get_giveaway, gid)
+    if not await run_db(giveaways_svc.purge_giveaway, gid):
+        return web.json_response({"ok": False, "error": "Активний розіграш спершу скасуйте"},
+                                 status=409, headers=cors_headers(request))
+    if g and g.get("message_id") and g.get("status") != "cancelled":
+        try:
+            await bot_app.bot.edit_message_reply_markup(chat_id=g["channel"], message_id=g["message_id"],
+                                                        reply_markup=None)
+        except Exception:
+            pass
+    return web.json_response({"ok": True}, headers=cors_headers(request))
+
+
 async def handle_get_ai_suggestions(request: web.Request):
     denied = await _editor_guard(request)
     if denied is not None:
