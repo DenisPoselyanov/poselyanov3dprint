@@ -4812,6 +4812,9 @@ async def run_giveaway_draw(giveaway_id: int, *, notify_owner: bool = True) -> d
     try:
         g = await run_db(giveaways_svc.get_giveaway, giveaway_id)
         candidates = await run_db(giveaways_svc.draw_candidates, giveaway_id, (OWNER_ID,))
+        if not candidates:
+            # власник виключений з жеребкування, крім випадку, коли він єдиний учасник
+            candidates = await run_db(giveaways_svc.draw_candidates, giveaway_id)
         chat = config.normalize_channel_id(g["channel"])
         eligible: set[int] = set()
         errors = 0
