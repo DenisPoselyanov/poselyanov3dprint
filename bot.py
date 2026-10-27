@@ -4785,7 +4785,8 @@ async def giveaway_join_action(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 def _giveaway_user_html(w: dict) -> str:
-    name = html.escape((w.get("name") or "").strip() or "Учасник")
+    username = (w.get("username") or "").strip().lstrip("@")
+    name = html.escape(f"@{username}" if username else (w.get("name") or "").strip() or "Учасник")
     return f'<a href="tg://user?id={int(w["user_id"])}">{name}</a>'
 
 
@@ -5218,13 +5219,33 @@ async def handle_publish_giveaway(request: web.Request):
     text = _giveaway_results_html(item, item["winners"], item["stats"].get("entries", 0))
     reply = ReplyParameters(message_id=item["message_id"], allow_sending_without_reply=True) \
         if item.get("message_id") else None
+    card_png = None
+    win = [w for w in item["winners"] if w["role"] == "winner" and w["status"] != "replaced"]
+    if win and len(text) <= 1000:  # довший підпис Telegram не прийме під фото — тоді лише текст
+        try:
+            card_png = await asyncio.to_thread(
+                post_cards_svc.render_results_card,
+                [("@" + w["username"]) if w.get("username") else (w.get("name") or "") for w in win],
+                prize=item["title"],
+            )
+        except Exception:
+            logger.exception("Не вдалось намалювати картку підсумків розіграшу %s", gid)
     try:
-        message = await _telegram_retry(
-            lambda: bot_app.bot.send_message(chat_id=item["channel"], text=text, parse_mode="HTML",
-                                             reply_parameters=reply,
-                                             link_preview_options=LinkPreviewOptions(is_disabled=True)),
-            label="giveaway results",
-        )
+        if card_png:
+            from telegram import InputFile
+
+            message = await _telegram_retry(
+                lambda: bot_app.bot.send_photo(chat_id=item["channel"], photo=InputFile(io.BytesIO(card_png), filename="results.png"),
+                                               caption=text, parse_mode="HTML", reply_parameters=reply),
+                label="giveaway results card",
+            )
+        else:
+            message = await _telegram_retry(
+                lambda: bot_app.bot.send_message(chat_id=item["channel"], text=text, parse_mode="HTML",
+                                                 reply_parameters=reply,
+                                                 link_preview_options=LinkPreviewOptions(is_disabled=True)),
+                label="giveaway results",
+            )
     except Exception as e:
         await run_db(giveaways_svc.unpublish, gid)
         logger.warning("Результати розіграшу %s не опубліковано: %s", gid, _redact_token(e))

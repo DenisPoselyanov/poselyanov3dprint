@@ -521,3 +521,130 @@ def render_giveaway_card(photo: bytes | None, *, title: str, ends: str = "") -> 
     buf = io.BytesIO()
     out.save(buf, "PNG", optimize=False, compress_level=3)
     return buf.getvalue()
+
+
+# ─── Картка підсумків розіграшу ─────────────────────────────────
+
+RESULTS_MAX_PILLS = 4
+RESULTS_NAME_MAX = 22
+
+
+def _drawable(text: str, *fonts: str) -> str:
+    """Лишає лише символи, які є хоча б в одному зі шрифтів (емодзі в іменах дали б «квадратики»)."""
+    return "".join(ch for ch in text if ch.isspace() or any(_has_glyph(f, ch) for f in fonts))
+
+
+def render_results_card(names: list[str], *, prize: str = "") -> bytes:
+    """Макет «Пост — Підсумки розіграшу» 1080×1080: «Вітаю переможця!» і плашки з іменами. Не падає через текст."""
+    bold, bold_fb = "CodecPro-Bold.ttf", "GolosText-Bold.ttf"
+    reg, reg_fb = "GolosText-Regular.ttf", "GolosText-Medium.ttf"
+    clean = []
+    for n in names:
+        n = _clean(_drawable(str(n or ""), bold, bold_fb), 60) or "Учасник"
+        clean.append(n if len(n) <= RESULTS_NAME_MAX else n[: RESULTS_NAME_MAX - 1].rstrip() + "…")
+    clean = clean or ["Учасник"]
+    total = len(clean)
+    shown = clean[:RESULTS_MAX_PILLS]
+    prize = _clean(prize, GIVEAWAY_TITLE_MAX)
+
+    S = SS
+    W = SIZE * S
+    cx = W // 2
+    right = (SIZE - MARGIN) * S
+
+    # Фон: діагональний градієнт і топо-патерн
+    gy = Image.linear_gradient("L").resize((W, W), Image.BILINEAR)
+    gx = Image.linear_gradient("L").rotate(90).transpose(Image.FLIP_LEFT_RIGHT).resize((W, W), Image.BILINEAR)
+    base = ImageChops.add(gx, gy, scale=2)
+    top, bottom = (0xF7, 0xFB, 0xFE), (0xE2, 0xEF, 0xF9)
+    img = Image.merge("RGB", [base.point(lambda v, a=top[i], b=bottom[i]: int(a + (b - a) * v / 255)) for i in range(3)]).convert("RGBA")
+    topo = _topo()
+    if topo is not None:
+        t = topo.resize((W, W), Image.LANCZOS)
+        img.paste(Image.new("RGB", (W, W), ICE), mask=t.getchannel("A").point(lambda v: int(v * 0.55)))
+    d = ImageDraw.Draw(img)
+
+    logo = _logo()
+    if logo is not None:
+        lh = 66 * S
+        img.alpha_composite(logo.resize((round(logo.width * lh / logo.height), lh), Image.LANCZOS), (MARGIN * S, 60 * S))
+    tag, tag_px, tag_sp = "ПІДСУМКИ", 18 * S, 2.6 * S
+    tw = _text_width(tag, bold, bold_fb, tag_px, tag_sp) - tag_sp
+    pw, ph = round(tw + 44 * S), 38 * S
+    d.rounded_rectangle((right - pw, 74 * S, right, 74 * S + ph), radius=ph // 2, fill=WHITE)
+    _draw_text(d, right - pw + 22 * S, 74 * S + ph / 2 + 6.5 * S, tag, bold, bold_fb, tag_px, BLUE, tag_sp)
+
+    # Куб із м'яким світлом
+    try:
+        cube = Image.open(ASSETS / "cube.png").convert("RGBA")
+    except Exception:
+        cube = None
+    if cube is not None:
+        ch = 240 * S
+        cube = cube.resize((round(cube.width * ch / cube.height), ch), Image.LANCZOS)
+        cy0 = 190 * S
+        glow = Image.new("RGBA", img.size, (*WHITE, 0))
+        ImageDraw.Draw(glow).ellipse((cx - 190 * S, cy0 - 20 * S, cx + 190 * S, cy0 + ch + 20 * S), fill=(*WHITE, 230))
+        img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(40 * S)))
+        img.alpha_composite(cube, (cx - cube.width // 2, cy0))
+        d = ImageDraw.Draw(img)
+
+    def centered(text: str, baseline: float, primary: str, fb: str, size: int, fill, spacing: float = 0.0) -> None:
+        w = _text_width(text, primary, fb, size, spacing) - spacing
+        _draw_text(d, cx - w / 2, baseline, text, primary, fb, size, fill, spacing)
+
+    centered("РОЗІГРАШ ЗАВЕРШЕНО", 505 * S, bold, bold_fb, 20 * S, BLUE, 4.0 * S)
+    title = "Вітаю переможця!" if total == 1 else "Вітаю переможців!"
+    centered(title, 590 * S, bold, bold_fb, 72 * S, NAVY)
+
+    # Плашки з іменами: одна велика, 2–3 стовпчиком, 4+ у два стовпці
+    def pill(text: str, x0: int, y0: int, w: int, h: int, size: int) -> None:
+        d.rounded_rectangle((x0, y0, x0 + w, y0 + h), radius=h // 2, fill=WHITE, outline=BLUE, width=3 * S)
+        px = size
+        while px > 22 * S and _text_width(text, bold, bold_fb, px) > w - 48 * S:
+            px -= S
+        tw_ = _text_width(text, bold, bold_fb, px)
+        _draw_text(d, x0 + (w - tw_) / 2, y0 + h / 2 + px * 0.36, text, bold, bold_fb, px, BLUE)
+
+    y = 650 * S
+    if len(shown) == 1:
+        w, h = 520 * S, 92 * S
+        pill(shown[0], cx - w // 2, y, w, h, 46 * S)
+        y += h
+    elif len(shown) <= 3:
+        w, h, gap = 520 * S, 64 * S, 12 * S
+        for n in shown:
+            pill(n, cx - w // 2, y, w, h, 34 * S)
+            y += h + gap
+        y -= gap
+    else:
+        w, h, gap = 400 * S, 64 * S, 12 * S
+        for i, n in enumerate(shown):
+            pill(n, cx - w - gap // 2 + (i % 2) * (w + gap), y + (i // 2) * (h + gap), w, h, 32 * S)
+        y += 2 * h + gap
+
+    more = total - len(shown)
+    note = f"Приз — {prize}. " if prize else ""
+    note += (f"Ще переможців: {more}. " if more > 0 else "") + ("Переможцю" if total == 1 else "Переможцям") + " ми написали в боті. Дякуємо всім за участь!"
+    px = 27 * S
+    font_fn = lambda s_: _text_width(s_, reg, reg_fb, px)  # noqa: E731
+    lines, ok = _wrap(note, font_fn, 780 * S, 2)
+    lines = lines[:2]
+    if not ok:
+        lines[-1] = _ellipsize(lines[-1], lambda s_: font_fn(s_) <= 780 * S)
+    by = max(y + 58 * S, 880 * S) if len(lines) == 2 else max(y + 58 * S, 900 * S)
+    by = min(by, 905 * S)
+    for i, line in enumerate(lines):
+        centered(line, by + i * 40 * S, reg, reg_fb, px, SLATE)
+
+    d.line((MARGIN * S, 972 * S, right, 972 * S), fill=(0xD9, 0xE3, 0xEE), width=S)
+    fb_y = 1013 * S
+    _draw_text(d, MARGIN * S, fb_y, f"Магазин у Telegram → @{config.BOT_USERNAME}", reg, reg_fb, 21 * S, (0x6E, 0x7A, 0x8C))
+    brand, bsp = "POSELYANOV 3D PRINT", 2.6 * S
+    bw = _text_width(brand, bold, bold_fb, 15 * S, bsp) - bsp
+    _draw_text(d, right - bw, fb_y, brand, bold, bold_fb, 15 * S, STEEL, bsp)
+
+    out = img.convert("RGB").resize((SIZE, SIZE), Image.LANCZOS)
+    buf = io.BytesIO()
+    out.save(buf, "PNG", optimize=False, compress_level=3)
+    return buf.getvalue()

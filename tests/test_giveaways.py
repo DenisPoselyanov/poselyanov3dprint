@@ -432,8 +432,8 @@ def test_http_full_cycle(env, monkeypatch):
         r = await client.post(f"/api/admin/giveaways/{g['id']}/publish", headers=adm)
         data = await r.json()
         assert r.status == 200 and data["delivered"] == 1
-        results = [kw for k, kw in fake.calls if k == "message" and kw["chat_id"] == "@mychan"]
-        assert "Підсумки" in results[0]["text"] and results[0]["reply_parameters"].message_id == 55
+        results = [kw for k, kw in fake.calls if k == "photo" and kw["chat_id"] == "@mychan" and getattr(kw["photo"], "filename", "") == "results.png"]
+        assert "Підсумки" in results[0]["caption"] and results[0]["reply_parameters"].message_id == 55
         prize_msgs = [kw for k, kw in fake.calls if k == "message" and kw["chat_id"] in (1, 2)]
         assert prize_msgs[0]["reply_markup"].inline_keyboard[0][0].url.endswith("startapp=prize")
         assert "оплачуємо ми" in prize_msgs[0]["text"] and "чекає у вашому кошику" in prize_msgs[0]["text"]
@@ -833,3 +833,15 @@ def test_http_giveaway_template_card(env, monkeypatch):
     kind, kw = fake.calls[0]
     assert kind == "photo" and kw["photo"].filename == "giveaway.png"
     assert kw["reply_markup"].inline_keyboard[0][0].text == "🎁 Взяти участь"
+
+
+def test_render_results_card_sizes():
+    import io
+
+    from PIL import Image
+
+    import services.post_cards as pc
+
+    for names in (["Julia 🌸"], ["@a", "Б", "В"], ["Дуже довге ім'я " * 5] * 9, []):
+        png = pc.render_results_card(names, prize="Приз " * 30)
+        assert Image.open(io.BytesIO(png)).size == (1080, 1080)
