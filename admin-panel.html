@@ -2827,6 +2827,10 @@
         .col-sw-row { display: flex; flex-wrap: wrap; gap: 10px; }
         .col-sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--bg-card); background: var(--h); cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--border); }
         .col-sw.on { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--h); }
+        .gw-photo-pick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .gw-photo-pick button { width: 64px; height: 64px; padding: 0; border: 2px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-section); cursor: pointer; }
+        .gw-photo-pick button.on { border-color: var(--accent); }
+        .gw-photo-pick img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .gw-picker { position: relative; }
         .gw-picker-btn { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; padding: 8px 12px; min-height: 46px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px; color: var(--text-main); font-size: 14px; cursor: pointer; }
         .gw-picker-btn:focus-visible, .gw-picker.open .gw-picker-btn { border-color: var(--accent); outline: none; }
@@ -4304,7 +4308,8 @@
                                         <button type="button" class="btn btn-secondary" id="gwPhotoBtn" onclick="document.getElementById('gwPhotoFile').click()">📷 Завантажити</button>
                                         <input type="url" id="gwPhoto" placeholder="або https-посилання на фото" autocomplete="off" oninput="gwField()">
                                     </div>
-                                    <div class="form-hint">Без фото — перше фото товару.</div>
+                                    <div id="gwPhotoPick" class="gw-photo-pick"></div>
+                                    <div class="form-hint">Без фото — перше фото товару. Можна обрати з фото товару вище.</div>
                                 </div>
                                 <label class="ap-check" style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="gwPin"> Закріпити пост у каналі</label>
                             </section>
@@ -13007,6 +13012,8 @@
         }
 
         function gwPickerPick(id) {
+            const old = gwProduct(), ph = document.getElementById('gwPhoto');
+            if (old && (old.photos || []).includes(ph.value)) ph.value = '';
             document.getElementById('gwProduct').value = id ? String(id) : '';
             gwPickerToggle(false);
             gwPickerSync();
@@ -13161,6 +13168,10 @@
             cnt.textContent = `${document.getElementById('gwText').value.length} / 900 · рядок з датою підсумків бот додасть сам`;
             const p = gwProduct();
             const photo = /^https:\/\//.test(st.photo) ? st.photo : ((p && (p.photos || [])[0]) || '');
+            const shots = ((p && p.photos) || []).filter(Boolean);
+            document.getElementById('gwPhotoPick').innerHTML = shots.length > 1 || (shots.length === 1 && st.photo && st.photo !== shots[0])
+                ? shots.map(u => `<button type="button" class="${u === photo ? 'on' : ''}" onclick="gwPickPhoto(this.dataset.u)" data-u="${escapeAttr(u)}"><img src="${escapeAttr(u)}" alt="" loading="lazy"></button>`).join('')
+                : '';
             const ends = st.ends ? new Date(st.ends) : null;
             const endsLine = ends && !Number.isNaN(ends.getTime()) ? `\n\n🗓 Підсумки: ${bcDateLabel(ends.toISOString())}` : '';
             const useCard = st.card === 'template';
@@ -13175,6 +13186,11 @@
                 </div>
                 <div class="tg-btn">🎁 Взяти участь</div>`;
             setDirtyUi('gwDirty', gwSnapshot !== null && JSON.stringify(st) !== gwSnapshot);
+        }
+
+        function gwPickPhoto(url) {
+            document.getElementById('gwPhoto').value = url;
+            gwField();
         }
 
         async function gwUploadPhoto(input) {
