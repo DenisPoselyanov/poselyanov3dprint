@@ -5229,7 +5229,8 @@ async def handle_publish_giveaway(request: web.Request):
         try:
             card_png = await asyncio.to_thread(
                 post_cards_svc.render_results_card,
-                [("@" + w["username"]) if w.get("username") else (w.get("name") or "") for w in win],
+                [("@" + w["username"].strip().lstrip("@")) if (w.get("username") or "").strip().lstrip("@") not in ("", "—")
+                 else (w.get("name") or "") for w in win],
                 prize=item["title"],
             )
         except Exception:
@@ -5399,6 +5400,8 @@ async def handle_upload_prize_card(request: web.Request):
     result = await upload_photo_to_cloudinary(file_data, f"prize_{winner_id}", file_field.content_type)
     url = (result.get("url") or "") if result.get("ok") else ""
     if not url or not await run_db(giveaways_svc.set_card_url, winner_id, user_id, url):
+        logger.warning("Листівка приза %s не збережена: cloudinary=%s url=%r", winner_id,
+                       result.get("error") if isinstance(result, dict) else result, url)
         return web.json_response({"ok": False, "error": "upload_failed"}, status=502, headers=cors_headers(request))
     return web.json_response({"ok": True, "url": url}, headers=cors_headers(request))
 

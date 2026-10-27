@@ -7466,13 +7466,13 @@ async function openPrizeShare() {
     state.localUrl = URL.createObjectURL(state.blob);
     if (prizeShareFor === state) prev.innerHTML = `<img src="${state.localUrl}" alt="Листівка з призом">`;
     if (!p.card_url && tgApp()?.initData) {
-      try { p.card_url = await uploadPrizeCard(p, state.blob); } catch (_) { /* лишається «Зберегти» локально */ }
+      try { p.card_url = await uploadPrizeCard(p, state.blob); } catch (e) { p.cardErr = e?.message || 'upload_failed'; }
     }
   })();
   try { await state.ready; } catch (_) {}
   if (prizeShareFor !== state) return;
   document.querySelectorAll('#ps-list [data-ps]').forEach(b => {
-    b.disabled = b.dataset.ps !== 'save' && !p.card_url;
+    b.disabled = false; // без card_url натискання повторить завантаження й покаже причину
   });
 }
 function closePrizeShare() {
@@ -7488,6 +7488,14 @@ async function prizeShareDo(act) {
   const t = tgApp();
   haptic('light');
   try {
+    if (act !== 'save' && !p.card_url && st.blob) {
+      try { p.card_url = await uploadPrizeCard(p, st.blob); p.cardErr = ''; }
+      catch (e) { p.cardErr = e?.message || 'upload_failed'; }
+      if (!p.card_url) {
+        showToast({ msg: `Не вдалось підготувати листівку (${p.cardErr}). Спробуй ще раз пізніше`, icon: 'alert' });
+        return;
+      }
+    }
     if (act === 'story' && p.card_url) {
       const text = `Мій приз з розіграшу Poselyanov 3D Print 🎁${p.channel_url ? ' ' + p.channel_url : ''}`;
       const params = { text: text.slice(0, 200) };
