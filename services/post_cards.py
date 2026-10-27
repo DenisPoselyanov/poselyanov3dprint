@@ -215,7 +215,7 @@ def _decode_photo(photo: bytes | None) -> Image.Image | None:
         return None
 
 
-def _placeholder(size: tuple[int, int]) -> Image.Image:
+def _placeholder(size: tuple[int, int], label: str = "ФОТО ТОВАРУ") -> Image.Image:
     """Світлий градієнт із топо-патерном і підписом «ФОТО ТОВАРУ»."""
     w, h = size
     gy = Image.linear_gradient("L").resize((w, h), Image.BILINEAR)
@@ -231,7 +231,7 @@ def _placeholder(size: tuple[int, int]) -> Image.Image:
         alpha = t.getchannel("A").point(lambda v: int(v * 0.6))
         img.paste(Image.new("RGB", (w, h), ICE), mask=alpha)
     d = ImageDraw.Draw(img)
-    label, sp = "ФОТО ТОВАРУ", 3.0 * SS
+    sp = 3.0 * SS
     size_px = 20 * SS
     width = _text_width(label, "CodecPro-Bold.ttf", "GolosText-Bold.ttf", size_px, sp) - sp
     _draw_text(d, (w - width) / 2, h / 2 + 7 * SS, label, "CodecPro-Bold.ttf", "GolosText-Bold.ttf", size_px, STEEL, sp)
@@ -280,10 +280,10 @@ def _wrap(text: str, font_fn, max_w: float, max_lines: int) -> tuple[list[str], 
     return lines, len(lines) <= max_lines
 
 
-def _fit_title(title: str, max_w: int) -> tuple[list[str], int]:
-    """Підбирає розмір 56→36 так, щоб влізло у 2 рядки; інакше обрізає з «…»."""
+def _fit_title(title: str, max_w: int, max_size: int = 56) -> tuple[list[str], int]:
+    """Підбирає розмір max_size→36 так, щоб влізло у 2 рядки; інакше обрізає з «…»."""
     name, fb = "CodecPro-Bold.ttf", "GolosText-Bold.ttf"
-    for size in range(56, 35, -2):
+    for size in range(max_size, 35, -2):
         px = size * SS
         lines, ok = _wrap(title, lambda s: _text_width(s, name, fb, px), max_w * SS, 2)
         if ok:
@@ -425,6 +425,95 @@ def render_card(photo: bytes | None, *, template: str, title: str, price: str = 
     _draw_text(d, MARGIN * S, fb_y, left_text, "GolosText-Regular.ttf", "GolosText-Medium.ttf", 21 * S, (0x6E, 0x7A, 0x8C))
     brand = "POSELYANOV 3D PRINT"
     bsp = 2.6 * S
+    bw = _text_width(brand, bold, bold_fb, 15 * S, bsp) - bsp
+    _draw_text(d, right - bw, fb_y, brand, bold, bold_fb, 15 * S, STEEL, bsp)
+
+    out = img.convert("RGB").resize((SIZE, SIZE), Image.LANCZOS)
+    buf = io.BytesIO()
+    out.save(buf, "PNG", optimize=False, compress_level=3)
+    return buf.getvalue()
+
+
+# ─── Картка розіграшу ───────────────────────────────────────────
+
+GIVEAWAY_TITLE_MAX = 100
+GIVEAWAY_ENDS_MAX = 24
+
+
+def render_giveaway_card(photo: bytes | None, *, title: str, ends: str = "") -> bytes:
+    """Макет «Пост — Розіграш» 1080×1080: фото призу, «Розігрую …», три кроки участі. Не падає через текст."""
+    title = _clean(title, GIVEAWAY_TITLE_MAX) or "приз"
+    ends = _clean(ends, GIVEAWAY_ENDS_MAX)
+
+    S = SS
+    W = SIZE * S
+    img = Image.new("RGBA", (W, W), (*WHITE, 255))
+    d = ImageDraw.Draw(img)
+    bold, bold_fb = "CodecPro-Bold.ttf", "GolosText-Bold.ttf"
+    med, med_fb = "GolosText-Medium.ttf", "GolosText-Medium.ttf"
+    right = (SIZE - MARGIN) * S
+
+    logo = _logo()
+    if logo is not None:
+        lh = 66 * S
+        lw = round(logo.width * lh / logo.height)
+        img.alpha_composite(logo.resize((lw, lh), Image.LANCZOS), (MARGIN * S, 60 * S))
+
+    def pill(text: str, x: int, y: int, h: int, fill, color, size: int, spacing: float, pad: int, align_right: bool = False) -> None:
+        px, sp = size * S, spacing * S
+        tw = _text_width(text, bold, bold_fb, px, sp) - sp
+        pw = round(tw + 2 * pad * S)
+        x0 = x - pw if align_right else x
+        d.rounded_rectangle((x0, y, x0 + pw, y + h), radius=h // 2, fill=fill)
+        _draw_text(d, x0 + pad * S, y + h / 2 + size * 0.36 * S, text, bold, bold_fb, px, color, sp)
+
+    pill("РОЗІГРАШ", right, 74 * S, 38 * S, MIST, BLUE, 18, 2.6, 22, align_right=True)
+
+    # Фото призу (або заглушка) зі скругленням і тонкою рамкою
+    x0, y0, x1, y1 = MARGIN * S, 160 * S, right, 670 * S
+    box = (x1 - x0, y1 - y0)
+    src = _decode_photo(photo)
+    tile = (_cover(src, box) if src is not None else _placeholder(box, "ФОТО ПРИЗУ")).convert("RGBA")
+    img.paste(tile, (x0, y0), _rounded_mask(box, PHOTO_RADIUS * S))
+    border = Image.new("RGBA", box, (0, 0, 0, 0))
+    ImageDraw.Draw(border).rounded_rectangle((0, 0, box[0] - 1, box[1] - 1), radius=PHOTO_RADIUS * S, outline=(*NAVY, 22), width=S)
+    img.alpha_composite(border, (x0, y0))
+    pill("БЕЗКОШТОВНО", x0 + 36 * S, y0 + 36 * S, 42 * S, NAVY, WHITE, 18, 2.6, 22)
+
+    # «Розігрую …» — один або два рядки
+    lines, tsize = _fit_title(f"Розігрую {title}", SIZE - 2 * MARGIN, max_size=48)
+    base1 = 742 if len(lines) == 1 else 736
+    step = round(tsize * 1.12)
+    for i, line in enumerate(lines):
+        _draw_text(d, MARGIN * S, (base1 + i * step) * S, line, bold, bold_fb, tsize * S, NAVY)
+
+    # Три кроки участі
+    cy = (826 if len(lines) == 1 else 856) * S
+    steps = (
+        ("Підпишись", "на канал"),
+        ("Натисни «Взяти", "участь» під постом"),
+        ("Результати —", ends or "у вказаний день"),
+    )
+    r = 26 * S
+    for i, (l1, l2) in enumerate(steps):
+        cx = (MARGIN + 26 + i * 312) * S
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=BLUE)
+        num = str(i + 1)
+        nw = _text_width(num, bold, bold_fb, 26 * S)
+        _draw_text(d, cx - nw / 2, cy + 9 * S, num, bold, bold_fb, 26 * S, WHITE)
+        tx = cx + r + 16 * S
+        for j, t in enumerate((l1, l2)):
+            px = 24 * S
+            while px > 18 * S and _text_width(t, med, med_fb, px) > 226 * S:
+                px -= S
+            _draw_text(d, tx, cy - 1 * S + j * 30 * S, t, med, med_fb, px, NAVY)
+
+    # Підвал
+    d.line((MARGIN * S, 972 * S, right, 972 * S), fill=(0xE3, 0xE8, 0xEF), width=S)
+    fb_y = 1013 * S
+    _draw_text(d, MARGIN * S, fb_y, f"Магазин у Telegram → @{config.BOT_USERNAME}", "GolosText-Regular.ttf", "GolosText-Medium.ttf",
+               21 * S, (0x6E, 0x7A, 0x8C))
+    brand, bsp = "POSELYANOV 3D PRINT", 2.6 * S
     bw = _text_width(brand, bold, bold_fb, 15 * S, bsp) - bsp
     _draw_text(d, right - bw, fb_y, brand, bold, bold_fb, 15 * S, STEEL, bsp)
 

@@ -770,3 +770,66 @@ def test_prize_tick_reminder_owner_notice_and_buttons(env, monkeypatch):
     assert "подовжено" in fake.calls[-1][1]["text"] and fake.calls[-1][1]["chat_id"] == uid
     asyncio.run(bot.giveaway_owner_action(update(f"gw_rr_{wid}"), None))
     assert "перекинуто" in edits[-1] and gw.active_prizes(uid) == []
+
+
+# ── Макет розіграшу ────────────────────────────────────────────────
+
+def test_render_giveaway_card_sizes():
+    import io
+
+    from PIL import Image
+
+    import services.post_cards as pc
+
+    for title in ("Лампа", "Дуже довга назва призу " * 6, ""):
+        png = pc.render_giveaway_card(None, title=title, ends="30.11 о 20:00")
+        assert Image.open(io.BytesIO(png)).size == (1080, 1080)
+    assert Image.open(io.BytesIO(pc.render_giveaway_card(b"junk", title="x", ends=""))).size == (1080, 1080)
+
+
+def test_http_giveaway_template_card(env, monkeypatch):
+    import auth
+    import bot
+    import config
+    from aiohttp import web
+    from aiohttp.test_utils import TestClient, TestServer
+    from routes.setup import register_http_routes
+
+    fake = FakeBot()
+    monkeypatch.setattr(config, "VALIDATE_INIT_DATA", True)
+    monkeypatch.setattr(config, "ALLOW_LOCAL_NETWORK", False)
+    monkeypatch.setattr(config, "ADMIN_BYPASS_TOKEN", "tok")
+    monkeypatch.setattr(auth, "is_local_dev_origin", lambda request: False)
+    monkeypatch.setattr(bot, "bot_app", SimpleNamespace(bot=fake))
+    product = {"id": 42, "name": "Дракон", "price": 350, "photos": ["https://res.cloudinary.com/x/image/upload/v1/a.jpg"]}
+    monkeypatch.setattr(bot, "get_product_by_id", lambda pid: product if pid == 42 else None)
+    downloaded = []
+
+    async def fake_download(url):
+        downloaded.append(url)
+        return None
+
+    monkeypatch.setattr(bot, "_download_card_photo", fake_download)
+    adm = {"X-Admin-Bypass-Token": "tok"}
+
+    async def steps(client):
+        url = "/api/admin/giveaway-card"
+        assert (await client.post(url, json=_payload())).status == 403
+        assert (await client.post(url, json=_payload(ends_at="bad"), headers=adm)).status == 400
+        r = await client.post(url, json=_payload(), headers=adm)
+        assert r.status == 200 and r.headers["Content-Type"] == "image/png"
+        assert downloaded == ["https://res.cloudinary.com/x/image/upload/v1/a.jpg"]
+        r = await client.post("/api/admin/giveaways", json=_payload(card="template", pin=False), headers=adm)
+        return r.status, await r.json()
+
+    async def run():
+        app = web.Application()
+        register_http_routes(app, bot)
+        async with TestClient(TestServer(app)) as client:
+            return await steps(client)
+
+    status, data = asyncio.run(run())
+    assert status == 200 and data["ok"]
+    kind, kw = fake.calls[0]
+    assert kind == "photo" and kw["photo"].filename == "giveaway.png"
+    assert kw["reply_markup"].inline_keyboard[0][0].text == "🎁 Взяти участь"

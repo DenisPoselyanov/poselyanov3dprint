@@ -5052,6 +5052,48 @@ async def handle_get_giveaways(request: web.Request):
     )
 
 
+def _giveaway_prize_title(payload: dict, product: dict | None, variant: dict | None) -> str:
+    """Назва призу: введена вручну, інакше товар (+ варіант) або «Сертифікат на N ₴»."""
+    return payload["title"] or (
+        str(product.get("name") or "") + (f" · {variant['name']}" if variant else "")
+        if product else f"Сертифікат на {payload['prize_value']} ₴"
+    )[: giveaways_svc.TITLE_MAX]
+
+
+async def _render_giveaway_card(payload: dict, product: dict | None) -> bytes:
+    """Макет розіграшу з фото призу: власне фото або перше фото товару (завантажується на сервері)."""
+    url = payload["photo"] or next((u for u in ((product or {}).get("photos") or []) if u), "")
+    photo_bytes = await _download_card_photo(url) if url else None
+    return await asyncio.to_thread(
+        post_cards_svc.render_giveaway_card, photo_bytes,
+        title=payload["title"], ends=giveaways_svc.format_kyiv(payload["ends_at"]),
+    )
+
+
+async def handle_giveaway_card_preview(request: web.Request):
+    """PNG-превʼю макета розіграшу (те саме зображення піде в канал)."""
+    denied = await _admin_guard(request)
+    if denied is not None:
+        return denied
+    data, bad = await _json_body(request)
+    if bad is not None:
+        return bad
+    payload, err = giveaways_svc.validate_giveaway(data)
+    if err:
+        return web.json_response({"ok": False, "error": err}, status=400, headers=cors_headers(request))
+    product = await run_db(get_product_by_id, payload["product_id"]) if payload["product_id"] else None
+    variant = get_product_variant(product, payload["product_variant"]) if product and payload["product_variant"] else None
+    if payload["prize_type"] == "amount":
+        variant = None
+    payload["title"] = _giveaway_prize_title(payload, product, variant)
+    try:
+        png = await _render_giveaway_card(payload, product)
+    except Exception:
+        logger.exception("Не вдалось намалювати превʼю розіграшу")
+        return web.json_response({"ok": False, "error": "Не вдалось створити картку"}, status=500, headers=cors_headers(request))
+    return web.Response(body=png, content_type="image/png", headers={**cors_headers(request), "Cache-Control": "no-store"})
+
+
 async def handle_create_giveaway(request: web.Request):
     """Створює розіграш і одразу публікує пост з кнопкою «Взяти участь» у канал."""
     denied = await _admin_guard(request)
@@ -5080,10 +5122,7 @@ async def handle_create_giveaway(request: web.Request):
         if payload["prize_value"] <= 0:
             return web.json_response({"ok": False, "error": "У товару немає фіксованої ціни — обери інший"},
                                      status=400, headers=cors_headers(request))
-    payload["title"] = payload["title"] or (
-        str(product.get("name") or "") + (f" · {variant['name']}" if variant else "")
-        if product else f"Сертифікат на {payload['prize_value']} ₴"
-    )[: giveaways_svc.TITLE_MAX]
+    payload["title"] = _giveaway_prize_title(payload, product, variant)
     product = product or {}
     channel = channel_posts_svc.normalize_channel(data.get("channel")) or await run_db(channel_posts_svc.get_channel)
     if not channel:
@@ -5094,6 +5133,14 @@ async def handle_create_giveaway(request: web.Request):
         return web.json_response({"ok": False, "error": "Бот не запущено"}, status=502, headers=cors_headers(request))
 
     photo = payload["photo"] or next((_share_photo_url(u) for u in (product.get("photos") or []) if u), "")
+    card_png = None
+    if data.get("card") == "template":
+        try:
+            card_png = await _render_giveaway_card(payload, product)
+        except Exception:
+            logger.exception("Не вдалось намалювати картку розіграшу")
+            return web.json_response({"ok": False, "error": "Не вдалось створити картку розіграшу"}, status=500,
+                                     headers=cors_headers(request))
     gid = await run_db(giveaways_svc.create_giveaway, payload, channel)
     body = (html.escape(payload["text"])
             + f"\n\n🗓 Підсумки: {giveaways_svc.format_kyiv(payload['ends_at'])} (за Києвом)")
@@ -5103,7 +5150,15 @@ async def handle_create_giveaway(request: web.Request):
     from rich_messages import _telegram_retry
 
     try:
-        if photo:
+        if card_png:
+            from telegram import InputFile
+
+            message = await _telegram_retry(
+                lambda: tg_bot.send_photo(chat_id=channel, photo=InputFile(io.BytesIO(card_png), filename="giveaway.png"),
+                                          caption=body, parse_mode="HTML", reply_markup=markup),
+                label="giveaway post card",
+            )
+        elif photo:
             message = await _telegram_retry(
                 lambda: tg_bot.send_photo(chat_id=channel, photo=photo, caption=body, parse_mode="HTML",
                                           reply_markup=markup),

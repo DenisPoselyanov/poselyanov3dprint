@@ -4264,6 +4264,14 @@
                                     <div class="form-hint" id="gwTextCount">0 / 900 · рядок з датою підсумків бот додасть сам</div>
                                 </div>
                                 <div class="form-group">
+                                    <label>Оформлення поста</label>
+                                    <div id="gwCardSeg" class="col-seg">
+                                        <button type="button" data-v="photo" onclick="gwSetSeg('gwCardSeg', 'photo')">Просто фото</button>
+                                        <button type="button" data-v="template" onclick="gwSetSeg('gwCardSeg', 'template')">Макет розіграшу</button>
+                                    </div>
+                                    <div class="form-hint">«Макет» — брендована картинка з фото призу, назвою, кроками участі й датою підсумків.</div>
+                                </div>
+                                <div class="form-group">
                                     <label>Фото <span class="dr-badge">за бажанням</span></label>
                                     <div class="cp-add-row">
                                         <input type="file" id="gwPhotoFile" accept="image/*" style="display:none;" onchange="gwUploadPhoto(this)">
@@ -12982,8 +12990,60 @@
                 referral_limit: Number(document.getElementById('gwLimit').value) || 0,
                 text: document.getElementById('gwText').value.trim(),
                 photo: document.getElementById('gwPhoto').value.trim(),
+                card: gwSegValue('gwCardSeg') || 'photo',
                 pin: document.getElementById('gwPin').checked,
             };
+        }
+
+        // Тіло запиту розіграшу (спільне для публікації й превʼю макета)
+        function gwBody(st, ends) {
+            return {
+                prize_type: st.prize_type, title: st.prize_type === 'amount' ? st.title : '',
+                product_id: st.product_id, product_variant: st.prize_type === 'amount' ? '' : st.product_variant,
+                prize_value: st.prize_type === 'amount' ? st.prize_value : 0,
+                winners_count: st.winners_count,
+                ends_at: ends.toISOString(), channel: st.channel, shipping_payer: st.shipping_payer,
+                referral_bonus: st.referral_bonus, referral_limit: st.referral_limit,
+                text: st.text, photo: st.photo, card: st.card, pin: st.pin,
+            };
+        }
+
+        // Превʼю макета: дебаунс, сервер малює те саме зображення, що піде в канал
+        let gwCardUrl = '', gwCardKey = '', gwCardTimer = null, gwCardErr = '';
+        function gwCardRefresh(st) {
+            const ends = st.ends ? new Date(st.ends) : null;
+            const ok = ends && !Number.isNaN(ends.getTime());
+            const key = JSON.stringify([st.prize_type, st.title, st.product_id, st.product_variant, st.prize_value, st.ends, st.photo]);
+            if (key === gwCardKey) return;
+            gwCardKey = key;
+            clearTimeout(gwCardTimer);
+            if (!ok || (st.prize_type === 'product' ? !st.product_id : (!st.product_id && !st.title))) {
+                gwCardErr = 'Обери приз і дату завершення — і тут зʼявиться макет';
+                gwCardUrl = '';
+                return;
+            }
+            gwCardTimer = setTimeout(async () => {
+                try {
+                    const res = await fetch(API_BASE + '/admin/giveaway-card', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                        body: JSON.stringify(gwBody({ ...gwState(), card: 'template' }, new Date(gwState().ends))),
+                    });
+                    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Не вдалося намалювати макет');
+                    const url = URL.createObjectURL(await res.blob());
+                    if (gwCardUrl) URL.revokeObjectURL(gwCardUrl);
+                    gwCardUrl = url;
+                    gwCardErr = '';
+                } catch (e) {
+                    gwCardUrl = '';
+                    gwCardErr = e.message || 'Не вдалося намалювати макет';
+                }
+                if (gwSegValue('gwCardSeg') === 'template') {
+                    const img = document.getElementById('gwCardImg');
+                    if (img && gwCardUrl) { img.src = gwCardUrl; img.style.display = ''; }
+                    const note = document.getElementById('gwCardNote');
+                    if (note) note.textContent = gwCardErr;
+                }
+            }, 450);
         }
 
         function gwField() {
@@ -12995,9 +13055,14 @@
             const photo = /^https:\/\//.test(st.photo) ? st.photo : ((p && (p.photos || [])[0]) || '');
             const ends = st.ends ? new Date(st.ends) : null;
             const endsLine = ends && !Number.isNaN(ends.getTime()) ? `\n\n🗓 Підсумки: ${bcDateLabel(ends.toISOString())}` : '';
+            const useCard = st.card === 'template';
+            if (useCard) gwCardRefresh(st);
+            const media = useCard
+                ? `<img id="gwCardImg" src="${escapeAttr(gwCardUrl)}" alt="" style="${gwCardUrl ? '' : 'display:none'}"><div id="gwCardNote" class="form-hint" style="padding:8px 12px;">${escapeHtml(gwCardUrl ? '' : (gwCardErr || 'Малюю макет…'))}</div>`
+                : (photo ? `<img src="${escapeAttr(photo)}" alt="">` : '');
             document.getElementById('gwPreview').innerHTML = `
                 <div class="tg-bubble">
-                    ${photo ? `<img src="${escapeAttr(photo)}" alt="">` : ''}
+                    ${media}
                     <div class="tg-t ${st.text ? '' : 'ph'}">${st.text ? escapeHtml(st.text + endsLine) : 'Текст поста…'}</div>
                 </div>
                 <div class="tg-btn">🎁 Взяти участь</div>`;
@@ -13048,6 +13113,7 @@
             gwSetSeg('gwTypeSeg', 'product');
             gwSetSeg('gwPayerSeg', 'winner');
             gwSetSeg('gwBonusSeg', 'off');
+            gwSetSeg('gwCardSeg', 'photo');
             gwSnapshot = null;
             gwField();
             gwSnapshot = JSON.stringify(gwState());
@@ -13090,15 +13156,7 @@
             try {
                 const res = await fetch(API_BASE + '/admin/giveaways', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        prize_type: st.prize_type, title: st.prize_type === 'amount' ? st.title : '',
-                        product_id: st.product_id, product_variant: st.prize_type === 'amount' ? '' : st.product_variant,
-                        prize_value: st.prize_type === 'amount' ? st.prize_value : 0,
-                        winners_count: st.winners_count,
-                        ends_at: ends.toISOString(), channel: st.channel, shipping_payer: st.shipping_payer,
-                        referral_bonus: st.referral_bonus, referral_limit: st.referral_limit,
-                        text: st.text, photo: st.photo, pin: st.pin,
-                    }),
+                    body: JSON.stringify(gwBody(st, ends)),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok || !data.ok) throw new Error(data.error || 'Не вдалося створити розіграш');

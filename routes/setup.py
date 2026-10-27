@@ -137,6 +137,7 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_delete("/api/admin/broadcasts/{id}", handlers.handle_delete_broadcast)
     http_app.router.add_get("/api/admin/giveaways", handlers.handle_get_giveaways)
     http_app.router.add_post("/api/admin/giveaways", handlers.handle_create_giveaway)
+    http_app.router.add_post("/api/admin/giveaway-card", handlers.handle_giveaway_card_preview)
     http_app.router.add_post("/api/admin/giveaways/{id}/draw", handlers.handle_draw_giveaway)
     http_app.router.add_post("/api/admin/giveaways/{id}/publish", handlers.handle_publish_giveaway)
     http_app.router.add_post("/api/admin/giveaways/{id}/cancel", handlers.handle_cancel_giveaway)
