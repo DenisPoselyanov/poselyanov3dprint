@@ -4252,8 +4252,14 @@
                                     <label for="gwLimit">Максимум бонусних шансів</label>
                                     <input type="number" id="gwLimit" min="1" max="50" step="1" value="5" inputmode="numeric" oninput="this.closest('.form-group').classList.remove('has-error'); gwField()">
                                     <div class="form-error">Від 1 до 50</div>
-                                    <div class="form-hint">Друг зараховується, якщо він новий у боті, сам узяв участь і підписаний на момент жеребкування.</div>
+                                    <div class="form-hint">Друг зараховується, якщо він сам узяв участь (лише раз — за першого, хто його запросив) і підписаний на момент жеребкування.</div>
                                 </div>
+                                <label class="gw-scope-el" style="display:none;">Кого зараховувати другом</label>
+                                <div id="gwScopeSeg" class="col-seg gw-scope-el" style="display:none;">
+                                    <button type="button" data-v="any" onclick="gwSetSeg('gwScopeSeg', 'any')">Будь-кого</button>
+                                    <button type="button" data-v="new" onclick="gwSetSeg('gwScopeSeg', 'new')">Лише нових у боті</button>
+                                </div>
+                                <div class="form-hint gw-scope-el" id="gwScopeHint" style="display:none;"></div>
                             </section>
 
                             <section class="dr-sec">
@@ -12827,7 +12833,7 @@
                         <span>🎁 ${g.prize_type === 'amount'
                             ? `Приз — ${g.prize_value.toLocaleString('uk-UA')} ₴ на будь-яке замовлення`
                             : `Приз — ${escapeHtml(((adminProducts || []).find(p => p.id === g.product_id) || {}).name || g.title || `товар №${g.product_id}`)} безкоштовно (${g.product_variant ? '' : 'будь-який варіант, до '}${g.prize_value.toLocaleString('uk-UA')} ₴)`} · переможців: ${g.winners_count}</span>
-                        <span>🚚 Доставку оплачує ${g.shipping_payer === 'shop' ? 'магазин' : 'переможець'} · ${g.referral_bonus ? `+1 шанс за друга (до +${g.referral_limit})` : 'без бонусів'}</span>
+                        <span>🚚 Доставку оплачує ${g.shipping_payer === 'shop' ? 'магазин' : 'переможець'} · ${g.referral_bonus ? `+1 шанс за ${g.referral_scope === 'new' ? 'нового друга' : 'друга'} (до +${g.referral_limit})` : 'без бонусів'}</span>
                         ${postUrl ? `<span><a href="${escapeAttr(postUrl)}" target="_blank" rel="noopener">Пост розіграшу ↗</a>${resultUrl ? ` · <a href="${escapeAttr(resultUrl)}" target="_blank" rel="noopener">Підсумки ↗</a>` : ''}</span>` : ''}
                     </div>
                     <div class="bc-stats gw-stats">
@@ -12902,7 +12908,15 @@
 
         function gwSetSeg(id, v) {
             document.querySelectorAll(`#${id} button`).forEach(b => b.classList.toggle('on', b.dataset.v === v));
-            if (id === 'gwBonusSeg') document.getElementById('gwLimitWrap').style.display = v === 'on' ? '' : 'none';
+            if (id === 'gwBonusSeg') {
+                document.getElementById('gwLimitWrap').style.display = v === 'on' ? '' : 'none';
+                document.querySelectorAll('.gw-scope-el').forEach(el => { el.style.display = v === 'on' ? '' : 'none'; });
+            }
+            if (id === 'gwScopeSeg') {
+                document.getElementById('gwScopeHint').textContent = v === 'new'
+                    ? 'Друг має вперше відкрити бот після старту розіграшу. Хто вже був у боті — не зараховується.'
+                    : 'Зараховується будь-хто, хто ще не бере участі в розіграші — і ті, хто вже відкривав бот, і нові.';
+            }
             if (id === 'gwTypeSeg') gwTypeChanged();
             gwField();
         }
@@ -12948,7 +12962,7 @@
                 'Умови:',
                 '1️⃣ Підпишіться на наш канал',
                 '2️⃣ Натисніть «Взяти участь» під цим постом',
-                bonus ? '3️⃣ Запрошуйте друзів — +1 шанс за кожного' : '',
+                bonus ? (gwSegValue('gwScopeSeg') === 'new' ? '3️⃣ Запрошуйте нових друзів у бот — +1 шанс за кожного, хто візьме участь' : '3️⃣ Запрошуйте друзів — +1 шанс за кожного, хто візьме участь') : '',
                 '',
                 winners > 1 ? `Переможців: ${winners}. Обираємо випадково.` : 'Переможця обираємо випадково.',
             ].filter((l, i, arr) => l !== '' || arr[i - 1] !== '').join('\n');
@@ -12997,6 +13011,7 @@
                 shipping_payer: gwSegValue('gwPayerSeg'),
                 referral_bonus: gwSegValue('gwBonusSeg') === 'on',
                 referral_limit: Number(document.getElementById('gwLimit').value) || 0,
+                referral_scope: gwSegValue('gwScopeSeg') || 'any',
                 text: document.getElementById('gwText').value.trim(),
                 photo: document.getElementById('gwPhoto').value.trim(),
                 card: gwSegValue('gwCardSeg') || 'photo',
@@ -13012,7 +13027,7 @@
                 prize_value: st.prize_type === 'amount' ? st.prize_value : 0,
                 winners_count: st.winners_count,
                 ends_at: ends.toISOString(), channel: st.channel, shipping_payer: st.shipping_payer,
-                referral_bonus: st.referral_bonus, referral_limit: st.referral_limit,
+                referral_bonus: st.referral_bonus, referral_limit: st.referral_limit, referral_scope: st.referral_scope,
                 text: st.text, photo: st.photo, card: st.card, pin: st.pin,
             };
         }
@@ -13122,6 +13137,7 @@
             gwSetSeg('gwTypeSeg', 'product');
             gwSetSeg('gwPayerSeg', 'winner');
             gwSetSeg('gwBonusSeg', 'off');
+            gwSetSeg('gwScopeSeg', 'any');
             gwSetSeg('gwCardSeg', 'photo');
             gwSnapshot = null;
             gwField();

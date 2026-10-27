@@ -4687,7 +4687,8 @@ def _giveaway_entered_text(g: dict, number: int, tickets: int, user_id: int) -> 
         link = giveaways_svc.join_link(config.BOT_USERNAME, g["id"], user_id)
         lines += [
             "",
-            f"👥 Запрошуйте друзів: +1 шанс за кожного друга, що підпишеться й візьме участь "
+            f"👥 Запрошуйте друзів: +1 шанс за кожного "
+            f"{'нового в боті друга' if g.get('referral_scope') == 'new' else 'друга'}, що підпишеться й візьме участь "
             f"(до +{g['referral_limit']}).",
             f"Ваше посилання: {html.escape(link)}",
             f"Зараз шансів: <b>{tickets}</b>",

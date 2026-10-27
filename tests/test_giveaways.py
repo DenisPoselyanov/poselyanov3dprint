@@ -859,3 +859,21 @@ def test_purge_giveaway_removes_non_active(env):
     assert gw.purge_giveaway(gid) is True
     assert gw.get_giveaway(gid) is None and gw.get_entry(gid, 1) is None
     assert gw.purge_giveaway(gid) is False
+
+
+def test_referral_scope_new_only_counts_new_users(env):
+    gid = _create(referral_scope="new")
+    gw.join(gid, 1)
+    _new_user(2)
+    _sql("UPDATE users SET joined_at = '2000-01-01 00:00:00' WHERE id = 2")  # давній користувач бота
+    gw.join(gid, 2, referrer_id=1)
+    _new_user(3)
+    _sql("UPDATE users SET joined_at = '2099-01-01 00:00:00' WHERE id = 3")  # зʼявився вже після старту
+    gw.join(gid, 3, referrer_id=1)
+    assert gw.get_entry(gid, 2)["referred_by"] is None
+    assert gw.get_entry(gid, 3)["referred_by"] == 1
+
+
+def test_referral_scope_validated(env):
+    assert gw.validate_giveaway(_payload(referral_scope="x"))[1]
+    assert gw.validate_giveaway(_payload())[0]["referral_scope"] == "any"

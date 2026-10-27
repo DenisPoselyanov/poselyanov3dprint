@@ -37,6 +37,8 @@ CARD_URL_RE = re.compile(r"^https://res\.cloudinary\.com/[^\s]{3,500}$")
 MAX_WINNERS = 20
 MAX_REFERRAL_LIMIT = 50
 DEFAULT_REFERRAL_LIMIT = 5
+# Кого зараховуємо другом: any — будь-кого, хто вперше бере участь; new — лише нових у боті
+REFERRAL_SCOPES = ("any", "new")
 TITLE_MAX = 100
 TEXT_MAX = 900  # підпис фото — 1024, лишаємо запас під рядок про дату завершення
 _HTTPS_RE = re.compile(r"^https://[^\s]{3,500}$")
@@ -60,6 +62,7 @@ def init_giveaways_table(conn) -> None:
                 shipping_payer  TEXT NOT NULL DEFAULT 'winner',
                 referral_bonus  INTEGER NOT NULL DEFAULT 0,
                 referral_limit  INTEGER NOT NULL DEFAULT 5,
+                referral_scope  TEXT NOT NULL DEFAULT 'any',
                 text            TEXT NOT NULL DEFAULT '',
                 photo           TEXT NOT NULL DEFAULT '',
                 status          TEXT NOT NULL DEFAULT 'active',
@@ -118,6 +121,7 @@ def init_giveaways_table(conn) -> None:
                 shipping_payer  TEXT NOT NULL DEFAULT 'winner',
                 referral_bonus  INTEGER NOT NULL DEFAULT 0,
                 referral_limit  INTEGER NOT NULL DEFAULT 5,
+                referral_scope  TEXT NOT NULL DEFAULT 'any',
                 text            TEXT NOT NULL DEFAULT '',
                 photo           TEXT NOT NULL DEFAULT '',
                 status          TEXT NOT NULL DEFAULT 'active',
@@ -161,6 +165,10 @@ def init_giveaways_table(conn) -> None:
                 created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+    if is_postgres():
+        conn.execute("ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS referral_scope TEXT NOT NULL DEFAULT 'any'")
+    elif "referral_scope" not in {r[1] for r in conn.execute("PRAGMA table_info(giveaways)").fetchall()}:
+        conn.execute("ALTER TABLE giveaways ADD COLUMN referral_scope TEXT NOT NULL DEFAULT 'any'")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_giveaways_status_ends ON giveaways(status, ends_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_giveaway_entries_ref ON giveaway_entries(giveaway_id, referred_by)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_giveaway_winners_gw ON giveaway_winners(giveaway_id)")
@@ -301,6 +309,9 @@ def validate_giveaway(data: dict) -> tuple[dict | None, str | None]:
     limit = _int(data.get("referral_limit"), DEFAULT_REFERRAL_LIMIT)
     if bonus and not 1 <= limit <= MAX_REFERRAL_LIMIT:
         return None, f"Ліміт бонусів — від 1 до {MAX_REFERRAL_LIMIT}"
+    scope = str(data.get("referral_scope") or "any").strip()
+    if scope not in REFERRAL_SCOPES:
+        return None, "Обери, кого зараховувати другом"
     text = str(data.get("text") or "").strip()
     if not text:
         return None, "Напиши текст поста"
@@ -312,7 +323,7 @@ def validate_giveaway(data: dict) -> tuple[dict | None, str | None]:
     return {
         "prize_type": prize_type, "product_id": product_id, "product_variant": product_variant, "title": title, "prize_value": prize_value, "winners_count": winners,
         "ends_at": ends_at, "shipping_payer": payer, "referral_bonus": 1 if bonus else 0,
-        "referral_limit": limit if bonus else DEFAULT_REFERRAL_LIMIT, "text": text, "photo": photo,
+        "referral_limit": limit if bonus else DEFAULT_REFERRAL_LIMIT, "referral_scope": scope, "text": text, "photo": photo,
     }, None
 
 
@@ -320,7 +331,7 @@ def create_giveaway(payload: dict, channel: str) -> int:
     conn = db_connect()
     try:
         cols = ("title", "prize_type", "product_id", "product_variant", "prize_value", "winners_count", "ends_at", "channel", "shipping_payer",
-                "referral_bonus", "referral_limit", "text", "photo")
+                "referral_bonus", "referral_limit", "referral_scope", "text", "photo")
         values = tuple(_db_time(payload["ends_at"]) if c == "ends_at" else (channel if c == "channel" else payload[c])
                        for c in cols)
         placeholders = ", ".join("?" for _ in cols)
@@ -375,7 +386,7 @@ def purge_giveaway(giveaway_id: int) -> bool:
 
 
 _GW_COLS = ("id", "title", "prize_type", "product_id", "product_variant", "prize_value", "winners_count", "ends_at", "channel", "shipping_payer",
-            "referral_bonus", "referral_limit", "text", "photo", "status", "message_id", "result_message_id",
+            "referral_bonus", "referral_limit", "referral_scope", "text", "photo", "status", "message_id", "result_message_id",
             "eligible_count", "created_at", "drawn_at", "published_at")
 
 
@@ -482,9 +493,9 @@ def join(giveaway_id: int, user_id: int, referrer_id: int = 0) -> dict:
         is_new = _is_new_user(conn, uid, g)
         referred_by = None
         ref = int(referrer_id or 0)
-        # Другом може бути й той, хто вже відкривав бот; запрошення зараховується лише за першу участь —
-        # хто вже в розіграші (в т.ч. запрошений кимось), повторно нікому не зараховується.
-        if g["referral_bonus"] and ref and ref != uid:
+        # Запрошення зараховується лише за першу участь: хто вже в розіграші (в т.ч. запрошений кимось),
+        # повторно нікому не зараховується. Режим «new» — друг має бути новим у боті.
+        if g["referral_bonus"] and ref and ref != uid and (is_new or g.get("referral_scope") != "new"):
             ok_ref = conn.execute(
                 _sql("SELECT 1 FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?"), (g["id"], ref)
             ).fetchone()
