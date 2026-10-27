@@ -4209,7 +4209,7 @@
                                 </div>
                                 <div class="form-group required" id="gwProductWrap">
                                     <label for="gwProduct" id="gwProductLabel">Товар</label>
-                                    <select id="gwProduct" onchange="gwProductChanged()" style="display:none;"></select>
+                                    <input type="hidden" id="gwProduct" value="">
                                     <div class="gw-picker" id="gwPicker">
                                         <button type="button" class="gw-picker-btn" id="gwPickerBtn" onclick="gwPickerToggle()"></button>
                                         <div class="gw-picker-pop" id="gwPickerPop" style="display:none;">
@@ -12950,9 +12950,6 @@
 
         function gwTypeChanged() {
             const isProduct = gwSegValue('gwTypeSeg') !== 'amount';
-            const sel = document.getElementById('gwProduct');
-            const first = sel.querySelector('option[value=""]');
-            if (first) first.textContent = isProduct ? '— обери товар —' : '— без товару (лише сума) —';
             document.getElementById('gwProductWrap').classList.toggle('required', isProduct);
             gwPickerSync();
             document.getElementById('gwProductLabel').textContent = isProduct ? 'Товар' : 'Товар для фото поста';
@@ -13211,10 +13208,8 @@
         async function openGiveawayModal() {
             document.getElementById('giveawayForm').reset();
             document.querySelectorAll('#giveawayForm .form-group.has-error').forEach(g => g.classList.remove('has-error'));
-            const products = (allProducts || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'uk'));
             document.getElementById('gwVariant').dataset.key = '';
-            document.getElementById('gwProduct').innerHTML = '<option value="">— обери товар —</option>'
-                + products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} · №${p.id}${p.price ? ` · ${p.price} ₴` : ''}</option>`).join('');
+            document.getElementById('gwProduct').value = '';
             if (!gwDefaultChannel) await loadGiveaways();
             document.getElementById('gwChannel').value = gwDefaultChannel;
             const end = new Date(Date.now() + 3 * 86400000);
