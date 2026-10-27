@@ -13,7 +13,7 @@ from services.coupons import (
     release_coupon_for_order,
     reserve_coupon,
 )
-from services.db_utils import row_to_dict
+from services.db_utils import is_gift_name, row_to_dict
 
 _user_order_locks: dict[int, asyncio.Lock] = {}
 
@@ -885,14 +885,14 @@ def update_order_pricing(order_id: int, item_prices: dict[int, int]) -> dict:
     subtotal = sum(
         int(i.get("price") or 0) * int(i.get("quantity") or 1)
         for i in items
-        if not str(i.get("product_name", "")).startswith("🎁")
+        if not is_gift_name(i.get("product_name"))
     )
     discount = int(order.get("discount_amount") or 0)
     total = max(0, subtotal - discount)
     still_pending = any(
         int(i.get("is_contract_price") or 0)
         for i in items
-        if not str(i.get("product_name", "")).startswith("🎁")
+        if not is_gift_name(i.get("product_name"))
     )
     conn.execute(
         _sql("UPDATE orders SET total_price = ?, price_pending = ? WHERE id = ?"),

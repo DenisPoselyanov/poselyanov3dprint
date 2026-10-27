@@ -143,6 +143,12 @@ def _migrate_coupon_uses_status(conn) -> None:
     )
 
 
+def is_gift_name(name) -> bool:
+    """Подарунок до замовлення («🎁 …»). Приз розіграшу — повноцінна позиція, не подарунок."""
+    text = str(name or "")
+    return text.startswith("🎁") and not text.startswith("🎁 Приз розіграшу")
+
+
 def row_to_dict(row) -> dict:
     """Convert sqlite3.Row / psycopg dict-row to a plain JSON-serializable dict."""
     if isinstance(row, dict):

@@ -164,7 +164,7 @@ from services.collections import (
     update_collection,
     visible_collections,
 )
-from services.db_utils import init_db, row_to_dict as _row_to_dict
+from services.db_utils import init_db, is_gift_name, row_to_dict as _row_to_dict
 from services.events import EVENT_TYPES, FUNNEL_EVENT_TYPES, popular_searches, record_funnel_event, record_search
 from services.hits import bought_together, top_selling_products
 from services.product_stats import admin_products_with_stats
@@ -1187,7 +1187,7 @@ def _admin_items_from_db(db_items: list[dict]) -> list[dict]:
             "comment": i.get("comment") or "",
         }
         for i in db_items
-        if not str(i.get("product_name", "")).startswith("🎁")
+        if not is_gift_name(i.get("product_name"))
     ]
 
 
@@ -1220,7 +1220,7 @@ def _client_block_from_db(order: dict, db_items: list[dict]) -> dict:
                 "comment": i.get("comment") or "",
             }
             for i in db_items
-            if not str(i.get("product_name", "")).startswith("🎁")
+            if not is_gift_name(i.get("product_name"))
         ],
         "total_price": int(order.get("total_price") or 0),
         "coupon_code": coupon_code,
@@ -1418,7 +1418,7 @@ async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
             "comment": i.get("comment") or "",
         }
         for i in items
-        if not str(i.get("product_name", "")).startswith("🎁")
+        if not is_gift_name(i.get("product_name"))
     ]
     admin_html = build_admin_order_notification(
         order_id=int(order["id"]),
@@ -1491,7 +1491,7 @@ def _build_admin_batch_section_data(order_id: int, order: dict | None = None, it
             "comment": i.get("comment") or "",
         }
         for i in items
-        if not str(i.get("product_name", "")).startswith("🎁")
+        if not is_gift_name(i.get("product_name"))
     ]
     gift_name = order.get("gift_product_name")
     return {
@@ -4687,7 +4687,7 @@ def _giveaway_entered_text(g: dict, number: int, tickets: int, user_id: int) -> 
         link = giveaways_svc.join_link(config.BOT_USERNAME, g["id"], user_id)
         lines += [
             "",
-            f"👥 Запрошуйте друзів: +1 шанс за кожного нового друга, що підпишеться й візьме участь "
+            f"👥 Запрошуйте друзів: +1 шанс за кожного друга, що підпишеться й візьме участь "
             f"(до +{g['referral_limit']}).",
             f"Ваше посилання: {html.escape(link)}",
             f"Зараз шансів: <b>{tickets}</b>",
@@ -5947,7 +5947,7 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "comment": i.get("comment") or "",
         }
         for i in items
-        if not str(i.get("product_name", "")).startswith("🎁")
+        if not is_gift_name(i.get("product_name"))
     ]
     admin_html = build_admin_order_notification(
         order_id=int(order["id"]),

@@ -465,7 +465,9 @@ def join(giveaway_id: int, user_id: int, referrer_id: int = 0) -> dict:
         is_new = _is_new_user(conn, uid, g)
         referred_by = None
         ref = int(referrer_id or 0)
-        if g["referral_bonus"] and is_new and ref and ref != uid:
+        # Другом може бути й той, хто вже відкривав бот; запрошення зараховується лише за першу участь —
+        # хто вже в розіграші (в т.ч. запрошений кимось), повторно нікому не зараховується.
+        if g["referral_bonus"] and ref and ref != uid:
             ok_ref = conn.execute(
                 _sql("SELECT 1 FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?"), (g["id"], ref)
             ).fetchone()
@@ -567,7 +569,7 @@ def compute_weights(entries: list[dict], eligible: set[int], bonus: bool, limit:
         referrals: dict[int, int] = {}
         for e in entries:
             ref = int(e.get("referred_by") or 0)
-            if ref and int(e["user_id"]) in eligible and e.get("is_new"):
+            if ref and int(e["user_id"]) in eligible:
                 referrals[ref] = referrals.get(ref, 0) + 1
         for uid in weights:
             weights[uid] += min(int(limit), referrals.get(uid, 0))

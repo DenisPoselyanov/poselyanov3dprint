@@ -11350,8 +11350,9 @@
                 const data = await res.json();
                 const order = data.order || {};
                 const allItems = data.items || [];
-                const items = allItems.filter(i => !String(i.product_name || '').startsWith('🎁'));
-                const giftItems = allItems.filter(i => String(i.product_name || '').startsWith('🎁'));
+                const isGiftName = n => { const t = String(n || ''); return t.startsWith('🎁') && !t.startsWith('🎁 Приз розіграшу'); };
+                const items = allItems.filter(i => !isGiftName(i.product_name));
+                const giftItems = allItems.filter(i => isGiftName(i.product_name));
                 const hasContractItems = items.some(i => i.is_contract_price);
                 const userLine = renderOrderUserLine(order);
                 const status = order.status || 'new';

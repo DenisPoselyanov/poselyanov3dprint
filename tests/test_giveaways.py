@@ -125,22 +125,26 @@ def test_join_closed_after_end_or_cancel(env):
     assert gw.join(gid2, 1)["error"] == "closed"
 
 
-def test_referral_only_for_new_users(env):
+def test_referral_counts_for_existing_bot_users_once(env):
     gid = _create()
     gw.join(gid, 1)
-    gw.join(gid, 2, referrer_id=1)  # старий користувач — не друг
+    gw.join(gid, 2, referrer_id=1)  # користувач, що вже був у боті, теж друг
     _new_user(10)
     gw.join(gid, 10, referrer_id=1)
+    gw.join(gid, 10, referrer_id=2)  # повторно — вже в розіграші, запрошення 2 не зараховується
+    gw.join(gid, 3, referrer_id=2)
+    gw.join(gid, 1, referrer_id=2)  # 1 вже учасник — запрошення 2 не зараховується
     _new_user(11)
     gw.join(gid, 11, referrer_id=11)  # сам себе — ні
     _new_user(12)
     gw.join(gid, 12, referrer_id=999)  # запросив не учасник — ні
-    assert gw.get_entry(gid, 2)["referred_by"] is None
-    assert gw.get_entry(gid, 10)["referred_by"] == 1 and gw.get_entry(gid, 10)["is_new"] == 1
+    assert gw.get_entry(gid, 2)["referred_by"] == 1
+    assert gw.get_entry(gid, 10)["referred_by"] == 1
+    assert gw.get_entry(gid, 1)["referred_by"] is None
     assert gw.get_entry(gid, 11)["referred_by"] is None
     assert gw.get_entry(gid, 12)["referred_by"] is None
     g = gw.get_giveaway(gid)
-    assert gw.tickets_preview(g, 1) == 2 and gw.tickets_preview(g, 2) == 1
+    assert gw.tickets_preview(g, 1) == 3 and gw.tickets_preview(g, 2) == 2
 
 
 def test_referral_ignored_when_bonus_off(env):

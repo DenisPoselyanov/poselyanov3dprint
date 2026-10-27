@@ -285,17 +285,23 @@ async def edit_rich_message(bot, chat_id, message_id: int, html_content: str, re
             await _telegram_retry(_edit_html, label="editMessageText (html)")
 
 
+def is_gift_name(name) -> bool:
+    """Подарунок до замовлення («🎁 …»). Приз розіграшу — повноцінна позиція, не подарунок."""
+    text = str(name or "")
+    return text.startswith("🎁") and not text.startswith("🎁 Приз розіграшу")
+
+
 def _items_have_comments(items: list[dict]) -> bool:
     return any(
         (i.get("comment") or "").strip()
         for i in items
-        if not str(i.get("product_name", "")).startswith("🎁")
+        if not is_gift_name(i.get("product_name"))
     )
 
 
 def _render_admin_items_with_comments(items: list[dict], *, linked: bool = True) -> list[str]:
     parts: list[str] = []
-    filtered = [i for i in items if not str(i.get("product_name", "")).startswith("🎁")]
+    filtered = [i for i in items if not is_gift_name(i.get("product_name"))]
     if not filtered:
         return parts
     idx = 0
@@ -317,7 +323,7 @@ def _render_admin_items_with_comments(items: list[dict], *, linked: bool = True)
 
 def _render_client_items_with_comments(items: list[dict]) -> list[str]:
     parts: list[str] = []
-    filtered = [i for i in items if not str(i.get("product_name", "")).startswith("🎁")]
+    filtered = [i for i in items if not is_gift_name(i.get("product_name"))]
     if not filtered:
         return parts
     idx = 0
@@ -610,7 +616,7 @@ def build_client_price_quote(order_id: int, total_price: int, items: list[dict])
         "<ul>",
     ]
     for item in items:
-        if str(item.get("product_name", "")).startswith("🎁"):
+        if is_gift_name(item.get("product_name")):
             continue
         name = escape(item.get("product_name", "—"))
         qty = int(item.get("quantity") or 1)
