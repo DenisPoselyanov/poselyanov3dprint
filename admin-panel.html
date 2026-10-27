@@ -2827,6 +2827,19 @@
         .col-sw-row { display: flex; flex-wrap: wrap; gap: 10px; }
         .col-sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--bg-card); background: var(--h); cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--border); }
         .col-sw.on { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--h); }
+        .gw-picker { position: relative; }
+        .gw-picker-btn { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; padding: 8px 12px; min-height: 46px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px; color: var(--text-main); font-size: 14px; cursor: pointer; }
+        .gw-picker-btn:focus-visible, .gw-picker.open .gw-picker-btn { border-color: var(--accent); outline: none; }
+        .gw-picker-pop { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); background: var(--bg-card, var(--bg-input)); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.35); padding: 8px; }
+        .gw-picker-pop input { width: 100%; margin-bottom: 6px; }
+        .gw-picker-list { max-height: 320px; overflow-y: auto; }
+        .gw-picker-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--text-main); text-align: left; cursor: pointer; font-size: 14px; }
+        .gw-picker-item:hover, .gw-picker-item.hl { background: var(--bg-section); }
+        .gw-picker-item img, .gw-picker-btn img, .gw-picker-ph { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex: none; background: var(--bg-section); }
+        .gw-picker-ph { display: inline-flex; align-items: center; justify-content: center; font-size: 16px; }
+        .gw-picker-item .t, .gw-picker-btn .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .gw-picker-item .m { font-size: 12px; opacity: .7; white-space: nowrap; }
+        .gw-picker-empty { padding: 14px; text-align: center; opacity: .7; font-size: 13px; }
         .col-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg-section); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
         .col-seg button { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-weight: 700; font-size: 14px; padding: 9px 10px; border-radius: 9px; cursor: pointer; }
         .col-seg button.on { background: var(--bg-card); color: var(--accent-text); box-shadow: 0 1px 3px var(--shadow-card); }
@@ -4196,7 +4209,14 @@
                                 </div>
                                 <div class="form-group required" id="gwProductWrap">
                                     <label for="gwProduct" id="gwProductLabel">Товар</label>
-                                    <select id="gwProduct" onchange="gwProductChanged()"></select>
+                                    <select id="gwProduct" onchange="gwProductChanged()" style="display:none;"></select>
+                                    <div class="gw-picker" id="gwPicker">
+                                        <button type="button" class="gw-picker-btn" id="gwPickerBtn" onclick="gwPickerToggle()"></button>
+                                        <div class="gw-picker-pop" id="gwPickerPop" style="display:none;">
+                                            <input type="text" id="gwPickerSearch" placeholder="Пошук за назвою або №" autocomplete="off" oninput="gwPickerRender()" onkeydown="gwPickerKey(event)">
+                                            <div class="gw-picker-list" id="gwPickerList"></div>
+                                        </div>
+                                    </div>
                                     <div class="form-error">Обери товар-приз</div>
                                     <div class="form-hint" id="gwProductHint"></div>
                                 </div>
@@ -12934,6 +12954,7 @@
             const first = sel.querySelector('option[value=""]');
             if (first) first.textContent = isProduct ? '— обери товар —' : '— без товару (лише сума) —';
             document.getElementById('gwProductWrap').classList.toggle('required', isProduct);
+            gwPickerSync();
             document.getElementById('gwProductLabel').textContent = isProduct ? 'Товар' : 'Товар для фото поста';
             document.getElementById('gwValueWrap').style.display = isProduct ? 'none' : '';
             document.getElementById('gwTitleWrap').style.display = isProduct ? 'none' : '';
@@ -12942,6 +12963,72 @@
                 : 'Сертифікат сам застосується в кошику переможця до будь-якого замовлення — 48 годин на оформлення. Резерв — 3 учасники.';
             gwProductChanged();
         }
+
+        function gwPickerThumb(p) {
+            const u = p && p.photos && p.photos.find(Boolean);
+            return u ? `<img src="${escapeAttr(u)}" alt="" loading="lazy">` : '<span class="gw-picker-ph">📦</span>';
+        }
+
+        function gwPickerSync() {
+            const p = gwProduct();
+            const isProduct = gwSegValue('gwTypeSeg') !== 'amount';
+            document.getElementById('gwPickerBtn').innerHTML = p
+                ? `${gwPickerThumb(p)}<span class="t">${escapeHtml(p.name)}</span><span style="font-size:12px;opacity:.7;">№${p.id}${p.price ? ` · ${p.price} ₴` : ''}</span><span style="opacity:.6;">▾</span>`
+                : `<span class="t" style="opacity:.7;">${isProduct ? '— обери товар —' : '— без товару (лише сума) —'}</span><span style="opacity:.6;">▾</span>`;
+        }
+
+        let gwPickerHl = 0;
+        function gwPickerFiltered() {
+            const q = document.getElementById('gwPickerSearch').value.trim().toLowerCase();
+            const list = (allProducts || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'uk'));
+            return q ? list.filter(p => String(p.name).toLowerCase().includes(q) || String(p.id) === q.replace(/^№/, '')) : list;
+        }
+
+        function gwPickerRender() {
+            const items = gwPickerFiltered();
+            gwPickerHl = Math.min(gwPickerHl, Math.max(0, items.length - 1));
+            const cur = Number(document.getElementById('gwProduct').value) || 0;
+            const clear = gwSegValue('gwTypeSeg') === 'amount'
+                ? '<button type="button" class="gw-picker-item" onclick="gwPickerPick(0)"><span class="gw-picker-ph">✕</span><span class="t">Без товару</span></button>' : '';
+            document.getElementById('gwPickerList').innerHTML = clear + (items.length
+                ? items.map((p, i) => `<button type="button" class="gw-picker-item${i === gwPickerHl ? ' hl' : ''}${p.id === cur ? ' sel' : ''}" onclick="gwPickerPick(${p.id})">${gwPickerThumb(p)}<span class="t">${escapeHtml(p.name)}</span><span class="m">№${p.id}${p.price ? ` · ${p.price} ₴` : ' · без ціни'}</span></button>`).join('')
+                : '<div class="gw-picker-empty">Нічого не знайдено</div>');
+        }
+
+        function gwPickerToggle(force) {
+            const pop = document.getElementById('gwPickerPop');
+            const open = force === undefined ? pop.style.display === 'none' : force;
+            pop.style.display = open ? '' : 'none';
+            document.getElementById('gwPicker').classList.toggle('open', open);
+            if (open) {
+                const input = document.getElementById('gwPickerSearch');
+                input.value = '';
+                gwPickerHl = 0;
+                gwPickerRender();
+                input.focus();
+            }
+        }
+
+        function gwPickerPick(id) {
+            document.getElementById('gwProduct').value = id ? String(id) : '';
+            gwPickerToggle(false);
+            gwPickerSync();
+            gwProductChanged();
+        }
+
+        function gwPickerKey(e) {
+            const n = gwPickerFiltered().length;
+            if (e.key === 'ArrowDown') { gwPickerHl = Math.min(n - 1, gwPickerHl + 1); gwPickerRender(); e.preventDefault(); }
+            else if (e.key === 'ArrowUp') { gwPickerHl = Math.max(0, gwPickerHl - 1); gwPickerRender(); e.preventDefault(); }
+            else if (e.key === 'Enter') { const p = gwPickerFiltered()[gwPickerHl]; if (p) gwPickerPick(p.id); e.preventDefault(); }
+            else if (e.key === 'Escape') { gwPickerToggle(false); e.stopPropagation(); e.preventDefault(); }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') document.querySelector('#gwPickerList .hl')?.scrollIntoView({ block: 'nearest' });
+        }
+
+        document.addEventListener('click', e => {
+            const pk = document.getElementById('gwPicker');
+            if (pk && !pk.contains(e.target)) gwPickerToggle(false);
+        });
 
         function gwProduct() {
             const id = Number(document.getElementById('gwProduct').value);
@@ -13135,6 +13222,8 @@
             document.getElementById('gwEnds').value = gwLocalInput(end);
             gwTextTouched = false;
             gwSetSeg('gwTypeSeg', 'product');
+            gwPickerSync();
+            gwPickerToggle(false);
             gwSetSeg('gwPayerSeg', 'winner');
             gwSetSeg('gwBonusSeg', 'off');
             gwSetSeg('gwScopeSeg', 'any');
