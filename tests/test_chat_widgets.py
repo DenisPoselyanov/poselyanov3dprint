@@ -188,7 +188,7 @@ def test_promo_lines(env):
     assert "подарунок до 100 ₴" in line({"type": "gift_threshold", "min_items": 3, "max_gift_price": 100})
     assert line({"type": "info", "subtitle": "Привіт"}) == "Привіт"
     widget = env.cw.build_promo_widget([{"type": "info", "title": "А", "subtitle": "б"}, {"type": "info", "title": "В"}])
-    assert widget["data"] == "" and "і ще 1" in widget["caption"]
+    assert widget["data"] == "" and widget["caption"] == ""  # назви акцій уже у віджеті
 
 
 def test_showcase_rows_mark_quick_add(env):
@@ -554,5 +554,5 @@ def test_widget_catalog_previews(env):
         assert item["html"] and item["states"], key
         assert env.ow.widget_zlib_size(item["html"]) <= 4096, key
         for state in item["states"]:
-            assert state["label"] and state["caption"] and len(state["data"].encode()) <= 1024, key
+            assert state["label"] and isinstance(state["caption"], str) and len(state["data"].encode()) <= 1024, key
     assert len(previews["status"]["states"]) >= 5 and len(previews["quote"]["states"]) == 2

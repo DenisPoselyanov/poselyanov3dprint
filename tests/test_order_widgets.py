@@ -159,8 +159,9 @@ def test_data_caption_and_notes(env):
     tracking = {"state": "b", "free_until": "2026-11-19"}
     data = json.loads(env.ow.build_widget_data(shipped, tracking, review_bonus=False))
     assert data == {"s": "shipped", "p": 1, "n": "20450718331264", "c": "b", "f": "19 листопада"}
-    assert env.ow.build_caption(shipped, tracking) == f"Замовлення №{oid} · Чекає у відділенні"
-    assert env.ow.build_caption({**order, "status": "ready", "delivery_method": "self"}).endswith("Можна забирати")
+    # Підпис порожній: статус уже у віджеті, сповіщення йде окремим рядком.
+    assert env.ow.build_caption(shipped, tracking) == ""
+    assert env.ow.build_caption({**order, "status": "ready", "delivery_method": "self"}) == ""
     assert env.ow.status_note({**order, "status": "printing"}) == f"🖨️ Замовлення №{oid} друкується"
     assert "можна забирати" in env.ow.status_note({**order, "status": "ready", "delivery_method": "self"})
     assert env.ow.status_note(order) is None  # про «нове» окремо не сповіщаємо
@@ -251,7 +252,7 @@ def test_sync_creates_then_updates_data_only(env):
     assert asyncio.run(env.wm.sync_order_widget(bot, oid, create=True)) == "sent"
     name, payload = bot.calls[0]
     assert name == "sendWidget" and payload["chat_id"] == OWNER and payload["allow_queries"] is True
-    assert json.loads(payload["chat_data"])["s"] == "new" and payload["caption"].endswith("Очікує підтвердження")
+    assert json.loads(payload["chat_data"])["s"] == "new" and "caption" not in payload  # без дубля статусу під віджетом
     row = env.ow.get_widget(oid)
     assert row["message_id"] == 101 and env.ow.find_widget_by_message(OWNER, 101)["order_id"] == oid
 
@@ -261,7 +262,7 @@ def test_sync_creates_then_updates_data_only(env):
     env.orders.update_order_status(oid, "printing")
     env.orders.update_order_fields(oid, {"is_paid": 1})
     assert asyncio.run(env.wm.sync_order_widget(bot, oid)) == "updated"
-    assert bot.names() == ["sendWidget", "editMessageWidgetData", "editMessageCaption"]
+    assert bot.names() == ["sendWidget", "editMessageWidgetData"]  # підпис порожній — його не редагуємо
     assert json.loads(bot.calls[1][1]["chat_data"]) == {"s": "printing", "p": 1, "rb": 1}
     assert bot.calls[1][1]["message_id"] == 101
 

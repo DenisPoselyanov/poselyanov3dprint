@@ -268,8 +268,8 @@ def status_title(order: dict, tracking: dict | None = None) -> str:
 
 
 def build_caption(order: dict, tracking: dict | None = None) -> str:
-    """Підпис під віджетом: текст сповіщення й те, що бачать застосунки без підтримки віджетів."""
-    return f"Замовлення №{int(order['id'])} · {status_title(order, tracking)}"
+    """Підпис під віджетом порожній: статус уже є у самому віджеті, а сповіщення — окремим рядком (status_note)."""
+    return ""
 
 
 def status_note(order: dict, event: str | None = None, tracking: dict | None = None) -> str | None:

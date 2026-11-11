@@ -254,11 +254,10 @@ let n=0;function draw(){const c=C.c[n],l=c[3]&&left(c[3]);$('w').className=c[0];
 $('h').textContent=c[1];$('p').textContent=c[2];$('tm').textContent=l?'⏳ Ще '+l:'';H('tm',!l);H('nx',C.c.length<2)}
 $('nx').onclick=()=>{n=(n+1)%C.c.length;draw()};$('go').onclick=()=>TG(B+'sales');setInterval(draw,1e3);
 """
-    title = cards[0][1] if cards else "Акції"
     return {
         "html": _page(body, js, {"c": cards}),
         "data": "",
-        "caption": f"🔥 Акції магазину: {title}" + (f" і ще {len(cards) - 1}" if len(cards) > 1 else ""),
+        "caption": "",  # назва акції вже є у віджеті — підпис би дублював її
     }
 
 
