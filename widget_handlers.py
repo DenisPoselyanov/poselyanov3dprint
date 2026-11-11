@@ -91,9 +91,12 @@ async def send_quote(bot, order_id: int) -> bool:
 
 async def _quote_agree(bot, user_id: int, chat_id: int, message_id: int, order_id: int) -> str:
     order, _ = await run_db(get_order_with_items, order_id)
-    if not order or int(order.get("user_id") or 0) != int(user_id):
+    if not order or int(order.get("user_id") or 0) != int(user_id) or not cw.enabled_for(user_id, "quote"):
         return ""
     if order.get("status") in ("new", "draft"):
+        # Погодити можна лише вже встановлену ціну: інакше клієнт підтвердить замовлення з нульовою сумою.
+        if order.get("price_pending") or int(order.get("total_price") or 0) <= 0:
+            return ""
         confirm = hooks.get("confirm_order")
         if not confirm or not await confirm(order_id):
             return ""

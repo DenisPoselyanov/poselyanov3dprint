@@ -277,6 +277,7 @@ def test_quote_agree_confirms_only_own_order(env):
         return True
 
     env.wh.hooks["confirm_order"] = confirm
+    env.settings.update_admin_settings({"widget_modes": {"quote": "all"}})
     tg = FakeBot()
     assert asyncio.run(env.wh.handle_widget_query(tg, _query(999, f"q:a:{oid}", 42)))
     assert not confirmed and _answer(tg) == {}                                  # чужий користувач
@@ -285,6 +286,12 @@ def test_quote_agree_confirms_only_own_order(env):
     assert tg.last("editMessageWidgetData")["message_id"] == 42
     asyncio.run(env.wh.handle_widget_query(tg, _query(CLIENT, f"q:a:{oid}", 42)))
     assert confirmed == [oid] and _answer(tg) == {"a": 1}                       # повторний дотик нічого не ламає
+    items = [{"product_id": 1, "product_name": "Договірний", "price": 0, "quantity": 1}]
+    free, _ = env.orders.save_order(CLIENT, "@u", "Тест", items, 0, "", extra={"delivery_method": "self"},
+                                    price_pending=1, merge=False)                # ціна ще не встановлена — не погоджуємо
+    assert env.orders.get_order_with_items(free)[0]["price_pending"] == 1
+    asyncio.run(env.wh.handle_widget_query(tg, _query(CLIENT, f"q:a:{free}", 43)))
+    assert free not in confirmed and _answer(tg) == {}
 
 
 def test_unknown_widget_query_is_left_for_order_widget(env):

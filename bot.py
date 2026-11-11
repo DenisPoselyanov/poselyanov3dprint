@@ -1441,6 +1441,8 @@ async def _confirm_order_by_client(order_id: int) -> bool:
     order, _ = await run_db(get_order_with_items, int(order_id))
     if not order or not is_valid_transition(order.get("status") or "new", "confirmed"):
         return False
+    if order.get("price_pending") or int(order.get("total_price") or 0) <= 0:
+        return False
     await _sync_order_status_to_telegram(int(order_id), "confirm")
     order, _ = await run_db(get_order_with_items, int(order_id))
     if order and await _client_widget(order_id) and not order.get("is_test"):
