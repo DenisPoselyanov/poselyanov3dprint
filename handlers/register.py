@@ -47,6 +47,10 @@ def register_telegram_handlers(app: Application, handlers) -> None:
     app.add_handler(CommandHandler("status", handlers.status_cmd))
     app.add_handler(CommandHandler("contact", handlers.contact))
     app.add_handler(CommandHandler("reload_products", handlers.reload_products_cmd))
+    app.add_handler(CommandHandler("hits", handlers.hits_cmd))
+    app.add_handler(CommandHandler("gift", handlers.gift_cmd))
+    app.add_handler(CommandHandler("cart", handlers.cart_cmd))
+    app.add_handler(CommandHandler("dash", handlers.dash_cmd))
     app.add_handler(
         MessageHandler(
             filters.TEXT & filters.Regex(r"^(?:/mycoupons|🎟️ Мої купони)$"),
@@ -56,6 +60,11 @@ def register_telegram_handlers(app: Application, handlers) -> None:
     app.add_handler(CallbackQueryHandler(handlers.contact_action, pattern=r"^contact_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.order_action, pattern=r"^(confirm|draft|cancel)_"))
     app.add_handler(CallbackQueryHandler(handlers.paid_action, pattern=r"^(paid|unpaid)_\d+$"))
+    app.add_handler(CallbackQueryHandler(handlers.order_steps_action, pattern=r"^st_(p|e|x)_\d+(_\d)?$"))
+    app.add_handler(CallbackQueryHandler(handlers.gift_again_action, pattern=r"^gf_again$"))
+    app.add_handler(CallbackQueryHandler(handlers.gift_action, pattern=r"^gf_(kid|her|him|work|any)(_|$)"))
+    app.add_handler(CallbackQueryHandler(handlers.my_tickets_action, pattern=r"^gw_my_\d+$"))
+    app.add_handler(CallbackQueryHandler(handlers.my_coupons_action, pattern=r"^mycpn$"))
     app.add_handler(CallbackQueryHandler(handlers.review_action, pattern=r"^rev_(pub|hide)_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.giveaway_join_action, pattern=r"^gw_join_\d+_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.giveaway_owner_action, pattern=r"^gw_(rr|ext)_\d+$"))
@@ -95,6 +104,9 @@ async def configure_bot_commands(app: Application, *, owner_id: int, user_comman
             ("status", "📋 Статус замовлення"),
             ("mycoupons", "🎟️ Мої купони"),
             ("sales", "🔥 Акції"),
+            ("hits", "⭐ Хіти продажів"),
+            ("gift", "🎁 Підібрати подарунок"),
+            ("dash", "📊 Зведення дня"),
             ("contact", "📬 Контакти"),
             ("myid", "🪪 Мій ID"),
         ],

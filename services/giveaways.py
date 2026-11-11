@@ -464,6 +464,18 @@ def get_entry(giveaway_id: int, user_id: int) -> dict | None:
     return rows[0] if rows else None
 
 
+def entries_count(giveaway_id: int) -> int:
+    """Скільки людей бере участь — для лічильника у віджеті розіграшу."""
+    conn = db_connect()
+    try:
+        row = conn.execute(
+            _sql("SELECT COUNT(*) FROM giveaway_entries WHERE giveaway_id = ?"), (int(giveaway_id),)
+        ).fetchone()
+    finally:
+        conn.close()
+    return int(row[0] or 0) if row else 0
+
+
 def referral_count(giveaway_id: int, user_id: int) -> int:
     conn = db_connect()
     try:

@@ -158,6 +158,7 @@ def register_http_routes(http_app: web.Application, handlers) -> None:
     http_app.router.add_delete("/api/admin/ai-suggestions/{id}", handlers.handle_delete_ai_suggestion)
     http_app.router.add_get("/api/admin/settings", handlers.handle_get_settings)
     http_app.router.add_put("/api/admin/settings", handlers.handle_update_settings)
+    http_app.router.add_get("/api/admin/widgets/previews", handlers.handle_widget_previews)
     http_app.router.add_get("/api/admin/promotions", handlers.handle_get_promotions)
     http_app.router.add_post("/api/admin/promotions", handlers.handle_create_promotion)
     http_app.router.add_put("/api/admin/promotions/{id}", handlers.handle_update_promotion)

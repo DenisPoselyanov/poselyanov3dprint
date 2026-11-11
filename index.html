@@ -7043,6 +7043,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     ORDERS_FOCUS = Number(orderLink[1]);
     switchPage('orders');
   }
+  // startapp=cart_12x2-15x1 — «Оформити замовлення» з кошика в чаті (ROADMAP.md, п. 11)
+  const cartLink = /^cart_(\d+x\d+(?:-\d+x\d+)*)$/.exec(startParam || '');
+  if (cartLink) {
+    let added = 0;
+    cartLink[1].split('-').forEach(pair => {
+      const [id, qty] = pair.split('x').map(Number);
+      const p = findProduct(id);
+      if (!p || opensCard(p)) return;
+      const want = Math.max(1, Math.min(20, qty || 1));
+      const line = getCartItem(id);
+      if (line) line.quantity = Math.max(line.quantity, want);
+      else cart.push(stampLine(buildCartRow(p, want, defaultFilamentFor(p))));
+      refreshProductControls(id);
+      added++;
+    });
+    if (added) { saveCart(); updateCartBadge(); }
+    switchPage('cart');
+  }
   const reviewLink = /^review_(\d+)(?:_([1-5]))?$/.exec(startParam || '');
   if (reviewLink) {
     REVIEW_DEEP = Number(reviewLink[1]);

@@ -52,6 +52,15 @@ def init_channel_posts_table(conn) -> None:
             )
         """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_channel_posts_product ON channel_posts(product_id)")
+    # Для оновлення вже опублікованих постів (ROADMAP.md, п. 3): тип повідомлення, де посилання,
+    # ціна на момент публікації (базова) і поточний дописаний рядок.
+    from services.db_utils import _ensure_columns
+
+    _ensure_columns(
+        conn, "channel_posts",
+        {"kind": "TEXT DEFAULT ''", "links_mode": "INTEGER DEFAULT -1", "price": "BIGINT", "note": "TEXT DEFAULT ''"},
+        postgres=is_postgres(),
+    )
 
 
 # ── Канал ───────────────────────────────────────────────────────────
@@ -125,18 +134,21 @@ def shop_link(post_id: int) -> str:
 
 # ── Записи постів ───────────────────────────────────────────────────
 
-def create_post(product_id: int, chat_id: str, text: str) -> int:
-    """Резервуємо id до відправки — він потрібен для мітки в посиланнях кнопок."""
+def create_post(product_id: int, chat_id: str, text: str, *, kind: str = "", links_mode: int = -1,
+                price: int | None = None) -> int:
+    """Резервуємо id до відправки — він потрібен для мітки в посиланнях кнопок.
+
+    kind — text / photo / album; links_mode — 1, якщо посилання в тексті, 0 — кнопки; price — ціна товару зараз.
+    """
     conn = db_connect()
     try:
-        params = (int(product_id), str(chat_id), text)
+        params = (int(product_id), str(chat_id), text, kind, int(links_mode), price)
+        query = "INSERT INTO channel_posts (product_id, chat_id, text, kind, links_mode, price) VALUES (?, ?, ?, ?, ?, ?)"
         if is_postgres():
-            row = conn.execute(
-                _sql("INSERT INTO channel_posts (product_id, chat_id, text) VALUES (?, ?, ?) RETURNING id"), params
-            ).fetchone()
+            row = conn.execute(_sql(query + " RETURNING id"), params).fetchone()
             post_id = int(row[0])
         else:
-            cur = conn.execute(_sql("INSERT INTO channel_posts (product_id, chat_id, text) VALUES (?, ?, ?)"), params)
+            cur = conn.execute(_sql(query), params)
             post_id = int(cur.lastrowid)
         conn.commit()
     finally:
@@ -232,3 +244,93 @@ def record_click(user_id: int, post_id: int) -> bool:
     finally:
         conn.close()
     return True
+
+
+# ── Оновлення опублікованих постів (ROADMAP.md, п. 3) ───────────────
+# Канали не приймають віджети, тому «живу» ціну тримаємо звичайним редагуванням: під текстом поста
+# дописуємо один рядок про актуальну ціну чи наявність. Сам текст власника не чіпаємо.
+
+NOTE_UNAVAILABLE = "⛔️ Зараз немає в наявності"
+SYNC_LIMIT = 20
+
+
+def product_note(product: dict | None, baseline: int | None) -> str:
+    """Рядок під постом. Порожній — товар такий самий, як на момент публікації."""
+    if not product or product.get("status", "active") != "active":
+        return NOTE_UNAVAILABLE
+    if product.get("contractPrice"):
+        return ""
+    price = int(product.get("price") or 0)
+    if price <= 0 or baseline is None or price == int(baseline):
+        return ""
+    old = int(product.get("oldPrice") or 0)
+    if old > price:
+        return f"🔥 Зараз {price} ₴ замість {old} ₴"
+    return f"💰 Актуальна ціна: {price} ₴"
+
+
+def posts_for_sync(product_id: int, limit: int = SYNC_LIMIT) -> list[dict]:
+    conn = db_connect(dict_rows=True)
+    try:
+        rows = conn.execute(
+            _sql("""
+                SELECT id, product_id, chat_id, message_id, text, kind, links_mode, price, note FROM channel_posts
+                WHERE product_id = ? AND message_id IS NOT NULL
+                ORDER BY id DESC LIMIT ?
+            """),
+            (int(product_id), int(limit)),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
+
+
+def set_note(post_id: int, note: str) -> None:
+    conn = db_connect()
+    try:
+        conn.execute(_sql("UPDATE channel_posts SET note = ? WHERE id = ?"), (note, int(post_id)))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def backfill_baseline(lookup) -> int:
+    """Старим постам без базової ціни записати нинішню ціну товару: від неї рахуємо подальші зміни.
+
+    lookup(product_id) → товар або None. Повертає кількість оновлених постів.
+    """
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT id, product_id FROM channel_posts WHERE price IS NULL").fetchall()
+        done = 0
+        for post_id, product_id in rows:
+            product = lookup(int(product_id))
+            if not product or product.get("contractPrice"):
+                continue
+            conn.execute(_sql("UPDATE channel_posts SET price = ? WHERE id = ?"),
+                         (int(product.get("price") or 0), int(post_id)))
+            done += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return done
+
+
+def render_post(post: dict, note: str) -> tuple[str, bool, str]:
+    """(HTML поста з дописаним рядком, чи потрібні кнопки, помилка).
+
+    Для старих постів невідомо, де були посилання (links_mode = -1), тож ставимо їх у текст:
+    так «Замовити» лишається в пості за будь-якого початкового вигляду.
+    """
+    text = str(post.get("text") or "")
+    links_in_text = int(post.get("links_mode") if post.get("links_mode") is not None else -1) != 0
+    limit = TEXT_MAX if post.get("kind") == "text" else CAPTION_MAX
+    used = len(text) + (len(note) + 2 if note else 0) + (LINKS_TEXT_LEN if links_in_text else 0)
+    if used > limit:
+        return "", False, f"не влазить у ліміт: {used} із {limit}"
+    body = caption_html(text)
+    if note:
+        body += f"\n\n<i>{html.escape(note)}</i>"
+    if links_in_text:
+        body += links_html(int(post["id"]), int(post["product_id"]))
+    return body, not links_in_text, ""

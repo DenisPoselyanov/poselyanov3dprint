@@ -26,6 +26,20 @@ REVIEW_BONUS_ENABLED_KEY = "review_bonus_enabled"
 # Віджет «Живий статус замовлення» (ROADMAP.md, п. 1): off — нікому, owner — лише власнику, all — усім
 ORDER_WIDGET_MODE_KEY = "order_widget_mode"
 ORDER_WIDGET_MODES = ("off", "owner", "all")
+# Кожен віджет чату вмикається окремо (сторінка «Віджети» в адмінці). status — п. 1, решта — п. 4–15.
+WIDGET_KINDS = ("status", "quote", "giveaway", "promo", "cart", "hits", "gift", "dash")
+# Дашборд бачить лише власник, тому режиму «усім» у нього немає.
+OWNER_ONLY_WIDGETS = ("dash",)
+
+
+def widget_mode_key(kind: str) -> str:
+    return ORDER_WIDGET_MODE_KEY if kind == "status" else f"widget_mode_{kind}"
+
+
+# Покрокове підтвердження замовлення в чаті замовлень: ціна → термін (п. 2)
+ORDER_STEPS_KEY = "order_steps_enabled"
+# Рядок про актуальну ціну / наявність у вже опублікованих постах каналу (п. 3)
+CHANNEL_AUTOUPDATE_KEY = "channel_posts_autoupdate"
 
 # Дефолти — стан «як було до появи фічі».
 DEFAULTS: dict[str, str] = {
@@ -34,6 +48,10 @@ DEFAULTS: dict[str, str] = {
     REVIEWS_AUTO_PUBLISH_KEY: "0",
     REVIEW_BONUS_ENABLED_KEY: "1",
     ORDER_WIDGET_MODE_KEY: "off",
+    **{f"widget_mode_{kind}": "off" for kind in ("quote", "giveaway", "promo", "cart", "hits", "gift")},
+    "widget_mode_dash": "owner",
+    ORDER_STEPS_KEY: "1",
+    CHANNEL_AUTOUPDATE_KEY: "1",
 }
 SOLD_COUNT_MIN_LIMIT = 10_000
 
@@ -153,6 +171,28 @@ def order_widget_mode() -> str:
     return mode if mode in ORDER_WIDGET_MODES else "off"
 
 
+def widget_mode(kind: str) -> str:
+    """Режим одного віджета: off — нікому, owner — лише власнику, all — усім."""
+    if kind not in WIDGET_KINDS:
+        return "off"
+    mode = str(get_setting(widget_mode_key(kind))).strip().lower()
+    if mode not in ORDER_WIDGET_MODES:
+        return "off"
+    return "owner" if mode == "all" and kind in OWNER_ONLY_WIDGETS else mode
+
+
+def widget_modes() -> dict[str, str]:
+    return {kind: widget_mode(kind) for kind in WIDGET_KINDS}
+
+
+def order_steps_enabled() -> bool:
+    return get_bool(ORDER_STEPS_KEY)
+
+
+def channel_autoupdate_enabled() -> bool:
+    return get_bool(CHANNEL_AUTOUPDATE_KEY)
+
+
 def public_settings() -> dict:
     """Налаштування, які потрібні вітрині."""
     return {"coupon_stacking_enabled": coupon_stacking_enabled()}
@@ -165,19 +205,28 @@ def admin_settings() -> dict:
         "reviews_auto_publish": get_bool(REVIEWS_AUTO_PUBLISH_KEY),
         "review_bonus_enabled": review_bonus_enabled(),
         "order_widget_mode": order_widget_mode(),
+        "widget_modes": widget_modes(),
+        "order_steps_enabled": order_steps_enabled(),
+        "channel_posts_autoupdate": channel_autoupdate_enabled(),
     }
 
 
 def update_admin_settings(data: dict) -> dict:
     updates: dict[str, str] = {}
-    for key in (COUPON_STACKING_KEY, REVIEWS_AUTO_PUBLISH_KEY, REVIEW_BONUS_ENABLED_KEY):
+    for key in (COUPON_STACKING_KEY, REVIEWS_AUTO_PUBLISH_KEY, REVIEW_BONUS_ENABLED_KEY,
+                ORDER_STEPS_KEY, CHANNEL_AUTOUPDATE_KEY):
         if key in data:
             updates[key] = "1" if data.get(key) in (1, True, "1", "true", "on", "yes") else "0"
+    modes = dict(data.get("widget_modes") or {}) if isinstance(data.get("widget_modes"), dict) else {}
     if ORDER_WIDGET_MODE_KEY in data:
-        mode = str(data.get(ORDER_WIDGET_MODE_KEY) or "").strip().lower()
-        if mode not in ORDER_WIDGET_MODES:
+        modes["status"] = data.get(ORDER_WIDGET_MODE_KEY)
+    for kind, raw in modes.items():
+        mode = str(raw or "").strip().lower()
+        if kind not in WIDGET_KINDS:
+            return {"ok": False, "error": "Невідомий віджет"}
+        if mode not in ORDER_WIDGET_MODES or (mode == "all" and kind in OWNER_ONLY_WIDGETS):
             return {"ok": False, "error": "Режим віджета: off, owner або all"}
-        updates[ORDER_WIDGET_MODE_KEY] = mode
+        updates[widget_mode_key(kind)] = mode
     if SOLD_COUNT_MIN_KEY in data:
         try:
             threshold = int(data.get(SOLD_COUNT_MIN_KEY))

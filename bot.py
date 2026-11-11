@@ -237,6 +237,8 @@ from services.status_messages import list_status_messages, mark_status_message_d
 from services import order_widgets as order_widgets_svc
 from services.settings import order_widget_mode
 from widget_messages import answer_widget_query, send_order_note, sync_order_widget
+import widget_handlers
+from services.settings import channel_autoupdate_enabled, order_steps_enabled
 import services.broadcasts as broadcasts_svc
 import services.channel_posts as channel_posts_svc
 import services.post_cards as post_cards_svc
@@ -954,6 +956,10 @@ async def sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    user = update.effective_user
+    if user and update.message.chat_id == user.id and await widget_handlers.send_promos(context.bot, user.id, promotions):
+        return
+
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton("🛍️ Відкрити каталог", web_app=WebAppInfo(url=WEBAPP_URL))
     ]])
@@ -1428,6 +1434,174 @@ def _build_order_status_channel_markup(
             rows.append([write_button])
         return InlineKeyboardMarkup(rows)
     return _build_single_order_channel_markup(order_id, price_pending, user_id, username, first_name)
+
+
+async def _confirm_order_by_client(order_id: int) -> bool:
+    """Клієнт натиснув «Погоджуюсь» у кошторисі: підтверджуємо, як кнопкою в чаті замовлень."""
+    order, _ = await run_db(get_order_with_items, int(order_id))
+    if not order or not is_valid_transition(order.get("status") or "new", "confirmed"):
+        return False
+    await _sync_order_status_to_telegram(int(order_id), "confirm")
+    order, _ = await run_db(get_order_with_items, int(order_id))
+    if order and await _client_widget(order_id) and not order.get("is_test"):
+        await _widget_note(order)
+    await _owner_alert(f"✅ Клієнт погодив ціну замовлення №{int(order_id)} — підтверджено")
+    return True
+
+
+widget_handlers.hooks.update(confirm_order=_confirm_order_by_client, admin_url=lambda: get_admin_webapp_url())
+
+
+# ── Покрокове підтвердження в чаті замовлень: ціна → термін (ROADMAP.md, п. 2) ──
+# Кроки — тимчасове повідомлення на місці замовлення; його бачить лише той, хто натиснув «Підтвердити».
+ETA_OPTIONS = {"1": "сьогодні–завтра", "2": "2–3 дні", "3": "4–7 днів", "4": "1–2 тижні", "0": ""}
+
+
+def _steps_price_view(order: dict) -> tuple[str, InlineKeyboardMarkup]:
+    oid = int(order["id"])
+    admin_url = get_admin_webapp_url(oid)
+    total = int(order.get("total_price") or 0)
+    rows = []
+    if order.get("price_pending"):
+        text = (f"<b>Замовлення №{oid}</b> · крок 1 із 2\n\n"
+                "💰 Ціна ще не встановлена: є позиції з договірною ціною.")
+        if admin_url:
+            rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
+        rows.append([InlineKeyboardButton("➡️ Далі без ціни", callback_data=f"st_p_{oid}")])
+    else:
+        text = f"<b>Замовлення №{oid}</b> · крок 1 із 2\n\n💰 Сума замовлення: <b>{total} ₴</b>. Усе правильно?"
+        rows.append([InlineKeyboardButton(f"✅ Так, {total} ₴", callback_data=f"st_p_{oid}")])
+        if admin_url:
+            rows.append([InlineKeyboardButton("✏️ Змінити в адмінці", url=admin_url)])
+    rows.append([InlineKeyboardButton("✖️ Не підтверджувати", callback_data=f"st_x_{oid}")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _steps_eta_view(order_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    text = (f"<b>Замовлення №{order_id}</b> · крок 2 із 2\n\n"
+            "⏱ Коли буде готове? Клієнт побачить термін у статусі замовлення.")
+    def btn(key):
+        return InlineKeyboardButton(ETA_OPTIONS[key].capitalize(), callback_data=f"st_e_{order_id}_{key}")
+    return text, InlineKeyboardMarkup([
+        [btn("1"), btn("2")],
+        [btn("3"), btn("4")],
+        [InlineKeyboardButton("Без терміну", callback_data=f"st_e_{order_id}_0")],
+        [InlineKeyboardButton("✖️ Не підтверджувати", callback_data=f"st_x_{order_id}")],
+    ])
+
+
+async def _start_confirm_steps(bot, query, order_id: int) -> bool:
+    """False — тимчасові повідомлення недоступні: підтверджуємо одразу, як раніше."""
+    order, _ = await run_db(get_order_with_items, order_id)
+    if not order:
+        return False
+    text, markup = _steps_price_view(order)
+    return bool(await widget_handlers.send_ephemeral(bot, query, text, replace=True, reply_markup=markup))
+
+
+async def _drop_step_message(query, done_text: str = "") -> None:
+    try:
+        await query.delete_message()
+    except Exception:
+        try:
+            await query.edit_message_text(done_text or "Готово", reply_markup=None)
+        except Exception as e:
+            logger.info("Крок підтвердження не прибрано: %s", e)
+
+
+async def order_steps_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопки кроків: st_p_<id> — ціна ок, st_e_<id>_<термін> — підтвердити, st_x_<id> — передумав."""
+    query = update.callback_query
+    m = re.match(r"^st_(p|e|x)_(\d+)(?:_(\d))?$", query.data or "")
+    if not m or query.from_user.id != OWNER_ID:
+        await query.answer()
+        return
+    kind, order_id, key = m.group(1), int(m.group(2)), m.group(3) or "0"
+    if kind == "x":
+        await query.answer("Замовлення не підтверджено")
+        await _drop_step_message(query, "Не підтверджено")
+        return
+    if kind == "p":
+        await query.answer()
+        text, markup = _steps_eta_view(order_id)
+        try:
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
+        except Exception as e:
+            logger.warning("Крок «термін» для #%s не показано: %s", order_id, e)
+        return
+    eta = ETA_OPTIONS.get(key, "")
+    order, _ = await run_db(get_order_with_items, order_id)
+    if not order or not is_valid_transition(order.get("status") or "new", "confirmed"):
+        await query.answer("Замовлення вже оброблено", show_alert=True)
+        await _drop_step_message(query)
+        return
+    await run_db(update_order_fields, order_id, {"eta_text": eta})
+    await _sync_order_status_to_telegram(order_id, "confirm")
+    order, _ = await run_db(get_order_with_items, order_id)
+    if order and order.get("is_test"):
+        await _send_test_review_request(order)
+    if order and await _client_widget(order_id) and not order.get("is_test"):
+        await _widget_note(order)
+    done = "✅ Підтверджено" + (f" · {eta}" if eta else "")
+    await query.answer(done)
+    await _drop_step_message(query, done)
+
+
+# ── Оновлення опублікованих постів каналу (ROADMAP.md, п. 3) ─────────────────
+async def _edit_channel_post(bot, post: dict, body: str, markup) -> bool:
+    chat_id, message_id = post["chat_id"], int(post["message_id"])
+    kind = post.get("kind") or ""
+    attempts = []
+    if kind != "text":
+        attempts.append(lambda: bot.edit_message_caption(
+            chat_id=chat_id, message_id=message_id, caption=body, parse_mode="HTML", reply_markup=markup))
+    if kind in ("text", ""):
+        attempts.append(lambda: bot.edit_message_text(
+            chat_id=chat_id, message_id=message_id, text=body, parse_mode="HTML", reply_markup=markup,
+            link_preview_options=LinkPreviewOptions(is_disabled=True)))
+    for attempt in attempts:
+        try:
+            await attempt()
+            return True
+        except Exception as e:
+            if "not modified" in str(e).lower():
+                return True
+            logger.info("Пост %s у %s не оновлено: %s", post.get("id"), chat_id, _redact_token(e))
+    return False
+
+
+async def sync_channel_posts(product_ids) -> int:
+    """Під старими постами товару дописати рядок про актуальну ціну чи наявність."""
+    from catalog_store import get_product_any
+
+    if not channel_autoupdate_enabled() or not app_state.bot_app:
+        return 0
+    bot, changed = app_state.bot_app.bot, 0
+    for product_id in {int(pid) for pid in (product_ids or []) if str(pid).lstrip("-").isdigit()}:
+        product = await run_db(get_product_any, product_id)
+        for post in await run_db(channel_posts_svc.posts_for_sync, product_id):
+            note = channel_posts_svc.product_note(product, post.get("price"))
+            if note == (post.get("note") or ""):
+                continue
+            body, with_buttons, problem = channel_posts_svc.render_post(post, note)
+            if problem:
+                logger.info("Пост %s не оновлено: %s", post["id"], problem)
+                continue
+            markup = None
+            if with_buttons and post.get("kind") != "album":
+                markup = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🛒 Замовити", url=channel_posts_svc.product_link(post["id"], product_id)),
+                    InlineKeyboardButton("🛍 Усі товари", url=channel_posts_svc.shop_link(post["id"])),
+                ]])
+            if await _edit_channel_post(bot, post, body, markup):
+                await run_db(channel_posts_svc.set_note, post["id"], note)
+                changed += 1
+    return changed
+
+
+def _sync_posts_later(result: dict, product_ids) -> None:
+    if isinstance(result, dict) and result.get("ok"):
+        _spawn_background(sync_channel_posts(product_ids))
 
 
 FULFILMENT_STATUS_LABELS = {
@@ -2699,6 +2873,7 @@ async def handle_update_product(request: web.Request):
         product_id = int(request.match_info.get('id', 0))
         data = await request.json()
         result = await run_db(update_product, product_id, data)
+        _sync_posts_later(result, [product_id])
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2718,6 +2893,7 @@ async def handle_delete_product(request: web.Request):
     try:
         product_id = int(request.match_info.get('id', 0))
         result = await run_db(delete_product, product_id)
+        _sync_posts_later(result, [product_id])
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2787,6 +2963,7 @@ async def handle_set_product_status(request: web.Request):
     if bad is not None:
         return bad
     result = await run_db(set_product_status, _product_id_param(request), str(data.get("status") or ""))
+    _sync_posts_later(result, [_product_id_param(request)])
     return _result_response(request, result)
 
 
@@ -2799,6 +2976,7 @@ async def handle_patch_product(request: web.Request):
     if bad is not None:
         return bad
     result = await run_db(patch_product, _product_id_param(request), data)
+    _sync_posts_later(result, [_product_id_param(request)])
     return _result_response(request, result)
 
 
@@ -2811,6 +2989,7 @@ async def handle_bulk_products(request: web.Request):
     if bad is not None:
         return bad
     result = await run_db(bulk_update_products, data.get("ids"), str(data.get("action") or ""), data.get("value"))
+    _sync_posts_later(result, data.get("ids") if isinstance(data.get("ids"), list) else [])
     return _result_response(request, result)
 
 
@@ -3613,6 +3792,7 @@ async def handle_update_order_pricing(request: web.Request):
                 try:
                     await _refresh_client_confirmation_after_pricing(uid_int, order_id)
                     result["client_notified"] = True
+                    result["quote_sent"] = await widget_handlers.send_quote(app_state.bot_app.bot, order_id)
                     logger.info(
                         "✅ Оновлено підтвердження клієнту %s після ціни замовлення #%s",
                         uid_int, order_id,
@@ -4617,7 +4797,12 @@ async def handle_publish_channel_post(request: web.Request):
     if tg_bot is None:
         return web.json_response({"ok": False, "error": "Бот не запущено"}, status=502, headers=cors_headers(request))
 
-    post_id = await run_db(channel_posts_svc.create_post, product_id, channel, text)
+    post_id = await run_db(
+        channel_posts_svc.create_post, product_id, channel, text,
+        kind="album" if len(album) > 1 else "photo" if photo else "text",
+        links_mode=1 if links_mode else 0,
+        price=None if product.get("contractPrice") else int(product.get("price") or 0),
+    )
     body = channel_posts_svc.caption_html(text)
     if links_mode:
         # Посилання в самому тексті: усе в одному повідомленні, навіть для альбому
@@ -4890,6 +5075,8 @@ async def giveaway_entry_flow(tg_bot, chat_id: int, user_id: int, giveaway_id: i
         return "closed"
     entry = await run_db(giveaways_svc.get_entry, g["id"], user_id)
     if entry:
+        if chat_id == user_id and await widget_handlers.send_giveaway(tg_bot, user_id, g):
+            return "already"
         tickets = await run_db(giveaways_svc.tickets_preview, g, user_id)
         await say(_giveaway_entered_text(g, int(entry["number"]), tickets, user_id), _giveaway_entered_markup(g, user_id))
         return "already"
@@ -4923,6 +5110,8 @@ async def giveaway_entry_flow(tg_bot, chat_id: int, user_id: int, giveaway_id: i
             return "closed"
         await say("Не вдалося записати участь, спробуйте ще раз.")
         return "error"
+    if chat_id == user_id and await widget_handlers.send_giveaway(tg_bot, user_id, g):
+        return "already" if res.get("already") else "entered"
     tickets = await run_db(giveaways_svc.tickets_preview, g, user_id)
     await say(_giveaway_entered_text(g, int(res["number"]), tickets, user_id), _giveaway_entered_markup(g, user_id))
     return "already" if res.get("already") else "entered"
@@ -5312,9 +5501,10 @@ async def handle_create_giveaway(request: web.Request):
     gid = await run_db(giveaways_svc.create_giveaway, payload, channel)
     body = (html.escape(payload["text"])
             + f"\n\n🗓 Підсумки: {giveaways_svc.format_kyiv(payload['ends_at'])} (за Києвом)")
-    markup = InlineKeyboardMarkup([[InlineKeyboardButton(
-        "🎁 Взяти участь", url=giveaways_svc.join_link(config.BOT_USERNAME, gid),
-    )]])
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎁 Взяти участь", url=giveaways_svc.join_link(config.BOT_USERNAME, gid))],
+        [InlineKeyboardButton("🎟 Мої квитки", callback_data=f"gw_my_{gid}")],
+    ])
     from rich_messages import _telegram_retry
 
     try:
@@ -5763,6 +5953,19 @@ async def handle_get_settings(request: web.Request):
     return web.json_response(await run_db(admin_settings), headers=cors_headers(request))
 
 
+async def handle_widget_previews(request: web.Request):
+    """Зразки всіх віджетів (справжній HTML + приклади стану) для сторінки «Віджети» в адмінці."""
+    auth, err = resolve_request_user(request, {})
+    if err is not None:
+        return err
+    denied = require_admin(request, auth)
+    if denied is not None:
+        return denied
+    from services import widget_catalog
+
+    return web.json_response({"widgets": await run_db(widget_catalog.previews)}, headers=cors_headers(request))
+
+
 async def handle_update_settings(request: web.Request):
     """Змінити глобальні налаштування (наразі — сумування купонів з акціями)."""
     try:
@@ -6078,6 +6281,9 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current and not is_valid_transition(current.get("status") or "new", target_status):
             return  # застаріла кнопка: замовлення вже далі по ланцюжку
 
+    if action == "confirm" and order_steps_enabled() and await _start_confirm_steps(context.bot, query, order_id):
+        return  # далі веде order_steps_action
+
     if action == "confirm":
         await run_db(update_order_status, order_id, "confirmed")
         label = "✅ Підтверджено"
@@ -6338,6 +6544,8 @@ async def widget_query_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = (getattr(update, "api_kwargs", None) or {}).get("widget_query")
     if not query:
         return
+    if await widget_handlers.handle_widget_query(context.bot, query):
+        return
     try:
         await answer_widget_query(context.bot, str(query.get("id") or ""))
     except Exception as e:
@@ -6357,6 +6565,17 @@ async def widget_query_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         await track_np_orders(only_order_id=order_id)
     except Exception:
         logger.warning("widget_query: не вдалось оновити статус посилки", exc_info=True)
+
+
+# Віджети чату й тимчасові відповіді (ROADMAP.md, п. 4–15) — обробники живуть у widget_handlers.py
+hits_cmd = widget_handlers.hits_cmd
+gift_cmd = widget_handlers.gift_cmd
+gift_action = widget_handlers.gift_action
+gift_again_action = widget_handlers.gift_again_action
+cart_cmd = widget_handlers.cart_cmd
+dash_cmd = widget_handlers.dash_cmd
+my_tickets_action = widget_handlers.my_tickets_action
+my_coupons_action = widget_handlers.my_coupons_action
 
 
 # Команда для відкриття адмін панелі
@@ -6492,6 +6711,8 @@ def main():
                 ("status", "📋 Статус замовлення"),
                 ("mycoupons", "🎟️ Мої купони"),
                 ("sales", "🔥 Акції"),
+                ("hits", "⭐ Хіти продажів"),
+                ("gift", "🎁 Підібрати подарунок"),
                 ("contact", "📬 Контакти"),
             ]
             await configure_bot_commands(bot_app, owner_id=OWNER_ID, user_commands=user_commands)
@@ -6504,6 +6725,12 @@ def main():
             broadcast_task = asyncio.create_task(_broadcast_scheduler_loop())
             giveaway_task = asyncio.create_task(_giveaway_loop())
             np_task = asyncio.create_task(_np_tracking_loop())
+            try:
+                from catalog_store import get_product_any
+
+                await run_db(channel_posts_svc.backfill_baseline, get_product_any)
+            except Exception:
+                logger.warning("Базову ціну постів каналу не заповнено", exc_info=True)
             await stop_event.wait()
             np_task.cancel()
             review_task.cancel()

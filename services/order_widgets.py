@@ -289,6 +289,9 @@ def build_widget_data(order: dict, tracking: dict | None = None, *, review_bonus
     data: dict = {"s": str(order.get("status") or "new")}
     if order.get("is_paid"):
         data["p"] = 1
+    eta = str(order.get("eta_text") or "").strip()
+    if eta and data["s"] in ("confirmed", "printing"):
+        data["e"] = eta[:40]
     ttn = str(order.get("ttn") or "").strip()
     if ttn:
         data["n"] = ttn
@@ -377,6 +380,7 @@ delivered:['green','check',C.of-1,'Отримано','Дякую, що обра�
 cancelled:['red','x',-1,'Скасовано','Є питання — напиши Денису','Написати Денису',den]}[s]||['blue','clock',0,s,''];
 if(s=='shipped'&&d.c=='b')v=['orange','pin',3,'Чекає у відділенні',d.f?'Безкоштовно до '+d.f:'Можна забирати',v[5],v[6]];
 if(s=='shipped'&&d.c=='r')v=['red','x',3,'Посилка повертається','Напиши Денису, якщо це помилка','Написати Денису',den];
+if(d.e&&(s=='printing'||s=='confirmed'&&!(card&&!d.p)))v[4]='Орієнтовний термін: '+d.e;
 return v}
 function render(){const d=st(),v=view(d),card=C.pm=='card';
 $('w').className=v[0];$('orb').innerHTML='<svg viewBox="0 0 24 24">'+I[v[1]]+'</svg>';

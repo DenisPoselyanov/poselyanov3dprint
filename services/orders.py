@@ -40,6 +40,7 @@ STATUS_TO_STEP = {
 EDITABLE_ORDER_FIELDS = frozenset({
     "delivery_method", "city", "city_ref", "branch", "branch_ref", "recipient_name",
     "phone", "pay_method", "ttn", "internal_note", "source", "promotion_id", "gift_product_id", "is_test", "is_paid",
+    "eta_text",
 })
 _DELIVERY_METHODS = ("np", "up", "self")
 _PAY_METHODS = ("card", "cod")
@@ -405,7 +406,7 @@ def list_user_orders(user_id: int, limit: int = 30) -> list[dict]:
         _sql("""
             SELECT id, total_price, status, ordered_at, delivery_method, city, branch,
                    pay_method, ttn, comment, coupon_code, discount_amount,
-                   promotion_discount, gift_product_name, price_pending, is_paid
+                   promotion_discount, gift_product_name, price_pending, is_paid, eta_text
             FROM orders
             WHERE user_id = ?
             ORDER BY id DESC
@@ -556,7 +557,7 @@ def get_order_with_items(order_id: int):
                    gift_product_name, coupon_code, discount_amount, promotion_discount,
                    status, ordered_at, price_pending, channel_message_id,
                    delivery_method, city, branch, recipient_name, phone, pay_method,
-                   ttn, internal_note, source, delivered_at, is_test, is_paid
+                   ttn, internal_note, source, delivered_at, is_test, is_paid, eta_text
             FROM orders WHERE id = ?
         """),
         (order_id,),

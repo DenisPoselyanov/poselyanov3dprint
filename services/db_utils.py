@@ -65,6 +65,7 @@ ORDER_EXTRA_COLUMNS = {
     "review_bonus_code": "TEXT DEFAULT ''",
     "is_test": "INTEGER DEFAULT 0",
     "is_paid": "INTEGER DEFAULT 0",
+    "eta_text": "TEXT DEFAULT ''",
 }
 
 ORDER_ITEM_EXTRA_COLUMNS = {
@@ -175,6 +176,7 @@ def init_db() -> None:
     from services.ai_suggestions import init_ai_suggestions_table
     from services.broadcasts import init_broadcasts_table
     from services.channel_posts import init_channel_posts_table
+    from services.chat_widgets import init_chat_widget_tables
     from services.collections import init_collections_table
     from services.events import init_events_table
     from services.giveaways import init_giveaways_table
@@ -319,6 +321,7 @@ def init_db() -> None:
         init_promotions_table(conn)
         init_settings_table(conn)
         init_order_widget_tables(conn)
+        init_chat_widget_tables(conn)
         init_collections_table(conn)
         init_events_table(conn)
         init_reviews_table(conn)
@@ -468,6 +471,7 @@ def init_db() -> None:
         init_promotions_table(conn)
         init_settings_table(conn)
         init_order_widget_tables(conn)
+        init_chat_widget_tables(conn)
         init_collections_table(conn)
         init_events_table(conn)
         init_reviews_table(conn)

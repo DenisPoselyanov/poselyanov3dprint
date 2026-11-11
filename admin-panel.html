@@ -1479,6 +1479,99 @@
             .st-ctl:has(.st-seg) { width: calc(100% - 52px); }
         }
 
+        /* ── Сторінка «Віджети» ─────────────────────────────────── */
+        .wg-hero { display: flex; gap: 20px 28px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; padding: 26px 28px; border-radius: 20px; border: 1px solid var(--border);
+            background: radial-gradient(120% 150% at 0% 0%, rgba(124,92,252,.17), transparent 55%), radial-gradient(90% 130% at 100% 0%, rgba(40,156,219,.15), transparent 60%), var(--bg-card, var(--bg-surface)); }
+        .wg-hero-main { flex: 1 1 380px; min-width: 0; }
+        .wg-eyebrow { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; background: rgba(124,92,252,.16); color: #6a4df0; }
+        body.dark .wg-eyebrow { color: #b6a4ff; }
+        .wg-hero h2 { margin: 12px 0 6px; font-size: 30px; line-height: 1.1; font-weight: 800; letter-spacing: -.025em; }
+        .wg-hero p { margin: 0; max-width: 560px; font-size: 14px; line-height: 1.55; color: var(--text-muted); }
+        .wg-hero-side { display: flex; align-items: center; gap: 14px 22px; flex-wrap: wrap; }
+        .wg-stat { display: flex; align-items: center; gap: 10px; }
+        .wg-stat b { font-size: 40px; line-height: 1; font-weight: 800; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+        .wg-stat > span { font-size: 12.5px; line-height: 1.35; color: var(--text-muted); }
+        .wg-sub { margin: 14px 0 0; }
+        .wg-sub h3 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+        .wg-sub p { margin: 4px 0 0; font-size: 13.5px; color: var(--text-muted); }
+        .wg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; align-items: start; margin-top: 18px; }
+        .wg-col { display: flex; flex-direction: column; min-width: 0; }
+        @media (max-width: 1100px) {
+            .wg-grid { grid-template-columns: minmax(0, 1fr); }
+            .wg-col { display: contents; }
+            .wg-card { max-width: 640px; }
+        }
+        .wg-card { margin: 0 0 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-card, var(--bg-surface)); overflow: hidden; transition: border-color .2s, box-shadow .2s; }
+        .wg-card[data-mode=owner] { border-color: rgba(242,169,0,.6); box-shadow: 0 0 0 3px rgba(242,169,0,.09); }
+        .wg-card[data-mode=all] { border-color: rgba(34,160,107,.6); box-shadow: 0 0 0 3px rgba(34,160,107,.09); }
+        .wg-head { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px 14px; }
+        .wg-ico { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; background: var(--bg-surface-alt); border: 1px solid var(--border); }
+        .wg-headtxt { flex: 1; min-width: 0; }
+        .wg-titlerow { display: flex; align-items: center; justify-content: space-between; gap: 6px 10px; flex-wrap: wrap; }
+        .wg-titlerow h3 { margin: 0; font-size: 16px; line-height: 1.25; font-weight: 700; letter-spacing: -.01em; }
+        .wg-headtxt p { margin: 5px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+        .wg-pill { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--bg-surface-alt); color: var(--text-muted); white-space: nowrap; }
+        .wg-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .55; }
+        .wg-card[data-mode=owner] .wg-pill { background: rgba(242,169,0,.16); color: #a66f00; }
+        body.dark .wg-card[data-mode=owner] .wg-pill { color: #ffc93c; }
+        .wg-card[data-mode=all] .wg-pill { background: rgba(16,185,129,.14); color: #0d9668; }
+        .wg-card[data-mode=owner] .wg-pill::before, .wg-card[data-mode=all] .wg-pill::before { opacity: 1; }
+        .wg-stage { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 14px 18px; border-block: 1px solid var(--border); background: linear-gradient(160deg, #bfdcae, #8fbfb3); }
+        .wg-stage.dark { background: linear-gradient(160deg, #0e1621, #131f2c); }
+        .wg-states { display: flex; gap: 6px; flex-wrap: wrap; max-width: 100%; }
+        .wg-states button { border: 0; font: inherit; font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 999px; cursor: pointer; white-space: nowrap; background: rgba(255,255,255,.5); color: #24402f; }
+        .wg-states button[aria-pressed=true] { background: #fff; color: #0c1628; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+        .wg-stage.dark .wg-states button { background: rgba(255,255,255,.08); color: #9fb1c2; }
+        .wg-stage.dark .wg-states button[aria-pressed=true] { background: #2b5278; color: #fff; }
+        .wg-bubble, .wg-msg { width: min(340px, 100%); border-radius: 16px 16px 16px 5px; overflow: hidden; background: #fff; color: #0c1628; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+        .wg-stage.dark .wg-bubble, .wg-stage.dark .wg-msg { background: #182533; color: #fff; }
+        .wg-bubble iframe { display: block; width: 100%; height: 240px; border: 0; }
+        .wg-cap { display: flex; gap: 8px; align-items: flex-end; padding: 7px 12px 8px; font-size: 14px; line-height: 1.35; }
+        .wg-cap span { flex: 1; min-width: 0; }
+        .wg-cap time { font-size: 11px; opacity: .5; }
+        .wg-skel { height: 240px; background: linear-gradient(100deg, rgba(128,128,128,.10) 30%, rgba(128,128,128,.22) 50%, rgba(128,128,128,.10) 70%); background-size: 200% 100%; animation: wg-shimmer 1.3s linear infinite; }
+        @keyframes wg-shimmer { to { background-position: -200% 0; } }
+        @media (prefers-reduced-motion: reduce) { .wg-skel { animation: none; } }
+        .wg-fail { padding: 22px 16px; font-size: 13.5px; text-align: center; }
+        .wg-fail button { margin-top: 10px; }
+        .wg-msg { padding: 9px 12px 10px; font-size: 14px; line-height: 1.42; }
+        .wg-msg.eph { box-shadow: 0 0 0 1.5px #289cdb, 0 1px 2px rgba(0,0,0,.18); }
+        .wg-eye { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 700; letter-spacing: .02em; color: #1b7fba; }
+        .wg-stage.dark .wg-eye { color: #4bb7e5; }
+        .wg-kb { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 9px; }
+        .wg-kb span { padding: 7px 6px; border-radius: 8px; text-align: center; font-size: 13px; font-weight: 600; background: rgba(40,156,219,.13); color: #1b7fba; }
+        .wg-stage.dark .wg-kb span { color: #6cc4ee; }
+        .wg-kb .wide { grid-column: 1 / -1; }
+        .wg-photo { display: grid; place-items: center; height: 124px; margin: -9px -12px 9px; font-size: 46px; background: linear-gradient(135deg, #a58bff, #289cdb); }
+        .wg-note { margin-top: 8px; padding: 6px 9px; border-radius: 8px; font-weight: 650; background: rgba(245,130,42,.16); }
+        .wg-meta { display: grid; gap: 8px; margin: 0; padding: 14px 18px 0; }
+        .wg-meta div { display: grid; grid-template-columns: 112px 1fr; gap: 10px; font-size: 13px; line-height: 1.45; }
+        .wg-meta dt { color: var(--text-muted); }
+        .wg-meta dd { margin: 0; }
+        .wg-meta code { padding: 1px 6px; border-radius: 6px; font: 600 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg-surface-alt); border: 1px solid var(--border); }
+        .wg-foot { padding: 14px 18px 16px; }
+        .wg-foot .st-seg { display: flex; width: 100%; }
+        .wg-foot .st-seg button { flex: 1; padding: 9px 6px; }
+        .wg-hint:empty { display: none; }
+        .wg-hint { margin: 9px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+        .wg-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        @media (max-width: 640px) {
+            .wg-hero { padding: 18px 16px; border-radius: 16px; }
+            .wg-hero h2 { font-size: 24px; }
+            .wg-hero-side { width: 100%; justify-content: space-between; }
+            .wg-stat b { font-size: 32px; }
+            .wg-grid { margin-top: 14px; }
+            .wg-card { margin-bottom: 14px; border-radius: 16px; }
+            .wg-head { padding: 14px 14px 12px; }
+            .wg-stage { padding: 12px 10px 14px; }
+            .wg-states { flex-wrap: nowrap; overflow-x: auto; width: 100%; scrollbar-width: none; }
+            .wg-states::-webkit-scrollbar { display: none; }
+            .wg-meta { padding: 12px 14px 0; }
+            .wg-meta div { grid-template-columns: 1fr; gap: 1px; }
+            .wg-foot { padding: 12px 14px 14px; }
+            .wg-foot .st-seg button { padding: 10px 4px; }
+        }
+
         .quick-status {
             margin: 8px 0 0;
             font-size: 12px;
@@ -3173,6 +3266,8 @@
                 <button class="page-tab sb-item" type="button" data-page="broadcasts" onclick="switchPage('broadcasts'); toggleSidebar(false)"><span class="sb-ico" data-icon="broadcasts" style="display:contents"></span>Розсилки</button>
                 <button class="page-tab sb-item" type="button" data-page="giveaways" onclick="switchPage('giveaways'); toggleSidebar(false)"><span class="sb-ico" data-icon="giveaways" style="display:contents"></span>Розіграші<span class="sb-count" id="navCountGiveaways"></span></button>
                 <button class="page-tab sb-item" type="button" data-page="reviews" onclick="switchPage('reviews'); toggleSidebar(false)"><span class="sb-ico" data-icon="reviews" style="display:contents"></span>Відгуки<span class="sb-count" id="navCountReviews"></span></button>
+                <div class="sb-group">Бот</div>
+                <button class="page-tab sb-item" type="button" data-page="widgets" onclick="switchPage('widgets'); toggleSidebar(false)"><span class="sb-ico" data-icon="widgets" style="display:contents"></span>Віджети<span class="sb-count" id="navCountWidgets"></span></button>
             </nav>
             <div class="sb-foot">
                 <div class="sb-status"><span id="sbDot" class="sb-dot"></span><span><span id="sbBotLabel">Перевіряю…</span> · <b id="sbProducts">0</b> товарів у магазині</span></div>
@@ -3399,6 +3494,29 @@
                 <div id="bcList" class="bc-list"></div>
             </section>
 
+            <section id="widgetsPage" class="page-section">
+                <div class="wg-hero">
+                    <div class="wg-hero-main">
+                        <span class="wg-eyebrow">Telegram Bot API 10.4</span>
+                        <h2>Віджети</h2>
+                        <p>Живі картки в чаті з ботом замість звичайного тексту. Кожен віджет вмикається окремо: спершу «Лише мені», щоб перевірити на собі, потім «Усім».</p>
+                    </div>
+                    <div class="wg-hero-side">
+                        <div class="wg-stat"><b id="wgOnCount">0</b><span>із <span id="wgTotal">8</span> віджетів<br>увімкнено</span></div>
+                        <div class="st-seg" id="wgThemeSeg" role="radiogroup" aria-label="Тема прев'ю">
+                            <button type="button" role="radio" data-theme="light" onclick="setWidgetTheme('light')">☀️ Світла</button>
+                            <button type="button" role="radio" data-theme="dark" onclick="setWidgetTheme('dark')">🌙 Темна</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="wgGrid" class="wg-grid"></div>
+                <div class="wg-sub">
+                    <h3>Без віджетів, але теж у чаті</h3>
+                    <p>Дві автоматики, які працюють звичайними повідомленнями.</p>
+                </div>
+                <div id="wgAutoGrid" class="wg-grid"></div>
+            </section>
+
             <section id="giveawaysPage" class="page-section">
                 <div class="orders-toolbar">
                     <h2>🎁 Розіграші <span id="gwCountTotal" class="orders-count"></span></h2>
@@ -3567,22 +3685,6 @@
                         </div>
                     </div>
 
-                    <div class="st-group">Замовлення</div>
-                    <div class="st-row" style="align-items:flex-start;">
-                        <div class="st-ico">📍</div>
-                        <div class="st-main">
-                            <div class="st-title">Віджет «Живий статус замовлення»</div>
-                            <div class="st-desc">Одне повідомлення, яке саме оновлюється при зміні статусу, і стеження за посилкою в Новій Пошті.</div>
-                            <div class="st-hint" id="orderWidgetHint"></div>
-                        </div>
-                        <div class="st-ctl">
-                            <div class="st-seg" id="orderWidgetModeSeg" role="radiogroup" aria-label="Режим віджета статусу">
-                                <button type="button" role="radio" data-mode="off" onclick="saveOrderWidgetMode('off')">Вимкнено</button>
-                                <button type="button" role="radio" data-mode="owner" onclick="saveOrderWidgetMode('owner')">Лише мені</button>
-                                <button type="button" role="radio" data-mode="all" onclick="saveOrderWidgetMode('all')">Усім</button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
                 <div id="promotionsTabs" class="orders-tabs"></div>
                 <div id="promotionsLoading" class="loading" style="display:none;">
@@ -4987,6 +5089,12 @@
                 return;
             }
 
+            if (currentPage === 'widgets') {
+                label.textContent = 'Віджетів увімкнено';
+                value.textContent = `${wgOnCount()} / ${WG_LIST.length}`;
+                return;
+            }
+
             if (currentPage === 'orders') {
                 label.textContent = 'Замовлень';
                 value.textContent = String(allOrders.length);
@@ -5040,6 +5148,7 @@
             if (page === 'reviews') loadReviews();
             if (page === 'broadcasts') loadBroadcasts();
             if (page === 'giveaways') loadGiveaways();
+            if (page === 'widgets') loadWidgets();
             if (page === 'ai') loadAiSuggestions();
         }
 
@@ -5734,7 +5843,7 @@
         const PAGE_TITLES = {
             overview: 'Огляд', orders: 'Замовлення', queue: 'Черга друку', products: 'Товари', categories: 'Категорії', collections: 'Добірки',
             filaments: 'Філаменти', promotions: 'Акції', coupons: 'Купони', reviews: 'Відгуки', users: 'Клієнти', broadcasts: 'Розсилки',
-            giveaways: 'Розіграші', ai: 'Пропозиції ШІ',
+            giveaways: 'Розіграші', ai: 'Пропозиції ШІ', widgets: 'Віджети',
         };
 
         const NAV_ICON_PATHS = {
@@ -5752,6 +5861,7 @@
             broadcasts: '<path d="m3 11 18-8v18l-18-8Z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
             giveaways: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
             ai: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/>',
+            widgets: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="12" width="8" height="9" rx="2"/><rect x="3" y="15" width="8" height="6" rx="2"/>',
             fullscreen: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
             search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
             bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/>',
@@ -10092,44 +10202,306 @@
                 if (rbt) rbt.checked = reviewBonusEnabled;
                 const soldInput = document.getElementById('soldCountMinInput');
                 if (soldInput) soldInput.value = data.sold_count_min ?? 5;
-                setOrderWidgetModeUI(data.order_widget_mode || 'off');
+                applyWidgetSettings(data);
             } catch (e) {
                 console.error('loadSettings error:', e);
             }
             renderCouponStackingToggle();
         }
 
-        const ORDER_WIDGET_HINTS = {
-            off: 'Клієнти отримують звичайні текстові повідомлення, як раніше.',
-            owner: 'Віджет бачиш лише ти — на своїх замовленнях. Для клієнтів нічого не змінюється: так можна спокійно перевірити.',
-            all: 'Нові замовлення всіх клієнтів отримують віджет, а посилки відстежуються автоматично. Старі замовлення лишаються з текстом.',
-        };
+        // ═══════════════════════════════════════════════════════════
+        // СТОРІНКА «ВІДЖЕТИ»
+        // ═══════════════════════════════════════════════════════════
 
-        function setOrderWidgetModeUI(mode) {
-            document.querySelectorAll('#orderWidgetModeSeg button').forEach((btn) => {
-                btn.setAttribute('aria-checked', btn.dataset.mode === mode ? 'true' : 'false');
-            });
-            const hint = document.getElementById('orderWidgetHint');
-            if (hint) hint.textContent = ORDER_WIDGET_HINTS[mode] || '';
+        const WG_MODE_LABELS = { off: 'Вимкнено', owner: 'Лише мені', all: 'Усім' };
+        const WG_PILL_LABELS = { off: 'Вимкнено', owner: 'Лише тобі', all: 'Усім клієнтам' };
+        const WG_LIST = [
+            { key: 'status', ico: '📍', title: 'Живий статус замовлення',
+              desc: 'Одне повідомлення, яке саме оновлюється при зміні статусу й стежить за посилкою в Новій Пошті.',
+              when: 'Після оформлення замовлення й при кожній зміні статусу. Команда <code>/status</code> показує активні замовлення.',
+              off: 'Клієнт отримує звичайні текстові сповіщення про статус.' },
+            { key: 'quote', ico: '🧾', title: 'Кошторис',
+              desc: 'Розбивка суми з кнопками «Погоджуюсь» і «Змінити». Згода клієнта одразу підтверджує замовлення.',
+              when: 'Щойно ти встановлюєш ціну нового замовлення в адмінці.',
+              off: 'Клієнт отримує текст із сумою, замовлення підтверджуєш ти.' },
+            { key: 'giveaway', ico: '🎟', title: 'Участь у розіграші',
+              desc: 'Номер учасника, шанси, кількість учасників, таймер до жеребкування й «Запросити друзів».',
+              when: 'Коли клієнт натискає «Взяти участь» під постом розіграшу.',
+              off: 'Бот відповідає текстом із номером учасника.' },
+            { key: 'promo', ico: '🔥', title: 'Акції',
+              desc: 'До трьох активних акцій із таймером і кнопка «Мої купони».',
+              when: 'Команда <code>/sales</code>.',
+              off: 'Бот надсилає акції звичайними картками й текстом.' },
+            { key: 'hits', ico: '⭐', title: 'Хіти й добірки',
+              desc: 'Вітрина з вкладками добірок. Ціни оновлюються самі, коли віджет на екрані.',
+              when: 'Команда <code>/hits</code>.',
+              off: 'Бот надсилає список товарів текстом із посиланнями.' },
+            { key: 'gift', ico: '🎁', title: 'Підбір подарунка',
+              desc: 'Три запитання кнопками: кому, бюджет, привід. Далі до п\'яти товарів.',
+              when: 'Команда <code>/gift</code>, після третьої відповіді.',
+              off: 'Запитання ті самі, результат приходить текстовим списком.' },
+            { key: 'cart', ico: '🛒', title: 'Кошик у чаті',
+              desc: 'Кнопка «+» у хітах і підборі кладе товар у кошик, «Оформити» відкриває застосунок із цими товарами.',
+              when: 'Команда <code>/cart</code> і кнопка «+» у віджетах хітів та підбору.',
+              off: 'Кнопки «+» немає: товар відкривається в застосунку.' },
+            { key: 'dash', ico: '📊', title: 'Дашборд власника', ownerOnly: true,
+              desc: 'Замовлення й виторг за сьогодні та 7 днів, черга друку, що шукають клієнти. Закріплюється в чаті.',
+              when: 'Команда <code>/dash</code> у приватному чаті з ботом. Працює лише для тебе.',
+              off: '<code>/dash</code> надсилає те саме зведення текстом.' },
+        ];
+        const WG_AUTO = [
+            { key: 'order_steps_enabled', ico: '✅', title: 'Покрокове підтвердження',
+              desc: 'Після «Підтвердити» бот питає ціну й термін. Кроки бачиш лише ти, термін клієнт бачить у статусі замовлення.',
+              when: 'Чат замовлень, кнопка «✅ Підтвердити».',
+              off: 'Замовлення підтверджується одним натисканням, без терміну.',
+              states: [
+                  { label: 'Крок 1 · Ціна', html: '<div class="wg-msg"><b>🆕 Замовлення №131</b><br>Олена К. · Нова Пошта, Київ<br>Фігурка за ескізом × 1<br>Органайзер для кабелів × 2<div class="wg-kb"><span>✅ Підтвердити</span><span>❌ Відхилити</span></div></div><div class="wg-msg eph"><span class="wg-eye">👁 Бачиш лише ти</span><b>Замовлення №131</b> · крок 1 із 2<br><br>💰 Сума замовлення: <b>730 ₴</b>. Усе правильно?<div class="wg-kb"><span class="wide">✅ Так, 730 ₴</span><span class="wide">✏️ Змінити в адмінці</span><span class="wide">✖️ Не підтверджувати</span></div></div>' },
+                  { label: 'Крок 2 · Термін', html: '<div class="wg-msg eph"><span class="wg-eye">👁 Бачиш лише ти</span><b>Замовлення №131</b> · крок 2 із 2<br><br>⏱ Коли буде готове? Клієнт побачить термін у статусі замовлення.<div class="wg-kb"><span>Сьогодні–завтра</span><span>2–3 дні</span><span>4–7 днів</span><span>1–2 тижні</span><span class="wide">Без терміну</span><span class="wide">✖️ Не підтверджувати</span></div></div>' },
+              ] },
+            { key: 'channel_posts_autoupdate', ico: '📣', title: 'Актуальні ціни в старих постах',
+              desc: 'Коли змінюється ціна або товар зникає з продажу, бот дописує під постом один рядок. Твій текст не змінюється.',
+              when: 'Канал: після зміни ціни чи наявності товару в адмінці.',
+              off: 'Старі пости лишаються як є, навіть якщо ціна вже інша.',
+              states: [
+                  { label: 'Нова ціна', html: '<div class="wg-msg"><div class="wg-photo">🐉</div><b>Флексі-дракон 40 см</b><br>Гнучкий, друкується одним шматком. 250 ₴<div class="wg-note">🔥 Зараз 220 ₴ замість 250 ₴</div><div class="wg-kb"><span>Замовити</span><span>Усі товари</span></div></div>' },
+                  { label: 'Немає в наявності', html: '<div class="wg-msg"><div class="wg-photo">🐉</div><b>Флексі-дракон 40 см</b><br>Гнучкий, друкується одним шматком. 250 ₴<div class="wg-note">⛔️ Зараз немає в наявності</div><div class="wg-kb"><span>Замовити</span><span>Усі товари</span></div></div>' },
+              ] },
+        ];
+        const WG_TG_THEME = {
+            light: '--tg-theme-bg-color:#fff;--tg-theme-text-color:#0C1628;--tg-theme-hint-color:#5A6474;--tg-theme-section-separator-color:#E3E8EF;color-scheme:light',
+            dark: '--tg-theme-bg-color:#182533;--tg-theme-text-color:#fff;--tg-theme-hint-color:#8FA3B8;--tg-theme-section-separator-color:#27384a;color-scheme:dark',
+        };
+        let wgModes = {};
+        let wgBools = { order_steps_enabled: true, channel_posts_autoupdate: true };
+        let wgPreviews = null;
+        let wgLoading = false;
+        let wgFailed = false;
+        let wgTheme = '';
+        const wgState = {};
+        const wgHeights = {};
+
+        function wgEsc(text) {
+            return String(text ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
         }
 
-        async function saveOrderWidgetMode(mode) {
-            setOrderWidgetModeUI(mode);
-            try {
-                const res = await fetch(API_BASE + '/admin/settings', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
-                    body: JSON.stringify({ order_widget_mode: mode }),
-                });
-                const result = await res.json();
-                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти');
-                setOrderWidgetModeUI(result.settings.order_widget_mode);
-                const labels = { off: 'Віджет статусу вимкнено', owner: 'Віджет статусу — лише тобі ✅', all: 'Віджет статусу — усім клієнтам ✅' };
-                showToast(labels[result.settings.order_widget_mode] || 'Збережено', 'success');
-            } catch (e) {
-                showToast(e.message || 'Помилка збереження налаштування', 'error');
-                loadSettings();
+        function wgOnCount() {
+            return WG_LIST.filter((w) => (wgModes[w.key] || 'off') !== 'off').length;
+        }
+
+        function wgHint(w, mode) {
+            if (mode === 'off') return '';
+            if (w.ownerOnly) return 'Увімкнено. Цей віджет бачиш лише ти.';
+            if (mode === 'owner') return 'Бачиш лише ти. Для клієнтів нічого не змінюється, тож можна спокійно перевірити.';
+            return 'Отримують усі клієнти. Якщо їхній Telegram ще не підтримує віджети, бот надішле текст.';
+        }
+
+        // Дві колонки без CSS columns: з ними Chromium губить перемальовування iframe під час прокрутки.
+        function wgColumns(list, auto) {
+            const cols = ['', ''];
+            list.forEach((w, i) => { cols[i % 2] += wgCardHtml(w, auto, i); });
+            return cols.map((html) => `<div class="wg-col">${html}</div>`).join('');
+        }
+
+        function wgCardHtml(w, auto, order) {
+            const control = auto
+                ? `<label class="wg-toggle"><span>Увімкнути</span><span class="switch"><input type="checkbox" onchange="saveWidgetBool('${w.key}', this)"><span class="switch-slider"></span></span></label>`
+                : `<div class="st-seg" role="radiogroup" aria-label="Кому показувати">${(w.ownerOnly ? ['off', 'owner'] : ['off', 'owner', 'all']).map((m) =>
+                    `<button type="button" role="radio" data-mode="${m}" onclick="saveWidgetMode('${w.key}', '${m}')">${w.ownerOnly && m === 'owner' ? 'Увімкнено' : WG_MODE_LABELS[m]}</button>`).join('')}</div>`;
+            return `<article class="wg-card" data-key="${w.key}" data-mode="off" style="order:${order}">
+                <header class="wg-head">
+                    <div class="wg-ico">${w.ico}</div>
+                    <div class="wg-headtxt">
+                        <div class="wg-titlerow"><h3>${w.title}</h3><span class="wg-pill">Вимкнено</span></div>
+                        <p>${w.desc}</p>
+                    </div>
+                </header>
+                <div class="wg-stage"></div>
+                <dl class="wg-meta">
+                    <div><dt>Де з’являється</dt><dd>${w.when}</dd></div>
+                    <div><dt>Якщо вимкнено</dt><dd>${w.off}</dd></div>
+                </dl>
+                <footer class="wg-foot">${control}<p class="wg-hint"></p></footer>
+            </article>`;
+        }
+
+        function wgSrcdoc(key, html, data) {
+            const stub = '<script>window.TelegramWidget={chatData:' + JSON.stringify(String(data || '')).replace(/</g, '\\u003c')
+                + ',onEvent(){},ready(){},request(){return new Promise(()=>{})},openLink(){},openTelegramLink(){},copyText(){}};'
+                + 'addEventListener("load",()=>{const s=()=>parent.postMessage({wg:' + JSON.stringify(key)
+                + ',h:document.body.offsetHeight},"*");new ResizeObserver(s).observe(document.body);s()})<\/script>';
+            return '<!doctype html><html style="' + WG_TG_THEME[wgTheme] + '"><head><meta charset="utf-8"></head>'
+                + '<body style="margin:0;background:var(--tg-theme-bg-color);color:var(--tg-theme-text-color);'
+                + 'font:15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif">' + stub + html + '</body></html>';
+        }
+
+        function wgStateChips(key, states, index) {
+            if (states.length < 2) return '';
+            return `<div class="wg-states" role="group" aria-label="Стан прев’ю">${states.map((s, i) =>
+                `<button type="button" aria-pressed="${i === index}" onclick="setWidgetState('${key}', ${i})">${wgEsc(s.label)}</button>`).join('')}</div>`;
+        }
+
+        function wgPaintStage(key) {
+            const stage = document.querySelector(`.wg-card[data-key="${key}"] .wg-stage`);
+            if (!stage) return;
+            stage.classList.toggle('dark', wgTheme === 'dark');
+            const auto = WG_AUTO.find((a) => a.key === key);
+            if (auto) {
+                const index = Math.min(wgState[key] || 0, auto.states.length - 1);
+                stage.innerHTML = wgStateChips(key, auto.states, index) + auto.states[index].html;
+                return;
             }
+            const preview = wgPreviews && wgPreviews[key];
+            if (!preview) {
+                stage.innerHTML = wgFailed
+                    ? '<div class="wg-bubble wg-fail">Прев’ю не завантажилось.<br><button class="btn btn-secondary" type="button" onclick="loadWidgets(true)">Спробувати ще раз</button></div>'
+                    : '<div class="wg-bubble"><div class="wg-skel"></div></div>';
+                return;
+            }
+            const index = Math.min(wgState[key] || 0, preview.states.length - 1);
+            const state = preview.states[index];
+            const title = (WG_LIST.find((w) => w.key === key) || {}).title || key;
+            stage.innerHTML = wgStateChips(key, preview.states, index)
+                + `<div class="wg-bubble"><iframe sandbox="allow-scripts" data-wg="${key}" title="Прев’ю: ${wgEsc(title)}"${wgHeights[key] ? ` style="height:${wgHeights[key]}px"` : ''}></iframe>`
+                + `<div class="wg-cap"><span>${wgEsc(state.caption)}</span><time>14:02</time></div></div>`;
+            stage.querySelector('iframe').srcdoc = wgSrcdoc(key, preview.html, state.data);
+        }
+
+        function wgPaintAll() {
+            WG_LIST.forEach((w) => wgPaintStage(w.key));
+            WG_AUTO.forEach((a) => wgPaintStage(a.key));
+        }
+
+        function setWidgetState(key, index) {
+            wgState[key] = index;
+            wgPaintStage(key);
+        }
+
+        function setWidgetTheme(theme) {
+            wgTheme = theme === 'dark' ? 'dark' : 'light';
+            document.querySelectorAll('#wgThemeSeg button').forEach((btn) => {
+                btn.setAttribute('aria-checked', btn.dataset.theme === wgTheme ? 'true' : 'false');
+            });
+            wgPaintAll();
+        }
+
+        function updateWidgetControls() {
+            WG_LIST.forEach((w) => {
+                const card = document.querySelector(`.wg-card[data-key="${w.key}"]`);
+                if (!card) return;
+                const mode = wgModes[w.key] || 'off';
+                card.dataset.mode = mode;
+                card.querySelector('.wg-pill').textContent = w.ownerOnly && mode === 'owner' ? 'Увімкнено' : WG_PILL_LABELS[mode];
+                card.querySelectorAll('.st-seg button').forEach((btn) => {
+                    btn.setAttribute('aria-checked', btn.dataset.mode === mode ? 'true' : 'false');
+                });
+                card.querySelector('.wg-hint').innerHTML = wgHint(w, mode);
+            });
+            WG_AUTO.forEach((a) => {
+                const card = document.querySelector(`.wg-card[data-key="${a.key}"]`);
+                if (!card) return;
+                const on = !!wgBools[a.key];
+                card.dataset.mode = on ? 'all' : 'off';
+                card.querySelector('.wg-pill').textContent = on ? 'Увімкнено' : 'Вимкнено';
+                card.querySelector('input[type=checkbox]').checked = on;
+                card.querySelector('.wg-hint').innerHTML = '';
+            });
+            const count = wgOnCount();
+            const countEl = document.getElementById('wgOnCount');
+            if (countEl) countEl.textContent = String(count);
+            const totalEl = document.getElementById('wgTotal');
+            if (totalEl) totalEl.textContent = String(WG_LIST.length);
+            const nav = document.getElementById('navCountWidgets');
+            if (nav) nav.textContent = count ? String(count) : '';
+            if (currentPage === 'widgets') updateHeaderStat();
+        }
+
+        function applyWidgetSettings(data) {
+            wgModes = { ...(data.widget_modes || {}) };
+            wgBools = {
+                order_steps_enabled: data.order_steps_enabled !== false,
+                channel_posts_autoupdate: data.channel_posts_autoupdate !== false,
+            };
+            updateWidgetControls();
+        }
+
+        async function loadWidgets(retry) {
+            if (!wgTheme) wgTheme = document.body.classList.contains('dark') ? 'dark' : 'light';
+            if (!document.querySelector('#wgGrid .wg-card')) {
+                document.getElementById('wgGrid').innerHTML = wgColumns(WG_LIST, false);
+                document.getElementById('wgAutoGrid').innerHTML = wgColumns(WG_AUTO, true);
+                setWidgetTheme(wgTheme);
+                updateWidgetControls();
+            }
+            if (!Object.keys(wgModes).length) loadSettings();
+            if (wgLoading || (wgPreviews && !retry)) return;
+            wgLoading = true;
+            wgFailed = false;
+            if (retry) wgPaintAll();
+            try {
+                const res = await fetch(API_BASE + '/admin/widgets/previews', { headers: { 'X-Telegram-Init-Data': tgInitData } });
+                if (!res.ok) throw new Error(`Помилка прев’ю (${res.status})`);
+                wgPreviews = (await res.json()).widgets || {};
+            } catch (e) {
+                console.error('loadWidgets error:', e);
+                wgFailed = true;
+            }
+            wgLoading = false;
+            wgPaintAll();
+        }
+
+        window.addEventListener('message', (event) => {
+            const data = event.data;
+            if (!data || typeof data.wg !== 'string' || !(data.h > 0)) return;
+            const frame = Array.from(document.querySelectorAll('iframe[data-wg]')).find((f) => f.contentWindow === event.source);
+            if (!frame || frame.dataset.wg !== data.wg) return;
+            const height = Math.min(Math.ceil(data.h), 900);
+            wgHeights[data.wg] = height;
+            frame.style.height = height + 'px';
+        });
+
+        async function saveWidgetMode(key, mode) {
+            const previous = wgModes[key] || 'off';
+            if (previous === mode) return;
+            wgModes[key] = mode;
+            updateWidgetControls();
+            const widget = WG_LIST.find((w) => w.key === key);
+            try {
+                const settings = await putSettings({ widget_modes: { [key]: mode } });
+                wgModes = { ...(settings.widget_modes || {}) };
+                updateWidgetControls();
+                const label = widget.ownerOnly && mode === 'owner' ? 'увімкнено' : WG_PILL_LABELS[wgModes[key] || 'off'].toLowerCase();
+                showToast(`${widget.title}: ${label}`, 'success');
+            } catch (e) {
+                wgModes[key] = previous;
+                updateWidgetControls();
+                showToast(e.message || 'Помилка збереження налаштування', 'error');
+            }
+        }
+
+        async function saveWidgetBool(key, input) {
+            const previous = !!wgBools[key];
+            wgBools[key] = input.checked;
+            updateWidgetControls();
+            try {
+                const settings = await putSettings({ [key]: input.checked });
+                wgBools[key] = !!settings[key];
+                showToast('Збережено', 'success');
+            } catch (e) {
+                wgBools[key] = previous;
+                showToast(e.message || 'Помилка збереження налаштування', 'error');
+            }
+            updateWidgetControls();
+        }
+
+        async function putSettings(body) {
+            const res = await fetch(API_BASE + '/admin/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                body: JSON.stringify(body),
+            });
+            const result = await res.json();
+            if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти');
+            return result.settings;
         }
 
         async function saveSoldCountMin(value) {
