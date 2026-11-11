@@ -1442,6 +1442,43 @@
             transform: translateX(20px);
         }
 
+        /* ── Налаштування магазину (сторінка «Акції») ───────────── */
+        .st-card { border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card, var(--bg-surface)); margin: 14px 0; overflow: hidden; }
+        .st-group { padding: 12px 18px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+        .st-group:not(:first-child) { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 16px; }
+        .st-row { display: flex; align-items: center; gap: 14px; padding: 12px 18px 14px; }
+        .st-ico { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; background: var(--bg-surface-alt); border: 1px solid var(--border); }
+        .st-main { flex: 1; min-width: 0; }
+        .st-title { font-size: 14.5px; font-weight: 650; color: var(--text-toggle, inherit); line-height: 1.3; }
+        .st-desc { margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+        .st-more { margin-top: 4px; font-size: 12.5px; color: var(--text-muted); }
+        .st-more summary { cursor: pointer; width: fit-content; color: var(--accent-text, var(--accent)); font-weight: 600; list-style: none; }
+        .st-more summary::-webkit-details-marker { display: none; }
+        .st-more summary::after { content: " ▾"; }
+        .st-more[open] summary::after { content: " ▴"; }
+        .st-more p { margin: 6px 0 0; line-height: 1.5; }
+        .st-ctl { flex: none; display: flex; align-items: center; gap: 10px; }
+        .st-chip { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: rgba(16,185,129,.14); color: #0d9668; }
+        .st-chip.off { background: var(--bg-surface-alt); color: var(--text-muted); }
+        .st-row:has(input[type=checkbox]:checked) .st-chip.off,
+        .st-row:not(:has(input[type=checkbox]:checked)) .st-chip.on { display: none; }
+        .st-num { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+        .st-num input { width: 76px; padding: 8px 10px; border: 1px solid var(--border-input, var(--border)); border-radius: 10px; background: var(--bg-card, var(--bg-surface)); color: inherit; font: inherit; font-size: 15px; font-weight: 650; text-align: center; }
+        .st-num input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .st-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 12px; background: var(--bg-surface-alt); border: 1px solid var(--border); }
+        .st-seg button { border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: 13px; font-weight: 600; padding: 7px 13px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+        .st-seg button:hover { color: inherit; }
+        .st-seg button[aria-checked=true] { background: var(--accent); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+        .st-hint { margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+        @media (max-width: 640px) {
+            .st-row { flex-wrap: wrap; }
+            .st-main { flex-basis: calc(100% - 56px); }
+            .st-ctl { margin-left: 52px; }
+            .st-seg { width: 100%; }
+            .st-seg button { flex: 1; padding: 8px 6px; }
+            .st-ctl:has(.st-seg) { width: calc(100% - 52px); }
+        }
+
         .quick-status {
             margin: 8px 0 0;
             font-size: 12px;
@@ -3494,38 +3531,57 @@
                     Перемикач вмикає/вимикає акцію одразу — і в каталозі, і при розрахунку суми замовлення.
                     Якщо активних знижкових акцій кілька, застосовується найвигідніша для клієнта.
                 </p>
-                <div style="border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:12px 0; background:var(--bg-surface-alt);">
-                    <div class="toggle-row">
-                        <span class="toggle-row-label">🔥 + 🏷️ Дозволити сумування купонів з акціями</span>
-                        <label class="switch" title="Глобальний перемикач сумування">
-                            <input type="checkbox" id="couponStackingToggle" onchange="saveCouponStacking(this.checked)">
-                            <span class="switch-slider"></span>
-                        </label>
+                <div class="st-card">
+                    <div class="st-group">Ціни й знижки</div>
+                    <div class="st-row">
+                        <div class="st-ico">🏷️</div>
+                        <div class="st-main">
+                            <div class="st-title">Сумувати купони з акціями</div>
+                            <div class="st-desc">Коли вимкнено, промокод замінює акційну знижку.</div>
+                            <details class="st-more">
+                                <summary>Докладніше</summary>
+                                <p>Увімкнено — знижки <b>додаються</b>, але лише для купонів із галочкою «Сумувати з акційною знижкою». Обидві знижки рахуються від суми кошика.</p>
+                            </details>
+                        </div>
+                        <div class="st-ctl">
+                            <span class="st-chip on">Увімкнено</span><span class="st-chip off">Вимкнено</span>
+                            <label class="switch" title="Глобальний перемикач сумування">
+                                <input type="checkbox" id="couponStackingToggle" onchange="saveCouponStacking(this.checked)">
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
                     </div>
-                    <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
-                        Вимкнено — промокод, як і раніше, <b>замінює</b> акційну знижку.
-                        Увімкнено — знижки <b>додаються</b>, але лише для тих купонів, де стоїть галочка
-                        «Сумувати з акційною знижкою». Обидві знижки рахуються від суми кошика.
+
+                    <div class="st-group">Каталог</div>
+                    <div class="st-row">
+                        <div class="st-ico">📦</div>
+                        <div class="st-main">
+                            <div class="st-title">Лічильник «N продано» у картці товару</div>
+                            <div class="st-desc">Показується, коли продано не менше вказаної кількості. Рахуються замовлення, які ти прийняв у роботу (не нові, не «під питанням», не скасовані).</div>
+                        </div>
+                        <div class="st-ctl">
+                            <label class="st-num">від
+                                <input type="number" id="soldCountMinInput" min="0" max="10000" step="1" inputmode="numeric" onchange="saveSoldCountMin(this.value)">
+                                шт.
+                            </label>
+                        </div>
                     </div>
-                    <div class="toggle-row" style="margin-top:14px;">
-                        <span class="toggle-row-label">📦 Показувати «N продано» в картці товару від</span>
-                        <input type="number" id="soldCountMinInput" min="0" max="10000" step="1" style="width:84px;" onchange="saveSoldCountMin(this.value)">
-                    </div>
-                    <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
-                        Рахуються замовлення, які ти прийняв у роботу (не нові, не «під питанням» і не скасовані).
-                    </div>
-                    <div class="toggle-row" style="margin-top:14px;">
-                        <span class="toggle-row-label">📍 Віджет «Живий статус замовлення»</span>
-                        <select id="orderWidgetModeSelect" onchange="saveOrderWidgetMode(this.value)">
-                            <option value="off">Вимкнено</option>
-                            <option value="owner">Лише мені</option>
-                            <option value="all">Усім клієнтам</option>
-                        </select>
-                    </div>
-                    <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
-                        Клієнт отримує одне повідомлення-віджет, яке саме оновлюється при зміні статусу,
-                        і бот стежить за посилкою в Новій Пошті. «Лише мені» — перевірити на власних замовленнях.
-                        Вимкнено — звичайні текстові повідомлення, як раніше.
+
+                    <div class="st-group">Замовлення</div>
+                    <div class="st-row" style="align-items:flex-start;">
+                        <div class="st-ico">📍</div>
+                        <div class="st-main">
+                            <div class="st-title">Віджет «Живий статус замовлення»</div>
+                            <div class="st-desc">Одне повідомлення, яке саме оновлюється при зміні статусу, і стеження за посилкою в Новій Пошті.</div>
+                            <div class="st-hint" id="orderWidgetHint"></div>
+                        </div>
+                        <div class="st-ctl">
+                            <div class="st-seg" id="orderWidgetModeSeg" role="radiogroup" aria-label="Режим віджета статусу">
+                                <button type="button" role="radio" data-mode="off" onclick="saveOrderWidgetMode('off')">Вимкнено</button>
+                                <button type="button" role="radio" data-mode="owner" onclick="saveOrderWidgetMode('owner')">Лише мені</button>
+                                <button type="button" role="radio" data-mode="all" onclick="saveOrderWidgetMode('all')">Усім</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div id="promotionsTabs" class="orders-tabs"></div>
@@ -10034,16 +10090,29 @@
                 if (rbt) rbt.checked = reviewBonusEnabled;
                 const soldInput = document.getElementById('soldCountMinInput');
                 if (soldInput) soldInput.value = data.sold_count_min ?? 5;
-                const widgetSelect = document.getElementById('orderWidgetModeSelect');
-                if (widgetSelect) widgetSelect.value = data.order_widget_mode || 'off';
+                setOrderWidgetModeUI(data.order_widget_mode || 'off');
             } catch (e) {
                 console.error('loadSettings error:', e);
             }
             renderCouponStackingToggle();
         }
 
+        const ORDER_WIDGET_HINTS = {
+            off: 'Клієнти отримують звичайні текстові повідомлення, як раніше.',
+            owner: 'Віджет бачиш лише ти — на своїх замовленнях. Для клієнтів нічого не змінюється: так можна спокійно перевірити.',
+            all: 'Нові замовлення всіх клієнтів отримують віджет, а посилки відстежуються автоматично. Старі замовлення лишаються з текстом.',
+        };
+
+        function setOrderWidgetModeUI(mode) {
+            document.querySelectorAll('#orderWidgetModeSeg button').forEach((btn) => {
+                btn.setAttribute('aria-checked', btn.dataset.mode === mode ? 'true' : 'false');
+            });
+            const hint = document.getElementById('orderWidgetHint');
+            if (hint) hint.textContent = ORDER_WIDGET_HINTS[mode] || '';
+        }
+
         async function saveOrderWidgetMode(mode) {
-            const select = document.getElementById('orderWidgetModeSelect');
+            setOrderWidgetModeUI(mode);
             try {
                 const res = await fetch(API_BASE + '/admin/settings', {
                     method: 'PUT',
@@ -10052,7 +10121,7 @@
                 });
                 const result = await res.json();
                 if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти');
-                if (select) select.value = result.settings.order_widget_mode;
+                setOrderWidgetModeUI(result.settings.order_widget_mode);
                 const labels = { off: 'Віджет статусу вимкнено', owner: 'Віджет статусу — лише тобі ✅', all: 'Віджет статусу — усім клієнтам ✅' };
                 showToast(labels[result.settings.order_widget_mode] || 'Збережено', 'success');
             } catch (e) {
