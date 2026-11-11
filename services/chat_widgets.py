@@ -64,7 +64,7 @@ s{color:var(--tg-theme-hint-color);font-weight:500;margin-right:5px}
 # W — API віджета, S() — стан із chat_data, ask() — запит до бота з розбором JSON-відповіді.
 _BASE_JS = """
 const W=window.TelegramWidget,$=i=>document.getElementById(i),H=(i,h)=>h?$(i).setAttribute('hidden',''):$(i).removeAttribute('hidden'),B='https://t.me/%(bot)s?startapp=',D='%(denis)s';
-const TG=u=>W&&W.openTelegramLink(u),E=s=>String(s).replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';'),M=n=>String(n).replace(/\\B(?=(\\d{3})+$)/g,' ')+' ₴';
+const TG=u=>W&&W.openTelegramLink(u),E=s=>String(s).replace(/[&<>"]/g,c=>'&#'+c.charCodeAt(0)+';'),M=n=>{const x=Math.round(+n)||0;let s=String(Math.abs(x)),o='';while(s.length>3){o=' '+s.slice(-3)+o;s=s.slice(0,-3)}return(x<0?'-':'')+s+o+' ₴'};
 let R=null;function S(){if(R)return R;try{return JSON.parse(W&&W.chatData||'{}')||{}}catch(e){return{}}}
 function ask(q,f){if(!W)return;W.request(q).then(a=>{try{R=Object.assign({},S(),JSON.parse(a.result||'{}'))}catch(e){}f&&f();draw()},()=>{f&&f();draw()})}
 function left(t){let s=Math.max(0,Math.floor((t-Date.now())/1e3)),d=Math.floor(s/86400),h=Math.floor(s%%86400/3600),m=Math.floor(s%%3600/60);return s<=0?'':d?d+' д '+h+' год':h?h+' год '+m+' хв':m+' хв '+s%%60+' с'}
@@ -200,7 +200,7 @@ def build_giveaway_widget(g: dict, state: dict, link: str = "") -> dict:
 function draw(){const d=S(),l=left(C.e),on=d.st=='active'&&l;
 $('p').textContent=on?'До підсумків: '+l:d.st=='cancelled'?'Розіграш скасовано':'Розіграш завершено — підсумки в каналі';
 $('no').textContent='№'+(d.no||'—');$('t').textContent=d.t||1;$('n').textContent=d.n||1;H('tr',!C.r);H('ref',!C.r||!on)}
-$('inv').onclick=()=>TG('https://t.me/share/url?url='+encodeURIComponent(C.l)+'&text='+encodeURIComponent('Беру участь у розіграші — приєднуйся 🎁'));
+$('inv').onclick=()=>{const u='https://t.me/share/url?url='+encodeURIComponent(C.l),t=u+'&text='+encodeURIComponent('Приєднуйся 🎁');TG(t.length<=250?t:u)};
 $('cp').onclick=()=>W&&W.copyText(C.l);
 setInterval(draw,1e3);ask('g:'+C.id);W&&W.onEvent('activated',()=>ask('g:'+C.id));
 """
