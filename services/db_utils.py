@@ -479,5 +479,17 @@ def init_db() -> None:
     for r in load_filaments_file(config.FILAMENTS_FILE):
         sync_filament_colors_table(conn, r)
 
+    # Індекси під найчастіші запити (обидва бекенди). Без індексу на order_items.order_id кожне
+    # відкриття замовлення, «Мої замовлення», хіти й «З цим купують» перебирали всю таблицю позицій.
+    for ddl in (
+        "CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)",
+        "CREATE INDEX IF NOT EXISTS idx_orders_ordered_at ON orders(ordered_at)",
+        "CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)",
+        "CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id)",
+        "CREATE INDEX IF NOT EXISTS idx_events_user_type_created ON events(user_id, type, created_at)",
+    ):
+        conn.execute(ddl)
+
     conn.commit()
     conn.close()

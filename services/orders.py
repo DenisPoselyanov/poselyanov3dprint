@@ -411,7 +411,7 @@ def list_user_orders(user_id: int, limit: int = 30) -> list[dict]:
             ORDER BY id DESC
             LIMIT ?
         """),
-        (uid, int(limit)),
+        (uid, max(1, min(int(limit or 30), 100))),
     ).fetchall()
     ids = [int(o["id"]) for o in orders]
     items_by_order: dict[int, list[dict]] = {}

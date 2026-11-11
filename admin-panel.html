@@ -4663,7 +4663,9 @@
             mq.addEventListener('change', apply);
         })();
 
-        const escapeHtml = (text) => (window.SharedApp ? window.SharedApp.escapeHtml(text) : String(text || ''));
+        // Запасний варіант теж екранує: якщо shared.js не завантажився, сирий текст у розмітку не потрапить
+        const escapeHtml = (text) => (window.SharedApp ? window.SharedApp.escapeHtml(text)
+            : String(text ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])));
         const escapeAttr = (text) => (window.SharedApp ? window.SharedApp.escapeAttr(text) : escapeHtml(text));
         // API base: local frontend (5500) talks to local backend (8080).
         // In deployed mode, use current origin + /api.
@@ -10726,7 +10728,8 @@
             const username = String(order?.username || '').trim();
             if (username.startsWith('@')) {
                 const handle = username.slice(1).trim();
-                if (handle && handle !== 'невідомо' && handle !== '—') return handle;
+                // Лише справжній нік Telegram: у старих замовленнях це поле надсилав клієнт, там може бути що завгодно
+                if (/^[A-Za-z0-9_]{1,32}$/.test(handle)) return handle;
             }
             return '';
         }
@@ -10752,7 +10755,8 @@
             if (!contactUrl) {
                 return escapeHtml(name || order?.username || 'невідомо');
             }
-            const onclick = `openTelegramContact('${escapeAttr(contactUrl)}', event)`;
+            // Адресу беремо з href, а не вставляємо в код обробника: HTML-екранування не захищає рядок усередині JS
+            const onclick = `openTelegramContact(this.href, event)`;
             if (handle) {
                 return `<a href="${escapeAttr(contactUrl)}" onclick="${onclick}; return false;" rel="noopener">${escapeHtml(name || handle)} · @${escapeHtml(handle)}</a>`;
             }

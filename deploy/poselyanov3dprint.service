@@ -7,7 +7,12 @@ Type=simple
 User=poselyanov
 Group=poselyanov
 WorkingDirectory=/opt/poselyanov3dprint
+# API слухає лише localhost: назовні його віддає nginx (TLS, ліміти запитів). Значення з .env має пріоритет.
+Environment=HTTP_HOST=127.0.0.1
 EnvironmentFile=/etc/poselyanov3dprint/.env
+# Процес не може підняти собі привілеї й має власний /tmp
+NoNewPrivileges=true
+PrivateTmp=true
 ExecStart=/opt/poselyanov3dprint/.venv/bin/python bot.py
 Restart=on-failure
 RestartSec=5

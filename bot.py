@@ -7,6 +7,8 @@ import aiohttp
 from aiohttp import web
 import asyncio
 import concurrent.futures
+import gzip
+import hashlib
 import html
 import json
 import logging
@@ -15,6 +17,7 @@ import re
 import signal
 import sys
 import time
+import warnings
 from pathlib import Path
 from urllib.parse import urlparse
 try:
@@ -336,6 +339,11 @@ def is_animated_image(file_data: bytes, content_type: str = "") -> bool:
         return is_gif_image(file_data, content_type)
 
 
+# Фото надсилають і покупці (відгуки, листівка призу): «бомба» на сотні мегапікселів у кількох мегабайтах
+# файлу з'їла б усю пам'ять сервера. Понад ліміт Pillow кидає виняток ще до розпакування пікселів.
+Image.MAX_IMAGE_PIXELS = 64_000_000
+warnings.simplefilter("error", Image.DecompressionBombWarning)
+
 ANIMATED_MAX_MEGAPIXELS = 45.0
 ANIMATED_MIN_WIDTH = 320
 ANIMATED_MAX_FRAMES = 80
@@ -441,6 +449,9 @@ def prepare_static_for_upload(file_data: bytes, content_type: str = "") -> tuple
             if needs_resize:
                 new_w = STATIC_MAX_WIDTH
                 new_h = max(1, int(height * new_w / width))
+                if img.format == "JPEG":
+                    # JPEG уміє розпаковуватись одразу в 1/2, 1/4, 1/8 розміру: у рази менше пам'яті й часу
+                    img.draft(None, (new_w, new_h))
                 work = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
             has_alpha = work.mode in ("RGBA", "LA") or (
@@ -528,9 +539,13 @@ async def fetch_image_bytes_from_url(url: str, max_bytes: int = MAX_UPLOAD_BYTES
 
 
 def _cloudinary_upload_with_timeout(file_data: bytes, upload_opts: dict):
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+    # Без `with`: вихід з блоку чекав би завершення потоку, і таймаут нічого б не давав
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
         future = executor.submit(cloudinary.uploader.upload, file_data, **upload_opts)
         return future.result(timeout=CLOUDINARY_UPLOAD_TIMEOUT)
+    finally:
+        executor.shutdown(wait=False)
 
 
 def upload_photo_to_cloudinary_sync(file_data: bytes, filename: str = "product_photo", content_type: str = ""):
@@ -2090,6 +2105,16 @@ async def _deliver_order_notifications(
 
 
 #Новий HTTP хендлер для прийому замовлень з веб-додатку
+_background_tasks: set = set()
+
+
+def _spawn_background(coro) -> None:
+    """Фонова задача з утримуваним посиланням: без нього цикл подій тримає задачу лише слабко."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
 def _safe_int(value, default: int = 0) -> int:
     """int() від даних клієнта без 500 на сміттєвому значенні."""
     try:
@@ -2098,34 +2123,54 @@ def _safe_int(value, default: int = 0) -> int:
         return default
 
 
+_ORDER_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{1,32}$")
+ORDER_COMMENT_MAX = 1000
+CLIENT_NAME_MAX = 100
+
+
+def _clean_tg_username(value) -> str:
+    """@username Telegram без «@»; усе, що не схоже на нік, — порожній рядок."""
+    handle = str(value or "").strip().lstrip("@")
+    return handle if _ORDER_USERNAME_RE.match(handle) else ""
+
+
+def _clean_name(value) -> str:
+    return str(value or "").strip()[:CLIENT_NAME_MAX]
+
+
+def _clean_comment(value) -> str:
+    return value.strip()[:ORDER_COMMENT_MAX] if isinstance(value, str) else ""
+
+
 async def handle_order(request):
     try:
         data = await request.json()
     except Exception:
+        return web.Response(status=400, text="Bad JSON", headers=cors_headers(request))
+    if not isinstance(data, dict):
         return web.Response(status=400, text="Bad JSON", headers=cors_headers(request))
 
     auth, err = resolve_request_user(request, data)
     if err is not None:
         return err
 
-    user_id = auth.get("user_id") or data.get("user_id") or 0
+    user_id = _safe_int(auth.get("user_id") or data.get("user_id"))
     if await run_db(is_user_blocked, user_id):
         return web.json_response({"ok": False, "error": "Замовлення недоступне"}, status=403, headers=cors_headers(request))
 
-    first_name = auth.get("first_name") or data.get("first_name", "")
-    tg_username = auth.get("username") or data.get("tg_username")
-    await run_db(
-        save_user_id,
-        int(user_id or 0),
-        first_name,
-        (tg_username or "").lstrip("@"),
-    )
-    username = data.get("user") or (f"@{tg_username}" if tg_username else "невідомо")
+    # Ім'я та @username — лише з підписаного initData. Поля з тіла запиту клієнт може підробити
+    # (чужий нік у замовленні, розмітка в адмінці), тож вони годяться тільки без перевірки підпису
+    # (локальна розробка).
+    trust_body = not config.VALIDATE_INIT_DATA
+    first_name = _clean_name(auth.get("first_name") or (data.get("first_name") if trust_body else ""))
+    tg_username = _clean_tg_username(auth.get("username") or (data.get("tg_username") if trust_body else ""))
+    await run_db(save_user_id, user_id, first_name, tg_username)
+    username = f"@{tg_username}" if tg_username else (first_name or "невідомо")
 
     items = data.get("items", [])
     client_total = _safe_int(data.get("total_price"))
-    comment = (data.get("comment") or "").strip()
-    coupon_code = (data.get("coupon_code") or "").strip() or None
+    comment = _clean_comment(data.get("comment"))
+    coupon_code = str(data.get("coupon_code") or "").strip()[:64] or None
 
     if coupon_code:
         # Той самий ліміт, що й у /check_coupon: замовлення з купоном теж відповідає, чи код існує
@@ -2209,7 +2254,7 @@ async def handle_order(request):
     # Формуємо назву для збереження в БД (всі товари через кому)
     product_name = ', '.join(i.get('product_name', '—') for i in items)
 
-    idempotency_key = (data.get("idempotency_key") or "").strip() or None
+    idempotency_key = str(data.get("idempotency_key") or "").strip()[:128] or None
     uid = int(user_id or 0)
     if uid > 0 and not idempotency_key:
         return web.json_response(
@@ -2281,7 +2326,7 @@ async def handle_order(request):
                 headers=cors_headers(request),
             )
 
-    asyncio.create_task(_deliver_order_notifications(
+    _spawn_background(_deliver_order_notifications(
         order_id=order_id,
         is_new=is_new,
         user_id=user_id,
@@ -2303,15 +2348,78 @@ async def handle_order(request):
 
 # ─── АДМІН HANDLERS ─────────────────────────────────────────
 
+_STATIC_CONTENT_TYPES = {
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+}
+_STATIC_TEXT_SUFFIXES = ('.html', '.css', '.js', '.json', '.svg')
+# Сторінки й скрипти щоразу звіряються з сервером (ETag → 304 без тіла), картинки й шрифти кешуються на добу
+_STATIC_REVALIDATE = "no-cache"
+_STATIC_LONG_CACHE = "public, max-age=86400"
+# шлях -> (mtime_ns, розмір, тіло, gzip-тіло або None, ETag)
+_static_cache: dict[str, tuple[int, int, bytes, bytes | None, str]] = {}
+
+
+def _load_static(path: Path):
+    """Файл із диска з кешем у пам'яті: читаємо й стискаємо один раз на версію файлу, а не на кожен запит."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key = str(path)
+    cached = _static_cache.get(key)
+    if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+        return cached
+    try:
+        body = path.read_bytes()
+    except OSError:
+        return None
+    packed = None
+    if path.suffix.lower() in _STATIC_TEXT_SUFFIXES and len(body) >= 1024:
+        packed = gzip.compress(body, 6)
+    etag = '"' + hashlib.sha1(body).hexdigest()[:20] + '"'
+    entry = (st.st_mtime_ns, st.st_size, body, packed, etag)
+    _static_cache[key] = entry
+    return entry
+
+
+async def _serve_static(request: web.Request, path: Path, not_found: str = "File not found") -> web.Response:
+    entry = await asyncio.to_thread(_load_static, path)
+    if entry is None:
+        return web.Response(status=404, text=not_found, headers=cors_headers(request))
+    _mtime, _size, body, packed, etag = entry
+    suffix = path.suffix.lower()
+    headers = cors_headers(request)
+    headers["ETag"] = etag
+    headers["Cache-Control"] = _STATIC_REVALIDATE if suffix in _STATIC_TEXT_SUFFIXES else _STATIC_LONG_CACHE
+    if packed is not None:
+        headers["Vary"] = "Origin, Accept-Encoding"
+    if etag in request.headers.get("If-None-Match", ""):
+        return web.Response(status=304, headers=headers)
+    if packed is not None and "gzip" in request.headers.get("Accept-Encoding", "").lower():
+        body = packed
+        headers["Content-Encoding"] = "gzip"
+    return web.Response(
+        body=body, content_type=_STATIC_CONTENT_TYPES.get(suffix, 'application/octet-stream'), headers=headers
+    )
+
+
 async def handle_index(request: web.Request):
     """Отримати HTML головної сторінки"""
-    try:
-        html = Path("index.html").read_text(encoding="utf-8")
-        headers = cors_headers(request)
-        headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        return web.Response(text=html, content_type='text/html', headers=headers)
-    except FileNotFoundError:
-        return web.Response(status=404, text="Index file not found", headers=cors_headers(request))
+    return await _serve_static(request, Path("index.html"), "Index file not found")
+
 
 async def handle_static(request: web.Request):
     """Обслуговування статичних файлів (allowlist)."""
@@ -2321,35 +2429,11 @@ async def handle_static(request: web.Request):
         return web.Response(status=403, text="Access denied", headers=cors_headers(request))
 
     try:
-        file = Path(file_path)
-        if not file.exists():
-            return web.Response(status=404, text="File not found", headers=cors_headers(request))
-        
-        # Визначаємо content type на основі розширення
-        content_types = {
-            '.html': 'text/html',
-            '.css': 'text/css',
-            '.js': 'application/javascript',
-            '.json': 'application/json',
-            '.svg': 'image/svg+xml',
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.gif': 'image/gif',
-            '.ico': 'image/x-icon',
-            '.woff': 'font/woff',
-            '.woff2': 'font/woff2',
-            '.ttf': 'font/ttf',
-        }
-        
-        ext = file.suffix.lower()
-        content_type = content_types.get(ext, 'application/octet-stream')
-        
-        content = file.read_bytes()
-        return web.Response(body=content, content_type=content_type, headers=cors_headers(request))
+        return await _serve_static(request, Path(file_path))
     except Exception:
         logger.exception("static file %s failed", file_path)
         return web.Response(status=500, text="Internal error", headers=cors_headers(request))
+
 
 async def handle_admin_panel(request: web.Request):
     """Отримати HTML адмін панелі.
@@ -2359,13 +2443,8 @@ async def handle_admin_panel(request: web.Request):
     через window.Telegram.WebApp.initData). Автентифікація відбувається
     на рівні API-ендпоінтів через заголовок X-Telegram-Init-Data.
     """
-    try:
-        html_content = Path("admin-panel.html").read_text(encoding="utf-8")
-        headers = cors_headers(request)
-        headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        return web.Response(text=html_content, content_type='text/html', headers=headers)
-    except FileNotFoundError:
-        return web.Response(status=404, text="Admin panel file not found", headers=cors_headers(request))
+    return await _serve_static(request, Path("admin-panel.html"), "Admin panel file not found")
+
 
 # Хендлер для отримання списку всіх товарів. Він викликає функцію get_all_products, яка повертає список товарів з бази даних або файлу, і повертає його у вигляді JSON відповіді. Він також додає CORS заголовки до відповіді, щоб дозволити доступ з веб-додатку.
 def _is_admin_viewer(request: web.Request) -> bool:
@@ -2382,7 +2461,7 @@ def _public_product(product: dict) -> dict:
 
 async def handle_get_products(request: web.Request):
     """Отримати список всіх товарів (з рейтингом і «продано» — REDESIGN.md, розд. 5.3)"""
-    products = get_all_products()
+    products = await run_db(get_all_products)
     if not _is_admin_viewer(request):
         products = [_public_product(p) for p in products]
     products = await run_db(with_stats, products)
@@ -2399,13 +2478,13 @@ async def handle_get_categories(request: web.Request):
         denied = require_editor(request, auth)
         if denied is not None:
             return denied
-    categories = get_all_categories(active_only=not include_inactive)
+    categories = await run_db(get_all_categories, not include_inactive)
     return web.json_response(categories, headers=cors_headers(request))
 
 
 async def handle_get_filaments(request: web.Request):
     """Отримати список філаментів."""
-    reload_filaments_cache()
+    await run_db(reload_filaments_cache)
     filaments = [{**f, "glow": is_glow_filament(f)} for f in FILAMENTS_CACHE]
     if _is_admin_viewer(request):
         # Для адмінки: у скількох товарах колір пропонується («у N товарах»)
@@ -2419,7 +2498,7 @@ async def handle_get_product(request: web.Request):
     product_id = _product_id_param(request)
     is_admin = _is_admin_viewer(request)
     # Адмін бачить і приховані та архівні товари (редактор); покупцям — лише активні.
-    product = get_admin_product(product_id) if is_admin else get_product_by_id(product_id)
+    product = await run_db(get_admin_product if is_admin else get_product_by_id, product_id)
     if not product:
         return web.json_response({"error": "Не знайдено"}, status=404, headers=cors_headers(request))
     if not is_admin:
@@ -2466,7 +2545,7 @@ async def handle_update_filament(request: web.Request):
     try:
         filament_id = request.match_info.get('id', '')
         data = await request.json()
-        result = update_filament(filament_id, data)
+        result = await run_db(update_filament, filament_id, data)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2485,7 +2564,7 @@ async def handle_create_filament(request: web.Request):
         data = await request.json()
         if not isinstance(data, dict):
             raise ValueError("Очікується JSON-обʼєкт")
-        result = add_filament(data)
+        result = await run_db(add_filament, data)
         status = 201 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2543,7 +2622,7 @@ async def handle_create_category(request: web.Request):
 
     try:
         data = await request.json()
-        result = add_category(data)
+        result = await run_db(add_category, data)
         status = 201 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2562,7 +2641,7 @@ async def handle_update_category(request: web.Request):
     try:
         category_id = request.match_info.get('id', '')
         data = await request.json()
-        result = update_category(category_id, data)
+        result = await run_db(update_category, category_id, data)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2580,7 +2659,7 @@ async def handle_delete_category(request: web.Request):
 
     try:
         category_id = request.match_info.get('id', '')
-        result = delete_category(category_id)
+        result = await run_db(delete_category, category_id)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2599,7 +2678,7 @@ async def handle_create_product(request: web.Request):
 
     try:
         data = await request.json()
-        result = add_product(data)
+        result = await run_db(add_product, data)
         status = 201 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2619,7 +2698,7 @@ async def handle_update_product(request: web.Request):
     try:
         product_id = int(request.match_info.get('id', 0))
         data = await request.json()
-        result = update_product(product_id, data)
+        result = await run_db(update_product, product_id, data)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -2638,7 +2717,7 @@ async def handle_delete_product(request: web.Request):
 
     try:
         product_id = int(request.match_info.get('id', 0))
-        result = delete_product(product_id)
+        result = await run_db(delete_product, product_id)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status, headers=cors_headers(request))
     except Exception as e:
@@ -3066,7 +3145,7 @@ async def handle_get_my_orders(request: web.Request):
         user_id = 0
     if user_id <= 0:
         return web.json_response({"orders": []}, headers=cors_headers(request))
-    orders = await run_db(list_user_orders, user_id, _query_int(request, "limit", 30))
+    orders = await run_db(list_user_orders, user_id, _query_int(request, "limit", 30, 1, 100))
     return web.json_response({"orders": orders}, headers=cors_headers(request))
 
 
@@ -3098,7 +3177,7 @@ async def handle_prepare_share(request: web.Request):
         photo_index = max(0, int(data.get("photo_index") or 0))
     except (TypeError, ValueError):
         return web.json_response({"ok": False, "error": "bad_request"}, status=400, headers=cors_headers(request))
-    product = get_product_by_id(product_id) if user_id > 0 else None
+    product = await run_db(get_product_by_id, product_id) if user_id > 0 else None
     photos = (product or {}).get("photos") or []
     if not product or not photos:
         return web.json_response({"ok": False, "error": "no_photo"}, status=404, headers=cors_headers(request))
@@ -3879,11 +3958,13 @@ async def handle_get_public_promotions(request: web.Request):
     return web.json_response(await run_db(public_promotions), headers=cors_headers(request))
 
 
-def _query_int(request: web.Request, name: str, default: int) -> int:
+def _query_int(request: web.Request, name: str, default: int, lo: int = 0, hi: int = 100_000) -> int:
+    """Ціле з рядка запиту в межах [lo, hi]: без від'ємних LIMIT/OFFSET і чисел, що не влазять у BIGINT."""
     try:
-        return int(request.query.get(name, default))
+        value = int(request.query.get(name, default))
     except (TypeError, ValueError):
         return default
+    return max(lo, min(value, hi))
 
 
 async def handle_get_config(request: web.Request):
@@ -5867,7 +5948,7 @@ async def handle_upload_photo_url(request: web.Request):
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
             return web.json_response({"ok": False, "error": "❌ Дозволені лише http/https посилання"}, status=400, headers=cors_headers(request))
-        if not is_safe_http_url(url):
+        if not await asyncio.to_thread(is_safe_http_url, url):
             return web.json_response({"ok": False, "error": "❌ Небезпечне посилання"}, status=400, headers=cors_headers(request))
 
         try:
@@ -6366,9 +6447,9 @@ def main():
         register_http_routes(http_app, sys.modules[__name__])
         runner = web.AppRunner(http_app)
         await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
+        site = web.TCPSite(runner, config.HTTP_HOST, config.HTTP_PORT)
         await site.start()
-        logger.info("🌐 HTTP сервер запущено  →  порт 8080")
+        logger.info("🌐 HTTP сервер запущено  →  %s:%s", config.HTTP_HOST, config.HTTP_PORT)
 
         stop_event = asyncio.Event()
 

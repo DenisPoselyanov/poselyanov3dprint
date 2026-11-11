@@ -21,6 +21,11 @@ WEBAPP_URL = os.environ.get(
 ).strip()
 API_PUBLIC_URL = os.environ.get("API_PUBLIC_URL", "").strip().rstrip("/")
 
+# Адреса й порт HTTP API. За nginx на тому ж сервері став HTTP_HOST=127.0.0.1 — інакше порт видно
+# з інтернету напряму, в обхід TLS і лімітів nginx. У Docker лишай 0.0.0.0.
+HTTP_HOST = os.environ.get("HTTP_HOST", "0.0.0.0").strip() or "0.0.0.0"
+HTTP_PORT = int(os.environ.get("PORT", "8080"))
+
 DB_FILE = os.environ.get("DB_FILE", "users.db")
 DB_BACKEND = os.environ.get("DB_BACKEND", "sqlite").strip().lower()
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")

@@ -147,6 +147,9 @@ CREATE TABLE IF NOT EXISTS filament_colors (
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_ordered_at ON orders(ordered_at);
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_user_id ON coupon_uses(user_id);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_code ON coupon_uses(code);
 CREATE INDEX IF NOT EXISTS idx_coupon_uses_code_status ON coupon_uses(code, status);

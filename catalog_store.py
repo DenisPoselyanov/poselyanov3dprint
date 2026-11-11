@@ -56,8 +56,8 @@ INACTIVE_CUSTOM_PRODUCTS_CACHE: list[dict] = []
 
 def _replace_cache_list(cache: list, items: list) -> None:
     """Keep imported references valid (e.g. bot.py `from catalog_store import FILAMENTS_CACHE`)."""
-    cache.clear()
-    cache.extend(items)
+    # Одна атомарна заміна: каталог читають і з інших потоків (run_db), порожнього списку вони не побачать
+    cache[:] = items
 
 
 def use_catalog_db() -> bool:
