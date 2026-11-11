@@ -23,12 +23,17 @@ REVIEWS_AUTO_PUBLISH_KEY = "reviews_auto_publish"
 # Акція «купон за відгук»: вимкнена — форма й повідомлення про неї мовчать, нові купони не видаються
 REVIEW_BONUS_ENABLED_KEY = "review_bonus_enabled"
 
+# Віджет «Живий статус замовлення» (ROADMAP.md, п. 1): off — нікому, owner — лише власнику, all — усім
+ORDER_WIDGET_MODE_KEY = "order_widget_mode"
+ORDER_WIDGET_MODES = ("off", "owner", "all")
+
 # Дефолти — стан «як було до появи фічі».
 DEFAULTS: dict[str, str] = {
     COUPON_STACKING_KEY: "0",
     SOLD_COUNT_MIN_KEY: "5",
     REVIEWS_AUTO_PUBLISH_KEY: "0",
     REVIEW_BONUS_ENABLED_KEY: "1",
+    ORDER_WIDGET_MODE_KEY: "off",
 }
 SOLD_COUNT_MIN_LIMIT = 10_000
 
@@ -143,6 +148,11 @@ def review_bonus_enabled() -> bool:
     return get_bool(REVIEW_BONUS_ENABLED_KEY)
 
 
+def order_widget_mode() -> str:
+    mode = str(get_setting(ORDER_WIDGET_MODE_KEY)).strip().lower()
+    return mode if mode in ORDER_WIDGET_MODES else "off"
+
+
 def public_settings() -> dict:
     """Налаштування, які потрібні вітрині."""
     return {"coupon_stacking_enabled": coupon_stacking_enabled()}
@@ -154,6 +164,7 @@ def admin_settings() -> dict:
         "sold_count_min": sold_count_min(),
         "reviews_auto_publish": get_bool(REVIEWS_AUTO_PUBLISH_KEY),
         "review_bonus_enabled": review_bonus_enabled(),
+        "order_widget_mode": order_widget_mode(),
     }
 
 
@@ -162,6 +173,11 @@ def update_admin_settings(data: dict) -> dict:
     for key in (COUPON_STACKING_KEY, REVIEWS_AUTO_PUBLISH_KEY, REVIEW_BONUS_ENABLED_KEY):
         if key in data:
             updates[key] = "1" if data.get(key) in (1, True, "1", "true", "on", "yes") else "0"
+    if ORDER_WIDGET_MODE_KEY in data:
+        mode = str(data.get(ORDER_WIDGET_MODE_KEY) or "").strip().lower()
+        if mode not in ORDER_WIDGET_MODES:
+            return {"ok": False, "error": "Режим віджета: off, owner або all"}
+        updates[ORDER_WIDGET_MODE_KEY] = mode
     if SOLD_COUNT_MIN_KEY in data:
         try:
             threshold = int(data.get(SOLD_COUNT_MIN_KEY))

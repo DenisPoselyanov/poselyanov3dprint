@@ -64,6 +64,7 @@ ORDER_EXTRA_COLUMNS = {
     "review_reminded_at": "TIMESTAMPTZ",
     "review_bonus_code": "TEXT DEFAULT ''",
     "is_test": "INTEGER DEFAULT 0",
+    "is_paid": "INTEGER DEFAULT 0",
 }
 
 ORDER_ITEM_EXTRA_COLUMNS = {
@@ -179,6 +180,7 @@ def init_db() -> None:
     from services.giveaways import init_giveaways_table
     from services.promotions import init_promotions_table
     from services.reviews import init_reviews_table
+    from services.order_widgets import init_order_widget_tables
     from services.settings import init_settings_table
 
     conn = db_connect()
@@ -316,6 +318,7 @@ def init_db() -> None:
         init_catalog_tables(conn)
         init_promotions_table(conn)
         init_settings_table(conn)
+        init_order_widget_tables(conn)
         init_collections_table(conn)
         init_events_table(conn)
         init_reviews_table(conn)
@@ -464,6 +467,7 @@ def init_db() -> None:
         """)
         init_promotions_table(conn)
         init_settings_table(conn)
+        init_order_widget_tables(conn)
         init_collections_table(conn)
         init_events_table(conn)
         init_reviews_table(conn)

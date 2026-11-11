@@ -7035,6 +7035,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (prizes.length) showPrizeWins();
     else if (prizeStart) showToast({ msg: 'Приз уже оформлено або його строк минув', icon: 'alert', duration: 4000 });
   });
+  // startapp=order_<id> — кнопка «Відкрити в застосунку» у віджеті статусу замовлення
+  const orderLink = /^order_(\d+)$/.exec(startParam || '');
+  if (orderLink) {
+    ORDERS_FOCUS = Number(orderLink[1]);
+    switchPage('orders');
+  }
   const reviewLink = /^review_(\d+)(?:_([1-5]))?$/.exec(startParam || '');
   if (reviewLink) {
     REVIEW_DEEP = Number(reviewLink[1]);

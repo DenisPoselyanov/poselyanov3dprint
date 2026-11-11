@@ -231,6 +231,9 @@ from services.orders import (
 )
 from services.stats import get_stats
 from services.status_messages import list_status_messages, mark_status_message_deleted, record_status_message
+from services import order_widgets as order_widgets_svc
+from services.settings import order_widget_mode
+from widget_messages import answer_widget_query, send_order_note, sync_order_widget
 import services.broadcasts as broadcasts_svc
 import services.channel_posts as channel_posts_svc
 import services.post_cards as post_cards_svc
@@ -276,6 +279,9 @@ PROMOTION_ENABLED = config.PROMOTION_ENABLED
 MAX_UPLOAD_BYTES = config.MAX_UPLOAD_BYTES
 REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024
 REVIEW_REQUEST_POLL_SEC = 1800
+NP_TRACK_POLL_SEC = 30 * 60      # фонова перевірка посилок Нової Пошти
+NP_TRACK_HOURS = (8, 21)         # за Києвом: уночі клієнтів не турбуємо
+NP_REFRESH_MIN_SEC = 300         # не частіше — оновлення на запит віджета
 MAX_UPLOAD_REQUEST_BYTES = config.MAX_UPLOAD_REQUEST_BYTES
 CLOUDINARY_UPLOAD_TIMEOUT = 60
 
@@ -947,6 +953,12 @@ async def sales(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /status — статус останнього замовлення
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
+    if order_widgets_svc.widget_enabled_for(user_id):
+        sent = 0
+        for active_id in await run_db(order_widgets_svc.list_active_order_ids, user_id):
+            sent += await _client_widget(active_id, create=True, resend=True)
+        if sent:
+            return
     conn = db_connect(dict_rows=True)
     order = conn.execute(_sql("""
         SELECT id, total_price, status, ordered_at
@@ -1243,8 +1255,52 @@ def _client_block_from_db(order: dict, db_items: list[dict]) -> dict:
     }
 
 
+async def _client_widget(order_id: int, *, create: bool = False, resend: bool = False) -> bool:
+    """Оновити (або створити) віджет статусу замовлення.
+
+    False — віджета немає або Telegram його не прийняв: тоді шлемо звичайні текстові повідомлення.
+    """
+    if not app_state.bot_app:
+        return False
+    try:
+        return bool(await sync_order_widget(app_state.bot_app.bot, int(order_id), create=create, resend=resend))
+    except Exception as e:
+        logger.warning("Віджет замовлення #%s недоступний, працює текстовий варіант: %s", order_id, e)
+        return False
+
+
+async def _widget_note(order: dict, event: str | None = None, tracking: dict | None = None) -> bool:
+    """Короткий рядок-сповіщення до віджета (сам віджет оновлюється без сповіщення)."""
+    text = order_widgets_svc.status_note(order, event, tracking)
+    user_id = int(order.get("user_id") or 0)
+    if not text or user_id <= 0 or not app_state.bot_app:
+        return False
+    try:
+        await send_order_note(app_state.bot_app.bot, int(order["id"]), user_id, text)
+        return True
+    except Exception as e:
+        logger.warning("Не вдалось сповістити клієнта %s про замовлення #%s: %s", user_id, order.get("id"), e)
+        return False
+
+
+def _paid_button(order: dict | None) -> InlineKeyboardButton | None:
+    """Кнопка оплати для чату замовлень: лише для оплати карткою (післяплату платять при отриманні)."""
+    if not order or order.get("pay_method") != "card":
+        return None
+    return _paid_button_for(int(order["id"]), bool(order.get("is_paid")))
+
+
+def _paid_button_for(order_id: int, paid: bool) -> InlineKeyboardButton:
+    if paid:
+        return InlineKeyboardButton("✅ Оплачено", callback_data=f"unpaid_{order_id}")
+    return InlineKeyboardButton("💳 Позначити оплаченим", callback_data=f"paid_{order_id}")
+
+
 async def _refresh_client_confirmation_after_pricing(uid_int: int, order_id: int) -> int:
     """Видаляє старе підтвердження клієнту та надсилає оновлене з актуальною ціною."""
+    if await _client_widget(order_id, create=True):
+        row = await run_db(order_widgets_svc.get_widget, order_id)
+        return int((row or {}).get("message_id") or 0)
     bot = app_state.bot_app.bot
     existing = confirmation_messages.get(uid_int)
 
@@ -1334,11 +1390,13 @@ def _build_order_status_channel_markup(
     user_id,
     username: str,
     first_name: str,
+    order: dict | None = None,
 ) -> InlineKeyboardMarkup | None:
     write_button = _make_contact_button(user_id, username, first_name or "клієнт")
 
     if status == "confirmed" or status in FULFILMENT_STATUS_LABELS:
-        return InlineKeyboardMarkup([[write_button]]) if write_button else None
+        rows = [[btn] for btn in (write_button, _paid_button(order)) if btn]
+        return InlineKeyboardMarkup(rows) if rows else None
     if status == "cancelled":
         return None
     if status == "draft":
@@ -1456,6 +1514,7 @@ async def _sync_order_status_to_telegram(order_id: int, action: str) -> None:
         user_id=order.get("user_id"),
         username=order.get("username") or "невідомо",
         first_name=first_name,
+        order=order,
     )
 
     if not channel_message_id:
@@ -1777,7 +1836,7 @@ async def _deliver_order_notifications(
             if not order:
                 return
 
-            if user_id:
+            if user_id and not await _client_widget(order_id, create=True):
                 try:
                     now = datetime.now()
                     order_block = _client_block_from_db(order, db_items)
@@ -1859,7 +1918,7 @@ async def _deliver_order_notifications(
                             logger.error(f"❌ Помилка надсилання в канал: {e}")
             return
 
-        if user_id:
+        if user_id and not await _client_widget(order_id, create=True):
             try:
                 now = datetime.now()
                 existing = confirmation_messages.get(user_id)
@@ -2903,10 +2962,10 @@ async def handle_update_order(request: web.Request):
         data = await request.json()
     except (TypeError, ValueError):
         return web.json_response({"ok": False, "error": "Невірний запит"}, status=400, headers=cors_headers(request))
-    fields = {k: data[k] for k in ("ttn", "internal_note", "is_test") if k in data}
+    fields = {k: data[k] for k in ("ttn", "internal_note", "is_test", "is_paid") if k in data}
     if not fields:
         return web.json_response(
-            {"ok": False, "error": "Нічого оновлювати: очікуються ttn, internal_note або is_test"},
+            {"ok": False, "error": "Нічого оновлювати: очікуються ttn, internal_note, is_test або is_paid"},
             status=400,
             headers=cors_headers(request),
         )
@@ -2922,6 +2981,8 @@ async def handle_update_order(request: web.Request):
         return web.json_response(
             {"ok": False, "error": "Замовлення не знайдено"}, status=404, headers=cors_headers(request)
         )
+    if "ttn" in fields or "is_paid" in fields:
+        await _client_widget(order_id)
     return web.json_response({"ok": True}, headers=cors_headers(request))
 
 
@@ -2954,6 +3015,8 @@ async def _send_test_review_request(order: dict) -> None:
 async def _notify_client_status(order: dict, status: str, ttn: str | None = None) -> bool:
     """Повідомлення клієнту про новий статус. Помилка доставки не блокує зміну статусу."""
     user_id = int(order.get("user_id") or 0)
+    # Віджет оновлюється тихо завжди — навіть для старих і тестових замовлень; сповіщення — за правилами нижче
+    has_widget = await _client_widget(int(order["id"]))
     # Старі замовлення (адмін закриває хвіст, відмічає друк заднім числом) — клієнта не турбуємо
     ordered_at = str(order.get("ordered_at") or "")[:10]
     try:
@@ -2968,6 +3031,8 @@ async def _notify_client_status(order: dict, status: str, ttn: str | None = None
             await _send_test_review_request(order)
             return True
         return False
+    if has_widget:
+        return await _widget_note({**order, "status": status})
     html_text = build_client_status_update(int(order["id"]), status, ttn)
     if user_id <= 0 or not html_text:
         return False
@@ -5951,6 +6016,9 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "confirm" and order.get("is_test"):
         await _send_test_review_request(order)
 
+    if await _client_widget(order_id) and not order.get("is_test"):
+        await _widget_note(order)
+
     if action in ("confirm", "cancel"):
         affected_user_id = order.get("user_id")
         if affected_user_id:
@@ -6018,7 +6086,8 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     admin_url = get_admin_webapp_url(order_id) if order.get("price_pending") else None
     if action == "confirm":
-        markup = InlineKeyboardMarkup([[write_button]]) if write_button else None
+        confirm_rows = [[btn] for btn in (write_button, _paid_button(order)) if btn]
+        markup = InlineKeyboardMarkup(confirm_rows) if confirm_rows else None
     elif action == "draft":
         buttons = [
             InlineKeyboardButton("✅ Підтвердити", callback_data=f"confirm_{order_id}"),
@@ -6046,6 +6115,167 @@ async def order_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception:
         pass
+
+
+async def paid_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопка «💳 Позначити оплаченим» / «✅ Оплачено» під замовленням у чаті замовлень."""
+    query = update.callback_query
+    if query.from_user.id != OWNER_ID:
+        await query.answer()
+        return
+    action, raw_id = query.data.split("_", 1)
+    order_id, paid = int(raw_id), action == "paid"
+    if not await run_db(update_order_fields, order_id, {"is_paid": 1 if paid else 0}):
+        await query.answer("Замовлення не знайдено")
+        return
+    await query.answer("Оплату позначено ✅" if paid else "Позначку оплати знято")
+    markup = query.message.reply_markup
+    if markup:
+        own = (f"paid_{order_id}", f"unpaid_{order_id}")
+        rows = [
+            [_paid_button_for(order_id, paid) if btn.callback_data in own else btn for btn in row]
+            for row in markup.inline_keyboard
+        ]
+        try:
+            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(rows))
+        except Exception as e:
+            logger.warning("paid_action: не вдалось оновити кнопки #%s: %s", order_id, e)
+    await _client_widget(order_id)
+
+
+# ── Трекінг Нової Пошти (ROADMAP.md, п. 1) ───────────────────────────────────
+_np_refreshed_at: dict[int, float] = {}
+
+
+def _kyiv_now() -> datetime:
+    try:
+        from zoneinfo import ZoneInfo
+
+        return datetime.now(ZoneInfo("Europe/Kyiv"))
+    except Exception:
+        return datetime.utcnow() + timedelta(hours=2)
+
+
+async def _owner_alert(text: str) -> None:
+    try:
+        await app_state.bot_app.bot.send_message(chat_id=ORDERS_CHAT_ID, text=text)
+    except Exception as e:
+        logger.warning("Не вдалось надіслати сповіщення власнику: %s", e)
+
+
+async def _apply_np_tracking(row: dict, info: dict) -> None:
+    """Застосувати свіжий статус посилки: віджет, сповіщення, авто-«Отримано», нагадування."""
+    order_id = int(row["id"])
+    ttn = str(row.get("ttn") or "")
+    same_ttn = (row.get("tracked_ttn") or ttn) == ttn  # ТТН змінили — історію посилки починаємо заново
+    prev = (row.get("state") or "") if same_ttn else ""
+    state = order_widgets_svc.np_state(int(info.get("code") or 0)) or prev
+    arrived_on = (row.get("arrived_on") or "") if same_ttn else ""
+    if state == "b" and not arrived_on:
+        arrived_on = info.get("arrived_on") or _kyiv_now().date().isoformat()
+    free_until = order_widgets_svc.free_until_from_np(info.get("paid_keeping_from") or "") or (
+        (row.get("free_until") or "") if same_ttn else ""
+    )
+    reminded = int(row.get("reminded") or 0) if same_ttn else 0
+    tracking = await run_db(
+        order_widgets_svc.save_tracking, order_id, ttn=ttn, state=state, np_code=int(info.get("code") or 0),
+        np_text=info.get("text") or "", arrived_on=arrived_on, free_until=free_until, reminded=reminded,
+    )
+    order, _ = await run_db(get_order_with_items, order_id)
+    if not order or order.get("status") != "shipped":
+        return
+    quiet = bool(order.get("is_test"))
+
+    if state == "d":
+        await _sync_order_status_to_telegram(order_id, "delivered")
+        await _notify_client_status(order, "delivered", ttn)
+        return
+
+    changed = state != prev
+    if changed or free_until != (row.get("free_until") or ""):
+        await _client_widget(order_id)
+    if changed and state == "b" and not quiet:
+        await _widget_note(order, "np_branch", tracking)
+    if changed and state == "r":
+        if not quiet:
+            await _widget_note(order, "np_return", tracking)
+        await _owner_alert(
+            f"↩️ Замовлення №{order_id}: посилка повертається відправнику.\nТТН {ttn}. НП: {info.get('text') or '—'}"
+        )
+    if state == "b":
+        day = order_widgets_svc.due_reminder(arrived_on, reminded, _kyiv_now().date())
+        if day:
+            await run_db(order_widgets_svc.save_tracking, order_id, reminded=day)
+            if not quiet:
+                await _widget_note(order, "np_remind", tracking)
+            if day >= order_widgets_svc.OWNER_ALERT_DAY:
+                await _owner_alert(
+                    f"⏰ Замовлення №{order_id}: посилка вже {day} дн. чекає у відділенні.\nТТН {ttn}"
+                )
+
+
+async def track_np_orders(only_order_id: int | None = None) -> int:
+    """Перевірити відправлені посилки в Новій Пошті. Повертає кількість оброблених замовлень."""
+    rows = await run_db(order_widgets_svc.list_trackable_orders)
+    rows = [r for r in rows if order_widgets_svc.widget_enabled_for(r.get("user_id"))]
+    if only_order_id is not None:
+        rows = [r for r in rows if int(r["id"]) == int(only_order_id)]
+    if not rows:
+        return 0
+    try:
+        infos = await delivery.np_track([(r["ttn"], r.get("phone") or "") for r in rows])
+    except delivery.DeliveryUnavailable as e:
+        logger.warning("Трекінг Нової Пошти недоступний: %s", e)
+        return 0
+    done = 0
+    for row in rows:
+        info = infos.get(re.sub(r"\D", "", str(row["ttn"])))
+        if not info:
+            continue
+        try:
+            await _apply_np_tracking(row, info)
+            done += 1
+        except Exception:
+            logger.exception("Трекінг замовлення #%s не застосовано", row.get("id"))
+    return done
+
+
+async def _np_tracking_loop() -> None:
+    while True:
+        try:
+            if order_widget_mode() != "off" and NP_TRACK_HOURS[0] <= _kyiv_now().hour < NP_TRACK_HOURS[1]:
+                await track_np_orders()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("np tracking loop failed")
+        await asyncio.sleep(NP_TRACK_POLL_SEC)
+
+
+async def widget_query_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Запит від віджета. Поки один — "r": віджет на екрані просить свіжий статус посилки."""
+    query = (getattr(update, "api_kwargs", None) or {}).get("widget_query")
+    if not query:
+        return
+    try:
+        await answer_widget_query(context.bot, str(query.get("id") or ""))
+    except Exception as e:
+        logger.info("answerWidgetQuery: %s", e)
+    try:
+        user_id = int((query.get("from") or {}).get("id") or 0)
+        message_id = int(query.get("message_id") or 0)
+        if query.get("data") != "r" or not user_id or not message_id:
+            return
+        row = await run_db(order_widgets_svc.find_widget_by_message, user_id, message_id)
+        if not row:
+            return
+        order_id = int(row["order_id"])
+        if time.monotonic() - _np_refreshed_at.get(order_id, 0.0) < NP_REFRESH_MIN_SEC:
+            return
+        _np_refreshed_at[order_id] = time.monotonic()
+        await track_np_orders(only_order_id=order_id)
+    except Exception:
+        logger.warning("widget_query: не вдалось оновити статус посилки", exc_info=True)
 
 
 # Команда для відкриття адмін панелі
@@ -6192,7 +6422,9 @@ def main():
             review_task = asyncio.create_task(_review_request_loop())
             broadcast_task = asyncio.create_task(_broadcast_scheduler_loop())
             giveaway_task = asyncio.create_task(_giveaway_loop())
+            np_task = asyncio.create_task(_np_tracking_loop())
             await stop_event.wait()
+            np_task.cancel()
             review_task.cancel()
             broadcast_task.cancel()
             giveaway_task.cancel()

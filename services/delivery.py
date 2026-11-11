@@ -230,3 +230,59 @@ async def np_warehouses(city_ref: str, kind: str = "all", q: str = "") -> dict:
     }
     _cache_put(key, result, WAREHOUSE_SEARCH_TTL_SEC if q else WAREHOUSE_TTL_SEC)
     return result
+
+
+# ─── Трекінг ТТН (ROADMAP.md, п. 1) ──────────────────────────────────────────
+
+TRACK_BATCH = 100  # НП приймає до 100 документів за один запит
+
+
+def _np_date(value) -> str:
+    """Дата з відповіді НП («2026-11-12 10:20:30», «12.11.2026», «12-11-2026 10:20:30») → ISO-день або ''."""
+    text = str(value or "").strip()
+    match = re.match(r"^(\d{4})-(\d{2})-(\d{2})", text)
+    if match:
+        return "-".join(match.groups())
+    match = re.match(r"^(\d{2})[.\-](\d{2})[.\-](\d{4})", text)
+    if match:
+        return f"{match.group(3)}-{match.group(2)}-{match.group(1)}"
+    return ""
+
+
+def _normalize_tracking(row: dict) -> dict:
+    try:
+        code = int(str(row.get("StatusCode") or "0").strip() or 0)
+    except ValueError:
+        code = 0
+    return {
+        "ttn": re.sub(r"\D", "", str(row.get("Number") or "")),
+        "code": code,
+        "text": str(row.get("Status") or "").strip()[:200],
+        "arrived_on": _np_date(row.get("ActualDeliveryDate")),
+        "received_on": _np_date(row.get("RecipientDateTime")),
+        "paid_keeping_from": _np_date(row.get("DatePayedKeeping") or row.get("DateFirstDayStorage")),
+    }
+
+
+async def np_track(documents: list[tuple[str, str]]) -> dict[str, dict]:
+    """Статуси посилок: [(ТТН, телефон отримувача)] → {ТТН: {code, text, arrived_on, …}}.
+
+    Телефон необовʼязковий: з ним НП віддає розширені дані (дати зберігання).
+    Кидає DeliveryUnavailable, якщо НП недоступна.
+    """
+    out: dict[str, dict] = {}
+    docs = [(re.sub(r"\D", "", str(t or "")), re.sub(r"\D", "", str(p or ""))) for t, p in documents]
+    docs = [d for d in docs if len(d[0]) == 14]
+    for start in range(0, len(docs), TRACK_BATCH):
+        chunk = docs[start:start + TRACK_BATCH]
+        data = await _np_call(
+            "TrackingDocument",
+            "getStatusDocuments",
+            {"Documents": [{"DocumentNumber": ttn, "Phone": phone} for ttn, phone in chunk]},
+        )
+        for row in data:
+            if isinstance(row, dict):
+                item = _normalize_tracking(row)
+                if item["ttn"]:
+                    out[item["ttn"]] = item
+    return out

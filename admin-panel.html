@@ -3514,6 +3514,19 @@
                     <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
                         Рахуються замовлення, які ти прийняв у роботу (не нові, не «під питанням» і не скасовані).
                     </div>
+                    <div class="toggle-row" style="margin-top:14px;">
+                        <span class="toggle-row-label">📍 Віджет «Живий статус замовлення»</span>
+                        <select id="orderWidgetModeSelect" onchange="saveOrderWidgetMode(this.value)">
+                            <option value="off">Вимкнено</option>
+                            <option value="owner">Лише мені</option>
+                            <option value="all">Усім клієнтам</option>
+                        </select>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+                        Клієнт отримує одне повідомлення-віджет, яке саме оновлюється при зміні статусу,
+                        і бот стежить за посилкою в Новій Пошті. «Лише мені» — перевірити на власних замовленнях.
+                        Вимкнено — звичайні текстові повідомлення, як раніше.
+                    </div>
                 </div>
                 <div id="promotionsTabs" class="orders-tabs"></div>
                 <div id="promotionsLoading" class="loading" style="display:none;">
@@ -10021,10 +10034,31 @@
                 if (rbt) rbt.checked = reviewBonusEnabled;
                 const soldInput = document.getElementById('soldCountMinInput');
                 if (soldInput) soldInput.value = data.sold_count_min ?? 5;
+                const widgetSelect = document.getElementById('orderWidgetModeSelect');
+                if (widgetSelect) widgetSelect.value = data.order_widget_mode || 'off';
             } catch (e) {
                 console.error('loadSettings error:', e);
             }
             renderCouponStackingToggle();
+        }
+
+        async function saveOrderWidgetMode(mode) {
+            const select = document.getElementById('orderWidgetModeSelect');
+            try {
+                const res = await fetch(API_BASE + '/admin/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tgInitData },
+                    body: JSON.stringify({ order_widget_mode: mode }),
+                });
+                const result = await res.json();
+                if (!res.ok || !result.ok) throw new Error(result.error || 'Не вдалося зберегти');
+                if (select) select.value = result.settings.order_widget_mode;
+                const labels = { off: 'Віджет статусу вимкнено', owner: 'Віджет статусу — лише тобі ✅', all: 'Віджет статусу — усім клієнтам ✅' };
+                showToast(labels[result.settings.order_widget_mode] || 'Збережено', 'success');
+            } catch (e) {
+                showToast(e.message || 'Помилка збереження налаштування', 'error');
+                loadSettings();
+            }
         }
 
         async function saveSoldCountMin(value) {
@@ -11005,6 +11039,7 @@
                                 <span class="order-card-id">#${o.id}</span>
                                 ${renderOrderStatusBadge(status)}
                                 ${o.is_test ? '<span class="order-ttn-chip" title="Не враховується в статистиці">🧪 Тест</span>' : ''}
+                                ${o.is_paid ? '<span class="order-ttn-chip" title="Оплату отримано">💳 Оплачено</span>' : ''}
                                 ${o.ttn ? `<span class="order-ttn-chip">ТТН ${escapeHtml(o.ttn)}</span>` : ''}
                             </div>
                             <div class="order-card-meta">${userLine} · ${formatOrderDate(o.ordered_at)}</div>
@@ -11433,6 +11468,11 @@
                         <button class="btn btn-primary" type="button" onclick="saveOrderPricing(${orderId})">💾 Зберегти ціну</button>
                     ` : ''}
                     </div>
+                    ${order.pay_method === 'card' ? `
+                    <label class="od-test" style="margin-bottom:8px;">
+                        <span>💳 Оплачено <small>клієнт бачить це у статусі замовлення</small></span>
+                        <span class="switch"><input type="checkbox" ${order.is_paid ? 'checked' : ''} onchange="toggleOrderPaid(${orderId}, this.checked)"><span class="switch-slider"></span></span>
+                    </label>` : ''}
                     <label class="od-test">
                         <span>🧪 Тестове замовлення <small>не рахується в статистиці</small></span>
                         <span class="switch"><input type="checkbox" ${order.is_test ? 'checked' : ''} onchange="toggleOrderTest(${orderId}, this.checked)"><span class="switch-slider"></span></span>
@@ -11485,6 +11525,12 @@
             const value = (document.getElementById(`order-ttn-${orderId}`)?.value || '').replace(/\s+/g, '');
             if (value && !/^\d{14}$/.test(value)) { showToast('ТТН Нової пошти — рівно 14 цифр', 'error'); return; }
             if (await putOrderFields(orderId, { ttn: value }, 'ТТН збережено ✅')) renderOrdersList();
+        }
+
+        async function toggleOrderPaid(orderId, checked) {
+            const ok = await putOrderFields(orderId, { is_paid: checked ? 1 : 0 },
+                checked ? 'Оплату позначено 💳' : 'Позначку оплати знято');
+            if (ok) renderOrdersList();
         }
 
         async function toggleOrderTest(orderId, checked) {

@@ -22,7 +22,8 @@ from telegram.ext import (
 
 from handlers.errors import telegram_error_handler
 
-TELEGRAM_ALLOWED_UPDATES = ["message", "callback_query"]
+# widget_query — запити від HTML-віджетів (Bot API 10.4); PTB їх не знає, читаємо з update.api_kwargs
+TELEGRAM_ALLOWED_UPDATES = ["message", "callback_query", "widget_query"]
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ def register_telegram_handlers(app: Application, handlers) -> None:
     """Attach Telegram command, message, and callback handlers."""
     app.add_error_handler(telegram_error_handler)
     app.add_handler(TypeHandler(Update, handlers.auto_register_user), group=-1)
+    app.add_handler(TypeHandler(Update, handlers.widget_query_action), group=1)
 
     app.add_handler(CommandHandler("catalog", handlers.catalog))
     app.add_handler(CommandHandler("start", handlers.start))
@@ -53,6 +55,7 @@ def register_telegram_handlers(app: Application, handlers) -> None:
     )
     app.add_handler(CallbackQueryHandler(handlers.contact_action, pattern=r"^contact_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.order_action, pattern=r"^(confirm|draft|cancel)_"))
+    app.add_handler(CallbackQueryHandler(handlers.paid_action, pattern=r"^(paid|unpaid)_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.review_action, pattern=r"^rev_(pub|hide)_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.giveaway_join_action, pattern=r"^gw_join_\d+_\d+$"))
     app.add_handler(CallbackQueryHandler(handlers.giveaway_owner_action, pattern=r"^gw_(rr|ext)_\d+$"))

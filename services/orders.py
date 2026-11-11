@@ -39,7 +39,7 @@ STATUS_TO_STEP = {
 # Поля замовлення, які можна міняти через update_order_fields.
 EDITABLE_ORDER_FIELDS = frozenset({
     "delivery_method", "city", "city_ref", "branch", "branch_ref", "recipient_name",
-    "phone", "pay_method", "ttn", "internal_note", "source", "promotion_id", "gift_product_id", "is_test",
+    "phone", "pay_method", "ttn", "internal_note", "source", "promotion_id", "gift_product_id", "is_test", "is_paid",
 })
 _DELIVERY_METHODS = ("np", "up", "self")
 _PAY_METHODS = ("card", "cod")
@@ -63,7 +63,7 @@ def _clean_extra(extra: dict | None) -> dict:
     for key, value in (extra or {}).items():
         if key not in EDITABLE_ORDER_FIELDS:
             continue
-        if key == "is_test":
+        if key in ("is_test", "is_paid"):
             out[key] = 1 if value in (1, True, "1", "true", "on") else 0
             continue
         if key == "gift_product_id":
@@ -405,7 +405,7 @@ def list_user_orders(user_id: int, limit: int = 30) -> list[dict]:
         _sql("""
             SELECT id, total_price, status, ordered_at, delivery_method, city, branch,
                    pay_method, ttn, comment, coupon_code, discount_amount,
-                   promotion_discount, gift_product_name, price_pending
+                   promotion_discount, gift_product_name, price_pending, is_paid
             FROM orders
             WHERE user_id = ?
             ORDER BY id DESC
@@ -556,7 +556,7 @@ def get_order_with_items(order_id: int):
                    gift_product_name, coupon_code, discount_amount, promotion_discount,
                    status, ordered_at, price_pending, channel_message_id,
                    delivery_method, city, branch, recipient_name, phone, pay_method,
-                   ttn, internal_note, source, delivered_at, is_test
+                   ttn, internal_note, source, delivered_at, is_test, is_paid
             FROM orders WHERE id = ?
         """),
         (order_id,),
@@ -655,7 +655,7 @@ _LIST_COLUMNS = """
     id, user_id, username, first_name, total_price, comment,
     gift_product_name, coupon_code, discount_amount, promotion_discount,
     status, ordered_at, price_pending, delivery_method, city, branch,
-    recipient_name, phone, pay_method, ttn, internal_note, source, delivered_at, is_test
+    recipient_name, phone, pay_method, ttn, internal_note, source, delivered_at, is_test, is_paid
 """
 
 

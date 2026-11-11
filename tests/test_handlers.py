@@ -11,8 +11,9 @@ sys.path.insert(0, str(ROOT))
 from handlers.register import TELEGRAM_ALLOWED_UPDATES
 
 
-def test_telegram_allowed_updates_filters_to_message_and_callback():
-    assert TELEGRAM_ALLOWED_UPDATES == ["message", "callback_query"]
+def test_telegram_allowed_updates_filters_to_message_callback_and_widget():
+    # widget_query — запити від віджета статусу замовлення (Bot API 10.4)
+    assert TELEGRAM_ALLOWED_UPDATES == ["message", "callback_query", "widget_query"]
 
 
 def test_telegram_error_handler_notifies_owner():

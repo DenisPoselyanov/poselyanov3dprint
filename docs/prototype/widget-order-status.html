@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Макет: віджет статусу замовлення</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ── Обгортка макета (не частина віджета) ── */
+  body { margin: 0; font: 15px/1.35 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #dfe5ec; color: #14202B; }
+  .page { padding: 28px 28px 36px; }
+  .page h1 { margin: 0 0 4px; font-size: 22px; }
+  .page .sub { margin: 0 0 22px; color: #5B6B7A; }
+  .grid { display: grid; grid-template-columns: repeat(3, 372px); gap: 22px; align-items: start; }
+  .chat { border-radius: 18px; padding: 14px 12px 16px; }
+  .chat.light { background: linear-gradient(160deg, #b9d7a8, #8fbfb3); }
+  .chat.dark { background: #0e1621; }
+  .label { font-size: 12px; font-weight: 600; letter-spacing: .02em; margin: 0 4px 9px; }
+  .light .label { color: #1d3b2a; }
+  .dark .label { color: #7d8e9e; }
+  .bubble { width: 340px; border-radius: 16px 16px 16px 5px; overflow: hidden; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+  .caption { padding: 7px 12px 8px; font-size: 14.5px; display: flex; gap: 8px; align-items: flex-end; }
+  .caption span:first-child { flex: 1; }
+  .caption .time { font-size: 11.5px; color: var(--tg-theme-hint-color); white-space: nowrap; }
+  .note { width: fit-content; max-width: 300px; margin-top: 7px; padding: 7px 11px 8px; border-radius: 5px 16px 16px 16px; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); font-size: 14.5px; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+  .note .time { font-size: 11.5px; color: var(--tg-theme-hint-color); margin-left: 8px; }
+  .light { --tg-theme-bg-color:#fff; --tg-theme-text-color:#0C1628; --tg-theme-hint-color:#5A6474; --tg-theme-section-separator-color:#E3E8EF; }
+  .dark  { --tg-theme-bg-color:#182533; --tg-theme-text-color:#fff; --tg-theme-hint-color:#8FA3B8; --tg-theme-section-separator-color:#27384a; }
+
+  /* ── Віджет ── */
+  /* Акценти — ті самі, що в акціях і картках дописів: (світлий, основний, темний) */
+  .w { --l:#4BB7E5; --h:#289CDB; --d:#1B7FBA; }
+  .w.amber  { --l:#FFC93C; --h:#F2A900; --d:#B97C00; }
+  .w.violet { --l:#A58BFF; --h:#7C5CFC; --d:#5B3FD6; }
+  .w.orange { --l:#FFA957; --h:#F5822A; --d:#C96112; }
+  .w.green  { --l:#4CC38A; --h:#22A06B; --d:#167C52; }
+  .w.red    { --l:#FF7A7E; --h:#E5484D; --d:#BC2B30; }
+  .dark .w { --ink: var(--l); }
+  .w {
+    --ink: var(--d); --bg: var(--tg-theme-bg-color);
+    position: relative; padding: 16px 16px 14px; line-height: 1.3;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--h) 11%, var(--bg)) 0%, var(--bg) 72%);
+  }
+  .w * { box-sizing: border-box; }
+  .w .hero { display: flex; align-items: center; gap: 14px; }
+  .w .txt { flex: 1; min-width: 0; }
+  .w .eye { display: inline-block; padding: 3px 9px; border-radius: 99px; background: color-mix(in srgb, var(--h) 14%, var(--bg)); color: var(--ink); font-size: 10px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+  .w h3 { margin: 8px 0 3px; font-size: 21px; line-height: 1.12; font-weight: 800; letter-spacing: -.02em; }
+  .w p { margin: 0; font-size: 13px; color: var(--tg-theme-hint-color); }
+  .w .orb { flex: none; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, var(--l), var(--h)); box-shadow: 0 0 26px color-mix(in srgb, var(--l) 55%, transparent); }
+  .w .orb svg { width: 30px; height: 30px; fill: none; stroke: #fff; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .w .bar { display: flex; gap: 4px; margin-top: 16px; }
+  .w .bar i { flex: 1; height: 5px; border-radius: 9px; background: color-mix(in srgb, var(--h) 15%, var(--bg)); }
+  .w .bar i.on { background: var(--h); }
+  .w .foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13.5px; }
+  .w .foot b { flex: 1; font-weight: 700; }
+  .w .foot b span { color: var(--ink); }
+  .w .foot small { font-size: 12.5px; color: var(--tg-theme-hint-color); }
+  .w .ttn { margin-top: 9px; font-size: 13px; color: var(--tg-theme-hint-color); }
+  .w .ttn b { color: var(--tg-theme-text-color); font-variant-numeric: tabular-nums; letter-spacing: .02em; margin: 0 5px 0 4px; }
+  .w .ttn svg { width: 14px; height: 14px; vertical-align: -2px; fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .w .cta { display: block; width: 100%; margin-top: 13px; border: 0; border-radius: 99px; padding: 10px 14px; font: inherit; font-size: 14px; font-weight: 700; background: var(--h); color: #fff; }
+  /* режим «Деталі» */
+  .w .back { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .w .rows { margin-top: 10px; font-size: 13.5px; }
+  .w .row { display: flex; gap: 10px; padding: 3.5px 0; }
+  .w .row .k { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .w .row .q, .w .row.dim { color: var(--tg-theme-hint-color); }
+  .w .row .v { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .w .row.sum { font-weight: 800; font-size: 15px; margin-top: 6px; padding-top: 9px; border-top: 1px solid var(--tg-theme-section-separator-color); }
+  .w .row s { color: var(--tg-theme-hint-color); font-weight: 500; margin-right: 5px; }
+  .w .row.more { color: var(--ink); font-weight: 700; }
+  .w .meta { margin-top: 8px; font-size: 12.5px; color: var(--tg-theme-hint-color); }
+  .w .ghost { display: block; width: 100%; margin-top: 12px; border: 0; border-radius: 99px; padding: 9px 14px; font: inherit; font-size: 13.5px; font-weight: 700; background: color-mix(in srgb, var(--h) 14%, var(--bg)); color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Віджет «Живий статус замовлення» — макет 2</h1>
+  <p class="sub">Мінімалістичний варіант у стилі карток акцій і дописів: м'який градієнт кольору статусу, кругла «печатка», смужка прогресу. Дані вигадані.</p>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const ICON = {
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+  print: '<path d="M7 9V4h10v5M7 17H4.5V9.5h15V17H17M7 14h10v6H7z"/>',
+  box:   '<path d="M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8"/>',
+  truck: '<path d="M2.5 6.5h11v9.5h-11zM13.5 10h4l3 3.2V16h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+  pin:   '<path d="M12 21s6.5-5.6 6.5-10.5a6.5 6.5 0 10-13 0C5.500 15.4 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.3"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  x:     '<path d="M7 7l10 10M17 7L7 17"/>',
+  copy:  '<rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a1 1 0 011-1h9"/>'
+};
+const svg = n => `<svg viewBox="0 0 24 24">${ICON[n]}</svg>`;
+const plural = n => n % 10 === 1 && n % 100 !== 11 ? 'товар' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'товари' : 'товарів');
+const MAX_LIST = 12;
+
+function widget(o) {
+  const n = o.items.length;
+  if (o.open) {
+    const rest = n - MAX_LIST;
+    const rows = o.items.slice(0, MAX_LIST).map(([t, q, p]) =>
+      `<div class="row"><span class="k">${t}${q > 1 ? ` <span class="q">× ${q}</span>` : ''}</span><span class="v">${p}</span></div>`).join('');
+    return `<div class="w ${o.ac}">
+      <div class="back">‹ Замовлення №${o.id}</div>
+      <div class="rows">${rows}${rest > 0 ? `<div class="row more">і ще ${rest} — у застосунку</div>` : ''}
+        <div class="row sum"><span class="k">Разом</span><span class="v">${o.old ? `<s>${o.old}</s>` : ''}${o.total}</span></div></div>
+      <div class="meta">${o.pay} · ${o.ship}</div>
+      <button class="ghost">Відкрити в застосунку</button>
+    </div>`;
+  }
+  const bar = Array.from({ length: o.of }, (_, i) => `<i class="${i <= o.step ? 'on' : ''}"></i>`).join('');
+  return `<div class="w ${o.ac}">
+    <div class="hero">
+      <div class="txt"><span class="eye">Замовлення №${o.id}</span><h3>${o.title}</h3><p>${o.text}</p></div>
+      <div class="orb">${svg(o.icon)}</div>
+    </div>
+    ${o.of ? `<div class="bar">${bar}</div>` : ''}
+    ${o.ttn ? `<div class="ttn">ТТН<b>${o.ttn}</b>${svg('copy')}</div>` : ''}
+    <div class="foot"><b>${n} ${plural(n)} · ${o.total} <span>›</span></b><small>${o.paid}</small></div>
+    ${o.cta ? `<button class="cta">${o.cta}</button>` : ''}
+  </div>`;
+}
+
+const ITEMS = [['Органайзер для кабелів', 2, '240 ₴'], ['Підставка для навушників', 1, '260 ₴']];
+const MANY = ITEMS.concat([['Тримач для телефона', 1, '320 ₴'], ['Гачки настінні, набір', 3, '270 ₴'], ['Підставка під ноутбук, складана', 1, '480 ₴'], ['Брелок із написом', 4, '200 ₴'], ['Горщик для сукулентів', 2, '360 ₴']]);
+const BIG = MANY.concat([['Тримач для зубних щіток', 1, '150 ₴'], ['Підставка під гарячий посуд', 2, '220 ₴'], ['Кліпси для пакетів, набір', 1, '90 ₴'],
+  ['Органайзер для спецій', 1, '410 ₴'], ['Тримач рушників', 1, '180 ₴'], ['Форма для печива «Зірка»', 3, '165 ₴'], ['Підставка для ножів', 1, '390 ₴'], ['Кришка для чашки', 2, '120 ₴']]);
+const NP = 'Київ, відділення №12 · Олена К.';
+const o128 = { id: 128, items: ITEMS, old: '500 ₴', total: '450 ₴', of: 5, pay: 'Картка, оплачено', ship: NP, paid: 'оплачено' };
+const branch = { ...o128, ac: 'orange', icon: 'pin', step: 3, title: 'Чекає у відділенні', text: 'Безкоштовно до 19 листопада', ttn: '2045 0718 3312 64', cta: 'Відстежити на Новій Пошті' };
+
+const CASES = [
+  { theme: 'light', label: '1 · Щойно оформлено', caption: 'Замовлення №128 · Очікує підтвердження', time: '14:02',
+    o: { ...o128, ac: 'amber', icon: 'clock', step: 0, title: 'Очікує підтвердження', text: 'Денис скоро напише тобі', paid: 'очікує оплати' } },
+  { theme: 'light', label: '2 · Друкується', caption: 'Замовлення №128 · Друкується', time: '14:02', note: ['🖨️ Замовлення №128 друкується', '09:15'],
+    o: { ...o128, ac: '', icon: 'print', step: 1, title: 'Друкується', text: 'Почав друкувати твоє замовлення' } },
+  { theme: 'light', label: '3 · Посилка у відділенні', caption: 'Замовлення №128 · Чекає у відділенні', time: '14:02', note: ['📦 Посилка №128 прибула у відділення', '11:40'], o: branch },
+  { theme: 'dark', label: '4 · Те саме в темній темі', caption: 'Замовлення №128 · Чекає у відділенні', time: '14:02', o: branch },
+  { theme: 'dark', label: '5 · Самовивіз', caption: 'Замовлення №131 · Можна забирати', time: '16:30',
+    o: { id: 131, items: [['Тримач для телефона', 1, '320 ₴']], total: '320 ₴', of: 4, ac: 'violet', icon: 'box', step: 2, title: 'Можна забирати', text: 'Домовмося про зручний час', paid: 'при отриманні', cta: 'Написати Денису' } },
+  { theme: 'light', label: '6 · Отримано', caption: 'Замовлення №128 · Отримано', time: '14:02',
+    o: { ...o128, ac: 'green', icon: 'check', step: 4, title: 'Отримано', text: 'Дякую, що обрав нас 💙', cta: 'Оцінити й отримати купон' } },
+  { theme: 'light', label: '7 · Деталі — після дотику «7 товарів ›»', caption: 'Замовлення №142 · Друкується', time: '10:20',
+    o: { id: 142, items: MANY, total: '2 130 ₴', ac: '', open: 1, pay: 'Картка, оплачено', ship: NP } },
+  { theme: 'dark', label: '8 · Деталі, 15 товарів', caption: 'Замовлення №150 · Друкується', time: '18:05',
+    o: { id: 150, items: BIG, total: '3 855 ₴', ac: '', open: 1, pay: 'Картка, оплачено', ship: NP } },
+  { theme: 'light', label: '9 · Скасовано', caption: 'Замовлення №133 · Скасовано', time: '12:10',
+    o: { id: 133, items: ITEMS, total: '500 ₴', of: 0, ac: 'red', icon: 'x', title: 'Скасовано', text: 'Є питання — напиши Денису', paid: '', cta: 'Написати Денису' } },
+];
+const only = location.hash.slice(1).split(',').filter(Boolean).map(Number);
+const list = only.length ? CASES.filter((c, i) => only.includes(i + 1)) : CASES;
+
+document.getElementById('grid').innerHTML = list.map(c => `
+  <div class="chat ${c.theme}">
+    <div class="label">${c.label}</div>
+    <div class="bubble">${widget(c.o)}<div class="caption"><span>${c.caption}</span><span class="time">${c.time}</span></div></div>
+    ${c.note ? `<div class="note">${c.note[0]}<span class="time">${c.note[1]}</span></div>` : ''}
+  </div>`).join('');
+</script>
+</body>
+</html>
