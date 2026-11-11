@@ -436,27 +436,35 @@ class StepQuery:
         self.data = data
         self.from_user = SimpleNamespace(id=user_id)
         self.message = SimpleNamespace(chat_id=-1001, reply_markup=None, message_id=9)
-        self.answers, self.edits, self.deleted = [], [], 0
+        self.answers, self.markups, self.fail_edit = [], [], False
 
     async def answer(self, text=None, **kw):
         self.answers.append(text)
 
-    async def edit_message_text(self, text, **kw):
-        self.edits.append((text, kw.get("reply_markup")))
+    async def edit_message_reply_markup(self, reply_markup=None, **kw):
+        if self.fail_edit:
+            raise RuntimeError("не вдалось")
+        self.markups.append(reply_markup)
+
+    async def edit_message_text(self, *a, **kw):                                # текст замовлення кроки не чіпають
+        raise AssertionError("кроки не повинні міняти текст повідомлення")
 
     async def delete_message(self):
-        self.deleted += 1
+        raise AssertionError("кроки не повинні видаляти повідомлення замовлення")
 
 
-def test_confirm_starts_private_steps_instead_of_confirming(botenv):
+def _callbacks(markup):
+    return [b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data]
+
+
+def test_confirm_starts_steps_under_the_order_message(botenv):
     oid = _order(botenv)
     query = StepQuery(f"confirm_{oid}")
     asyncio.run(botenv.bot.order_action(SimpleNamespace(callback_query=query), SimpleNamespace(bot=botenv.tg)))
-    payload = botenv.tg.last("sendMessage")
-    assert payload["ephemeral_message_parameters"]["replace_callback_query_message"] is True
-    assert "крок 1 із 2" in payload["text"] and "620 ₴" in payload["text"]
-    callbacks = [b.get("callback_data") for row in payload["reply_markup"]["inline_keyboard"] for b in row]
-    assert f"st_p_{oid}" in callbacks and f"st_x_{oid}" in callbacks
+    assert "sendMessage" not in botenv.tg.names()                               # нових повідомлень у каналі немає
+    markup = query.markups[0]
+    assert f"st_p_{oid}" in _callbacks(markup) and f"st_x_{oid}" in _callbacks(markup)
+    assert any("620 ₴" in b.text for row in markup.inline_keyboard for b in row)
     assert botenv.orders.get_order_with_items(oid)[0]["status"] == "new"       # ще не підтверджено
 
 
@@ -464,7 +472,7 @@ def test_steps_set_eta_and_confirm(botenv):
     oid = _order(botenv)
     price = StepQuery(f"st_p_{oid}")
     asyncio.run(botenv.bot.order_steps_action(SimpleNamespace(callback_query=price), None))
-    assert "крок 2 із 2" in price.edits[0][0]
+    assert f"st_e_{oid}_2" in _callbacks(price.markups[0]) and "Крок 2 із 2" in price.answers[-1]
 
     stranger = StepQuery(f"st_e_{oid}_2", user_id=5)
     asyncio.run(botenv.bot.order_steps_action(SimpleNamespace(callback_query=stranger), None))
@@ -474,7 +482,7 @@ def test_steps_set_eta_and_confirm(botenv):
     asyncio.run(botenv.bot.order_steps_action(SimpleNamespace(callback_query=done), None))
     order, _ = botenv.orders.get_order_with_items(oid)
     assert order["status"] == "confirmed" and order["eta_text"] == "2–3 дні"
-    assert botenv.synced == [(oid, "confirm")] and done.deleted == 1 and "2–3 дні" in done.answers[-1]
+    assert botenv.synced == [(oid, "confirm")] and "2–3 дні" in done.answers[-1]
     assert json.loads(botenv.ow.build_widget_data(order))["e"] == "2–3 дні"
 
     again = StepQuery(f"st_e_{oid}_1")                                          # застаріла кнопка
@@ -482,14 +490,15 @@ def test_steps_set_eta_and_confirm(botenv):
     assert botenv.synced == [(oid, "confirm")]
 
 
-def test_steps_cancel_and_fallback_when_ephemeral_unavailable(botenv):
+def test_steps_back_restores_buttons_and_fallback_when_edit_fails(botenv):
     oid = _order(botenv)
-    cancel = StepQuery(f"st_x_{oid}")
-    asyncio.run(botenv.bot.order_steps_action(SimpleNamespace(callback_query=cancel), None))
-    assert cancel.deleted == 1 and botenv.orders.get_order_with_items(oid)[0]["status"] == "new"
+    back = StepQuery(f"st_x_{oid}")
+    asyncio.run(botenv.bot.order_steps_action(SimpleNamespace(callback_query=back), None))
+    assert botenv.orders.get_order_with_items(oid)[0]["status"] == "new"
+    assert f"confirm_{oid}" in _callbacks(back.markups[0])                      # кнопки замовлення повернулись
 
-    botenv.tg.fail.add("sendMessage")                                            # старий сервер: кроків немає
-    query = StepQuery(f"confirm_{oid}")
+    query = StepQuery(f"confirm_{oid}")                                          # кнопки змінити не вдалось
+    query.fail_edit = True
     asyncio.run(botenv.bot.order_action(SimpleNamespace(callback_query=query), SimpleNamespace(bot=botenv.tg)))
     assert botenv.orders.get_order_with_items(oid)[0]["status"] == "confirmed"   # підтверджено одразу, як раніше
 

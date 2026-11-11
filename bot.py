@@ -1455,64 +1455,73 @@ widget_handlers.hooks.update(confirm_order=_confirm_order_by_client, admin_url=l
 
 
 # ── Покрокове підтвердження в чаті замовлень: ціна → термін (ROADMAP.md, п. 2) ──
-# Кроки — тимчасове повідомлення на місці замовлення; його бачить лише той, хто натиснув «Підтвердити».
+# Кроки — кнопки під самим повідомленням замовлення (текст не чіпаємо: у каналі тимчасових повідомлень немає).
 ETA_OPTIONS = {"1": "сьогодні–завтра", "2": "2–3 дні", "3": "4–7 днів", "4": "1–2 тижні", "0": ""}
 
 
-def _steps_price_view(order: dict) -> tuple[str, InlineKeyboardMarkup]:
+def _steps_price_markup(order: dict) -> InlineKeyboardMarkup:
     oid = int(order["id"])
     admin_url = get_admin_webapp_url(oid)
     total = int(order.get("total_price") or 0)
     rows = []
     if order.get("price_pending"):
-        text = (f"<b>Замовлення №{oid}</b> · крок 1 із 2\n\n"
-                "💰 Ціна ще не встановлена: є позиції з договірною ціною.")
         if admin_url:
             rows.append([InlineKeyboardButton("💰 Встановити ціну", url=admin_url)])
-        rows.append([InlineKeyboardButton("➡️ Далі без ціни", callback_data=f"st_p_{oid}")])
+        rows.append([InlineKeyboardButton("➡️ Крок 1/2 · далі без ціни", callback_data=f"st_p_{oid}")])
     else:
-        text = f"<b>Замовлення №{oid}</b> · крок 1 із 2\n\n💰 Сума замовлення: <b>{total} ₴</b>. Усе правильно?"
-        rows.append([InlineKeyboardButton(f"✅ Так, {total} ₴", callback_data=f"st_p_{oid}")])
+        rows.append([InlineKeyboardButton(f"✅ Крок 1/2 · сума {total} ₴ вірна", callback_data=f"st_p_{oid}")])
         if admin_url:
             rows.append([InlineKeyboardButton("✏️ Змінити в адмінці", url=admin_url)])
-    rows.append([InlineKeyboardButton("✖️ Не підтверджувати", callback_data=f"st_x_{oid}")])
-    return text, InlineKeyboardMarkup(rows)
+    rows.append([InlineKeyboardButton("↩️ Назад", callback_data=f"st_x_{oid}")])
+    return InlineKeyboardMarkup(rows)
 
 
-def _steps_eta_view(order_id: int) -> tuple[str, InlineKeyboardMarkup]:
-    text = (f"<b>Замовлення №{order_id}</b> · крок 2 із 2\n\n"
-            "⏱ Коли буде готове? Клієнт побачить термін у статусі замовлення.")
+def _steps_eta_markup(order_id: int) -> InlineKeyboardMarkup:
     def btn(key):
         return InlineKeyboardButton(ETA_OPTIONS[key].capitalize(), callback_data=f"st_e_{order_id}_{key}")
-    return text, InlineKeyboardMarkup([
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⏱ Крок 2/2 · коли буде готове?", callback_data=f"st_p_{order_id}")],
         [btn("1"), btn("2")],
         [btn("3"), btn("4")],
         [InlineKeyboardButton("Без терміну", callback_data=f"st_e_{order_id}_0")],
-        [InlineKeyboardButton("✖️ Не підтверджувати", callback_data=f"st_x_{order_id}")],
+        [InlineKeyboardButton("↩️ Назад", callback_data=f"st_x_{order_id}")],
     ])
 
 
 async def _start_confirm_steps(bot, query, order_id: int) -> bool:
-    """False — тимчасові повідомлення недоступні: підтверджуємо одразу, як раніше."""
+    """Кроки — це кнопки під самим повідомленням замовлення: його текст не чіпаємо.
+
+    False — кроки показати не вдалось (або це спільне повідомлення кількох замовлень): підтверджуємо одразу.
+    """
+    order, _ = await run_db(get_order_with_items, order_id)
+    if not order or len(await run_db(get_orders_sharing_channel_message, order_id)) > 1:
+        return False
+    try:
+        await query.edit_message_reply_markup(reply_markup=_steps_price_markup(order))
+    except Exception as e:
+        logger.info("Кроки підтвердження #%s не показано: %s", order_id, e)
+        return False
+    return True
+
+
+async def _restore_order_markup(query, order_id: int) -> None:
+    """Повернути кнопки замовлення, як вони були до кроків (за станом у БД)."""
     order, _ = await run_db(get_order_with_items, order_id)
     if not order:
-        return False
-    text, markup = _steps_price_view(order)
-    return bool(await widget_handlers.send_ephemeral(bot, query, text, replace=True, reply_markup=markup))
-
-
-async def _drop_step_message(query, done_text: str = "") -> None:
+        return
+    markup = _build_order_status_channel_markup(
+        order_id, order.get("status") or "new", price_pending=bool(order.get("price_pending")),
+        user_id=order.get("user_id"), username=order.get("username") or "невідомо",
+        first_name=order.get("first_name") or "", order=order,
+    )
     try:
-        await query.delete_message()
-    except Exception:
-        try:
-            await query.edit_message_text(done_text or "Готово", reply_markup=None)
-        except Exception as e:
-            logger.info("Крок підтвердження не прибрано: %s", e)
+        await query.edit_message_reply_markup(reply_markup=markup)
+    except Exception as e:
+        logger.info("Кнопки замовлення #%s не повернуто: %s", order_id, e)
 
 
 async def order_steps_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Кнопки кроків: st_p_<id> — ціна ок, st_e_<id>_<термін> — підтвердити, st_x_<id> — передумав."""
+    """Кнопки кроків: st_p_<id> — ціна ок, st_e_<id>_<термін> — підтвердити, st_x_<id> — назад."""
     query = update.callback_query
     m = re.match(r"^st_(p|e|x)_(\d+)(?:_(\d))?$", query.data or "")
     if not m or query.from_user.id != OWNER_ID:
@@ -1521,13 +1530,12 @@ async def order_steps_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
     kind, order_id, key = m.group(1), int(m.group(2)), m.group(3) or "0"
     if kind == "x":
         await query.answer("Замовлення не підтверджено")
-        await _drop_step_message(query, "Не підтверджено")
+        await _restore_order_markup(query, order_id)
         return
     if kind == "p":
-        await query.answer()
-        text, markup = _steps_eta_view(order_id)
+        await query.answer("Крок 2 із 2: коли буде готове?")
         try:
-            await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
+            await query.edit_message_reply_markup(reply_markup=_steps_eta_markup(order_id))
         except Exception as e:
             logger.warning("Крок «термін» для #%s не показано: %s", order_id, e)
         return
@@ -1535,18 +1543,16 @@ async def order_steps_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
     order, _ = await run_db(get_order_with_items, order_id)
     if not order or not is_valid_transition(order.get("status") or "new", "confirmed"):
         await query.answer("Замовлення вже оброблено", show_alert=True)
-        await _drop_step_message(query)
+        await _restore_order_markup(query, order_id)
         return
     await run_db(update_order_fields, order_id, {"eta_text": eta})
-    await _sync_order_status_to_telegram(order_id, "confirm")
+    await _sync_order_status_to_telegram(order_id, "confirm")  # перемальовує пост: кроки зникають самі
     order, _ = await run_db(get_order_with_items, order_id)
     if order and order.get("is_test"):
         await _send_test_review_request(order)
     if order and await _client_widget(order_id) and not order.get("is_test"):
         await _widget_note(order)
-    done = "✅ Підтверджено" + (f" · {eta}" if eta else "")
-    await query.answer(done)
-    await _drop_step_message(query, done)
+    await query.answer("✅ Підтверджено" + (f" · {eta}" if eta else ""))
 
 
 # ── Оновлення опублікованих постів каналу (ROADMAP.md, п. 3) ─────────────────
